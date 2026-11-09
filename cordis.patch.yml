@@ -1,0 +1,3 @@
+- insert:
+    - id: missions
+      name: '@daedalforge/dsh-missions'

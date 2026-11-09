@@ -1,0 +1,58 @@
+{
+  "name": "@daedalforge/dsh-missions",
+  "version": "0.16.0",
+  "description": "Panneau Missions de la barre latérale DSH : missions suivies non terminées, file et ordonnancement, modèles de workflows éditables, puis semaine, mois, Timeline et bilan du jour en lecture seule",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "scripts",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "missions",
+    "workflows"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daedalforge/missions.git"
+  },
+  "bugs": {
+    "url": "https://github.com/daedalforge/missions/issues"
+  },
+  "homepage": "https://github.com/daedalforge/missions#readme",
+  "scripts": {
+    "test": "node --test test/",
+    "validate": "node scripts/validate.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [],
+      "external": [
+        "dsh-theme-konoha/client"
+      ],
+      "immediately": true
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.18.5"
+  }
+}
