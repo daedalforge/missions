@@ -18,6 +18,9 @@ window.__ModuleLoader__.load({
 
     /* __VIEW__ */
 
+    /** Plugin context captured at apply time: gives access to uiWorkspace. */
+    let appContext = null
+
     const LIST_URL = 'missions/api/list'
     const REFRESH_MS = 60000
 
@@ -41,7 +44,7 @@ window.__ModuleLoader__.load({
     ]
 
     const CSS = `
-.missions-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 13px; line-height: 1.5; }
+.missions-panel { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 13px; line-height: 1.5; }
 .missions-head { display: flex; align-items: center; gap: 12px; padding: 24px 28px 0; flex: none; }
 .missions-title { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -.015em; }
 .missions-scope { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12px; }
@@ -97,6 +100,25 @@ window.__ModuleLoader__.load({
 .missions-dashboard-card { width: 100%; padding: 18px 20px; border: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.16)); border-radius: 10px; }
 .missions-dashboard-card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
 .missions-dashboard-card p { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12.5px; }
+.missions-drawer-backdrop { position: absolute; inset: 0; z-index: 2; }
+.missions-drawer { position: absolute; top: 0; right: 0; bottom: 0; z-index: 3; width: 380px; max-width: 92%; display: flex; flex-direction: column; gap: 16px; padding: 22px 24px; overflow: auto; background: var(--dsw-alias-bg-layer-2, #ffffff); border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); box-shadow: -8px 0 24px rgba(0,0,0,.06); animation: missions-slide .16s ease; }
+@keyframes missions-slide { from { transform: translateX(12px); opacity: 0 } to { transform: none; opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
+.missions-drawer-head { display: flex; align-items: flex-start; gap: 12px; }
+.missions-drawer-key { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-drawer-title { margin: 6px 0 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.missions-drawer-close { margin-left: auto; width: 28px; height: 28px; flex: none; display: grid; place-items: center; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-tertiary, #7a7168); cursor: pointer; }
+.missions-drawer-close:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-props { display: grid; grid-template-columns: 96px 1fr; gap: 9px 12px; margin: 0; font-size: 12px; }
+.missions-props dt { color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-props dd { margin: 0; color: var(--dsw-alias-label-primary, #1f1f1f); overflow-wrap: anywhere; }
+.missions-drawer-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.missions-action { height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; text-decoration: none; cursor: pointer; }
+.missions-action:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
+.missions-action--primary { border-color: transparent; background: var(--dsw-alias-brand-primary, #f5893a); color: #ffffff; font-weight: 600; }
+.missions-action--primary:hover { filter: brightness(1.06); background: var(--dsw-alias-brand-primary, #f5893a); }
+.missions-action:disabled { opacity: .55; cursor: default; }
+.missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 `
 
     /** Tab icon: a list of tickets. */
@@ -125,16 +147,20 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function MissionCard({ mission }) {
-      const open = mission.url
-        ? { onClick: () => window.open(mission.url, '_blank', 'noopener'), onKeyDown: (event) => { if (event.key === 'Enter') window.open(mission.url, '_blank', 'noopener') } }
-        : {}
+    function MissionCard({ mission, onSelect }) {
       return h('article', {
         className: 'missions-card',
         tabIndex: 0,
+        role: 'button',
+        'aria-pressed': 'false',
         'data-priority': mission.priority ?? 'none',
-        title: mission.title,
-        ...open,
+        onClick: () => onSelect(mission),
+        onKeyDown: (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onSelect(mission)
+          }
+        },
       },
         h('div', { className: 'missions-card-top' },
           h('span', { className: 'missions-type', 'data-type': mission.type ?? 'none' }, TYPE_LABELS[mission.type] ?? '—'),
@@ -149,7 +175,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function MissionsView({ loading, missions, query, onQuery, type, onType, filtered, groups }) {
+    function MissionsView({ loading, missions, query, onQuery, type, onType, filtered, groups, onSelect }) {
       const toolbar = h('div', { className: 'missions-toolbar' },
         h('label', { className: 'missions-search' },
           h('svg', { width: 13, height: 13, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'aria-hidden': 'true' },
@@ -195,9 +221,77 @@ window.__ModuleLoader__.load({
             h('span', { className: 'rule' }),
           ),
           h('div', { className: 'missions-cards' },
-            group.missions.map((mission) => h(MissionCard, { key: mission.key, mission })),
+            group.missions.map((mission) => h(MissionCard, { key: mission.key, mission, onSelect })),
           ),
         )),
+      )
+    }
+
+    function DrawerRow({ label, value }) {
+      if (value === null || value === undefined || value === '') return null
+      return h(React.Fragment, null, h('dt', null, label), h('dd', null, value))
+    }
+
+    function MissionDrawer({ mission, onClose }) {
+      const [note, setNote] = React.useState(null)
+
+      React.useEffect(() => {
+        const onKey = (event) => {
+          if (event.key === 'Escape') onClose()
+        }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+      }, [onClose])
+
+      const startSession = () => {
+        const workspace = appContext?.uiWorkspace
+        if (!workspace || typeof workspace.startSession !== 'function') {
+          setNote('Sessions are not available from this panel.')
+          return
+        }
+        const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
+        try {
+          workspace.startSession(undefined, { prompt, whenDraftExists: 'append' })
+          onClose()
+        } catch (error) {
+          setNote(error?.message ?? 'session could not start')
+        }
+      }
+
+      return h(React.Fragment, null,
+        h('div', { className: 'missions-drawer-backdrop', onClick: onClose }),
+        h('aside', { className: 'missions-drawer', role: 'dialog', 'aria-label': `Mission ${mission.key}` },
+          h('div', { className: 'missions-drawer-head' },
+            h('div', null,
+              h('div', { className: 'missions-drawer-key' }, mission.key),
+              h('h2', { className: 'missions-drawer-title' }, mission.title),
+            ),
+            h('button', { type: 'button', className: 'missions-drawer-close', onClick: onClose, 'aria-label': 'Close' },
+              h('svg', { width: 13, height: 13, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 },
+                h('path', { d: 'M4 4l8 8M12 4l-8 8', 'stroke-linecap': 'round' }),
+              ),
+            ),
+          ),
+
+          h('dl', { className: 'missions-props' },
+            h(DrawerRow, { label: 'State', value: STATE_LABELS[mission.state] ?? mission.state }),
+            h(DrawerRow, { label: 'Type', value: TYPE_LABELS[mission.type] ?? mission.type }),
+            h(DrawerRow, { label: 'Priority', value: mission.priority }),
+            h(DrawerRow, { label: 'Points', value: mission.points !== null && mission.points !== undefined ? `${mission.points} pts` : null }),
+            h(DrawerRow, { label: 'Project', value: mission.project }),
+            h(DrawerRow, { label: 'Epic', value: mission.epic }),
+            h(DrawerRow, { label: 'Updated', value: relativeAge(mission.updatedAt) }),
+          ),
+
+          note ? h('p', { className: 'missions-drawer-note' }, note) : null,
+
+          h('div', { className: 'missions-drawer-actions' },
+            mission.url
+              ? h('a', { className: 'missions-action', href: mission.url, target: '_blank', rel: 'noreferrer noopener' }, 'Open on the tracker')
+              : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
+            h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession }, 'Start a session'),
+          ),
+        ),
       )
     }
 
@@ -206,6 +300,7 @@ window.__ModuleLoader__.load({
       const [tab, setTab] = React.useState('missions')
       const [query, setQuery] = React.useState('')
       const [type, setType] = React.useState(null)
+      const [selected, setSelected] = React.useState(null)
 
       const load = React.useCallback(({ silent = false } = {}) => {
         if (!silent) setView((previous) => ({ ...previous, loading: true }))
@@ -281,12 +376,15 @@ window.__ModuleLoader__.load({
         },
           tab === 'dashboard'
             ? h(DashboardView, null)
-            : h(MissionsView, { loading, missions, query, onQuery: setQuery, type, onType: setType, filtered, groups }),
+            : h(MissionsView, { loading, missions, query, onQuery: setQuery, type, onType: setType, filtered, groups, onSelect: setSelected }),
         ),
+
+        selected ? h(MissionDrawer, { mission: selected, onClose: () => setSelected(null) }) : null,
       )
     }
 
     exports.apply = function apply(ctx) {
+      appContext = ctx
       ctx.effect(() => {
         const style = document.createElement('style')
         style.dataset.plugin = 'dsh-missions'
