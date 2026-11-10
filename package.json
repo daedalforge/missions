@@ -12,6 +12,7 @@
   },
   "files": [
     "lib",
+    "missions/projects.yml",
     "cordis.patch.yml",
     "README.md"
   ],
@@ -26,5 +27,11 @@
       "immediately": true
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
 }
