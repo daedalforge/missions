@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { inverser, normaliserIssue, premierConnu } from '../lib/mission.js'
+import { firstKnown, invertMap, normalizeIssue } from '../lib/mission.js'
 
-const PROJET = {
+const PROJECT = {
   id: 'missions',
   map: {
     states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
@@ -11,53 +11,53 @@ const PROJET = {
   },
 }
 
-test('le map est inversé, les valeurs nulles ignorées', () => {
-  const inverses = inverser(PROJET.map)
-  assert.equal(inverses.etats.get('in-review'), 'in-review')
-  assert.equal(inverses.etats.has('done'), false)
-  assert.equal(inverses.types.get('story'), 'story')
+test('the map is inverted and null values are ignored', () => {
+  const inverse = invertMap(PROJECT.map)
+  assert.equal(inverse.states.get('in-review'), 'in-review')
+  assert.equal(inverse.states.has('done'), false)
+  assert.equal(inverse.types.get('story'), 'story')
 })
 
-test('premierConnu retient la première valeur connue', () => {
-  const inverses = inverser(PROJET.map)
-  assert.equal(premierConnu(['urgent', 'ready', 'in-review'], inverses.etats), 'ready')
-  assert.equal(premierConnu(['urgent'], inverses.etats), null)
+test('firstKnown keeps the first known value', () => {
+  const inverse = invertMap(PROJECT.map)
+  assert.equal(firstKnown(['urgent', 'ready', 'in-review'], inverse.states), 'ready')
+  assert.equal(firstKnown(['urgent'], inverse.states), null)
 })
 
-test('une issue prend son état et son type dans le vocabulaire du tracker', () => {
-  const inverses = inverser(PROJET.map)
-  const mission = normaliserIssue({
-    projet: PROJET,
-    cle: 'daedalforge/missions#2',
-    numero: 2,
-    titre: 'Le panneau lit chaque projet indépendamment',
-    etatBrut: 'ready',
-    typeBrut: 'story',
+test('an issue takes its state and type from the tracker vocabulary', () => {
+  const inverse = invertMap(PROJECT.map)
+  const mission = normalizeIssue({
+    project: PROJECT,
+    key: 'daedalforge/missions#2',
+    number: 2,
+    title: 'The panel reads every project independently',
+    rawState: 'ready',
+    rawType: 'story',
     epic: 'Workspace',
     url: 'https://github.com/daedalforge/missions/issues/2',
-    maj: '2026-11-10T15:56:47Z',
-    inverses,
+    updatedAt: '2026-11-10T15:56:47Z',
+    inverse,
   })
 
-  assert.equal(mission.cle, 'daedalforge/missions#2')
-  assert.equal(mission.etat, 'ready')
+  assert.equal(mission.key, 'daedalforge/missions#2')
+  assert.equal(mission.state, 'ready')
   assert.equal(mission.type, 'story')
   assert.equal(mission.epic, 'Workspace')
-  assert.equal(mission.projet, 'missions')
+  assert.equal(mission.project, 'missions')
 })
 
-test('un état inconnu reste null plutôt que d’être deviné', () => {
-  const inverses = inverser(PROJET.map)
-  const mission = normaliserIssue({
-    projet: PROJET,
-    cle: 'daedalforge/missions#3',
-    titre: 'sans état',
-    etatBrut: 'urgent',
-    typeBrut: null,
-    inverses,
+test('an unknown state stays null instead of being guessed', () => {
+  const inverse = invertMap(PROJECT.map)
+  const mission = normalizeIssue({
+    project: PROJECT,
+    key: 'daedalforge/missions#3',
+    title: 'no state',
+    rawState: 'urgent',
+    rawType: null,
+    inverse,
   })
 
-  assert.equal(mission.etat, null)
+  assert.equal(mission.state, null)
   assert.equal(mission.type, null)
   assert.equal(mission.epic, null)
 })

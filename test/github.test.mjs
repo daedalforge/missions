@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { lister, oublierJeton } from '../lib/trackers/github.js'
+import { forgetToken, list } from '../lib/trackers/github.js'
 
-const PROJET = {
+const PROJECT = {
   id: 'missions',
   tracker: 'github',
   github: { owner: 'daedalforge', repo: 'missions' },
@@ -13,95 +13,94 @@ const PROJET = {
   },
 }
 
-function reponse(corps, { status = 200, link = null, reste = null } = {}) {
+function response(body, { status = 200, link = null, remaining = null } = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
     headers: {
-      get: (nom) => {
-        const cle = String(nom).toLowerCase()
-        if (cle === 'link') return link
-        if (cle === 'x-ratelimit-remaining') return reste
+      get: (name) => {
+        const key = String(name).toLowerCase()
+        if (key === 'link') return link
+        if (key === 'x-ratelimit-remaining') return remaining
         return null
       },
     },
-    text: async () => (corps === undefined ? '' : JSON.stringify(corps)),
+    text: async () => (body === undefined ? '' : JSON.stringify(body)),
   }
 }
 
-function issue(numero, { labels = [], pr = false, milestone = null } = {}) {
+function issue(number, { labels = [], pr = false, milestone = null } = {}) {
   return {
-    number: numero,
-    title: `Mission ${numero}`,
+    number,
+    title: `Mission ${number}`,
     labels: labels.map((name) => ({ name })),
     milestone,
-    html_url: `https://github.com/daedalforge/missions/issues/${numero}`,
+    html_url: `https://github.com/daedalforge/missions/issues/${number}`,
     updated_at: '2026-11-10T10:00:00Z',
     ...(pr ? { pull_request: { url: 'https://api.github.com/pulls/1' } } : {}),
   }
 }
 
 beforeEach(() => {
-  process.env.GH_TOKEN = 'jeton-de-test'
-  oublierJeton()
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
 })
 
-test('les issues sont normalisées, les pull requests écartées', async () => {
+test('issues are normalized and pull requests dropped', async () => {
   const fetchImpl = async () =>
-    reponse([
+    response([
       issue(2, { labels: ['story', 'ready'], milestone: { title: 'Workspace' } }),
       issue(9, { labels: ['bug'], pr: true }),
     ])
 
-  const missions = await lister(PROJET, { fetchImpl })
+  const missions = await list(PROJECT, { fetchImpl })
 
   assert.equal(missions.length, 1)
   assert.deepEqual(missions[0], {
-    projet: 'missions',
-    cle: 'daedalforge/missions#2',
-    numero: 2,
-    titre: 'Mission 2',
-    etat: 'ready',
+    project: 'missions',
+    key: 'daedalforge/missions#2',
+    number: 2,
+    title: 'Mission 2',
+    state: 'ready',
     type: 'story',
     epic: 'Workspace',
     url: 'https://github.com/daedalforge/missions/issues/2',
-    maj: '2026-11-10T10:00:00Z',
+    updatedAt: '2026-11-10T10:00:00Z',
   })
 })
 
-test('la pagination suit l’en-tête Link', async () => {
-  const appels = []
+test('pagination follows the Link header', async () => {
+  const calls = []
   const fetchImpl = async (url) => {
-    appels.push(url)
-    if (appels.length === 1) {
-      return reponse([issue(1, { labels: ['story', 'to-refine'] })], {
+    calls.push(url)
+    if (calls.length === 1) {
+      return response([issue(1, { labels: ['story', 'to-refine'] })], {
         link: '<https://api.github.com/repos/daedalforge/missions/issues?page=2>; rel="next"',
       })
     }
-    return reponse([issue(2, { labels: ['bug', 'in-review'] })])
+    return response([issue(2, { labels: ['bug', 'in-review'] })])
   }
 
-  const missions = await lister(PROJET, { fetchImpl })
+  const missions = await list(PROJECT, { fetchImpl })
 
-  assert.equal(appels.length, 2)
-  assert.deepEqual(missions.map((m) => m.numero), [1, 2])
-  assert.deepEqual(missions.map((m) => m.etat), ['to-refine', 'in-review'])
+  assert.equal(calls.length, 2)
+  assert.deepEqual(missions.map((m) => m.number), [1, 2])
+  assert.deepEqual(missions.map((m) => m.state), ['to-refine', 'in-review'])
 })
 
-test('un 401 nomme le jeton GitHub', async () => {
-  const fetchImpl = async () => reponse({ message: 'Bad credentials' }, { status: 401 })
+test('a 401 names the GitHub token', async () => {
+  const fetchImpl = async () => response({ message: 'Bad credentials' }, { status: 401 })
 
-  await assert.rejects(() => lister(PROJET, { fetchImpl }), /jeton GitHub absent ou invalide/)
+  await assert.rejects(() => list(PROJECT, { fetchImpl }), /GitHub token missing or invalid/)
 })
 
-test('un quota épuisé donne l’heure de reprise', async () => {
-  const fetchImpl = async () =>
-    reponse({ message: 'API rate limit exceeded' }, { status: 403, reste: '0' })
+test('an exhausted rate limit gives the retry time', async () => {
+  const fetchImpl = async () => response({ message: 'API rate limit exceeded' }, { status: 403, remaining: '0' })
 
-  await assert.rejects(() => lister(PROJET, { fetchImpl }), /quota GitHub épuisé/)
+  await assert.rejects(() => list(PROJECT, { fetchImpl }), /GitHub rate limit exhausted/)
 })
 
-test('un projet sans owner ni repo est refusé', async () => {
-  const sansRepo = { ...PROJET, github: {} }
-  await assert.rejects(() => lister(sansRepo, { fetchImpl: async () => reponse([]) }), /owner et repo/)
+test('a project without owner or repo is rejected', async () => {
+  const withoutRepo = { ...PROJECT, github: {} }
+  await assert.rejects(() => list(withoutRepo, { fetchImpl: async () => response([]) }), /owner and repo/)
 })

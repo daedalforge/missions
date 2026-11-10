@@ -4,15 +4,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { chargerProjets } from '../lib/projects.js'
+import { loadProjects } from '../lib/projects.js'
 
-test('le fichier du workspace déclare le projet missions, complet', async () => {
-  const { canonique, projets } = await chargerProjets()
+test('the workspace file declares the missions project, complete', async () => {
+  const { canonical, projects } = await loadProjects()
 
-  assert.deepEqual(canonique.states, ['to-refine', 'ready', 'in-progress', 'in-review', 'done'])
-  assert.deepEqual(canonique.types, ['bug', 'story'])
-  assert.equal(projets.length, 1)
-  const [missions] = projets
+  assert.deepEqual(canonical.states, ['to-refine', 'ready', 'in-progress', 'in-review', 'done'])
+  assert.deepEqual(canonical.types, ['bug', 'story'])
+  assert.equal(projects.length, 1)
+  const [missions] = projects
   assert.equal(missions.id, 'missions')
   assert.equal(missions.tracker, 'github')
   assert.equal(missions.github.owner, 'daedalforge')
@@ -21,17 +21,17 @@ test('le fichier du workspace déclare le projet missions, complet', async () =>
   assert.equal(missions.map.states.ready, 'ready')
 })
 
-test('un projet à la correspondance incomplète est refusé', async () => {
-  const dossier = await mkdtemp(join(tmpdir(), 'projects-'))
-  const fichier = join(dossier, 'projects.yml')
+test('a project with an incomplete mapping is rejected', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
+  const file = join(directory, 'projects.yml')
   await writeFile(
-    fichier,
+    file,
     [
       'canonical:',
       '  states: [to-refine, ready]',
       '  types: [bug]',
       'projects:',
-      '  - id: incomplet',
+      '  - id: incomplete',
       '    tracker: github',
       '    github: { owner: a, repo: b }',
       '    map:',
@@ -41,14 +41,14 @@ test('un projet à la correspondance incomplète est refusé', async () => {
     ].join('\n'),
   )
 
-  await assert.rejects(() => chargerProjets(new URL(`file://${fichier}`)), /ready/)
+  await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /ready/)
 })
 
-test('un tracker inconnu est refusé', async () => {
-  const dossier = await mkdtemp(join(tmpdir(), 'projects-'))
-  const fichier = join(dossier, 'projects.yml')
+test('an unknown tracker is rejected', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
+  const file = join(directory, 'projects.yml')
   await writeFile(
-    fichier,
+    file,
     [
       'canonical:',
       '  states: [to-refine]',
@@ -63,5 +63,5 @@ test('un tracker inconnu est refusé', async () => {
     ].join('\n'),
   )
 
-  await assert.rejects(() => chargerProjets(new URL(`file://${fichier}`)), /tracker inconnu/)
+  await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /unknown tracker/)
 })

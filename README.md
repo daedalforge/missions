@@ -30,6 +30,16 @@ tracker sont déclarés une fois dans [`missions/projects.yml`](missions/project
 - [`workflows/`](workflows/README.md) — le parcours : une page par étape, plus
   la table de correspondance entre états du workflow et états du tracker.
 
+## Conventions
+
+- **Le code est en anglais** : identifiants, chaînes, commentaires, messages
+  d'erreur, libellés d'interface. C'est la langue de l'outillage et des API
+  qu'il appelle.
+- **La documentation est en français** : ce README, `missions/`, `workflows/`
+  et les fiches de mission.
+- Une PR se renseigne comme son issue : assignation, type, état, lien, milestone
+  ([`workflows/execution.md`](workflows/execution.md)).
+
 ## Règles de lecture
 
 - Un document de workflow décrit **un geste**, pas un outil : les commandes
