@@ -14,9 +14,9 @@ test('the workspace file declares its projects, complete', async () => {
   assert.deepEqual(canonical.priorities, ['urgent', 'high', 'normal', 'low'])
   assert.deepEqual(
     projects.map((project) => project.id),
-    ['missions', 'manager'],
+    ['missions', 'manager', 'connect'],
   )
-  const [missions, manager] = projects
+  const [missions, manager, connect] = projects
   assert.equal(missions.id, 'missions')
   assert.equal(missions.tracker, 'github')
   assert.equal(missions.github.owner, 'daedalforge')
@@ -34,6 +34,32 @@ test('the workspace file declares its projects, complete', async () => {
   assert.deepEqual(manager.map.states['in-progress'], ['In Progress', 'Local Testing', 'Staging Test'])
   assert.deepEqual(manager.map.states.done, ['Released', 'Ready for prod'])
   assert.equal(manager.map.types.story, 'Story')
+
+  assert.equal(connect.name, 'Connect')
+  assert.equal(connect.tracker, 'jira')
+  assert.equal(connect.jira.site, 'https://saas-office.atlassian.net')
+  assert.equal(connect.jira.key_prefix, 'SOC')
+  assert.equal(connect.jira.story_points_field, 'customfield_10032')
+  assert.deepEqual(connect.map.states['to-refine'], ['To Refine', 'Inbox'])
+  assert.equal(connect.map.states.ready, 'Ready for dev')
+  assert.deepEqual(connect.map.states['in-progress'], ['In Progress', 'Ready for prod'])
+  assert.equal(connect.map.states['in-review'], 'Code review')
+  assert.equal(connect.map.states.done, 'Done')
+  assert.equal(connect.map.types.story, 'Story')
+})
+
+test('the connect map covers the statuses of the SOC workflow', async () => {
+  const { projects } = await loadProjects()
+  const connect = projects.find((project) => project.id === 'connect')
+  const covered = new Set(Object.values(connect.map.states).flat().filter(Boolean))
+
+  // Relevé sur le site : GET /rest/api/3/project/SOC/statuses.
+  const workflow = ['To Refine', 'Inbox', 'Ready for dev', 'In Progress', 'Ready for prod', 'Code review', 'Done']
+
+  assert.deepEqual(
+    workflow.filter((status) => !covered.has(status)),
+    [],
+  )
 })
 
 test('the manager map covers the statuses of the SO workflow', async () => {
