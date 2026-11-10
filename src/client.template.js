@@ -21,6 +21,12 @@ window.__ModuleLoader__.load({
     /** Plugin context captured at apply time: gives access to uiWorkspace. */
     let appContext = null
 
+    /** Whether the ui-workspace service is reachable from this panel. */
+    function uiWorkspaceReady() {
+      const workspace = appContext?.uiWorkspace ?? (typeof appContext?.get === 'function' ? appContext.get('uiWorkspace') : null)
+      return Boolean(workspace && typeof workspace.startSession === 'function')
+    }
+
     const LIST_URL = 'missions/api/list'
     const REFRESH_MS = 60000
 
@@ -367,7 +373,9 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'missions-panel' },
         h('header', { className: 'missions-head' },
           h('h1', { className: 'missions-title' }, 'Missions'),
-          h('span', { className: 'missions-scope' }, `assigned to me · ${missions.length}`),
+          h('span', { className: 'missions-scope' },
+            `assigned to me · ${missions.length} · v__VERSION__ · uiWorkspace ${uiWorkspaceReady() ? 'yes' : 'no'}`,
+          ),
           tab === 'missions' && errors.length === 0
             ? h('div', { className: 'missions-actions' },
                 h('button', { type: 'button', className: 'missions-btn', onClick: () => load(), disabled: loading }, 'Refresh'),
