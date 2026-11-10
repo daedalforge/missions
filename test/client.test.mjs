@@ -18,15 +18,15 @@ globalThis.document = {
   head: { append() {} },
 }
 
-function charger() {
+function charger(storage) {
   let captured = null
-  new Function('window', SOURCE)({ __ModuleLoader__: { load: (module) => { captured = module } } })
+  new Function('window', 'localStorage', SOURCE)({ __ModuleLoader__: { load: (module) => { captured = module } } }, storage)
 
   const h = (type, props, ...children) => ({ type, props, children })
   const React = {
     createElement: h,
     Fragment: 'fragment',
-    useState: (initial) => [initial, () => {}],
+    useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
     useCallback: (fn) => fn,
     useEffect: () => {},
   }
@@ -70,4 +70,15 @@ test('chaque composant rend sans lever, même sans service uiWorkspace', () => {
   for (const [name, component] of Object.entries(registered)) {
     assert.doesNotThrow(() => component({}), `rendu de ${name}`)
   }
+})
+
+test('le thème Naruto rend le bandeau et les images embarquées', () => {
+  const { api, ctx, registered } = charger({ getItem: () => 'manga', setItem: () => {} })
+  api.apply(ctx)
+  const tree = registered.main({})
+  const flat = JSON.stringify(tree)
+  assert.match(flat, /"data-theme":"manga"/)
+  assert.match(flat, /missions-hero/)
+  assert.match(flat, /data:image\/webp;base64,/)
+  assert.match(SOURCE, /Naruto theme/)
 })
