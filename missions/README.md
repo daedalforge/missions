@@ -86,6 +86,24 @@ terminé : il n'y a pas de libellé `done`. Un blocage se dit en commentaire, pa
 par un libellé. L'epic n'est pas un libellé : c'est un milestone.
 
 
+## Lecture
+
+Le panneau lit **plusieurs projets à la fois**, chacun dans son tracker. Un
+projet est une source : il se lit seul, avec ses propres identifiants, et son
+échec ne touche pas les autres.
+
+- **Indépendance.** Un jeton absent, un quota épuisé, une panne réseau ou des
+  droits insuffisants d'un côté ne suspendent pas la lecture des autres projets ;
+  l'erreur s'affiche pour le projet concerné, les autres restent lisibles.
+- **Aucune hypothèse partagée.** Deux projets ne partagent ni vocabulaire, ni
+  pagination, ni cadence de lecture. Ce qui vaut pour l'un n'est pas supposé
+  pour l'autre.
+- **Identité complète.** Une mission affichée porte toujours son projet et sa
+  clé (`owner/repo#12`, `SOC-1234`). Deux clés identiques dans deux projets
+  restent deux missions distinctes.
+- **Lecture seule.** Lire un tracker ne modifie rien : ni le tracker, ni le
+  dépôt, ni un fichier local.
+
 ## Correspondance avec le tracker
 
 Le workspace a un **vocabulaire canonique**, le même partout : états `to-refine`,
