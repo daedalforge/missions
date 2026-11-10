@@ -30,6 +30,13 @@ tracker sont déclarés une fois dans [`missions/projects.yml`](missions/project
 - [`workflows/`](workflows/README.md) — le parcours : une page par étape, plus
   la table de correspondance entre états du workflow et états du tracker.
 
+## Le plugin
+
+Le panneau vit dans `lib/` : moitié hôte (`index.js`, `trackers/`) et bundle
+client. `lib/client.js` est **généré** — éditer `src/client.template.js` et
+`lib/view.js`, puis `node tools/build.mjs`. Les helpers de `lib/view.js`
+(filtre, groupes, âge relatif) sont purs et testés sans DOM.
+
 ## Conventions
 
 - **Le code est en anglais** : identifiants, chaînes, commentaires, messages
