@@ -164,6 +164,7 @@ window.__ModuleLoader__.load({
     }
 
     const LIST_URL = 'missions/api/list'
+    const DECLARE_URL = 'missions/api/branches'
     const REFRESH_MS = 60000
 
     const STATE_LABELS = {
@@ -311,6 +312,16 @@ window.__ModuleLoader__.load({
 .missions-action:disabled { opacity: .55; cursor: default; }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-drawer-note--blocked { color: var(--dsw-alias-label-secondary, #5c534b); }
+.missions-declare { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
+.missions-declare-field { display: grid; gap: 4px; }
+.missions-declare-label { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+.missions-declare-input { height: 28px; padding: 0 8px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 6px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12px; }
+.missions-declare-input:focus { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 40%, transparent); outline-offset: 1px; }
+.missions-declare-save { height: 28px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 6px; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12px; cursor: pointer; }
+.missions-declare-save:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
+.missions-declare-save:disabled { opacity: .55; cursor: default; }
+.missions-declare-note { margin: 0; color: var(--dsw-alias-label-secondary, #5c534b); font-size: 11.5px; }
+.missions-declare-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-drawer--empty { justify-content: center; align-items: center; border-left: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
 .missions-drawer-hint { max-width: 220px; margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12px; text-align: center; }
 `
@@ -735,8 +746,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       return h(React.Fragment, null, h('dt', null, label), h('dd', null, value))
     }
 
-    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, theme }) {
+    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, theme }) {
       const [note, setNote] = React.useState(null)
+      const [branch, setBranch] = React.useState(mission.branch ?? '')
+      const [base, setBase] = React.useState(mission.base ?? '')
+      const [saving, setSaving] = React.useState(false)
+      const [declareNote, setDeclareNote] = React.useState(null)
 
       React.useEffect(() => {
         const onKey = (event) => {
@@ -775,6 +790,30 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
         }
       }
 
+      const saveDeclaration = async () => {
+        setSaving(true)
+        setDeclareNote(null)
+        try {
+          const response = await fetch(DECLARE_URL, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ key: mission.key, branch: branch.trim(), base: base.trim() }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `save failed (${response.status})`)
+          setDeclareNote({ error: false, text: `Saved in missions/${data.folder}/mission.yml — local only, nothing to commit.` })
+          onSaved?.(data)
+        } catch (error) {
+          setDeclareNote({ error: true, text: `Save failed: ${error?.message ?? error}` })
+        } finally {
+          setSaving(false)
+        }
+      }
+
+      const savedBranch = mission.branch ?? ''
+      const savedBase = mission.base ?? ''
+      const dirty = branch.trim() !== savedBranch || base.trim() !== savedBase
+
       return h('aside', { className: 'missions-drawer', role: 'complementary', 'aria-label': `Mission ${mission.key}` },
           h('div', { className: 'missions-drawer-head' },
             theme === 'manga' ? h('div', { className: 'missions-drawer-portrait' }, h('img', { src: ART.avatar, alt: '' })) : null,
@@ -797,12 +836,48 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
             h(DrawerRow, { label: 'Project', value: mission.projectName ?? mission.project }),
             h(DrawerRow, { label: 'Epic', value: mission.epic }),
             h(DrawerRow, { label: 'Updated', value: relativeAge(mission.updatedAt) }),
-            h(DrawerRow, { label: 'Branch', value: mission.branch }),
-            h(DrawerRow, { label: 'Base', value: mission.base }),
+          ),
+
+          h('div', { className: 'missions-declare' },
+            h('label', { className: 'missions-declare-field' },
+              h('span', { className: 'missions-declare-label' }, 'Branch'),
+              h('input', {
+                type: 'text',
+                className: 'missions-declare-input',
+                value: branch,
+                placeholder: 'gh-49',
+                spellCheck: false,
+                autoComplete: 'off',
+                disabled: saving,
+                onChange: (event) => setBranch(event.target.value),
+              }),
+            ),
+            h('label', { className: 'missions-declare-field' },
+              h('span', { className: 'missions-declare-label' }, 'Base'),
+              h('input', {
+                type: 'text',
+                className: 'missions-declare-input',
+                value: base,
+                placeholder: 'main',
+                spellCheck: false,
+                autoComplete: 'off',
+                disabled: saving,
+                onChange: (event) => setBase(event.target.value),
+              }),
+            ),
+            h('button', {
+              type: 'button',
+              className: 'missions-declare-save',
+              onClick: saveDeclaration,
+              disabled: saving || !dirty,
+            }, saving ? 'Saving…' : 'Save'),
+            declareNote
+              ? h('p', { className: declareNote.error ? 'missions-declare-note missions-declare-note--error' : 'missions-declare-note', role: declareNote.error ? 'alert' : 'status' }, declareNote.text)
+              : null,
           ),
 
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
-          blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}. Declare it in the mission's folder (missions/<folder>/mission.yml).`) : null,
+          blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}. Declare it below, or in the mission's folder.`) : null,
 
           h('div', { className: 'missions-drawer-actions' },
             mission.url
@@ -878,6 +953,20 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       const changeTheme = (value) => {
         setTheme(value)
         try { localStorage.setItem(THEME_KEY, value) } catch { /* storage is optional */ }
+      }
+
+      // The declaration route already wrote the file; reflect it without a
+      // full reload so the drawer and the session gate see the new values.
+      const applyDeclaration = (saved) => {
+        setView((previous) => ({
+          ...previous,
+          missions: previous.missions.map((mission) => (
+            mission.key === saved.key ? { ...mission, branch: saved.branch, base: saved.base } : mission
+          )),
+        }))
+        setSelected((previous) => (
+          previous && previous.key === saved.key ? { ...previous, branch: saved.branch, base: saved.base } : previous
+        ))
       }
       const hero = theme === 'manga' ? h('div', { className: 'missions-hero', 'aria-hidden': 'true' },
         h('img', { className: 'missions-hero-photo', src: ART.village, alt: '' }),
@@ -963,7 +1052,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
                 : h(MissionsView, { missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort, filtered, groups, onSelect: setSelected, theme }),
           ),
           selected
-            ? h(MissionDrawer, { mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), theme })
+            ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, theme })
             : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },
                 h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),
               ),

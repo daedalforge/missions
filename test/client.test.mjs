@@ -72,11 +72,21 @@ test('chaque composant rend sans lever, même sans service uiWorkspace', () => {
   }
 })
 
-test('le volet de détail porte la branche et la base, et bloque sans elles', () => {
+test('le volet déclare la branche et la base, et bloque sans elles', () => {
   // Le volet n'est pas enregistré comme slot : on vérifie le bundle construit,
-  // seule preuve que l'aide de vue a bien été inlinée et que les lignes existent.
-  assert.match(SOURCE, /label: 'Branch', value: mission\.branch/)
-  assert.match(SOURCE, /label: 'Base', value: mission\.base/)
+  // seule preuve que le formulaire et l'aide de vue ont bien été inlinés.
+  assert.match(SOURCE, /const DECLARE_URL = 'missions\/api\/branches'/)
+  assert.match(SOURCE, /className: 'missions-declare-label' \}, 'Branch'/)
+  assert.match(SOURCE, /className: 'missions-declare-label' \}, 'Base'/)
+  assert.match(SOURCE, /key: mission\.key, branch: branch\.trim\(\), base: base\.trim\(\)/)
+  assert.match(SOURCE, /disabled: saving \|\| !dirty/)
+  assert.match(SOURCE, /onSaved: applyDeclaration/)
+  // Le volet est remonté quand la mission change : sinon Save écrirait les
+  // valeurs de la mission précédente dans la suivante.
+  assert.match(SOURCE, /h\(MissionDrawer, \{ key: selected\.key, mission: selected/)
+  assert.match(SOURCE, /local only, nothing to commit/)
+  assert.match(SOURCE, /role: declareNote\.error \? 'alert' : 'status'/)
+  assert.match(SOURCE, /onSaved\?\.\(data\)/)
   assert.match(SOURCE, /function executionBlocker\(mission = \{\}\)/)
   assert.match(SOURCE, /Session blocked: \$\{blocker\}/)
   assert.match(SOURCE, /disabled: blocker !== null/)

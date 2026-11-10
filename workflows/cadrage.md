@@ -17,9 +17,13 @@ moins cher et qui évite le plus de travail perdu.
    son objectif propre. Un ticket trop gros revient en cadrage.
 5. **Proposer un plan** : les étapes d'exécution, dans l'ordre, avec ce qui est
    vérifiable à chacune.
-6. **Déclarer la branche et sa base** dans `missions/<dossier>/mission.yml`
-   (format dans [`../missions/README.md`](../missions/README.md#branche-et-base)) :
-   c'est ce qui autorise la session d'exécution.
+6. **Déclarer la branche et sa base** — directement dans le volet de détail du
+   panneau (champs « Branch » et « Base », bouton « Save »), ou à la main dans
+   `missions/<dossier>/mission.yml` (format dans
+   [`../missions/README.md`](../missions/README.md#branche-et-base)) : c'est ce
+   qui autorise la session d'exécution. Le panneau crée le dossier de la
+   mission s'il manque ; le fichier reste local (ignoré par git), il n'est
+   jamais commité.
 
 ## Condition de sortie — la mission est « prête »
 
