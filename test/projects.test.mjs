@@ -69,3 +69,48 @@ test('an unknown tracker is rejected', async () => {
 
   await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /unknown tracker/)
 })
+
+test('a state may name several tracker values', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
+  const file = join(directory, 'projects.yml')
+  await writeFile(
+    file,
+    [
+      'canonical:',
+      '  states: [to-refine, done]',
+      '  types: [bug]',
+      'projects:',
+      '  - id: jira',
+      '    tracker: jira',
+      '    map:',
+      '      states: { to-refine: [Inbox, To Refine], done: [Released, Ready for prod] }',
+      '      types: { bug: Bug }',
+      '',
+    ].join('\n'),
+  )
+
+  const { projects } = await loadProjects(new URL(`file://${file}`))
+  assert.deepEqual(projects[0].map.states.done, ['Released', 'Ready for prod'])
+})
+
+test('a tracker value mapped to two states is rejected', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
+  const file = join(directory, 'projects.yml')
+  await writeFile(
+    file,
+    [
+      'canonical:',
+      '  states: [to-refine, done]',
+      '  types: [bug]',
+      'projects:',
+      '  - id: jira',
+      '    tracker: jira',
+      '    map:',
+      '      states: { to-refine: [Inbox, Released], done: [Released] }',
+      '      types: { bug: Bug }',
+      '',
+    ].join('\n'),
+  )
+
+  await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /maps "Released" to both/)
+})

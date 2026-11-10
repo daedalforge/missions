@@ -18,6 +18,17 @@ test('the map is inverted and null values are ignored', () => {
   assert.equal(inverse.types.get('Feature'), 'story')
 })
 
+test('a canonical state may name several tracker values', () => {
+  const inverse = invertMap({
+    states: { 'in-progress': ['In Progress', 'Local Testing'], done: 'Released' },
+    types: {},
+  })
+
+  assert.equal(inverse.states.get('In Progress'), 'in-progress')
+  assert.equal(inverse.states.get('Local Testing'), 'in-progress')
+  assert.equal(inverse.states.get('Released'), 'done')
+})
+
 test('firstKnown keeps the first known value', () => {
   const inverse = invertMap(PROJECT.map)
   assert.equal(firstKnown(['urgent', 'ready', 'in-review'], inverse.states), 'ready')
