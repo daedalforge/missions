@@ -25,6 +25,9 @@
 # format (voir les champs ci-dessus), quand son dépôt sera branché : d'ici là,
 # aucune correspondance n'est inventée.
 
+# Chaque projet est une source lue indépendamment : son échec n'empêche pas
+# la lecture des autres, et rien n'est supposé partagé entre deux projets.
+
 canonical:
   states: [to-refine, ready, in-progress, in-review, done]
   types: [bug, story]
