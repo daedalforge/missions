@@ -398,15 +398,6 @@ window.__ModuleLoader__.load({
 
       const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
 
-      const copyPrompt = async () => {
-        try {
-          await navigator.clipboard.writeText(prompt)
-          setNote('Prompt copied — paste it into a new session.')
-        } catch (error) {
-          setNote(`Copy failed: ${error?.message ?? error}`)
-        }
-      }
-
       const startSession = async () => {
         setNote('Starting a session…')
         try {
@@ -467,7 +458,6 @@ window.__ModuleLoader__.load({
               ? h('a', { className: 'missions-action', href: mission.url, target: '_blank', rel: 'noreferrer noopener' }, 'Open on the tracker')
               : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
             h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession }, 'Start a session'),
-            h('button', { type: 'button', className: 'missions-action', onClick: copyPrompt }, 'Copy the prompt'),
           ),
         ),
       )
