@@ -32,8 +32,9 @@
 #   github   owner et repo du dépôt distant (tracker: github)
 #   map      correspondance canonique -> tracker (obligatoire)
 #
-# Deux projets sont déclarés. Le `map` de `manager` a été relevé sur le site
-# (voir le commentaire au-dessus de l'entrée) : il n'est pas deviné.
+# Trois projets sont déclarés. Les `map` de `manager` et `connect` ont été
+# relevés sur le site (voir le commentaire au-dessus de chaque entrée) : ils ne
+# sont pas devinés.
 
 # Chaque projet est une source lue indépendamment : son échec n'empêche pas
 # la lecture des autres, et rien n'est supposé partagé entre deux projets.
@@ -100,6 +101,36 @@ projects:
         in-progress: [In Progress, Local Testing, Staging Test]
         in-review: [Code review]
         done: [Released, Ready for prod]
+      types:
+        bug: Bug
+        story: Story
+      priorities:
+        urgent: Highest
+        high: High
+        normal: Medium
+        low: Low
+
+  # Relevé le 2026-11-10 sur le site : SOC (Connect) a sept statuts — To Refine,
+  # Inbox, Ready for dev, In Progress, Ready for prod, Code review, Done.
+  # « Ready for prod » est en catégorie In Progress : il reste `in-progress`,
+  # pas `done` ; `Done` seul ferme la mission.
+  - id: connect
+    name: Connect
+    repo: ~/projects/Connect
+    tracker: jira
+    jira:
+      site: https://saas-office.atlassian.net
+      cloud_id: 1e424f0c-65f2-4aab-aa05-ba0d359fa1f0
+      key_prefix: SOC
+      email: stephane.lucien-vauthier@saas-office.com
+      story_points_field: customfield_10032
+    map:
+      states:
+        to-refine: [To Refine, Inbox]
+        ready: Ready for dev
+        in-progress: [In Progress, Ready for prod]
+        in-review: Code review
+        done: Done
       types:
         bug: Bug
         story: Story
