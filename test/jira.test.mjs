@@ -51,7 +51,7 @@ function issue(key, { status = 'In Progress', type = 'Story', parent = null, lab
       issuetype: { name: type },
       priority: { name: 'High' },
       customfield_10016: 5,
-      parent: parent ? { key: parent } : undefined,
+      parent: parent ? { key: parent, fields: { summary: `Épic ${parent}` } } : undefined,
       labels,
       updated: '2026-11-10T10:00:00.000+0000',
     },
@@ -127,7 +127,7 @@ test('Jira issues are normalized through the project map', async () => {
     type: 'story',
     priority: 'high',
     points: 5,
-    epic: 'SO-1000',
+    epic: 'SO-1000 · Épic SO-1000',
     url: 'https://example.atlassian.net/browse/SO-1207',
     updatedAt: '2026-11-10T10:00:00.000+0000',
   })
