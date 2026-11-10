@@ -13,6 +13,7 @@
   "files": [
     "lib",
     "missions/projects.yml",
+    "missions/*/mission.yml",
     "cordis.patch.yml",
     "README.md"
   ],

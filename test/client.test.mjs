@@ -72,6 +72,25 @@ test('chaque composant rend sans lever, même sans service uiWorkspace', () => {
   }
 })
 
+test('le volet de détail porte la branche et la base, et bloque sans elles', () => {
+  // Le volet n'est pas enregistré comme slot : on vérifie le bundle construit,
+  // seule preuve que l'aide de vue a bien été inlinée et que les lignes existent.
+  assert.match(SOURCE, /label: 'Branch', value: mission\.branch/)
+  assert.match(SOURCE, /label: 'Base', value: mission\.base/)
+  assert.match(SOURCE, /function executionBlocker\(mission = \{\}\)/)
+  assert.match(SOURCE, /Session blocked: \$\{blocker\}/)
+  assert.match(SOURCE, /disabled: blocker !== null/)
+  assert.match(SOURCE, /'aria-describedby': blocker \? 'missions-session-blocked' : undefined/)
+})
+
+test('le prompt de session reprend la branche et la base déclarées', () => {
+  assert.match(SOURCE, /Branche : \$\{mission\.branch\} ; base : \$\{mission\.base\}\./)
+})
+
+test('les erreurs du bandeau ont une clé unique par ligne', () => {
+  assert.ok(SOURCE.includes('key: `${error.project}-${index}`'))
+})
+
 test('le thème Naruto rend le bandeau et les images embarquées', () => {
   const { api, ctx, registered } = charger({ getItem: () => 'manga', setItem: () => {} })
   api.apply(ctx)

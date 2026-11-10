@@ -2,21 +2,28 @@
 
 Produire le changement décrit par le cadrage, sans sortir du périmètre.
 
+Une mission s'exécute sur la **branche déclarée** dans son dossier
+`missions/<dossier>/mission.yml`, et sa PR vise la **base déclarée**. Sans les
+deux, pas de session : le panneau refuse de l'ouvrir, et le dossier se crée au
+cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
+
 ## Ce qu'on fait
 
-1. **Ouvrir la branche** depuis la branche principale du projet, nommée d'après la
-   clé du ticket (`soc-1541`, `gh-12`).
+1. **Ouvrir la branche** déclarée dans `missions/<dossier>/mission.yml`, depuis sa
+   `base` déclarée. Par convention son nom suit la clé du ticket (`soc-1541`,
+   `gh-41`) ; c'est la valeur déclarée qui fait foi.
 2. **Passer le ticket en cours** dans le tracker, une fois la branche poussée.
 3. **Travailler par petits commits**, un sujet par commit, chacun préfixé de la
    clé : `SOC-1541: referme l'accès au panneau`.
 4. **Vérifier au fur et à mesure** : les tests du projet passent, le changement
    fait ce que le cadrage annonce.
-5. **Ouvrir la PR** vers la branche principale : titre préfixé de la clé,
+5. **Ouvrir la PR** vers la `base` déclarée : titre préfixé de la clé,
    description qui dit ce que ça change et comment le vérifier.
 
 ## Condition de sortie — la mission est « en revue »
 
-- [ ] La branche est poussée et nommée d'après la clé.
+- [ ] La branche déclarée est poussée (par convention, nommée d'après la clé).
+- [ ] La PR cible la base déclarée dans le dossier de la mission.
 - [ ] Les commits sont préfixés de la clé, un sujet par commit.
 - [ ] Les tests du projet passent (ou l'absence de tests est justifiée dans la PR).
 - [ ] La PR est ouverte, liée au ticket.

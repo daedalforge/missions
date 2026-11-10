@@ -310,6 +310,7 @@ window.__ModuleLoader__.load({
 .missions-action--primary:hover { filter: brightness(1.06); background: var(--dsw-alias-button-primary-fill, #1f1f1f); }
 .missions-action:disabled { opacity: .55; cursor: default; }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
+.missions-drawer-note--blocked { color: var(--dsw-alias-label-secondary, #5c534b); }
 .missions-drawer--empty { justify-content: center; align-items: center; border-left: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
 .missions-drawer-hint { max-width: 220px; margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12px; text-align: center; }
 `
@@ -766,7 +767,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
         return () => document.removeEventListener('keydown', onKey)
       }, [onClose])
 
-      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
+      const blocker = executionBlocker(mission)
+      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.${blocker === null ? `\n\nBranche : ${mission.branch} ; base : ${mission.base}.` : ''}`
 
       const startSession = async () => {
         setNote('Starting a session…')
@@ -816,15 +818,18 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
             h(DrawerRow, { label: 'Project', value: mission.projectName ?? mission.project }),
             h(DrawerRow, { label: 'Epic', value: mission.epic }),
             h(DrawerRow, { label: 'Updated', value: relativeAge(mission.updatedAt) }),
+            h(DrawerRow, { label: 'Branch', value: mission.branch }),
+            h(DrawerRow, { label: 'Base', value: mission.base }),
           ),
 
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
+          blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}. Declare it in the mission's folder (missions/<folder>/mission.yml).`) : null,
 
           h('div', { className: 'missions-drawer-actions' },
             mission.url
               ? h('a', { className: 'missions-action', href: mission.url, target: '_blank', rel: 'noreferrer noopener' }, 'Open on the tracker')
               : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
-            h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession }, 'Start a session'),
+            h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession, disabled: blocker !== null, title: blocker ?? undefined, 'aria-describedby': blocker ? 'missions-session-blocked' : undefined }, 'Start a session'),
         ),
       )
     }
@@ -1000,7 +1005,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 
         tab === 'missions' && errors.length > 0
           ? h('div', { className: 'missions-errors' },
-              errors.map((error) => h('div', { className: 'missions-error', key: `${error.project}` },
+              errors.map((error, index) => h('div', { className: 'missions-error', key: `${error.project}-${index}` },
                 h('b', null, error.project),
                 h('span', null, error.message),
               )))

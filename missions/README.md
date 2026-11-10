@@ -1,7 +1,8 @@
 # La mission
 
 Une mission est un travail suivi par **un ticket de tracker**. Sa fiche, son
-état et son historique vivent dans le tracker ; le workspace n'en garde rien.
+état et son historique vivent dans le tracker ; le workspace ne garde que ce que
+le tracker ne sait pas porter : la branche de la mission et sa base.
 
 ## Identité
 
@@ -29,6 +30,7 @@ Un ticket ne saute pas d'état : chaque transition a une condition de sortie
 |---|---|---|
 | Fiche de mission (titre, description, critères) | Tracker | Non |
 | État, assignation, commentaires | Tracker | Non |
+| Branche et base (déclarées) | `missions/<dossier>/mission.yml` | Oui |
 | Branche et commits | Dépôt du projet | Selon le projet |
 | Preuves de clôture | Commentaire du ticket | Non |
 | Méthode (ce document, workflows) | Ce dépôt | Oui |
@@ -36,6 +38,37 @@ Un ticket ne saute pas d'état : chaque transition a une condition de sortie
 Sur GitHub, pas de board GitHub Projects : la liste des issues suffit. Une
 mission n'a pas de sous-ticket ; ce qui aurait été une sous-tâche est un critère
 d'acceptation ou une mission à part entière.
+
+## Branche et base
+
+Deux propriétés d'une mission n'existent ni sur GitHub ni sur Jira : la **branche
+de travail** et sa **branche de base**, celle d'où elle part et où revient sa PR
+(c'est ce qui permet de suivre l'arbre gitmachete et de viser la bonne branche).
+Elles sont **déclarées**, jamais déduites : le panneau les lit dans le dépôt, il
+n'interroge ni git ni gitmachete et ne devine pas un nom de branche.
+
+Chaque mission exécutable a **un dossier** sous `missions/`, avec un
+`mission.yml` :
+
+```yaml
+key: daedalforge/missions#41
+branch: gh-41
+base: main
+```
+
+- **`key` fait foi** : c'est lui qui relie le fichier à la mission du tracker
+  (`owner/repo#n` ou clé Jira). Le nom du dossier est libre — `GH-41` pour
+  `daedalforge/missions#41`.
+- **Pas de session sans les deux** : un dossier absent, ou un champ manquant,
+  laisse `branch`/`base` vides ; le volet de détail n'affiche alors ni branche ni
+  base et désactive « Start a session » plutôt que de supposer une branche.
+- **Une erreur se voit** : champ inconnu, clé dupliquée entre deux dossiers,
+  YAML invalide ou valeur vide sont signalés dans le panneau, pas avalés.
+- **Une déclaration sans mission affichée n'est pas une erreur** : une mission
+  fermée ou assignée à quelqu'un d'autre garde son dossier sans apparaître dans
+  le panneau.
+- **Le dossier se crée au cadrage**, quand la fiche est validée ; la branche
+  elle-même ne s'ouvre qu'à l'exécution, depuis `base`.
 
 ## Le projet décide du tracker
 
