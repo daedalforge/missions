@@ -102,6 +102,10 @@ projet est une source : il se lit seul, avec ses propres identifiants, et son
   restent deux missions distinctes.
 - **Lecture seule.** Lire un tracker ne modifie rien : ni le tracker, ni le
   dépôt, ni un fichier local.
+- **Mes missions seulement.** Chaque lecture est filtrée sur le compte qui
+  interroge : l'assigné courant sur GitHub, `assignee = currentUser()` en JQL
+  côté Jira. Le compte n'est jamais écrit dans `projects.yml` ; il vient du
+  jeton qui parle au tracker.
 
 ## Correspondance avec le tracker
 

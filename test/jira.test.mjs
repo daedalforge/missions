@@ -53,6 +53,19 @@ beforeEach(() => {
   forgetToken()
 })
 
+test('the JQL is scoped to the current assignee', async () => {
+  const calls = []
+  const fetchImpl = async (url) => {
+    calls.push(url)
+    return response({ issues: [] })
+  }
+
+  await list(PROJECT, { fetchImpl })
+
+  const jql = decodeURIComponent(calls[0]).replaceAll('+', ' ')
+  assert.match(jql, /assignee = currentUser\(\)/)
+})
+
 test('Jira issues are normalized through the project map', async () => {
   const fetchImpl = async () => response({ issues: [issue('SO-1207', { parent: 'SO-1000' })] })
 

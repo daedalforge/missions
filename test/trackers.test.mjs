@@ -42,6 +42,12 @@ function response(body) {
   }
 }
 
+/** Répond au compte courant, puis délègue aux issues données. */
+function routeIssues(issues) {
+  return async (url) =>
+    String(url).endsWith('/user') ? response({ login: 'slucienvauthier-so' }) : response(issues)
+}
+
 beforeEach(() => {
   process.env.GH_TOKEN = 'test-token'
   process.env.JIRA_API_TOKEN = 'test-jira-token'
@@ -51,8 +57,7 @@ beforeEach(() => {
 })
 
 test('a failing project does not prevent the others from being read', async () => {
-  const fetchImpl = async () =>
-    response([{ number: 2, title: 'Mission 2', labels: [{ name: 'ready' }], type: { name: 'Feature' } }])
+  const fetchImpl = routeIssues([{ number: 2, title: 'Mission 2', labels: [{ name: 'ready' }], type: { name: 'Feature' } }])
 
   const { missions, errors } = await listAll([PROJECT_BROKEN, PROJECT_OK], { fetchImpl })
 
@@ -79,12 +84,11 @@ test('the read is cached unless a fresh read is asked', async () => {
 })
 
 test('missions are sorted by state then key', async () => {
-  const fetchImpl = async () =>
-    response([
-      { number: 5, title: 'b', labels: [{ name: 'ready' }], type: { name: 'Feature' } },
-      { number: 1, title: 'a', labels: [{ name: 'in-review' }], type: { name: 'Bug' } },
-      { number: 3, title: 'c', labels: [{ name: 'ready' }], type: { name: 'Feature' } },
-    ])
+  const fetchImpl = routeIssues([
+    { number: 5, title: 'b', labels: [{ name: 'ready' }], type: { name: 'Feature' } },
+    { number: 1, title: 'a', labels: [{ name: 'in-review' }], type: { name: 'Bug' } },
+    { number: 3, title: 'c', labels: [{ name: 'ready' }], type: { name: 'Feature' } },
+  ])
 
   const { missions } = await listAll([PROJECT_OK], { fetchImpl })
 
@@ -93,6 +97,7 @@ test('missions are sorted by state then key', async () => {
 
 test('GitHub and Jira share the same list', async () => {
   const fetchImpl = async (url) => {
+    if (String(url).endsWith('/user')) return response({ login: 'slucienvauthier-so' })
     if (String(url).includes('api.github.com')) {
       return response([{ number: 2, title: 'GitHub mission', labels: [{ name: 'ready' }], type: { name: 'Feature' } }])
     }

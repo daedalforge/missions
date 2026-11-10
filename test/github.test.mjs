@@ -42,17 +42,25 @@ function issue(number, { labels = [], pr = false, milestone = null, type = 'Feat
   }
 }
 
+/** Route /user (compte courant) puis délègue au faux fetch d'issues. */
+function route(issues) {
+  return async (url) =>
+    String(url).endsWith('/user')
+      ? response({ login: 'slucienvauthier-so' })
+      : issues(url)
+}
+
 beforeEach(() => {
   process.env.GH_TOKEN = 'test-token'
   forgetToken()
 })
 
 test('issues are normalized and pull requests dropped', async () => {
-  const fetchImpl = async () =>
+  const fetchImpl = route(async () =>
     response([
       issue(2, { labels: ['ready'], milestone: { title: 'Workspace' }, type: 'Feature' }),
       issue(9, { labels: [], type: 'Bug', pr: true }),
-    ])
+    ]))
 
   const missions = await list(PROJECT, { fetchImpl })
 
@@ -72,7 +80,7 @@ test('issues are normalized and pull requests dropped', async () => {
 
 test('pagination follows the Link header', async () => {
   const calls = []
-  const fetchImpl = async (url) => {
+  const fetchImpl = route(async (url) => {
     calls.push(url)
     if (calls.length === 1) {
       return response([issue(1, { labels: ['to-refine'] })], {
@@ -80,13 +88,25 @@ test('pagination follows the Link header', async () => {
       })
     }
     return response([issue(2, { labels: ['in-review'], type: 'Bug' })])
-  }
+  })
 
   const missions = await list(PROJECT, { fetchImpl })
 
   assert.equal(calls.length, 2)
   assert.deepEqual(missions.map((m) => m.number), [1, 2])
   assert.deepEqual(missions.map((m) => m.state), ['to-refine', 'in-review'])
+})
+
+test('the query is scoped to the current assignee', async () => {
+  const calls = []
+  const fetchImpl = route(async (url) => {
+    calls.push(url)
+    return response([])
+  })
+
+  await list(PROJECT, { fetchImpl })
+
+  assert.match(calls[0], /assignee=slucienvauthier-so/)
 })
 
 test('a 401 names the GitHub token', async () => {
