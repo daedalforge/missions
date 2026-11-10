@@ -101,7 +101,23 @@ window.__ModuleLoader__.load({
         prefilledBy = prefill(sessions.binding(sessionId))
       }
 
-      return { sessionId, prefilledBy }
+      // Navigation is a separate service: creating a Session does not open it.
+      // Try every surface that could take the user there, and say which one did.
+      let openedBy = null
+      for (const nom of ['uiWorkspace', 'workspaceNavigation', 'navigation']) {
+        const surface = service(services, nom)
+        if (surface && typeof surface.openSession === 'function') {
+          try {
+            surface.openSession(sessionId)
+            openedBy = `${nom}.openSession`
+            break
+          } catch {
+            // try the next surface
+          }
+        }
+      }
+
+      return { sessionId, prefilledBy, openedBy }
     }
 
     const LIST_URL = 'missions/api/list'
@@ -331,12 +347,14 @@ window.__ModuleLoader__.load({
         const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
         setNote('Starting a session…')
         try {
-          const { prefilledBy } = await openMissionSession(services, prompt, workspaceId)
-          setNote(
-            prefilledBy
-              ? `Session opened, prompt prefilled via ${prefilledBy} — press Enter to send.`
-              : 'Session opened. The prompt could not be prefilled.',
-          )
+          const { prefilledBy, openedBy } = await openMissionSession(services, prompt, workspaceId)
+          if (openedBy) {
+            setNote(`Session opened via ${openedBy}, prompt prefilled via ${prefilledBy ?? 'nothing'} — press Enter to send.`)
+          } else if (prefilledBy) {
+            setNote(`Session created and prefilled via ${prefilledBy}, but this panel cannot open it — pick it in the sidebar.`)
+          } else {
+            setNote('Session created, but neither opened nor prefilled — pick it in the sidebar.')
+          }
         } catch (error) {
           setNote(`Session failed: ${error?.message ?? error}`)
         }
