@@ -37,7 +37,22 @@ window.__ModuleLoader__.load({
     /** Whether a session can be started from this panel. */
     function sessionsReady(services) {
       const sessions = service(services, 'sessions')
-      return Boolean(sessions && typeof sessions.create === 'function' && typeof sessions.using === 'function')
+      const ui = service(services, 'uiWorkspace')
+      return Boolean(
+        (ui && typeof ui.startSession === 'function') ||
+          (sessions && typeof sessions.create === 'function' && typeof sessions.using === 'function'),
+      )
+    }
+
+    /** Workspace records known to the app, as a plain array. */
+    function workspaceRecords(services) {
+      try {
+        const workspaces = service(services, 'workspaces')
+        const snapshot = workspaces?.list?.getSnapshot?.() ?? workspaces?.list?.() ?? []
+        return Array.isArray(snapshot) ? snapshot : []
+      } catch {
+        return []
+      }
     }
 
     /**
@@ -46,7 +61,27 @@ window.__ModuleLoader__.load({
      * The prompt is written into the composer, never sent: the user keeps the
      * hand on the send button.
      */
-    async function openMissionSession(services, prompt, workspaceId) {
+    async function openMissionSession(services, prompt, workspaceId, workspaceRoot) {
+      // The reference implementation: resolve the workspace record, then let
+      // uiWorkspace create, attach and open the session in one gesture.
+      const ui = service(services, 'uiWorkspace')
+      const records = workspaceRecords(services)
+      const target =
+        records.find((record) => record?.path === workspaceRoot) ?? records[0] ?? (workspaceId ? { workspaceId } : null)
+
+      if (ui && typeof ui.startSession === 'function' && target) {
+        const id = target.workspaceId ?? target.id
+        try {
+          if (typeof ui.connectWorkspace === 'function' && id) await ui.connectWorkspace(id)
+          ui.startSession(id, { prompt })
+          return { sessionId: null, prefilledBy: 'uiWorkspace.startSession', openedBy: 'uiWorkspace.startSession', workspaces: records.length }
+        } catch (error) {
+          // fall through to the manual path, and keep the reason
+          const raison = error?.message ?? String(error)
+          return { sessionId: null, prefilledBy: null, openedBy: null, workspaces: records.length, uiError: raison }
+        }
+      }
+
       const sessions = service(services, 'sessions')
       if (!sessions || typeof sessions.create !== 'function') {
         throw new Error('the sessions service is not reachable from this panel')
@@ -117,7 +152,7 @@ window.__ModuleLoader__.load({
         }
       }
 
-      return { sessionId, prefilledBy, openedBy }
+      return { sessionId, prefilledBy, openedBy, workspaces: records.length, uiAvailable: Boolean(ui) }
     }
 
     const LIST_URL = 'missions/api/list'
@@ -332,7 +367,7 @@ window.__ModuleLoader__.load({
       return h(React.Fragment, null, h('dt', null, label), h('dd', null, value))
     }
 
-    function MissionDrawer({ mission, services, workspaceId, onClose }) {
+    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose }) {
       const [note, setNote] = React.useState(null)
 
       React.useEffect(() => {
@@ -357,8 +392,10 @@ window.__ModuleLoader__.load({
       const startSession = async () => {
         setNote('Starting a session…')
         try {
-          const { prefilledBy, openedBy } = await openMissionSession(services, prompt, workspaceId)
-          if (openedBy) {
+          const { prefilledBy, openedBy, workspaces, uiError, uiAvailable } = await openMissionSession(services, prompt, workspaceId, workspaceRoot)
+          if (uiError) {
+            setNote(`uiWorkspace refused: ${uiError}`)
+          } else if (openedBy) {
             setNote(`Session opened via ${openedBy}, prompt prefilled via ${prefilledBy ?? 'nothing'} — press Enter to send.`)
           } else if (prefilledBy) {
             setNote(
@@ -366,7 +403,7 @@ window.__ModuleLoader__.load({
             )
           } else {
             setNote(
-              `Session created${workspaceId ? '' : ' without a workspace'}, but neither opened nor prefilled — pick it in the sidebar.`,
+              `Session created${workspaceId ? '' : ' without a workspace'}, but neither opened nor prefilled — pick it in the sidebar. [uiWorkspace ${uiAvailable ? 'yes' : 'no'}, workspaces ${workspaces}]`,
             )
           }
         } catch (error) {
@@ -415,7 +452,7 @@ window.__ModuleLoader__.load({
     }
 
     function MissionsPanel({ services }) {
-      const [view, setView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null })
+      const [view, setView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
       const [tab, setTab] = React.useState('missions')
       const [query, setQuery] = React.useState('')
       const [type, setType] = React.useState(null)
@@ -427,13 +464,14 @@ window.__ModuleLoader__.load({
           .then((response) => response.json())
           .then((data) => {
             if (data?.error) throw new Error(data.error)
-            setView({ loading: false, missions: data?.missions ?? [], errors: data?.errors ?? [], workspaceId: data?.workspaceId ?? null })
+            setView({ loading: false, missions: data?.missions ?? [], errors: data?.errors ?? [], workspaceId: data?.workspaceId ?? null, workspaceRoot: data?.workspaceRoot ?? null })
           })
           .catch((error) => {
             // A silent refresh that fails must not empty the list.
             setView((previous) => ({
               loading: false,
               workspaceId: previous.workspaceId,
+              workspaceRoot: previous.workspaceRoot,
               missions: silent ? previous.missions : [],
               errors: [{ project: 'panel', message: error?.message ?? 'read failed' }],
             }))
@@ -448,7 +486,7 @@ window.__ModuleLoader__.load({
         return () => clearInterval(timer)
       }, [load])
 
-      const { loading, missions, errors, workspaceId } = view
+      const { loading, missions, errors, workspaceId, workspaceRoot } = view
       const filtered = filterMissions(missions, { query, type })
       const groups = groupByState(filtered)
 
@@ -501,7 +539,7 @@ window.__ModuleLoader__.load({
             : h(MissionsView, { loading, missions, query, onQuery: setQuery, type, onType: setType, filtered, groups, onSelect: setSelected }),
         ),
 
-        selected ? h(MissionDrawer, { mission: selected, services, workspaceId, onClose: () => setSelected(null) }) : null,
+        selected ? h(MissionDrawer, { mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null) }) : null,
       )
     }
 
