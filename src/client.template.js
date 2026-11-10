@@ -40,21 +40,33 @@ window.__ModuleLoader__.load({
       return Boolean(sessions && typeof sessions.create === 'function' && typeof sessions.using === 'function')
     }
 
-    /** Create a session, in the code workspace, and send the mission prompt into it. */
-    async function startMissionSession(services, prompt, workspaceRoot) {
+    /**
+     * Open a session in the code workspace and prefill its draft.
+     *
+     * The prompt is written into the composer, never sent: the user keeps the
+     * hand on the send button.
+     */
+    async function openMissionSession(services, prompt, workspaceId) {
       const sessions = service(services, 'sessions')
-      if (!sessions || typeof sessions.create !== 'function' || typeof sessions.using !== 'function') {
+      if (!sessions || typeof sessions.create !== 'function') {
         throw new Error('the sessions service is not reachable from this panel')
       }
-      const sessionId = await sessions.create(workspaceRoot ? { cwd: workspaceRoot } : {})
-      await sessions.using(sessionId, { source: 'missions' }, async (reference) => {
-        const snapshot = reference?.binding?.session?.getSnapshot?.()
-        if (snapshot && snapshot.openState !== 'open') {
-          throw new Error(snapshot.openError?.message ?? 'the session did not open')
-        }
-        return reference.binding.session.prompt([{ type: 'text', text: prompt }], 'queue')
-      })
-      return sessionId
+
+      const created = await sessions.create(workspaceId ? { workspaceId } : {})
+      const sessionId = typeof created === 'string' ? created : created?.sessionId
+      if (!sessionId) throw new Error('the session was created without an id')
+
+      const input = service(services, 'conversation.input')
+      const binding = typeof sessions.binding === 'function' ? sessions.binding(sessionId) : null
+      let prefilled = false
+      if (input && typeof input.requestDraftInitialization === 'function' && binding) {
+        input.requestDraftInitialization(binding, { prompt, whenDraftExists: 'replace' })
+        prefilled = true
+      } else if (binding?.session && typeof binding.session.setDraft === 'function') {
+        binding.session.setDraft(prompt)
+        prefilled = true
+      }
+      return { sessionId, prefilled }
     }
 
     const LIST_URL = 'missions/api/list'
@@ -269,7 +281,7 @@ window.__ModuleLoader__.load({
       return h(React.Fragment, null, h('dt', null, label), h('dd', null, value))
     }
 
-    function MissionDrawer({ mission, services, workspaceRoot, onClose }) {
+    function MissionDrawer({ mission, services, workspaceId, onClose }) {
       const [note, setNote] = React.useState(null)
 
       React.useEffect(() => {
@@ -284,8 +296,12 @@ window.__ModuleLoader__.load({
         const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
         setNote('Starting a session…')
         try {
-          await startMissionSession(services, prompt, workspaceRoot)
-          setNote('Session started.')
+          const { prefilled } = await openMissionSession(services, prompt, workspaceId)
+          setNote(
+            prefilled
+              ? 'Session opened with a prefilled prompt — press Enter to send.'
+              : 'Session opened. The prompt could not be prefilled.',
+          )
         } catch (error) {
           setNote(`Session failed: ${error?.message ?? error}`)
         }
@@ -331,7 +347,7 @@ window.__ModuleLoader__.load({
     }
 
     function MissionsPanel({ services }) {
-      const [view, setView] = React.useState({ loading: true, missions: [], errors: [], workspaceRoot: null })
+      const [view, setView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null })
       const [tab, setTab] = React.useState('missions')
       const [query, setQuery] = React.useState('')
       const [type, setType] = React.useState(null)
@@ -343,13 +359,13 @@ window.__ModuleLoader__.load({
           .then((response) => response.json())
           .then((data) => {
             if (data?.error) throw new Error(data.error)
-            setView({ loading: false, missions: data?.missions ?? [], errors: data?.errors ?? [], workspaceRoot: data?.workspaceRoot ?? null })
+            setView({ loading: false, missions: data?.missions ?? [], errors: data?.errors ?? [], workspaceId: data?.workspaceId ?? null })
           })
           .catch((error) => {
             // A silent refresh that fails must not empty the list.
             setView((previous) => ({
               loading: false,
-              workspaceRoot: previous.workspaceRoot,
+              workspaceId: previous.workspaceId,
               missions: silent ? previous.missions : [],
               errors: [{ project: 'panel', message: error?.message ?? 'read failed' }],
             }))
@@ -364,7 +380,7 @@ window.__ModuleLoader__.load({
         return () => clearInterval(timer)
       }, [load])
 
-      const { loading, missions, errors, workspaceRoot } = view
+      const { loading, missions, errors, workspaceId } = view
       const filtered = filterMissions(missions, { query, type })
       const groups = groupByState(filtered)
 
@@ -417,7 +433,7 @@ window.__ModuleLoader__.load({
             : h(MissionsView, { loading, missions, query, onQuery: setQuery, type, onType: setType, filtered, groups, onSelect: setSelected }),
         ),
 
-        selected ? h(MissionDrawer, { mission: selected, services, workspaceRoot, onClose: () => setSelected(null) }) : null,
+        selected ? h(MissionDrawer, { mission: selected, services, workspaceId, onClose: () => setSelected(null) }) : null,
       )
     }
 
