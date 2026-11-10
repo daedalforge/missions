@@ -7,11 +7,18 @@ import test from 'node:test'
 import { loadProjects } from '../lib/projects.js'
 
 test('the workspace file declares its projects, complete', async () => {
-  const { canonical, projects } = await loadProjects()
+  const { canonical, products, projects } = await loadProjects()
 
   assert.deepEqual(canonical.states, ['to-refine', 'ready', 'in-progress', 'in-review', 'done'])
   assert.deepEqual(canonical.types, ['bug', 'story'])
   assert.deepEqual(canonical.priorities, ['urgent', 'high', 'normal', 'low'])
+  assert.deepEqual(products, {
+    manager: 'Manager',
+    marketplace: 'Marketplace',
+    core: 'Core',
+    connect: 'Connect',
+    clienthub: 'Clienthub',
+  })
   assert.deepEqual(
     projects.map((project) => project.id),
     ['missions', 'manager'],
@@ -33,6 +40,7 @@ test('the workspace file declares its projects, complete', async () => {
   assert.equal(manager.jira.story_points_field, 'customfield_10032')
   assert.deepEqual(manager.map.states['in-progress'], ['In Progress', 'Local Testing', 'Staging Test'])
   assert.deepEqual(manager.map.states.done, ['Released', 'Ready for prod'])
+  assert.deepEqual(manager.map.labels, products)
   assert.equal(manager.map.types.story, 'Story')
 })
 

@@ -9,6 +9,7 @@ const PROJECT = {
   map: {
     states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
     types: { bug: 'Bug', story: 'Feature' },
+    labels: { manager: 'Manager', marketplace: 'Marketplace' },
   },
 }
 
@@ -45,6 +46,7 @@ test('an issue takes its state and type from the tracker vocabulary', () => {
     title: 'The panel reads every project independently',
     rawState: 'ready',
     rawType: 'Feature',
+    rawLabels: ['marketplace', 'services-residents'],
     epic: 'Workspace',
     url: 'https://github.com/daedalforge/missions/issues/2',
     updatedAt: '2026-11-10T15:56:47Z',
@@ -55,8 +57,8 @@ test('an issue takes its state and type from the tracker vocabulary', () => {
   assert.equal(mission.state, 'ready')
   assert.equal(mission.type, 'story')
   assert.equal(mission.epic, 'Workspace')
-  assert.equal(mission.project, 'missions')
-  assert.equal(mission.projectName, 'Workspace missions')
+  assert.equal(mission.project, 'marketplace')
+  assert.equal(mission.projectName, 'Marketplace')
 })
 
 test('an unknown state stays null instead of being guessed', () => {
