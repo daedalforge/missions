@@ -12,8 +12,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 const root = new URL('../', import.meta.url)
 const read = (path) => readFile(new URL(path, root), 'utf8')
 
-const manifest = JSON.parse(await read('package.json'))
-const template = (await read('src/client.template.js')).replaceAll('__VERSION__', manifest.version)
+const template = await read('src/client.template.js')
 const view = (await read('lib/view.js')).replace(/^export /gm, '').trimEnd()
 const indented = view
   .split('\n')

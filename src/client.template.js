@@ -34,16 +34,6 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** Whether a session can be started from this panel. */
-    function sessionsReady(services) {
-      const sessions = service(services, 'sessions')
-      const ui = service(services, 'uiWorkspace')
-      return Boolean(
-        (ui && typeof ui.startSession === 'function') ||
-          (sessions && typeof sessions.create === 'function' && typeof sessions.using === 'function'),
-      )
-    }
-
     /** Workspace records known to the app, as a plain array. */
     function workspaceRecords(services) {
       try {
@@ -81,11 +71,10 @@ window.__ModuleLoader__.load({
             sessionId: null,
             prefilledBy: 'uiWorkspace.startSession',
             openedBy: 'uiWorkspace.startSession',
-            workspaces: records.length,
           }
         } catch (error) {
           const raison = error?.message ?? String(error)
-          return { sessionId: null, prefilledBy: null, openedBy: null, workspaces: records.length, uiError: raison }
+          return { sessionId: null, prefilledBy: null, openedBy: null, uiError: raison }
         }
       }
 
@@ -170,7 +159,7 @@ window.__ModuleLoader__.load({
         }
       }
 
-      return { sessionId, prefilledBy, openedBy, workspaces: records.length, uiAvailable: Boolean(ui) }
+      return { sessionId, prefilledBy, openedBy }
     }
 
     const LIST_URL = 'missions/api/list'
@@ -271,7 +260,6 @@ window.__ModuleLoader__.load({
 .missions-action--primary:hover { filter: brightness(1.06); background: var(--dsw-alias-button-primary-fill, #1f1f1f); }
 .missions-action:disabled { opacity: .55; cursor: default; }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
-.missions-drawer-version { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; }
 .missions-drawer--empty { justify-content: center; align-items: center; border-left: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
 .missions-drawer-hint { max-width: 220px; margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12px; text-align: center; }
 `
@@ -403,7 +391,7 @@ window.__ModuleLoader__.load({
       const startSession = async () => {
         setNote('Starting a session…')
         try {
-          const { prefilledBy, openedBy, workspaces, uiError, uiAvailable } = await openMissionSession(services, prompt, workspaceId, workspaceRoot)
+          const { prefilledBy, openedBy, uiError } = await openMissionSession(services, prompt, workspaceId, workspaceRoot)
           if (uiError) {
             setNote(`uiWorkspace refused: ${uiError}`)
           } else if (openedBy) {
@@ -418,7 +406,7 @@ window.__ModuleLoader__.load({
             )
           } else {
             setNote(
-              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'}, but neither opened nor prefilled — pick it in the sidebar. [uiWorkspace ${uiAvailable ? 'yes' : 'no'}, workspaces ${workspaces}]`,
+              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'}, but neither opened nor prefilled — pick it in the sidebar.`,
             )
           }
         } catch (error) {
@@ -450,8 +438,6 @@ window.__ModuleLoader__.load({
           ),
 
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
-
-          h('div', { className: 'missions-drawer-version' }, 'panel v__VERSION__'),
 
           h('div', { className: 'missions-drawer-actions' },
             mission.url
@@ -521,7 +507,7 @@ window.__ModuleLoader__.load({
         h('header', { className: 'missions-head' },
           h('h1', { className: 'missions-title' }, 'Missions'),
           h('span', { className: 'missions-scope' },
-            `assigned to me · ${missions.length} · v__VERSION__ · sessions ${sessionsReady(services) ? 'yes' : 'no'}`,
+            `assigned to me · ${missions.length}`,
           ),
           tab === 'missions' && errors.length === 0
             ? h('div', { className: 'missions-actions' },
