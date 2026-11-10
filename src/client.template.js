@@ -287,7 +287,7 @@ window.__ModuleLoader__.load({
 @keyframes missions-spin { to { transform: rotate(360deg); } }
 @keyframes missions-run { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-7px) rotate(4deg); } }
 @keyframes missions-lines { from { transform: translateX(0); } to { transform: translateX(-9px); } }
-@media (prefers-reduced-motion: reduce) { .missions-spinner, .missions-btn-spinner, .missions-runner-lines, .missions-chibi, .missions-chibi-head, .missions-chibi-arm, .missions-chibi-leg { animation: none; } .missions-chibi { left: calc(50% - 75px); } }
+@media (prefers-reduced-motion: reduce) { .missions-spinner, .missions-btn-spinner, .missions-runner-lines, .missions-chibi, .missions-chibi-body, .missions-chibi-head, .missions-chibi-arm, .missions-chibi-leg, .missions-chibi-ribbon, .missions-chibi-dust { animation: none; } .missions-chibi { left: calc(50% - 75px); } .missions-chibi-dust { display: none; } }
 .missions-dashboard { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; max-width: 520px; padding-top: 8px; }
 .missions-dashboard-card { width: 100%; padding: 18px 20px; border: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.16)); border-radius: 10px; }
 .missions-dashboard-card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
@@ -466,16 +466,25 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-loader-label { font-family: var(--mm-display); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
 .missions-panel[data-theme="manga"] .missions-runner { position: relative; width: min(88%, 720px); height: 172px; margin: 0 auto; overflow: hidden; }
 .missions-panel[data-theme="manga"] .missions-runner-track { position: absolute; inset: 12px 0 0; }
-.missions-panel[data-theme="manga"] .missions-chibi { position: absolute; left: 0; bottom: 2px; width: 150px; height: 150px; animation: missions-chibi-run 2.8s linear infinite; }
+.missions-panel[data-theme="manga"] .missions-chibi { position: absolute; left: 0; bottom: 2px; width: 150px; height: 150px; animation: missions-chibi-run 3s linear infinite; }
 .missions-panel[data-theme="manga"] .missions-chibi svg { width: 100%; height: 100%; overflow: visible; }
-.missions-panel[data-theme="manga"] .missions-chibi-head { transform-box: fill-box; transform-origin: 50% 100%; animation: missions-chibi-bob .32s ease-in-out infinite alternate; }
+.missions-panel[data-theme="manga"] .missions-chibi-body { transform-box: fill-box; transform-origin: 50% 95%; animation: missions-chibi-lean .38s ease-in-out infinite alternate; }
+.missions-panel[data-theme="manga"] .missions-chibi-head { transform-box: fill-box; transform-origin: 50% 100%; animation: missions-chibi-bob .36s ease-in-out infinite alternate; }
 .missions-panel[data-theme="manga"] .missions-chibi-arm, .missions-panel[data-theme="manga"] .missions-chibi-leg { transform-box: fill-box; transform-origin: 50% 0; }
-.missions-panel[data-theme="manga"] .missions-chibi-arm--front, .missions-panel[data-theme="manga"] .missions-chibi-leg--front { animation: missions-chibi-limb .34s ease-in-out infinite alternate; }
-.missions-panel[data-theme="manga"] .missions-chibi-arm--back, .missions-panel[data-theme="manga"] .missions-chibi-leg--back { animation: missions-chibi-limb .34s ease-in-out infinite alternate-reverse; }
+.missions-panel[data-theme="manga"] .missions-chibi-arm--front { animation: missions-chibi-arm .38s ease-in-out infinite alternate; }
+.missions-panel[data-theme="manga"] .missions-chibi-arm--back { animation: missions-chibi-arm .38s ease-in-out infinite alternate-reverse; }
+.missions-panel[data-theme="manga"] .missions-chibi-leg--front { animation: missions-chibi-leg .32s ease-in-out infinite alternate; }
+.missions-panel[data-theme="manga"] .missions-chibi-leg--back { animation: missions-chibi-leg .32s ease-in-out infinite alternate-reverse; }
+.missions-panel[data-theme="manga"] .missions-chibi-ribbon { transform-box: fill-box; transform-origin: 100% 50%; animation: missions-chibi-ribbon .4s ease-in-out infinite alternate; }
+.missions-panel[data-theme="manga"] .missions-chibi-dust { animation: missions-chibi-dust .7s ease-out infinite; }
 .missions-panel[data-theme="manga"] .missions-runner-lines { position: absolute; left: 0; bottom: 44px; width: 100%; height: 28px; background: repeating-linear-gradient(90deg, var(--mm-ink) 0 2px, transparent 2px 15px); opacity: .3; animation: missions-lines .38s linear infinite; }
 @keyframes missions-chibi-run { 0% { left: -150px; } 100% { left: calc(100% + 12px); } }
+@keyframes missions-chibi-lean { from { transform: rotate(-3deg) translateY(0); } to { transform: rotate(7deg) translateY(-2px); } }
 @keyframes missions-chibi-bob { from { transform: translateY(0); } to { transform: translateY(-3px); } }
-@keyframes missions-chibi-limb { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
+@keyframes missions-chibi-arm { from { transform: rotate(-7deg); } to { transform: rotate(5deg); } }
+@keyframes missions-chibi-leg { from { transform: rotate(-32deg); } to { transform: rotate(32deg); } }
+@keyframes missions-chibi-ribbon { from { transform: rotate(-6deg); } to { transform: rotate(8deg); } }
+@keyframes missions-chibi-dust { 0% { opacity: .8; transform: translateX(0) scale(.7); } 100% { opacity: 0; transform: translateX(-30px) scale(1.5); } }
 .missions-panel[data-theme="manga"] .missions-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; padding: 10px 20px 30px; text-align: center; }
 .missions-panel[data-theme="manga"] .missions-empty-art { position: relative; width: 300px; height: 196px; margin-bottom: 12px; }
 .missions-panel[data-theme="manga"] .missions-empty-photo { position: absolute; left: 0; top: 8px; width: 300px; height: 156px; overflow: hidden; border: 1.5px solid var(--mm-ink); border-radius: 6px; background: var(--mm-page-3); box-shadow: 4px 4px 0 var(--mm-shadow); transform: rotate(-2deg); }
@@ -840,8 +849,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
                       h('circle', { cx: 60, cy: 73, r: 3, fill: '#2f4f7a' }),
                     ),
                     h('g', { className: 'missions-chibi-arm missions-chibi-arm--front' },
-                      h('rect', { x: 71, y: 58, width: 9, height: 27, rx: 4, fill: '#f28a2e' }),
-                      h('circle', { cx: 76, cy: 86, r: 5.5, fill: '#f7c9a3' }),
+                      h('rect', { x: 48, y: 57, width: 9, height: 28, rx: 4, fill: '#f28a2e' }),
+                      h('circle', { cx: 52, cy: 86, r: 5.5, fill: '#f7c9a3' }),
                     ),
                     h('g', { className: 'missions-chibi-leg missions-chibi-leg--front' },
                       h('rect', { x: 61, y: 76, width: 13, height: 30, rx: 6, fill: '#2f4f7a' }),
@@ -857,6 +866,15 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
                       h('circle', { cx: 69, cy: 37, r: 2.1, fill: '#1f1f1f' }),
                       h('path', { d: 'M54 44 Q60 48 66 44', stroke: '#1f1f1f', strokeWidth: 1.6, fill: 'none', strokeLinecap: 'round' }),
                       h('path', { d: 'M44 39 l-4 0.6 M44 42 l-4 0.6 M44 45 l-4 0.6 M76 39 l4 0.6 M76 42 l4 0.6 M76 45 l4 0.6', stroke: '#b98a5a', strokeWidth: 1.1, strokeLinecap: 'round' }),
+                    ),
+                    h('g', { className: 'missions-chibi-ribbon' },
+                      h('path', { d: 'M38 30 Q28 31 20 39', stroke: '#2f4f7a', strokeWidth: 4.5, fill: 'none', strokeLinecap: 'round' }),
+                      h('path', { d: 'M37 34 Q27 37 18 46', stroke: '#2f4f7a', strokeWidth: 3.2, fill: 'none', strokeLinecap: 'round' }),
+                    ),
+                    h('g', { className: 'missions-chibi-dust' },
+                      h('circle', { cx: 38, cy: 107, r: 4, fill: '#c9b79a' }),
+                      h('circle', { cx: 29, cy: 109, r: 3, fill: '#c9b79a' }),
+                      h('circle', { cx: 47, cy: 109, r: 2.5, fill: '#c9b79a' }),
                     ),
                   ),
                 ),
