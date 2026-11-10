@@ -6,7 +6,7 @@ import { forgetToken as forgetJiraToken } from '../lib/trackers/jira.js'
 
 const MAP = {
   states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
-  types: { bug: 'bug', story: 'story' },
+  types: { bug: 'Bug', story: 'Feature' },
 }
 
 const PROJECT_OK = {
@@ -52,7 +52,7 @@ beforeEach(() => {
 
 test('a failing project does not prevent the others from being read', async () => {
   const fetchImpl = async () =>
-    response([{ number: 2, title: 'Mission 2', labels: [{ name: 'story' }, { name: 'ready' }] }])
+    response([{ number: 2, title: 'Mission 2', labels: [{ name: 'ready' }], type: { name: 'Feature' } }])
 
   const { missions, errors } = await listAll([PROJECT_BROKEN, PROJECT_OK], { fetchImpl })
 
@@ -81,9 +81,9 @@ test('the read is cached unless a fresh read is asked', async () => {
 test('missions are sorted by state then key', async () => {
   const fetchImpl = async () =>
     response([
-      { number: 5, title: 'b', labels: [{ name: 'ready' }] },
-      { number: 1, title: 'a', labels: [{ name: 'in-review' }] },
-      { number: 3, title: 'c', labels: [{ name: 'ready' }] },
+      { number: 5, title: 'b', labels: [{ name: 'ready' }], type: { name: 'Feature' } },
+      { number: 1, title: 'a', labels: [{ name: 'in-review' }], type: { name: 'Bug' } },
+      { number: 3, title: 'c', labels: [{ name: 'ready' }], type: { name: 'Feature' } },
     ])
 
   const { missions } = await listAll([PROJECT_OK], { fetchImpl })
@@ -94,7 +94,7 @@ test('missions are sorted by state then key', async () => {
 test('GitHub and Jira share the same list', async () => {
   const fetchImpl = async (url) => {
     if (String(url).includes('api.github.com')) {
-      return response([{ number: 2, title: 'GitHub mission', labels: [{ name: 'story' }, { name: 'ready' }] }])
+      return response([{ number: 2, title: 'GitHub mission', labels: [{ name: 'ready' }], type: { name: 'Feature' } }])
     }
     return response({
       issues: [

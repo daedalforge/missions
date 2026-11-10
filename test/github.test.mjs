@@ -9,7 +9,7 @@ const PROJECT = {
   github: { owner: 'daedalforge', repo: 'missions' },
   map: {
     states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
-    types: { bug: 'bug', story: 'story' },
+    types: { bug: 'Bug', story: 'Feature' },
   },
 }
 
@@ -29,12 +29,13 @@ function response(body, { status = 200, link = null, remaining = null } = {}) {
   }
 }
 
-function issue(number, { labels = [], pr = false, milestone = null } = {}) {
+function issue(number, { labels = [], pr = false, milestone = null, type = 'Feature' } = {}) {
   return {
     number,
     title: `Mission ${number}`,
     labels: labels.map((name) => ({ name })),
     milestone,
+    type: type ? { name: type } : null,
     html_url: `https://github.com/daedalforge/missions/issues/${number}`,
     updated_at: '2026-11-10T10:00:00Z',
     ...(pr ? { pull_request: { url: 'https://api.github.com/pulls/1' } } : {}),
@@ -49,8 +50,8 @@ beforeEach(() => {
 test('issues are normalized and pull requests dropped', async () => {
   const fetchImpl = async () =>
     response([
-      issue(2, { labels: ['story', 'ready'], milestone: { title: 'Workspace' } }),
-      issue(9, { labels: ['bug'], pr: true }),
+      issue(2, { labels: ['ready'], milestone: { title: 'Workspace' }, type: 'Feature' }),
+      issue(9, { labels: [], type: 'Bug', pr: true }),
     ])
 
   const missions = await list(PROJECT, { fetchImpl })
@@ -74,11 +75,11 @@ test('pagination follows the Link header', async () => {
   const fetchImpl = async (url) => {
     calls.push(url)
     if (calls.length === 1) {
-      return response([issue(1, { labels: ['story', 'to-refine'] })], {
+      return response([issue(1, { labels: ['to-refine'] })], {
         link: '<https://api.github.com/repos/daedalforge/missions/issues?page=2>; rel="next"',
       })
     }
-    return response([issue(2, { labels: ['bug', 'in-review'] })])
+    return response([issue(2, { labels: ['in-review'], type: 'Bug' })])
   }
 
   const missions = await list(PROJECT, { fetchImpl })

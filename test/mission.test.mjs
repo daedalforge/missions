@@ -7,7 +7,7 @@ const PROJECT = {
   id: 'missions',
   map: {
     states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
-    types: { bug: 'bug', story: 'story' },
+    types: { bug: 'Bug', story: 'Feature' },
   },
 }
 
@@ -15,7 +15,7 @@ test('the map is inverted and null values are ignored', () => {
   const inverse = invertMap(PROJECT.map)
   assert.equal(inverse.states.get('in-review'), 'in-review')
   assert.equal(inverse.states.has('done'), false)
-  assert.equal(inverse.types.get('story'), 'story')
+  assert.equal(inverse.types.get('Feature'), 'story')
 })
 
 test('firstKnown keeps the first known value', () => {
@@ -32,7 +32,7 @@ test('an issue takes its state and type from the tracker vocabulary', () => {
     number: 2,
     title: 'The panel reads every project independently',
     rawState: 'ready',
-    rawType: 'story',
+    rawType: 'Feature',
     epic: 'Workspace',
     url: 'https://github.com/daedalforge/missions/issues/2',
     updatedAt: '2026-11-10T15:56:47Z',

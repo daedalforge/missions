@@ -19,6 +19,7 @@ test('the workspace file declares the missions project, complete', async () => {
   assert.equal(missions.github.repo, 'missions')
   assert.equal(missions.map.states.done, null)
   assert.equal(missions.map.states.ready, 'ready')
+  assert.equal(missions.map.types.story, 'Feature')
 })
 
 test('a project with an incomplete mapping is rejected', async () => {
