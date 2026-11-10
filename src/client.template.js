@@ -219,7 +219,8 @@ window.__ModuleLoader__.load({
 .missions-errors { display: flex; flex-direction: column; gap: 6px; padding: 14px 28px 0; flex: none; }
 .missions-error { display: flex; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 12px; background: color-mix(in srgb, #cf222e 10%, transparent); border: 1px solid color-mix(in srgb, #cf222e 35%, transparent); }
 .missions-error b { font-weight: 600; }
-.missions-body { flex: 1; min-height: 0; overflow: auto; padding: 6px 28px 32px; }
+.missions-content { display: flex; flex: 1; min-height: 0; align-items: stretch; }
+.missions-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 6px 28px 32px; }
 .missions-group { margin-top: 20px; }
 .missions-group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); position: sticky; top: 0; background: var(--dsw-alias-bg-base, #fbfaf8); z-index: 1; }
 .missions-group-head .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -252,9 +253,8 @@ window.__ModuleLoader__.load({
 .missions-dashboard-card { width: 100%; padding: 18px 20px; border: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.16)); border-radius: 10px; }
 .missions-dashboard-card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
 .missions-dashboard-card p { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12.5px; }
-.missions-drawer-backdrop { position: absolute; inset: 0; z-index: 2; }
-.missions-drawer { position: absolute; top: 0; right: 0; bottom: 0; z-index: 3; width: 380px; max-width: 92%; display: flex; flex-direction: column; gap: 16px; padding: 22px 24px; overflow: auto; background: var(--dsw-alias-bg-layer-2, #ffffff); border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); box-shadow: -8px 0 24px rgba(0,0,0,.06); animation: missions-slide .16s ease; }
-@keyframes missions-slide { from { transform: translateX(12px); opacity: 0 } to { transform: none; opacity: 1 } }
+.missions-drawer { flex: none; width: 380px; max-width: 46%; display: flex; flex-direction: column; gap: 16px; padding: 16px 22px 24px; overflow: auto; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); animation: missions-slide .14s ease; }
+@keyframes missions-slide { from { opacity: 0 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
 .missions-drawer-head { display: flex; align-items: flex-start; gap: 12px; }
 .missions-drawer-key { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -424,9 +424,7 @@ window.__ModuleLoader__.load({
         }
       }
 
-      return h(React.Fragment, null,
-        h('div', { className: 'missions-drawer-backdrop', onClick: onClose }),
-        h('aside', { className: 'missions-drawer', role: 'dialog', 'aria-label': `Mission ${mission.key}` },
+      return h('aside', { className: 'missions-drawer', role: 'complementary', 'aria-label': `Mission ${mission.key}` },
           h('div', { className: 'missions-drawer-head' },
             h('div', null,
               h('div', { className: 'missions-drawer-key' }, mission.key),
@@ -458,7 +456,6 @@ window.__ModuleLoader__.load({
               ? h('a', { className: 'missions-action', href: mission.url, target: '_blank', rel: 'noreferrer noopener' }, 'Open on the tracker')
               : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
             h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession }, 'Start a session'),
-          ),
         ),
       )
     }
@@ -540,18 +537,19 @@ window.__ModuleLoader__.load({
               )))
           : null,
 
-        h('div', {
-          className: 'missions-body',
-          role: 'tabpanel',
-          id: `missions-view-${tab}`,
-          'aria-labelledby': `missions-tab-${tab}`,
-        },
-          tab === 'dashboard'
-            ? h(DashboardView, null)
-            : h(MissionsView, { loading, missions, query, onQuery: setQuery, type, onType: setType, filtered, groups, onSelect: setSelected }),
+        h('div', { className: 'missions-content' },
+          h('div', {
+            className: 'missions-body',
+            role: 'tabpanel',
+            id: `missions-view-${tab}`,
+            'aria-labelledby': `missions-tab-${tab}`,
+          },
+            tab === 'dashboard'
+              ? h(DashboardView, null)
+              : h(MissionsView, { loading, missions, query, onQuery: setQuery, type, onType: setType, filtered, groups, onSelect: setSelected }),
+          ),
+          selected ? h(MissionDrawer, { mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null) }) : null,
         ),
-
-        selected ? h(MissionDrawer, { mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null) }) : null,
       )
     }
 
