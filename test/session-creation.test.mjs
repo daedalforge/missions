@@ -60,8 +60,8 @@ test('missionsWorkspace : échoue fermé quand konoha n’est pas ouverte', () =
 })
 
 test('missionsWorkspace : reconnaît konoha sous sa forme brute et sa forme résolue', () => {
-  const items = snapshot([workspace('w-konoha', '/Volumes/dev/konoha')])
-  const data = { sessions: { workspacePaths: ['/Users/…/konoha', '/Volumes/dev/konoha'], workspaceLabel: '~/konoha' } }
+  const items = snapshot([workspace('w-konoha', '/Volumes/…/konoha')])
+  const data = { sessions: { workspacePaths: ['/Users/…/konoha', '/Volumes/…/konoha'], workspaceLabel: '~/konoha' } }
   assert.equal(client.missionsWorkspace(items, data).workspaceId, 'w-konoha')
 })
 
@@ -102,8 +102,8 @@ test('executionWorkspace : échoue fermé quand la racine produit n’est pas ou
 })
 
 test('executionWorkspace : reconnaît la racine produit sous sa forme brute et sa forme résolue', () => {
-  const items = snapshot([workspace('w-projects', '/Volumes/dev/projects')])
-  const data = { sessions: { workspacePath: '/Users/…/konoha', productWorkspacePaths: ['/Users/…/projects', '/Volumes/dev/projects'] } }
+  const items = snapshot([workspace('w-projects', '/Volumes/…/projects')])
+  const data = { sessions: { workspacePath: '/Users/…/konoha', productWorkspacePaths: ['/Users/…/projects', '/Volumes/…/projects'] } }
   assert.equal(client.executionWorkspace(items, data, 'produit').workspaceId, 'w-projects')
 })
 

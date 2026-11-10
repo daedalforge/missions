@@ -410,7 +410,6 @@ compte de `missions/archives/`, `epics/*/epic.md`, `workflows/queue.md`.
 
 `GET /missions/api/sessions` renvoie `{ byMission: { "<ID>": ["<uuid>", …] }, scanned, cached }`.
 
-`
 `POST /missions/api/link` avec `{ "missionId": "ABC-75", "sessionId": "session-<uuid>" }`
 enregistre un lien explicite.
 
@@ -463,3 +462,13 @@ Les chemins sont réglables par le patch du profil :
         workspaceRoot: ~/konoha
         productWorkspaceRoot: ~/projects
 ```
+
+Les routes des deux préfixes n'acceptent que des requêtes locales : le `Host` doit
+être une adresse de boucle (`localhost`, `127.0.0.1`, `[::1]`) et l'`Origin`, quand il
+est présent, doit concorder avec le `Host` — une page d'un autre site ne peut donc ni
+lire ni écrire, et un nom d'hôte re-lié vers la boucle locale est écarté. La vue
+Performance n'accepte que des dates `AAAA-MM-JJ`.
+
+Le dépôt public ne porte aucune donnée de mission : `test/neutrality.test.mjs` échoue
+si un fichier suivi contient un identifiant de mission, un nom ou un chemin personnel,
+une adresse électronique ou un secret.

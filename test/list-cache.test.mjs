@@ -90,7 +90,7 @@ async function lire(route, query = '') {
       this.payload = payload
     },
   }
-  await route.handler({ method: 'GET', url: `/missions/api/list${query}`, headers: {} }, res)
+  await route.handler({ method: 'GET', url: `/missions/api/list${query}`, headers: { host: '127.0.0.1:52018' } }, res)
   assert.equal(res.status, 200)
   const body = JSON.parse(res.payload)
   assert.equal(body.ok, true)
@@ -164,7 +164,7 @@ async function poster(route, chemin, payload) {
   const req = new EventEmitter()
   req.method = 'POST'
   req.url = `/missions/api/${chemin}`
-  req.headers = {}
+  req.headers = { host: '127.0.0.1:52018' }
   req.destroy = () => {}
   const res = {
     status: 0,

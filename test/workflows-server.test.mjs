@@ -20,7 +20,7 @@ function request(method, url, body) {
   const stream = new Readable({ read() {} })
   if (body !== undefined) stream.push(JSON.stringify(body))
   stream.push(null)
-  return Object.assign(stream, { method, url, headers: {} })
+  return Object.assign(stream, { method, url, headers: { host: '127.0.0.1:52018' } })
 }
 
 function response() {
