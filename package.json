@@ -1,6 +1,6 @@
 {
   "name": "@daedalforge/dsh-missions",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Missions panel for the DSH sidebar: reads the trackers declared in missions/projects.yml",
   "type": "module",
@@ -23,9 +23,7 @@
     },
     "client": {
       "platform": "web",
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-workspace"
-      ],
+      "inject": [],
       "immediately": true
     }
   },
