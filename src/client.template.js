@@ -399,11 +399,11 @@ window.__ModuleLoader__.load({
             setNote(`Session opened via ${openedBy}, prompt prefilled via ${prefilledBy ?? 'nothing'} — press Enter to send.`)
           } else if (prefilledBy) {
             setNote(
-              `Session created${workspaceId ? '' : ' without a workspace'} and prefilled via ${prefilledBy}, but this panel cannot open it — pick it in the sidebar.`,
+              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'} and prefilled via ${prefilledBy}, but this panel cannot open it — pick it in the sidebar.`,
             )
           } else {
             setNote(
-              `Session created${workspaceId ? '' : ' without a workspace'}, but neither opened nor prefilled — pick it in the sidebar. [uiWorkspace ${uiAvailable ? 'yes' : 'no'}, workspaces ${workspaces}]`,
+              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'}, but neither opened nor prefilled — pick it in the sidebar. [uiWorkspace ${uiAvailable ? 'yes' : 'no'}, workspaces ${workspaces}]`,
             )
           }
         } catch (error) {
