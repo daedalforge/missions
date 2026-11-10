@@ -43,6 +43,17 @@ canonical:
   types: [bug, story]
   priorities: [urgent, high, normal, low]
 
+# Produits déduits des labels Jira. La première étiquette connue gagne ;
+# les labels de thème (services-residents), de partenaire (visor, welcomr)
+# ou d'outil (Claude) ne sont pas des produits. Un ticket sans label garde
+# le nom de sa source.
+products:
+  manager: Manager
+  marketplace: Marketplace
+  core: Core
+  connect: Connect
+  clienthub: Clienthub
+
 projects:
   - id: missions
     name: Workspace missions

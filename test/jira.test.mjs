@@ -5,6 +5,7 @@ import { forgetToken, list } from '../lib/trackers/jira.js'
 
 const PROJECT = {
   id: 'manager',
+  name: 'Manager',
   tracker: 'jira',
   jira: {
     site: 'https://example.atlassian.net',
@@ -22,6 +23,7 @@ const PROJECT = {
     },
     types: { bug: 'Bug', story: 'Story' },
     priorities: { urgent: 'Highest', high: 'High', normal: 'Medium', low: 'Low' },
+    labels: { manager: 'Manager', marketplace: 'Marketplace' },
   },
 }
 
@@ -40,7 +42,7 @@ function response(body, { status = 200 } = {}) {
   }
 }
 
-function issue(key, { status = 'In Progress', type = 'Story', parent = null } = {}) {
+function issue(key, { status = 'In Progress', type = 'Story', parent = null, labels = [] } = {}) {
   return {
     key,
     fields: {
@@ -50,6 +52,7 @@ function issue(key, { status = 'In Progress', type = 'Story', parent = null } = 
       priority: { name: 'High' },
       customfield_10016: 5,
       parent: parent ? { key: parent } : undefined,
+      labels,
       updated: '2026-11-10T10:00:00.000+0000',
     },
   }
@@ -110,12 +113,13 @@ test('the cloudId is discovered from the site when the project does not declare 
 })
 
 test('Jira issues are normalized through the project map', async () => {
-  const fetchImpl = reading(async () => response({ issues: [issue('SO-1207', { parent: 'SO-1000' })] }))
+  const fetchImpl = reading(async () => response({ issues: [issue('SO-1207', { parent: 'SO-1000', labels: ['marketplace', 'services-residents'] })] }))
 
   const missions = await list(PROJECT, { fetchImpl })
 
   assert.deepEqual(missions[0], {
-    project: 'manager',
+    project: 'marketplace',
+    projectName: 'Marketplace',
     key: 'SO-1207',
     number: null,
     title: 'Mission SO-1207',

@@ -1,12 +1,47 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { filterMissions, groupByState, relativeAge } from '../lib/view.js'
+import {
+  epicOptions,
+  filterMissions,
+  groupByState,
+  hasActiveFilters,
+  priorityOptions,
+  projectOptions,
+  relativeAge,
+} from '../lib/view.js'
 
 const MISSIONS = [
-  { key: 'a#1', title: 'Panneau vide', project: 'missions', epic: 'Workspace', state: 'in-review', type: 'bug' },
-  { key: 'a#2', title: 'Lecture Jira', project: 'manager', epic: null, state: 'to-refine', type: 'story' },
-  { key: 'a#3', title: 'Cartes et filtres', project: 'missions', epic: 'Workspace', state: 'ready', type: 'story' },
+  {
+    key: 'a#1',
+    title: 'Panneau vide',
+    project: 'missions',
+    projectName: 'Workspace missions',
+    epic: 'Workspace',
+    state: 'in-review',
+    type: 'bug',
+    priority: 'urgent',
+  },
+  {
+    key: 'a#2',
+    title: 'Lecture Jira',
+    project: 'manager',
+    projectName: 'Manager',
+    epic: null,
+    state: 'to-refine',
+    type: 'story',
+    priority: 'normal',
+  },
+  {
+    key: 'a#3',
+    title: 'Cartes et filtres',
+    project: 'missions',
+    projectName: 'Workspace missions',
+    epic: 'Workspace',
+    state: 'ready',
+    type: 'story',
+    priority: 'low',
+  },
 ]
 
 test('la recherche porte sur le titre, la clé, le projet et l’epic', () => {
@@ -21,9 +56,39 @@ test('le filtre de type se combine avec la recherche', () => {
   assert.deepEqual(filterMissions(MISSIONS, { type: 'bug', query: 'cartes' }), [])
 })
 
+test('les filtres epic, priorité et projet se combinent en ET', () => {
+  assert.deepEqual(filterMissions(MISSIONS, { epic: 'Workspace' }).map((m) => m.key), ['a#1', 'a#3'])
+  assert.deepEqual(filterMissions(MISSIONS, { priority: 'normal' }).map((m) => m.key), ['a#2'])
+  assert.deepEqual(filterMissions(MISSIONS, { project: 'missions' }).map((m) => m.key), ['a#1', 'a#3'])
+  assert.deepEqual(filterMissions(MISSIONS, { project: 'missions', type: 'story' }).map((m) => m.key), ['a#3'])
+  assert.deepEqual(filterMissions(MISSIONS, { epic: 'Workspace', priority: 'urgent' }).map((m) => m.key), ['a#1'])
+  assert.deepEqual(filterMissions(MISSIONS, { query: 'cartes', project: 'missions' }).map((m) => m.key), ['a#3'])
+  assert.deepEqual(filterMissions(MISSIONS, { project: 'manager', type: 'bug' }), [])
+})
+
 test('une recherche vide ne filtre rien', () => {
   assert.equal(filterMissions(MISSIONS).length, 3)
   assert.equal(filterMissions(MISSIONS, { query: '   ' }).length, 3)
+})
+
+test('les options viennent des missions chargées, sans doublon et triées', () => {
+  assert.deepEqual(epicOptions(MISSIONS), ['Workspace'])
+  assert.deepEqual(priorityOptions(MISSIONS), ['urgent', 'normal', 'low'])
+  assert.deepEqual(projectOptions(MISSIONS), [
+    { id: 'manager', name: 'Manager' },
+    { id: 'missions', name: 'Workspace missions' },
+  ])
+  assert.deepEqual(epicOptions([]), [])
+  assert.deepEqual(priorityOptions([]), [])
+  assert.deepEqual(projectOptions([]), [])
+})
+
+test('un filtre actif est détecté, le type compris', () => {
+  assert.equal(hasActiveFilters({ type: null, epic: null, priority: null, project: null }), false)
+  assert.equal(hasActiveFilters({ type: 'bug', epic: null, priority: null, project: null }), true)
+  assert.equal(hasActiveFilters({ type: null, epic: 'Workspace', priority: null, project: null }), true)
+  assert.equal(hasActiveFilters({ type: null, epic: null, priority: 'normal', project: null }), true)
+  assert.equal(hasActiveFilters({ type: null, epic: null, priority: null, project: 'missions' }), true)
 })
 
 test('les groupes suivent l’ordre du workflow, l’inconnu en dernier', () => {

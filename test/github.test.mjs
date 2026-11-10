@@ -5,6 +5,7 @@ import { forgetToken, list } from '../lib/trackers/github.js'
 
 const PROJECT = {
   id: 'missions',
+  name: 'Workspace missions',
   tracker: 'github',
   github: { owner: 'daedalforge', repo: 'missions' },
   map: {
@@ -69,6 +70,7 @@ test('issues are normalized and pull requests dropped', async () => {
   assert.equal(missions.length, 1)
   assert.deepEqual(missions[0], {
     project: 'missions',
+    projectName: 'Workspace missions',
     key: 'daedalforge/missions#2',
     number: 2,
     title: 'Mission 2',
