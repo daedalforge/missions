@@ -195,7 +195,7 @@ window.__ModuleLoader__.load({
 
     const THEMES = [
       { id: 'default', label: 'Default' },
-      { id: 'manga', label: 'Naruto manga' },
+      { id: 'manga', label: 'Naruto' },
     ]
     const THEME_KEY = 'missions.theme'
 
@@ -314,7 +314,7 @@ window.__ModuleLoader__.load({
 .missions-theme svg { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-theme select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
-/* Naruto manga theme: scoped to the panel, opt-in, no global token. */
+/* Naruto theme: scoped to the panel, opt-in, no global token. */
 .missions-panel[data-theme="manga"] {
   --mm-page: #fbf4e6; --mm-page-2: #fffaf0; --mm-page-3: #f3e7d3;
   --mm-ink: #2c2621; --mm-ink-2: #5e554b; --mm-ink-3: #756b60;

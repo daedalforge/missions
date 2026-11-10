@@ -72,7 +72,7 @@ test('chaque composant rend sans lever, même sans service uiWorkspace', () => {
   }
 })
 
-test('le thème manga rend le bandeau et les images embarquées', () => {
+test('le thème Naruto rend le bandeau et les images embarquées', () => {
   const { api, ctx, registered } = charger({ getItem: () => 'manga', setItem: () => {} })
   api.apply(ctx)
   const tree = registered.main({})
@@ -80,5 +80,5 @@ test('le thème manga rend le bandeau et les images embarquées', () => {
   assert.match(flat, /"data-theme":"manga"/)
   assert.match(flat, /missions-hero/)
   assert.match(flat, /data:image\/webp;base64,/)
-  assert.match(SOURCE, /Naruto manga/)
+  assert.match(SOURCE, /Naruto theme/)
 })
