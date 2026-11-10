@@ -30,7 +30,7 @@ Un ticket ne saute pas d'état : chaque transition a une condition de sortie
 |---|---|---|
 | Fiche de mission (titre, description, critères) | Tracker | Non |
 | État, assignation, commentaires | Tracker | Non |
-| Branche et base (déclarées) | `missions/<dossier>/mission.yml` | Oui |
+| Branche et base (déclarées) | `missions/<dossier>/mission.yml` | Non — local, ignoré par git |
 | Branche et commits | Dépôt du projet | Selon le projet |
 | Preuves de clôture | Commentaire du ticket | Non |
 | Méthode (ce document, workflows) | Ce dépôt | Oui |
@@ -60,15 +60,28 @@ base: main
   (`owner/repo#n` ou clé Jira). Le nom du dossier est libre — `GH-41` pour
   `daedalforge/missions#41`.
 - **Pas de session sans les deux** : un dossier absent, ou un champ manquant,
-  laisse `branch`/`base` vides ; le volet de détail n'affiche alors ni branche ni
-  base et désactive « Start a session » plutôt que de supposer une branche.
+  laisse `branch`/`base` vides ; le volet de détail laisse alors les champs
+  vides et désactive « Start a session » plutôt que de supposer une branche.
 - **Une erreur se voit** : champ inconnu, clé dupliquée entre deux dossiers,
-  YAML invalide ou valeur vide sont signalés dans le panneau, pas avalés.
+  YAML invalide ou valeur vide sont signalés dans le panneau, pas avalés. Le
+  volet peut réparer une valeur vide ou mal typée en l'enregistrant ; un champ
+  inconnu, lui, reste signalé et refuse la réécriture.
 - **Une déclaration sans mission affichée n'est pas une erreur** : une mission
   fermée ou assignée à quelqu'un d'autre garde son dossier sans apparaître dans
   le panneau.
 - **Le dossier se crée au cadrage**, quand la fiche est validée ; la branche
   elle-même ne s'ouvre qu'à l'exécution, depuis `base`.
+
+**Depuis le panneau** : le volet de détail porte deux champs, « Branch » et
+« Base », et un bouton « Save ». L'enregistrement réutilise le dossier qui
+déclare déjà la clé, ou le crée (`missions/<slug de la clé>/`), et n'écrit que
+ce `mission.yml` — la clé et le dossier ne s'éditent pas à la main ; un champ
+vidé disparaît du fichier.
+
+**Jamais versionné** : `missions/*/` est ignoré par git. Une déclaration reste
+locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
+part donc sans déclaration : on les repose depuis le panneau au premier cadrage.
+Le panneau n'écrit que ce fichier, le versionnement n'est pas son affaire.
 
 ## Le projet décide du tracker
 
