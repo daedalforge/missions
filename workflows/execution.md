@@ -31,7 +31,10 @@ Une PR n'est pas qu'un diff : elle doit se retrouver dans une liste et se relier
 - **Typée** comme son issue : `bug` ou `story`, jamais les deux.
 - **Étiquetée `in-review`**, comme l'issue qu'elle sert.
 - **Liée** : `Closes #N` quand elle termine la mission, `Réf. #N` quand elle
-  n'en fait qu'une partie. GitHub relie alors la PR à l'issue.
+  n'en fait qu'une partie. Seul le mot-clé de fermeture remplit la section
+  **Development** de l'issue ; un `Réf. #N` ne crée qu'une référence croisée,
+  visible dans la chronologie, pas dans Development. Une PR partielle n'y
+  apparaît donc pas : c'est attendu, pas un oubli.
 - **Même milestone** que l'issue quand elle en a un — c'est l'epic de la
   mission. On ne crée pas de milestone pour l'occasion : sans epic, la PR n'en
   porte pas.
