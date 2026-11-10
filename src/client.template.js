@@ -56,17 +56,52 @@ window.__ModuleLoader__.load({
       const sessionId = typeof created === 'string' ? created : created?.sessionId
       if (!sessionId) throw new Error('the session was created without an id')
 
-      const input = service(services, 'conversation.input')
-      const binding = typeof sessions.binding === 'function' ? sessions.binding(sessionId) : null
-      let prefilled = false
-      if (input && typeof input.requestDraftInitialization === 'function' && binding) {
-        input.requestDraftInitialization(binding, { prompt, whenDraftExists: 'replace' })
-        prefilled = true
-      } else if (binding?.session && typeof binding.session.setDraft === 'function') {
-        binding.session.setDraft(prompt)
-        prefilled = true
+      let prefilledBy = null
+
+      /** Write into the composer through whichever surface actually answers. */
+      const prefill = (binding) => {
+        const session = binding?.session
+        const candidats = ['conversation', 'uiConversation', 'conversation.input']
+          .map((nom) => service(services, nom))
+          .map((valeur) => valeur?.input ?? valeur)
+          .filter((valeur) => valeur && typeof valeur.requestDraftInitialization === 'function')
+
+        for (const candidat of candidats) {
+          try {
+            candidat.requestDraftInitialization(binding, { prompt, whenDraftExists: 'replace' })
+            return 'conversation.input'
+          } catch {
+            // try the next surface
+          }
+        }
+        if (typeof session?.requestDraftInitialization === 'function') {
+          try {
+            session.requestDraftInitialization({ prompt, whenDraftExists: 'replace' })
+            return 'session.requestDraftInitialization'
+          } catch {
+            // fall through
+          }
+        }
+        if (typeof session?.setDraft === 'function') {
+          try {
+            session.setDraft(prompt)
+            return 'session.setDraft'
+          } catch {
+            // fall through
+          }
+        }
+        return null
       }
-      return { sessionId, prefilled }
+
+      await sessions.using(sessionId, { source: 'missions' }, async (reference) => {
+        prefilledBy = prefill(reference?.binding)
+      })
+
+      if (!prefilledBy && typeof sessions.binding === 'function') {
+        prefilledBy = prefill(sessions.binding(sessionId))
+      }
+
+      return { sessionId, prefilledBy }
     }
 
     const LIST_URL = 'missions/api/list'
@@ -296,10 +331,10 @@ window.__ModuleLoader__.load({
         const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
         setNote('Starting a session…')
         try {
-          const { prefilled } = await openMissionSession(services, prompt, workspaceId)
+          const { prefilledBy } = await openMissionSession(services, prompt, workspaceId)
           setNote(
-            prefilled
-              ? 'Session opened with a prefilled prompt — press Enter to send.'
+            prefilledBy
+              ? `Session opened, prompt prefilled via ${prefilledBy} — press Enter to send.`
               : 'Session opened. The prompt could not be prefilled.',
           )
         } catch (error) {
