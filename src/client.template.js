@@ -175,10 +175,9 @@ window.__ModuleLoader__.load({
       unknown: 'unknown state',
     }
     const TYPE_LABELS = { bug: 'bug', story: 'story' }
-    const TYPE_FILTERS = [
-      { id: null, label: 'All' },
-      { id: 'bug', label: 'Bug' },
-      { id: 'story', label: 'Story' },
+    const TYPE_OPTIONS = [
+      { id: 'bug', name: 'Bug' },
+      { id: 'story', name: 'Story' },
     ]
     const PRIORITY_LABELS = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' }
     const EMPTY_FILTERS = { type: null, state: null, epic: null, priority: null, project: null, missing: null }
@@ -227,10 +226,6 @@ window.__ModuleLoader__.load({
 .missions-search { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; }
 .missions-search input::placeholder { color: var(--dsw-alias-label-tertiary, #7a7168); }
-.missions-segmented { display: inline-flex; align-items: center; flex: none; height: 30px; padding: 2px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); }
-.missions-seg { height: 24px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-tertiary, #7a7168); font: inherit; font-size: 11.5px; cursor: pointer; }
-.missions-seg:hover { color: var(--dsw-alias-label-primary, #1f1f1f); }
-.missions-seg[aria-pressed="true"] { background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 8%, transparent); color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
 .missions-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .missions-select { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 11.5px; max-width: 300px; cursor: pointer; }
 .missions-select-label { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
@@ -396,9 +391,6 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-search { height: 32px; border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); color: var(--mm-ink-3); box-shadow: 1px 1px 0 var(--mm-shadow); }
 .missions-panel[data-theme="manga"] .missions-search input { color: var(--mm-ink); font-size: 12.5px; }
 .missions-panel[data-theme="manga"] .missions-search input::placeholder { color: var(--mm-ink-3); }
-.missions-panel[data-theme="manga"] .missions-segmented { height: 30px; border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); box-shadow: 1px 1px 0 var(--mm-shadow); }
-.missions-panel[data-theme="manga"] .missions-seg { color: var(--mm-ink-3); font-size: 10.5px; }
-.missions-panel[data-theme="manga"] .missions-seg[aria-pressed="true"] { background: var(--mm-ink); color: var(--mm-page); font-weight: 700; }
 .missions-panel[data-theme="manga"] .missions-select { border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); box-shadow: 1px 1px 0 var(--mm-shadow); color: var(--mm-ink-2); }
 .missions-panel[data-theme="manga"] .missions-select-label { color: var(--mm-ink-3); font-size: 9px; }
 .missions-panel[data-theme="manga"] .missions-select-value { color: var(--mm-ink); font-weight: 600; }
@@ -654,15 +646,6 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
               onChange: (event) => onQuery(event.target.value),
             }),
           ),
-          h('div', { className: 'missions-segmented', role: 'group', 'aria-label': 'Filter by type' },
-            TYPE_FILTERS.map((entry) => h('button', {
-              key: entry.label,
-              type: 'button',
-              className: 'missions-seg',
-              'aria-pressed': filters.type === entry.id ? 'true' : 'false',
-              onClick: () => onFilter('type', entry.id),
-            }, entry.label)),
-          ),
         ),
         h('div', { className: 'missions-filters' },
           h(FilterSelect, {
@@ -672,6 +655,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
             format: (state) => STATE_LABELS[state] ?? state,
             onChange: (value) => onFilter('state', value),
           }),
+          h(FilterSelect, { label: 'Type', value: filters.type, options: TYPE_OPTIONS, onChange: (value) => onFilter('type', value) }),
           h(FilterSelect, { label: 'Epic', value: filters.epic, options: epics, onChange: (value) => onFilter('epic', value) }),
           h(FilterSelect, { label: 'Project', value: filters.project, options: projects, onChange: (value) => onFilter('project', value) }),
           h(FilterSelect, {
