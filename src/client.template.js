@@ -287,7 +287,7 @@ window.__ModuleLoader__.load({
 @keyframes missions-spin { to { transform: rotate(360deg); } }
 @keyframes missions-run { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-7px) rotate(4deg); } }
 @keyframes missions-lines { from { transform: translateX(0); } to { transform: translateX(-9px); } }
-@media (prefers-reduced-motion: reduce) { .missions-spinner, .missions-btn-spinner, .missions-runner-lines, .missions-runner-bg, .missions-chibi, .missions-chibi-shadow, .missions-chibi-body, .missions-chibi-head, .missions-chibi-arm, .missions-chibi-leg, .missions-chibi-ribbon, .missions-chibi-dust { animation: none; } .missions-chibi { left: calc(50% - 75px); } .missions-chibi-shadow { left: calc(50% - 66px); } .missions-chibi-dust { display: none; } }
+@media (prefers-reduced-motion: reduce) { .missions-spinner, .missions-btn-spinner, .missions-runner-bg, .missions-runner-streaks, .missions-chibi-shadow, .missions-chibi-body, .missions-chibi-head, .missions-chibi-arm, .missions-chibi-leg, .missions-chibi-ribbon, .missions-chibi-dust { animation: none; } .missions-chibi { animation: missions-chibi-run 7s linear infinite; } .missions-chibi-dust { display: none; } }
 .missions-dashboard { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; max-width: 520px; padding-top: 8px; }
 .missions-dashboard-card { width: 100%; padding: 18px 20px; border: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.16)); border-radius: 10px; }
 .missions-dashboard-card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
@@ -480,7 +480,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-chibi-leg--back { animation: missions-chibi-leg .32s ease-in-out infinite alternate-reverse; }
 .missions-panel[data-theme="manga"] .missions-chibi-ribbon { transform-box: fill-box; transform-origin: 100% 50%; animation: missions-chibi-ribbon .4s ease-in-out infinite alternate; }
 .missions-panel[data-theme="manga"] .missions-chibi-dust { animation: missions-chibi-dust .7s ease-out infinite; }
-.missions-panel[data-theme="manga"] .missions-runner-lines { position: absolute; left: 0; bottom: 44px; width: 100%; height: 28px; background: repeating-linear-gradient(90deg, var(--mm-ink) 0 2px, transparent 2px 15px); opacity: .3; animation: missions-lines .38s linear infinite; }
+.missions-panel[data-theme="manga"] .missions-runner-streaks { position: absolute; left: 0; bottom: 40px; width: 100%; height: 82px; pointer-events: none; }
+.missions-panel[data-theme="manga"] .missions-streak { position: absolute; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--mm-ink), transparent); opacity: .34; filter: blur(.3px); transform-origin: left center; animation: missions-streak .55s linear infinite; }
+@keyframes missions-streak { from { transform: translateX(46px) scaleX(.5); opacity: .05; } 50% { opacity: .38; } to { transform: translateX(-46px) scaleX(1); opacity: .05; } }
 @keyframes missions-chibi-run { 0% { left: -150px; } 100% { left: calc(100% + 12px); } }
 @keyframes missions-chibi-lean { from { transform: rotate(-3deg) translateY(0); } to { transform: rotate(7deg) translateY(-2px); } }
 @keyframes missions-chibi-bob { from { transform: translateY(0); } to { transform: translateY(-3px); } }
@@ -838,7 +840,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
               h('div', { className: 'missions-runner-bg' }),
               h('div', { className: 'missions-runner-fog' }),
               h('div', { className: 'missions-runner-track' },
-                h('span', { className: 'missions-runner-lines' }),
+                h('div', { className: 'missions-runner-streaks' },
+                  h('span', { className: 'missions-streak', style: { top: '18%', width: '54%', left: '4%', animationDelay: '0s' } }),
+                  h('span', { className: 'missions-streak', style: { top: '40%', width: '38%', left: '0%', animationDelay: '.12s' } }),
+                  h('span', { className: 'missions-streak', style: { top: '62%', width: '62%', left: '8%', animationDelay: '.24s' } }),
+                  h('span', { className: 'missions-streak', style: { top: '82%', width: '30%', left: '2%', animationDelay: '.36s' } }),
+                ),
                 h('span', { className: 'missions-chibi-shadow' }),
                 h('div', { className: 'missions-chibi' },
                   h('svg', { viewBox: '0 0 120 120', xmlns: 'http://www.w3.org/2000/svg' },
