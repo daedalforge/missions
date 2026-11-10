@@ -16,6 +16,7 @@ const PROJECT = {
       done: 'Done',
     },
     types: { bug: 'Bug', story: 'Story' },
+    priorities: { urgent: 'Highest', high: 'High', normal: 'Medium', low: 'Low' },
   },
 }
 
@@ -41,6 +42,8 @@ function issue(key, { status = 'In Progress', type = 'Story', parent = null } = 
       summary: `Mission ${key}`,
       status: { name: status },
       issuetype: { name: type },
+      priority: { name: 'High' },
+      customfield_10016: 5,
       parent: parent ? { key: parent } : undefined,
       updated: '2026-11-10T10:00:00.000+0000',
     },
@@ -78,6 +81,8 @@ test('Jira issues are normalized through the project map', async () => {
     title: 'Mission SO-1207',
     state: 'in-progress',
     type: 'story',
+    priority: 'high',
+    points: 5,
     epic: 'SO-1000',
     url: 'https://example.atlassian.net/browse/SO-1207',
     updatedAt: '2026-11-10T10:00:00.000+0000',

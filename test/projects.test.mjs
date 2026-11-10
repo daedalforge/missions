@@ -11,6 +11,7 @@ test('the workspace file declares the missions project, complete', async () => {
 
   assert.deepEqual(canonical.states, ['to-refine', 'ready', 'in-progress', 'in-review', 'done'])
   assert.deepEqual(canonical.types, ['bug', 'story'])
+  assert.deepEqual(canonical.priorities, ['urgent', 'high', 'normal', 'low'])
   assert.equal(projects.length, 1)
   const [missions] = projects
   assert.equal(missions.id, 'missions')
@@ -20,6 +21,8 @@ test('the workspace file declares the missions project, complete', async () => {
   assert.equal(missions.map.states.done, null)
   assert.equal(missions.map.states.ready, 'ready')
   assert.equal(missions.map.types.story, 'Feature')
+  assert.equal(missions.map.priorities.urgent, 'priority:urgent')
+  assert.equal(missions.map.points, 'sp:')
 })
 
 test('a project with an incomplete mapping is rejected', async () => {

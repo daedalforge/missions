@@ -79,6 +79,8 @@ en revue, un bug peut être prêt.
 | `ready` | cadrage validé, prête à exécuter |
 | `in-progress` | branche ouverte, exécution en cours |
 | `in-review` | PR ouverte, en attente de revue |
+| `priority:urgent` · `priority:high` · `priority:normal` · `priority:low` | priorité, une seule par issue |
+| `sp:1` · `sp:2` · `sp:3` · `sp:5` · `sp:8` · `sp:13` | story points, un seul par issue |
 
 Une issue porte **un seul** type natif et **un seul** état. Fermer l'issue est
 l'état terminé : il n'y a pas de libellé `done`. Un blocage se dit en commentaire, pas
@@ -128,6 +130,8 @@ n'a pas de représentation propre (la fermeture de l'issue, par exemple).
 | `done` | fermeture de l'issue | `Done` |
 | `bug` | type `Bug` | type `Bug` |
 | `story` | type `Feature` | type `Story` |
+| `urgent` / `high` / `normal` / `low` | label `priority:*` | `Highest` / `High` / `Medium` / `Low` |
+| story points | label `sp:N` | champ `story_points_field` (défaut `customfield_10016`) |
 
 Deux conséquences :
 

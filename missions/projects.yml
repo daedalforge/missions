@@ -19,7 +19,8 @@
 #   name     nom lisible
 #   repo     chemin du clone sur le poste
 #   tracker  jira | github
-#   jira     site, préfixe des clés et adresse du compte (tracker: jira) ;
+#   jira     site, préfixe des clés, adresse du compte et champ des story
+#            points (tracker: jira) ;
 #            le jeton vient du Trousseau (service « atlassian-token ») ou de
 #            JIRA_API_TOKEN, jamais de ce fichier
 #   github   owner et repo du dépôt distant (tracker: github)
@@ -35,6 +36,7 @@
 canonical:
   states: [to-refine, ready, in-progress, in-review, done]
   types: [bug, story]
+  priorities: [urgent, high, normal, low]
 
 projects:
   - id: missions
@@ -54,3 +56,9 @@ projects:
       types:
         bug: Bug
         story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+      points: "sp:"
