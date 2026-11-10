@@ -467,7 +467,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-loader-label { font-family: var(--mm-display); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
 .missions-panel[data-theme="manga"] .missions-sharingan { width: 86px; height: 86px; filter: drop-shadow(0 0 16px color-mix(in srgb, var(--mm-coral) 50%, transparent)); animation: missions-sharingan-pulse 1.6s ease-in-out infinite alternate; }
 .missions-panel[data-theme="manga"] .missions-sharingan svg { width: 100%; height: 100%; overflow: visible; }
-.missions-panel[data-theme="manga"] .missions-sharingan-tomoe { transform-box: fill-box; transform-origin: center; animation: missions-sharingan-spin 1.6s linear infinite; }
+.missions-panel[data-theme="manga"] .missions-sharingan-tomoe { transform-box: view-box; transform-origin: 60px 60px; animation: missions-sharingan-spin 1.6s linear infinite; }
 @keyframes missions-sharingan-spin { to { transform: rotate(360deg); } }
 @keyframes missions-sharingan-pulse { from { opacity: .8; } to { opacity: 1; } }
 .missions-panel[data-theme="manga"] .missions-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; padding: 10px 20px 30px; text-align: center; }
