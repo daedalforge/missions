@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   epicOptions,
+  executionBlocker,
   filterMissions,
   groupByState,
   hasActiveFilters,
@@ -169,4 +170,13 @@ test('l’âge relatif reste court et lisible', () => {
   assert.equal(relativeAge('2026-11-10T08:00:00Z', now), '4 h')
   assert.equal(relativeAge('2026-11-08T12:00:00Z', now), '2 d')
   assert.equal(relativeAge(null, now), '')
+})
+
+test('une session exige une branche et une base déclarées', () => {
+  assert.equal(executionBlocker({ branch: 'gh-41', base: 'main' }), null)
+  assert.equal(executionBlocker({ branch: 'gh-41' }), 'base branch is not declared')
+  assert.equal(executionBlocker({ base: 'main' }), 'branch is not declared')
+  assert.equal(executionBlocker({}), 'branch is not declared')
+  assert.equal(executionBlocker({ branch: null, base: null }), 'branch is not declared')
+  assert.equal(executionBlocker(), 'branch is not declared')
 })

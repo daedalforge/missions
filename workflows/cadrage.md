@@ -17,6 +17,9 @@ moins cher et qui évite le plus de travail perdu.
    son objectif propre. Un ticket trop gros revient en cadrage.
 5. **Proposer un plan** : les étapes d'exécution, dans l'ordre, avec ce qui est
    vérifiable à chacune.
+6. **Déclarer la branche et sa base** dans `missions/<dossier>/mission.yml`
+   (format dans [`../missions/README.md`](../missions/README.md#branche-et-base)) :
+   c'est ce qui autorise la session d'exécution.
 
 ## Condition de sortie — la mission est « prête »
 
@@ -26,6 +29,7 @@ moins cher et qui évite le plus de travail perdu.
       observation précise.
 - [ ] Aucun critère ne dépend d'une décision non tranchée.
 - [ ] Le plan d'exécution est écrit et tient en quelques étapes.
+- [ ] La branche et sa base sont déclarées dans `missions/<dossier>/mission.yml`.
 - [ ] Le demandeur a validé — explicitement, dans le ticket.
 
 ## Signaux d'arrêt
