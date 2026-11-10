@@ -106,8 +106,10 @@ projet est une source : il se lit seul, avec ses propres identifiants, et son
   dépôt, ni un fichier local.
 - **Mes missions seulement.** Chaque lecture est filtrée sur le compte qui
   interroge : l'assigné courant sur GitHub, `assignee = currentUser()` en JQL
-  côté Jira. Le compte n'est jamais écrit dans `projects.yml` ; il vient du
-  jeton qui parle au tracker.
+  côté Jira. Le compte *à interroger* n'est jamais écrit dans `projects.yml` :
+  il vient du jeton qui parle au tracker. Seule l'adresse qui authentifie ce
+  jeton y figure (`jira.email`), quand le tracker l'exige — le jeton, lui, reste
+  hors du dépôt.
 
 ## Correspondance avec le tracker
 

@@ -26,7 +26,7 @@ const PROJECT_BROKEN = {
 const PROJECT_JIRA = {
   id: 'manager',
   tracker: 'jira',
-  jira: { site: 'https://example.atlassian.net', key_prefix: 'SO', email: 'me@example.test' },
+  jira: { site: 'https://example.atlassian.net', cloud_id: 'cloud-1', key_prefix: 'SO', email: 'me@example.test' },
   map: {
     states: { 'to-refine': 'To Do', ready: 'Ready', 'in-progress': 'In Progress', 'in-review': 'In Review', done: 'Done' },
     types: { bug: 'Bug', story: 'Story' },
@@ -98,6 +98,7 @@ test('missions are sorted by state then key', async () => {
 test('GitHub and Jira share the same list', async () => {
   const fetchImpl = async (url) => {
     if (String(url).endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    if (String(url).endsWith('/myself')) return response({ accountId: 'me' })
     if (String(url).includes('api.github.com')) {
       return response([{ number: 2, title: 'GitHub mission', labels: [{ name: 'ready' }], type: { name: 'Feature' } }])
     }
