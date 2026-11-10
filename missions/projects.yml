@@ -1,0 +1,49 @@
+# Projets : dépôt, tracker, correspondance du vocabulaire
+#
+# Le workspace a un vocabulaire canonique, fixé par le workflow : les états
+# `to-refine`, `ready`, `in-progress`, `in-review`, `done` et les types `bug`,
+# `story`. C'est ce vocabulaire qu'emploient les documents, les branches et les
+# commits. Chaque projet le projette sur son tracker par le bloc `map`.
+#
+# Règles de la projection :
+#   - la clé est le nom canonique, la valeur est le nom exact dans le tracker ;
+#   - une valeur `null` signifie « pas de représentation » : l'état se traduit
+#     par autre chose que le vocabulaire (fermeture de l'issue, par exemple) ;
+#   - quand le workflow du tracker a moins d'états que le canonique, on garde le
+#     statut le plus proche et on ajoute un libellé pour la nuance.
+#
+# Champs d'un projet :
+#   id       identifiant court du workspace (minuscules)
+#   name     nom lisible
+#   repo     chemin du clone sur le poste
+#   tracker  jira | github
+#   jira     site et préfixe des clés (tracker: jira)
+#   github   owner et repo du dépôt distant (tracker: github)
+#   map      correspondance canonique -> tracker (obligatoire)
+#
+# Seul le projet `missions` est déclaré. Un projet Jira s'ajoutera avec le même
+# format (voir les champs ci-dessus), quand son dépôt sera branché : d'ici là,
+# aucune correspondance n'est inventée.
+
+canonical:
+  states: [to-refine, ready, in-progress, in-review, done]
+  types: [bug, story]
+
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+        done: null
+      types:
+        bug: bug
+        story: story
