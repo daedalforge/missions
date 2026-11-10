@@ -119,6 +119,7 @@ window.__ModuleLoader__.load({
 .missions-action--primary:hover { filter: brightness(1.06); background: var(--dsw-alias-button-primary-fill, #1f1f1f); }
 .missions-action:disabled { opacity: .55; cursor: default; }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
+.missions-drawer-version { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; }
 `
 
     /** Tab icon: a list of tickets. */
@@ -297,6 +298,8 @@ window.__ModuleLoader__.load({
           ),
 
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
+
+          h('div', { className: 'missions-drawer-version' }, 'panel v__VERSION__'),
 
           h('div', { className: 'missions-drawer-actions' },
             mission.url
