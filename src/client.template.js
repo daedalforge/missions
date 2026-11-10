@@ -343,17 +343,31 @@ window.__ModuleLoader__.load({
         return () => document.removeEventListener('keydown', onKey)
       }, [onClose])
 
+      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
+
+      const copyPrompt = async () => {
+        try {
+          await navigator.clipboard.writeText(prompt)
+          setNote('Prompt copied — paste it into a new session.')
+        } catch (error) {
+          setNote(`Copy failed: ${error?.message ?? error}`)
+        }
+      }
+
       const startSession = async () => {
-        const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
         setNote('Starting a session…')
         try {
           const { prefilledBy, openedBy } = await openMissionSession(services, prompt, workspaceId)
           if (openedBy) {
             setNote(`Session opened via ${openedBy}, prompt prefilled via ${prefilledBy ?? 'nothing'} — press Enter to send.`)
           } else if (prefilledBy) {
-            setNote(`Session created and prefilled via ${prefilledBy}, but this panel cannot open it — pick it in the sidebar.`)
+            setNote(
+              `Session created${workspaceId ? '' : ' without a workspace'} and prefilled via ${prefilledBy}, but this panel cannot open it — pick it in the sidebar.`,
+            )
           } else {
-            setNote('Session created, but neither opened nor prefilled — pick it in the sidebar.')
+            setNote(
+              `Session created${workspaceId ? '' : ' without a workspace'}, but neither opened nor prefilled — pick it in the sidebar.`,
+            )
           }
         } catch (error) {
           setNote(`Session failed: ${error?.message ?? error}`)
@@ -394,6 +408,7 @@ window.__ModuleLoader__.load({
               ? h('a', { className: 'missions-action', href: mission.url, target: '_blank', rel: 'noreferrer noopener' }, 'Open on the tracker')
               : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
             h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession }, 'Start a session'),
+            h('button', { type: 'button', className: 'missions-action', onClick: copyPrompt }, 'Copy the prompt'),
           ),
         ),
       )
