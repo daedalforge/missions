@@ -68,21 +68,20 @@ n'y a pas d'engagement de date : un epic est thématique, pas calendaire.
 
 ## Libellés GitHub
 
-Une issue porte **un type** et **un état**. Le type dit la nature du travail ;
+Une issue porte **un type** natif et **un état** en libellé. Le type dit la
+nature du travail — `Bug` ou `Feature` sur GitHub, `Bug` ou `Story` sur Jira —,
 l'état dit où en est la mission. Les deux sont indépendants : une story peut être
 en revue, un bug peut être prêt.
 
 | Libellé | Rôle |
 |---|---|
-| `bug` | type : quelque chose est cassé |
-| `story` | type : un incrément de valeur pour celui qui s'en sert |
 | `to-refine` | cadrage non fait ou à refaire |
 | `ready` | cadrage validé, prête à exécuter |
 | `in-progress` | branche ouverte, exécution en cours |
 | `in-review` | PR ouverte, en attente de revue |
 
-Une issue porte **un seul** type et **un seul** état. Fermer l'issue est l'état
-terminé : il n'y a pas de libellé `done`. Un blocage se dit en commentaire, pas
+Une issue porte **un seul** type natif et **un seul** état. Fermer l'issue est
+l'état terminé : il n'y a pas de libellé `done`. Un blocage se dit en commentaire, pas
 par un libellé. L'epic n'est pas un libellé : c'est un milestone.
 
 
@@ -123,8 +122,8 @@ n'a pas de représentation propre (la fermeture de l'issue, par exemple).
 | `in-progress` | label `in-progress` | `In Progress` |
 | `in-review` | label `in-review` | `In Review` |
 | `done` | fermeture de l'issue | `Done` |
-| `bug` | label `bug` | `Bug` |
-| `story` | label `story` | `Story` |
+| `bug` | type `Bug` | type `Bug` |
+| `story` | type `Feature` | type `Story` |
 
 Deux conséquences :
 

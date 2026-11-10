@@ -2,7 +2,7 @@
   "name": "@daedalforge/dsh-missions",
   "version": "0.1.0",
   "private": true,
-  "description": "Panneau Missions de la barre latérale DSH",
+  "description": "Missions panel for the DSH sidebar: reads the trackers declared in missions/projects.yml",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -12,6 +12,7 @@
   },
   "files": [
     "lib",
+    "missions/projects.yml",
     "cordis.patch.yml",
     "README.md"
   ],
@@ -26,5 +27,11 @@
       "immediately": true
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
 }

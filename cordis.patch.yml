@@ -1,4 +1,4 @@
-# Patch de bundle : monte le panneau Missions dans le profil DSH.
+# Bundle patch: mounts the Missions panel into the DSH profile.
 - insert:
     - id: missions
       name: '@daedalforge/dsh-missions'

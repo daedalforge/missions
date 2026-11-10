@@ -2,7 +2,7 @@
 
 À recopier dans le tracker lors de la création du ticket. Les sections sont
 identiques sur Jira et sur GitHub ; ne pas recopier dans la description les
-champs natifs de l'outil (statut, assigné, sprint, labels, milestone).
+champs natifs de l'outil (type, statut, assigné, sprint, labels, milestone).
 
 ---
 
