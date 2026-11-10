@@ -67,16 +67,23 @@ window.__ModuleLoader__.load({
       const ui = service(services, 'uiWorkspace')
       const records = workspaceRecords(services)
       const target =
-        records.find((record) => record?.path === workspaceRoot) ?? records[0] ?? (workspaceId ? { workspaceId } : null)
+        records.find((record) => record?.path === workspaceRoot) ?? records[0] ?? null
+      // The host resolves the id even when the client cannot list workspaces.
+      const id = target?.workspaceId ?? target?.id ?? workspaceId
 
-      if (ui && typeof ui.startSession === 'function' && target) {
-        const id = target.workspaceId ?? target.id
+      // Reference path: startSession creates, attaches, opens and prefills in one
+      // gesture — the prompt goes into the composer, nothing is sent.
+      if (ui && typeof ui.startSession === 'function' && id) {
         try {
-          if (typeof ui.connectWorkspace === 'function' && id) await ui.connectWorkspace(id)
+          if (typeof ui.connectWorkspace === 'function') await ui.connectWorkspace(id)
           ui.startSession(id, { prompt })
-          return { sessionId: null, prefilledBy: 'uiWorkspace.startSession', openedBy: 'uiWorkspace.startSession', workspaces: records.length }
+          return {
+            sessionId: null,
+            prefilledBy: 'uiWorkspace.startSession',
+            openedBy: 'uiWorkspace.startSession',
+            workspaces: records.length,
+          }
         } catch (error) {
-          // fall through to the manual path, and keep the reason
           const raison = error?.message ?? String(error)
           return { sessionId: null, prefilledBy: null, openedBy: null, workspaces: records.length, uiError: raison }
         }
@@ -134,6 +141,17 @@ window.__ModuleLoader__.load({
 
       if (!prefilledBy && typeof sessions.binding === 'function') {
         prefilledBy = prefill(sessions.binding(sessionId))
+      }
+
+      if (!prefilledBy) {
+        // The composer is out of reach: put the brief on the clipboard instead of
+        // losing it, and say so.
+        try {
+          await navigator.clipboard.writeText(prompt)
+          prefilledBy = 'clipboard'
+        } catch {
+          // nothing else to offer
+        }
       }
 
       // Navigation is a separate service: creating a Session does not open it.
@@ -397,6 +415,10 @@ window.__ModuleLoader__.load({
             setNote(`uiWorkspace refused: ${uiError}`)
           } else if (openedBy) {
             setNote(`Session opened via ${openedBy}, prompt prefilled via ${prefilledBy ?? 'nothing'} — press Enter to send.`)
+          } else if (prefilledBy === 'clipboard') {
+            setNote(
+              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'}; the prompt is on your clipboard — paste it in the session.`,
+            )
           } else if (prefilledBy) {
             setNote(
               `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'} and prefilled via ${prefilledBy}, but this panel cannot open it — pick it in the sidebar.`,
