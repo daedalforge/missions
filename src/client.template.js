@@ -180,11 +180,12 @@ window.__ModuleLoader__.load({
       { id: 'story', label: 'Story' },
     ]
     const PRIORITY_LABELS = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' }
-    const EMPTY_FILTERS = { type: null, state: null, epic: null, priority: null, project: null }
+    const EMPTY_FILTERS = { type: null, state: null, epic: null, priority: null, project: null, missing: null }
     const SORT_OPTIONS = [
       { id: 'priority', name: 'Priority (high → low)' },
       { id: 'points', name: 'Story points (low → high)' },
     ]
+    const MISSING_OPTIONS = [{ id: 'any', name: 'Any missing' }]
 
     const TABS = [
       { id: 'dashboard', label: 'Dashboard' },
@@ -422,6 +423,12 @@ window.__ModuleLoader__.load({
             options: priorities,
             format: (priority) => PRIORITY_LABELS[priority] ?? priority,
             onChange: (value) => onFilter('priority', value),
+          }),
+          h(FilterSelect, {
+            label: 'Missing',
+            value: filters.missing,
+            options: MISSING_OPTIONS,
+            onChange: (value) => onFilter('missing', value),
           }),
           h(FilterSelect, {
             label: 'Sort',
