@@ -280,6 +280,14 @@ window.__ModuleLoader__.load({
 .missions-key { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; }
 .missions-age { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .missions-empty { color: var(--dsw-alias-label-tertiary, #7a7168); padding: 24px 0; }
+.missions-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 300px; padding: 40px 0; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-loader-label { font-size: 11.5px; letter-spacing: .02em; }
+.missions-spinner { width: 26px; height: 26px; border: 2.5px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 14%, transparent); border-top-color: var(--dsw-alias-label-primary, #1f1f1f); border-radius: 50%; animation: missions-spin .8s linear infinite; }
+.missions-btn-spinner { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; vertical-align: -1px; animation: missions-spin .8s linear infinite; }
+@keyframes missions-spin { to { transform: rotate(360deg); } }
+@keyframes missions-run { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-7px) rotate(4deg); } }
+@keyframes missions-lines { from { transform: translateX(0); } to { transform: translateX(-9px); } }
+@media (prefers-reduced-motion: reduce) { .missions-spinner, .missions-btn-spinner, .missions-runner-char, .missions-runner-lines { animation: none; } }
 .missions-dashboard { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; max-width: 520px; padding-top: 8px; }
 .missions-dashboard-card { width: 100%; padding: 18px 20px; border: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.16)); border-radius: 10px; }
 .missions-dashboard-card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
@@ -454,6 +462,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-drawer-hint { color: var(--mm-ink-3); }
 
 /* Empty result: a tilted Konoha print, the portrait and a speech bubble. */
+.missions-panel[data-theme="manga"] .missions-loader { color: var(--mm-ink-3); min-height: 340px; }
+.missions-panel[data-theme="manga"] .missions-loader-label { font-family: var(--mm-display); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+.missions-panel[data-theme="manga"] .missions-runner { position: relative; display: flex; align-items: flex-end; gap: 10px; height: 64px; }
+.missions-panel[data-theme="manga"] .missions-runner-char { width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--mm-ink); object-fit: cover; box-shadow: 2px 2px 0 var(--mm-shadow); animation: missions-run .5s ease-in-out infinite alternate; }
+.missions-panel[data-theme="manga"] .missions-runner-lines { width: 54px; height: 22px; background: repeating-linear-gradient(90deg, var(--mm-ink) 0 2px, transparent 2px 9px); opacity: .5; animation: missions-lines .5s linear infinite; }
 .missions-panel[data-theme="manga"] .missions-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; padding: 10px 20px 30px; text-align: center; }
 .missions-panel[data-theme="manga"] .missions-empty-art { position: relative; width: 300px; height: 196px; margin-bottom: 12px; }
 .missions-panel[data-theme="manga"] .missions-empty-photo { position: absolute; left: 0; top: 8px; width: 300px; height: 156px; overflow: hidden; border: 1.5px solid var(--mm-ink); border-radius: 6px; background: var(--mm-page-3); box-shadow: 4px 4px 0 var(--mm-shadow); transform: rotate(-2deg); }
@@ -624,7 +637,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       )
     }
 
-    function MissionsView({ loading, missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme }) {
+    function MissionsView({ missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme }) {
       const states = stateOptions(missions)
       const epics = epicOptions(missions)
       const priorities = priorityOptions(missions)
@@ -681,9 +694,6 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
         ),
       )
 
-      if (loading && missions.length === 0) {
-        return h('div', null, toolbar, h('p', { className: 'missions-empty' }, 'Reading projects…'))
-      }
       if (missions.length === 0) {
         return h('div', null, toolbar, h('p', { className: 'missions-empty' }, 'No open missions assigned to you.'))
       }
@@ -796,6 +806,20 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       )
     }
 
+    /** Theme-specific loading indicator, shared by every view. */
+    function PanelLoader({ theme }) {
+      const manga = theme === 'manga'
+      return h('div', { className: 'missions-loader', role: 'status', 'aria-live': 'polite' },
+        manga
+          ? h('div', { className: 'missions-runner', 'aria-hidden': 'true' },
+              h('span', { className: 'missions-runner-lines' }),
+              h('img', { className: 'missions-runner-char', src: 'assets/naruto-avatar.webp', alt: '' }),
+            )
+          : h('span', { className: 'missions-spinner', 'aria-hidden': 'true' }),
+        h('span', { className: 'missions-loader-label' }, 'Loading…'),
+      )
+    }
+
     function MissionsPanel({ services }) {
       const [view, setView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
       const [tab, setTab] = React.useState('missions')
@@ -886,7 +910,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           h('div', { className: 'missions-actions' },
             h(ThemeSelect, { value: theme, onChange: changeTheme }),
             tab === 'missions' && errors.length === 0
-              ? h('button', { type: 'button', className: 'missions-btn', onClick: () => load(), disabled: loading }, 'Refresh')
+              ? h('button', {
+                  type: 'button',
+                  className: 'missions-btn',
+                  onClick: () => load(),
+                  disabled: loading,
+                  'aria-busy': loading ? 'true' : 'false',
+                },
+                  loading ? h('span', { className: 'missions-btn-spinner', 'aria-hidden': 'true' }) : null,
+                  'Refresh',
+                )
               : null,
           ),
         ),
@@ -907,9 +940,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
             id: `missions-view-${tab}`,
             'aria-labelledby': `missions-tab-${tab}`,
           },
-            tab === 'dashboard'
-              ? h(DashboardView, null)
-              : h(MissionsView, { loading, missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort, filtered, groups, onSelect: setSelected, theme }),
+            loading && missions.length === 0
+              ? h(PanelLoader, { theme })
+              : tab === 'dashboard'
+                ? h(DashboardView, null)
+                : h(MissionsView, { missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort, filtered, groups, onSelect: setSelected, theme }),
           ),
           selected
             ? h(MissionDrawer, { mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), theme })
