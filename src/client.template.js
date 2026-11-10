@@ -171,6 +171,7 @@ window.__ModuleLoader__.load({
       ready: 'ready',
       'in-progress': 'in progress',
       'in-review': 'in review',
+      done: 'done',
       unknown: 'unknown state',
     }
     const TYPE_LABELS = { bug: 'bug', story: 'story' }
@@ -180,7 +181,12 @@ window.__ModuleLoader__.load({
       { id: 'story', label: 'Story' },
     ]
     const PRIORITY_LABELS = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' }
-    const EMPTY_FILTERS = { type: null, epic: null, priority: null, project: null }
+    const EMPTY_FILTERS = { type: null, state: null, epic: null, priority: null, project: null, missing: null }
+    const SORT_OPTIONS = [
+      { id: 'priority', name: 'Priority (high → low)' },
+      { id: 'points', name: 'Story points (low → high)' },
+    ]
+    const MISSING_OPTIONS = [{ id: 'any', name: 'Any missing' }]
 
     const TABS = [
       { id: 'dashboard', label: 'Dashboard' },
@@ -541,7 +547,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
     }
 
     /** A native select under a styled label: the value can be truncated. */
-    function FilterSelect({ label, value, options, format, onChange }) {
+    function FilterSelect({ label, value, options, format, allLabel = 'All', onChange }) {
       const entries = options.map((option) => {
         if (option && typeof option === 'object') return { value: option.id, label: option.name ?? option.id }
         return { value: option, label: format ? format(option) : String(option) }
@@ -550,7 +556,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
         entries.push({ value, label: format ? format(value) : String(value) })
       }
       const current = entries.find((entry) => entry.value === value)
-      const display = current ? current.label : 'All'
+      const display = current ? current.label : allLabel
       const active = value !== null && value !== undefined
       return h('label', { className: 'missions-select', 'data-active': active ? 'true' : 'false' },
         h('span', { className: 'missions-select-label' }, label),
@@ -563,7 +569,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           value: value ?? '',
           onChange: (event) => onChange(event.target.value === '' ? null : event.target.value),
         },
-          h('option', { value: '' }, 'All'),
+          h('option', { value: '' }, allLabel),
           entries.map((entry) => h('option', { key: String(entry.value), value: entry.value }, entry.label)),
         ),
       )
@@ -600,7 +606,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       )
     }
 
-    function MissionsView({ loading, missions, query, onQuery, filters, onFilter, onClear, filtered, groups, onSelect, theme }) {
+    function MissionsView({ loading, missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme }) {
+      const states = stateOptions(missions)
       const epics = epicOptions(missions)
       const priorities = priorityOptions(missions)
       const projects = projectOptions(missions)
@@ -632,6 +639,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           ),
         ),
         h('div', { className: 'missions-filters' },
+          h(FilterSelect, {
+            label: 'Status',
+            value: filters.state,
+            options: states,
+            format: (state) => STATE_LABELS[state] ?? state,
+            onChange: (value) => onFilter('state', value),
+          }),
           h(FilterSelect, { label: 'Epic', value: filters.epic, options: epics, onChange: (value) => onFilter('epic', value) }),
           h(FilterSelect, { label: 'Project', value: filters.project, options: projects, onChange: (value) => onFilter('project', value) }),
           h(FilterSelect, {
@@ -640,6 +654,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
             options: priorities,
             format: (priority) => PRIORITY_LABELS[priority] ?? priority,
             onChange: (value) => onFilter('priority', value),
+          }),
+          h(FilterSelect, {
+            label: 'Missing',
+            value: filters.missing,
+            options: MISSING_OPTIONS,
+            onChange: (value) => onFilter('missing', value),
+          }),
+          h(FilterSelect, {
+            label: 'Sort',
+            value: sort,
+            options: SORT_OPTIONS,
+            allLabel: 'Default',
+            onChange: onSort,
           }),
           active ? h('button', { type: 'button', className: 'missions-clear', onClick: onClear }, 'Clear') : null,
         ),
@@ -765,6 +792,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       const [tab, setTab] = React.useState('missions')
       const [query, setQuery] = React.useState('')
       const [filters, setFilters] = React.useState(EMPTY_FILTERS)
+      const [sort, setSort] = React.useState(null)
       const [selected, setSelected] = React.useState(null)
       const [theme, setTheme] = React.useState(readTheme)
 
@@ -811,7 +839,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
         h('div', { className: 'missions-hero-avatar' }, h('img', { src: ART.avatar, alt: '' })),
       ) : null
       const filtered = filterMissions(missions, { query, ...filters })
-      const groups = groupByState(filtered)
+      const groups = groupByState(sortMissions(filtered, sort))
       const onFilter = (key, value) => setFilters((previous) => ({ ...previous, [key]: value }))
       const onClear = () => setFilters(EMPTY_FILTERS)
 
@@ -872,7 +900,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           },
             tab === 'dashboard'
               ? h(DashboardView, null)
-              : h(MissionsView, { loading, missions, query, onQuery: setQuery, filters, onFilter, onClear, filtered, groups, onSelect: setSelected }),
+              : h(MissionsView, { loading, missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort, filtered, groups, onSelect: setSelected, theme }),
           ),
           selected
             ? h(MissionDrawer, { mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), theme })
