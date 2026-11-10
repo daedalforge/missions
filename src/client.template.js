@@ -287,7 +287,7 @@ window.__ModuleLoader__.load({
 @keyframes missions-spin { to { transform: rotate(360deg); } }
 @keyframes missions-run { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-7px) rotate(4deg); } }
 @keyframes missions-lines { from { transform: translateX(0); } to { transform: translateX(-9px); } }
-@media (prefers-reduced-motion: reduce) { .missions-spinner, .missions-btn-spinner, .missions-runner-lines, .missions-chibi, .missions-chibi-body, .missions-chibi-head, .missions-chibi-arm, .missions-chibi-leg, .missions-chibi-ribbon, .missions-chibi-dust { animation: none; } .missions-chibi { left: calc(50% - 75px); } .missions-chibi-dust { display: none; } }
+@media (prefers-reduced-motion: reduce) { .missions-spinner, .missions-btn-spinner, .missions-runner-lines, .missions-runner-bg, .missions-chibi, .missions-chibi-shadow, .missions-chibi-body, .missions-chibi-head, .missions-chibi-arm, .missions-chibi-leg, .missions-chibi-ribbon, .missions-chibi-dust { animation: none; } .missions-chibi { left: calc(50% - 75px); } .missions-chibi-shadow { left: calc(50% - 66px); } .missions-chibi-dust { display: none; } }
 .missions-dashboard { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; max-width: 520px; padding-top: 8px; }
 .missions-dashboard-card { width: 100%; padding: 18px 20px; border: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.16)); border-radius: 10px; }
 .missions-dashboard-card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
@@ -464,9 +464,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 /* Empty result: a tilted Konoha print, the portrait and a speech bubble. */
 .missions-panel[data-theme="manga"] .missions-loader { color: var(--mm-ink-3); min-height: 340px; }
 .missions-panel[data-theme="manga"] .missions-loader-label { font-family: var(--mm-display); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
-.missions-panel[data-theme="manga"] .missions-runner { position: relative; width: min(88%, 720px); height: 172px; margin: 0 auto; overflow: hidden; }
+.missions-panel[data-theme="manga"] .missions-runner { position: relative; width: min(94%, 820px); height: 220px; margin: 0 auto; overflow: hidden; border: 1.5px solid var(--mm-ink); border-radius: 10px; background: var(--mm-page); box-shadow: 3px 3px 0 var(--mm-shadow); }
+.missions-panel[data-theme="manga"] .missions-runner-bg { position: absolute; inset: 0; background: url(assets/konoha-village.webp) center 55% / cover no-repeat; opacity: .16; filter: grayscale(.35) contrast(1.05); animation: missions-bg-scroll 9s linear infinite; }
+.missions-panel[data-theme="manga"] .missions-runner-fog { position: absolute; inset: 0; background: linear-gradient(90deg, var(--mm-page) 0%, transparent 18%, transparent 82%, var(--mm-page) 100%), linear-gradient(0deg, var(--mm-page) 0%, transparent 42%); }
 .missions-panel[data-theme="manga"] .missions-runner-track { position: absolute; inset: 12px 0 0; }
-.missions-panel[data-theme="manga"] .missions-chibi { position: absolute; left: 0; bottom: 2px; width: 150px; height: 150px; animation: missions-chibi-run 3s linear infinite; }
+.missions-panel[data-theme="manga"] .missions-chibi { position: absolute; left: 0; bottom: 4px; width: 150px; height: 150px; animation: missions-chibi-run 3s linear infinite; }
+.missions-panel[data-theme="manga"] .missions-chibi-shadow { position: absolute; left: 0; bottom: 10px; width: 132px; height: 12px; border-radius: 50%; background: color-mix(in srgb, var(--mm-ink) 22%, transparent); filter: blur(3px); animation: missions-chibi-run 3s linear infinite, missions-chibi-shadow .36s ease-in-out infinite alternate; }
 .missions-panel[data-theme="manga"] .missions-chibi svg { width: 100%; height: 100%; overflow: visible; }
 .missions-panel[data-theme="manga"] .missions-chibi-body { transform-box: fill-box; transform-origin: 50% 95%; animation: missions-chibi-lean .38s ease-in-out infinite alternate; }
 .missions-panel[data-theme="manga"] .missions-chibi-head { transform-box: fill-box; transform-origin: 50% 100%; animation: missions-chibi-bob .36s ease-in-out infinite alternate; }
@@ -485,6 +488,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 @keyframes missions-chibi-leg { from { transform: rotate(-32deg); } to { transform: rotate(32deg); } }
 @keyframes missions-chibi-ribbon { from { transform: rotate(-6deg); } to { transform: rotate(8deg); } }
 @keyframes missions-chibi-dust { 0% { opacity: .8; transform: translateX(0) scale(.7); } 100% { opacity: 0; transform: translateX(-30px) scale(1.5); } }
+@keyframes missions-chibi-shadow { from { transform: scaleX(.82); opacity: .8; } to { transform: scaleX(1.05); opacity: .55; } }
+@keyframes missions-bg-scroll { from { background-position: 0 55%; } to { background-position: 220px 55%; } }
 .missions-panel[data-theme="manga"] .missions-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; padding: 10px 20px 30px; text-align: center; }
 .missions-panel[data-theme="manga"] .missions-empty-art { position: relative; width: 300px; height: 196px; margin-bottom: 12px; }
 .missions-panel[data-theme="manga"] .missions-empty-photo { position: absolute; left: 0; top: 8px; width: 300px; height: 156px; overflow: hidden; border: 1.5px solid var(--mm-ink); border-radius: 6px; background: var(--mm-page-3); box-shadow: 4px 4px 0 var(--mm-shadow); transform: rotate(-2deg); }
@@ -830,8 +835,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       return h('div', { className: 'missions-loader', role: 'status', 'aria-live': 'polite' },
         manga
           ? h('div', { className: 'missions-runner', 'aria-hidden': 'true' },
+              h('div', { className: 'missions-runner-bg' }),
+              h('div', { className: 'missions-runner-fog' }),
               h('div', { className: 'missions-runner-track' },
                 h('span', { className: 'missions-runner-lines' }),
+                h('span', { className: 'missions-chibi-shadow' }),
                 h('div', { className: 'missions-chibi' },
                   h('svg', { viewBox: '0 0 120 120', xmlns: 'http://www.w3.org/2000/svg' },
                     h('g', { className: 'missions-chibi-leg missions-chibi-leg--back' },
