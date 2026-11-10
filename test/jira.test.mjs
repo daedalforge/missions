@@ -6,14 +6,19 @@ import { forgetToken, list } from '../lib/trackers/jira.js'
 const PROJECT = {
   id: 'manager',
   tracker: 'jira',
-  jira: { site: 'https://example.atlassian.net', key_prefix: 'SO', email: 'me@example.test' },
+  jira: {
+    site: 'https://example.atlassian.net',
+    cloud_id: 'cloud-1',
+    key_prefix: 'SO',
+    email: 'me@example.test',
+  },
   map: {
     states: {
-      'to-refine': 'To Do',
-      ready: 'Ready',
+      'to-refine': 'To Refine',
+      ready: 'Ready to Dev',
       'in-progress': 'In Progress',
-      'in-review': 'In Review',
-      done: 'Done',
+      'in-review': 'Code review',
+      done: 'Released',
     },
     types: { bug: 'Bug', story: 'Story' },
     priorities: { urgent: 'Highest', high: 'High', normal: 'Medium', low: 'Low' },
@@ -50,6 +55,12 @@ function issue(key, { status = 'In Progress', type = 'Story', parent = null } = 
   }
 }
 
+/** Answer the identity check apart, so each test only sees the search calls. */
+function reading(handler) {
+  return async (url, init) =>
+    String(url).includes('/myself') ? response({ accountId: 'me' }) : handler(String(url), init)
+}
+
 beforeEach(() => {
   process.env.JIRA_API_TOKEN = 'test-token'
   process.env.JIRA_EMAIL = 'me@example.test'
@@ -58,10 +69,10 @@ beforeEach(() => {
 
 test('the JQL is scoped to the current assignee', async () => {
   const calls = []
-  const fetchImpl = async (url) => {
+  const fetchImpl = reading(async (url) => {
     calls.push(url)
     return response({ issues: [] })
-  }
+  })
 
   await list(PROJECT, { fetchImpl })
 
@@ -69,8 +80,37 @@ test('the JQL is scoped to the current assignee', async () => {
   assert.match(jql, /assignee = currentUser\(\)/)
 })
 
+test('reads go through the Atlassian gateway, never the site', async () => {
+  const calls = []
+  const fetchImpl = reading(async (url) => {
+    calls.push(url)
+    return response({ issues: [] })
+  })
+
+  await list(PROJECT, { fetchImpl })
+
+  assert.equal(calls.length, 1)
+  assert.ok(calls.every((url) => url.startsWith('https://api.atlassian.com/ex/jira/cloud-1/')))
+})
+
+test('the cloudId is discovered from the site when the project does not declare one', async () => {
+  const calls = []
+  const { cloud_id: _ignored, ...jira } = PROJECT.jira
+  const project = { ...PROJECT, jira }
+  const fetchImpl = reading(async (url) => {
+    calls.push(url)
+    if (url.includes('/_edge/tenant_info')) return response({ cloudId: 'cloud-9' })
+    return response({ issues: [] })
+  })
+
+  await list(project, { fetchImpl })
+
+  assert.match(calls[0], /^https:\/\/example\.atlassian\.net\/_edge\/tenant_info$/)
+  assert.match(calls[1], /^https:\/\/api\.atlassian\.com\/ex\/jira\/cloud-9\/rest\/api\/3\/search\/jql/)
+})
+
 test('Jira issues are normalized through the project map', async () => {
-  const fetchImpl = async () => response({ issues: [issue('SO-1207', { parent: 'SO-1000' })] })
+  const fetchImpl = reading(async () => response({ issues: [issue('SO-1207', { parent: 'SO-1000' })] }))
 
   const missions = await list(PROJECT, { fetchImpl })
 
@@ -90,7 +130,7 @@ test('Jira issues are normalized through the project map', async () => {
 })
 
 test('a status outside the mapping leaves the state null', async () => {
-  const fetchImpl = async () => response({ issues: [issue('SO-1', { status: 'Waiting for client' })] })
+  const fetchImpl = reading(async () => response({ issues: [issue('SO-1', { status: 'Waiting for client' })] }))
 
   const missions = await list(PROJECT, { fetchImpl })
 
@@ -98,39 +138,49 @@ test('a status outside the mapping leaves the state null', async () => {
 })
 
 test('pagination follows nextPageToken', async () => {
+  let searches = 0
   const calls = []
-  const fetchImpl = async (url) => {
+  const fetchImpl = reading(async (url) => {
     calls.push(url)
-    if (calls.length === 1) return response({ issues: [issue('SO-1')], nextPageToken: 'page-2' })
+    searches += 1
+    if (searches === 1) return response({ issues: [issue('SO-1')], nextPageToken: 'page-2' })
     return response({ issues: [issue('SO-2')] })
-  }
+  })
 
   const missions = await list(PROJECT, { fetchImpl })
 
-  assert.equal(calls.length, 2)
+  assert.equal(searches, 2)
   assert.match(calls[1], /nextPageToken=page-2/)
   assert.deepEqual(missions.map((m) => m.key), ['SO-1', 'SO-2'])
 })
 
 test('a 404 on /search/jql falls back to the legacy endpoint', async () => {
+  let searches = 0
   const calls = []
-  const fetchImpl = async (url) => {
+  const fetchImpl = reading(async (url) => {
     calls.push(url)
-    if (calls.length === 1) return response({ errorMessages: ['gone'] }, { status: 404 })
+    searches += 1
+    if (searches === 1) return response({ errorMessages: ['gone'] }, { status: 404 })
     return response({ issues: [issue('SO-3')], total: 1 })
-  }
+  })
 
   const missions = await list(PROJECT, { fetchImpl })
 
-  assert.equal(calls.length, 2)
+  assert.equal(searches, 2)
   assert.match(calls[1], /\/rest\/api\/3\/search\?/)
   assert.equal(missions[0].key, 'SO-3')
 })
 
-test('a 401 names the Jira token', async () => {
-  const fetchImpl = async () => response({ message: 'Unauthorized' }, { status: 401 })
+test('an invalid token raises before any search, naming the token', async () => {
+  const calls = []
+  const fetchImpl = async (url) => {
+    calls.push(String(url))
+    return response({ message: 'Unauthorized' }, { status: 401 })
+  }
 
   await assert.rejects(() => list(PROJECT, { fetchImpl }), /Jira token missing or invalid/)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0], /\/myself$/)
 })
 
 test('a project without site or prefix is rejected', async () => {
@@ -142,4 +192,10 @@ test('a project without site or prefix is rejected', async () => {
     () => list({ ...PROJECT, jira: { site: 'https://x' } }, { fetchImpl: async () => response({}) }),
     /key_prefix/,
   )
+})
+
+test('a 403 keeps its own message: permissions are not a dead token', async () => {
+  const fetchImpl = async () => response({ message: 'Forbidden' }, { status: 403 })
+
+  await assert.rejects(() => list(PROJECT, { fetchImpl }), /Jira access denied/)
 })
