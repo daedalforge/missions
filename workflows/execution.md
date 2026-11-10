@@ -22,6 +22,23 @@ Produire le changement décrit par le cadrage, sans sortir du périmètre.
 - [ ] La PR est ouverte, liée au ticket.
 - [ ] Chaque critère d'acceptation porte sa preuve dans la description de la PR.
 
+## Renseigner la PR
+
+Une PR n'est pas qu'un diff : elle doit se retrouver dans une liste et se relier
+à son issue sans qu'on ouvre le code.
+
+- **Assignée** à la personne qui l'a ouverte.
+- **Typée** comme son issue : `bug` ou `story`, jamais les deux.
+- **Étiquetée `in-review`**, comme l'issue qu'elle sert.
+- **Liée** : `Closes #N` quand elle termine la mission, `Réf. #N` quand elle
+  n'en fait qu'une partie. Seul le mot-clé de fermeture remplit la section
+  **Development** de l'issue ; un `Réf. #N` ne crée qu'une référence croisée,
+  visible dans la chronologie, pas dans Development. Une PR partielle n'y
+  apparaît donc pas : c'est attendu, pas un oubli.
+- **Même milestone** que l'issue quand elle en a un — c'est l'epic de la
+  mission. On ne crée pas de milestone pour l'occasion : sans epic, la PR n'en
+  porte pas.
+
 ## Règles de conduite
 
 - **Un seul sujet.** Une idée qui n'est pas dans les critères devient un ticket,
