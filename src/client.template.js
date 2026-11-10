@@ -272,6 +272,8 @@ window.__ModuleLoader__.load({
 .missions-action:disabled { opacity: .55; cursor: default; }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-drawer-version { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; }
+.missions-drawer--empty { justify-content: center; align-items: center; border-left: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
+.missions-drawer-hint { max-width: 220px; margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12px; text-align: center; }
 `
 
     /** Tab icon: a list of tickets. */
@@ -548,7 +550,11 @@ window.__ModuleLoader__.load({
               ? h(DashboardView, null)
               : h(MissionsView, { loading, missions, query, onQuery: setQuery, type, onType: setType, filtered, groups, onSelect: setSelected }),
           ),
-          selected ? h(MissionDrawer, { mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null) }) : null,
+          selected
+            ? h(MissionDrawer, { mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null) })
+            : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },
+                h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),
+              ),
         ),
       )
     }
