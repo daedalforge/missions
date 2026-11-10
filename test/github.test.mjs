@@ -61,7 +61,7 @@ beforeEach(() => {
 test('issues are normalized and pull requests dropped', async () => {
   const fetchImpl = route(async () =>
     response([
-      issue(2, { labels: ['ready', 'priority:high', 'sp:3'], milestone: { title: 'Workspace' }, type: 'Feature' }),
+      issue(2, { labels: ['ready', 'priority:high', 'sp:3'], milestone: { number: 1, title: 'Workspace' }, type: 'Feature' }),
       issue(9, { labels: [], type: 'Bug', pr: true }),
     ]))
 
@@ -78,7 +78,7 @@ test('issues are normalized and pull requests dropped', async () => {
     type: 'story',
     priority: 'high',
     points: 3,
-    epic: 'Workspace',
+    epic: '#1 · Workspace',
     url: 'https://github.com/daedalforge/missions/issues/2',
     updatedAt: '2026-11-10T10:00:00Z',
   })
