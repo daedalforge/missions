@@ -1,0 +1,116 @@
+# La mission
+
+Une mission est un travail suivi par **un ticket de tracker**. Sa fiche, son
+état et son historique vivent dans le tracker ; le workspace n'en garde rien.
+
+## Identité
+
+| Tracker | Forme | Exemple |
+|---|---|---|
+| Jira | `<PROJET>-<numéro>` | `SOC-1541`, `SO-1207` |
+| GitHub | `<owner>/<repo>#<numéro>` | `daedalforge/missions#12` |
+
+La clé est l'identifiant de travail, partout et sans exception : nom de branche,
+préfixe de commit, message de PR, liens entre tickets. On ne réinvente pas de
+numérotation locale.
+
+## États
+
+Cinq états, dans cet ordre : **à cadrer**, **prête**, **en cours**, **en revue**,
+**terminée**. Ils sont décrits dans [`../workflows/README.md`](../workflows/README.md),
+qui porte aussi leur correspondance Jira et GitHub.
+
+Un ticket ne saute pas d'état : chaque transition a une condition de sortie
+écrite dans la page de l'étape correspondante.
+
+## Où vit quoi
+
+| Élément | Emplacement | Versionné ici |
+|---|---|---|
+| Fiche de mission (titre, description, critères) | Tracker | Non |
+| État, assignation, commentaires | Tracker | Non |
+| Branche et commits | Dépôt du projet | Selon le projet |
+| Preuves de clôture | Commentaire du ticket | Non |
+| Méthode (ce document, workflows) | Ce dépôt | Oui |
+
+Sur GitHub, pas de board GitHub Projects : la liste des issues suffit. Une
+mission n'a pas de sous-ticket ; ce qui aurait été une sous-tâche est un critère
+d'acceptation ou une mission à part entière.
+
+## Le projet décide du tracker
+
+Chaque projet déclare son dépôt et son tracker dans [`projects.yml`](projects.yml).
+Une mission hérite du tracker de son projet : il n'y a pas de choix par mission.
+Un projet sans entrée dans `projects.yml` ne peut pas recevoir de mission.
+
+## Gabarit
+
+La fiche d'une mission se crée dans le tracker à partir de
+[`gabarit-mission.md`](gabarit-mission.md). Les sections sont les mêmes pour
+Jira et GitHub ; seuls les champs natifs de l'outil (statut, assigné, sprint)
+diffèrent et ne sont pas dupliqués dans la description.
+
+## Epics
+
+Un epic groupe des missions autour d'un même objectif. Ce n'est pas une mission :
+il ne suit pas le parcours cadrage → revue, il ne porte ni branche ni PR, et il
+n'occupe pas de ticket.
+
+| Tracker | Forme de l'epic |
+|---|---|
+| GitHub | **milestone** ; la mission y est rattachée par le champ `milestone` |
+| Jira | epic natif ; la mission y est rattachée par le lien d'epic |
+
+Une mission appartient à **un seul** epic. Un epic se décrit par un titre et une
+courte description, se ferme quand toutes ses missions sont terminées, et naît
+avec au moins une mission. La date d'échéance du milestone reste vide tant qu'il
+n'y a pas d'engagement de date : un epic est thématique, pas calendaire.
+
+## Libellés GitHub
+
+Une issue porte **un type** et **un état**. Le type dit la nature du travail ;
+l'état dit où en est la mission. Les deux sont indépendants : une story peut être
+en revue, un bug peut être prêt.
+
+| Libellé | Rôle |
+|---|---|
+| `bug` | type : quelque chose est cassé |
+| `story` | type : un incrément de valeur pour celui qui s'en sert |
+| `to-refine` | cadrage non fait ou à refaire |
+| `ready` | cadrage validé, prête à exécuter |
+| `in-progress` | branche ouverte, exécution en cours |
+| `in-review` | PR ouverte, en attente de revue |
+
+Une issue porte **un seul** type et **un seul** état. Fermer l'issue est l'état
+terminé : il n'y a pas de libellé `done`. Un blocage se dit en commentaire, pas
+par un libellé. L'epic n'est pas un libellé : c'est un milestone.
+
+
+## Correspondance avec le tracker
+
+Le workspace a un **vocabulaire canonique**, le même partout : états `to-refine`,
+`ready`, `in-progress`, `in-review`, `done`, types `bug`, `story`. Les documents,
+les branches et les commits l'emploient ; c'est seulement à la frontière du
+tracker qu'une traduction a lieu.
+
+Cette traduction est une donnée, pas une convention : chaque projet la déclare
+dans [`projects.yml`](projects.yml), bloc `map`. Une clé canonique sans valeur
+dans le tracker se compense par un libellé ; une valeur `null` dit que l'état
+n'a pas de représentation propre (la fermeture de l'issue, par exemple).
+
+| Canonique | GitHub (`missions`) | Jira (exemple à trois statuts) |
+|---|---|---|
+| `to-refine` | label `to-refine` | `To Do` |
+| `ready` | label `ready` | `To Do` + libellé `ready` |
+| `in-progress` | label `in-progress` | `In Progress` |
+| `in-review` | label `in-review` | `In Review` |
+| `done` | fermeture de l'issue | `Done` |
+| `bug` | label `bug` | `Bug` |
+| `story` | label `story` | `Story` |
+
+Deux conséquences :
+
+- Un projet dont le `map` est incomplet ne peut pas recevoir de mission : on ne
+  devine pas où poser un état.
+- Deux projets peuvent nommer le même état différemment — c'est le `map` qui
+  fait foi, jamais la mémoire de qui travaille.
