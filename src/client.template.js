@@ -75,11 +75,11 @@ window.__ModuleLoader__.load({
 .missions-group[data-state="ready"] .missions-group-head { color: #1a7f37; }
 .missions-group[data-state="to-refine"] .missions-group-head { color: #8250df; }
 .missions-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(292px, 1fr)); gap: 12px; }
-.missions-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 12px; background: var(--dsw-alias-bg-layer-1, #ffffff); cursor: pointer; transition: border-color .15s ease, transform .15s ease; }
-.missions-card:hover { border-color: color-mix(in srgb, currentColor 22%, transparent); transform: translateY(-1px); }
+.missions-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 12px; background: var(--dsw-alias-bg-layer-1, #ffffff); cursor: pointer; transition: border-color .15s ease, background-color .15s ease; }
+.missions-card:hover { border-color: color-mix(in srgb, currentColor 22%, transparent); background: color-mix(in srgb, currentColor 3%, var(--dsw-alias-bg-layer-1, #ffffff)); }
 .missions-card:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #f5893a) 60%, transparent); outline-offset: 2px; }
 .missions-card[data-priority="urgent"] { border-left: 3px solid #cf222e; padding-left: 14px; }
-@media (prefers-reduced-motion: reduce) { .missions-card { transition: none; } .missions-card:hover { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .missions-card { transition: none; } }
 .missions-card-top { display: flex; align-items: center; gap: 8px; }
 .missions-type { display: inline-flex; align-items: center; height: 21px; padding: 0 8px; border-radius: 999px; font-size: 11px; background: color-mix(in srgb, currentColor 9%, transparent); color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-type[data-type="bug"] { color: #cf222e; background: color-mix(in srgb, #cf222e 10%, transparent); }
