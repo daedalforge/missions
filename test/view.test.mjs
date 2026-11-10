@@ -111,6 +111,21 @@ test('le tri story points va du plus petit au plus grand, les sans-SP en fin', (
   assert.deepEqual(sortMissions(MISSIONS, null).map((m) => m.key), ['a#1', 'a#2', 'a#3'])
 })
 
+test('le filtre Missing ne garde que les tickets à qui il manque un champ', () => {
+  assert.deepEqual(filterMissions(MISSIONS, { missing: 'any' }).map((m) => m.key), ['a#2'])
+
+  const complete = [
+    ...MISSIONS,
+    { key: 'a#4', points: 0, priority: 'urgent', epic: 'Workspace', type: 'bug' },
+    { key: 'a#6', points: 0.5, priority: 'low', epic: 'Workspace', type: 'story' },
+  ]
+  assert.deepEqual(filterMissions(complete, { missing: 'any' }).map((m) => m.key), ['a#2'])
+
+  const sparse = [...MISSIONS, { key: 'a#5', points: null, priority: null, epic: null, type: null }]
+  assert.deepEqual(filterMissions(sparse, { missing: 'any' }).map((m) => m.key), ['a#2', 'a#5'])
+  assert.equal(filterMissions(complete, { missing: null }).length, complete.length)
+})
+
 test('une recherche vide ne filtre rien', () => {
   assert.equal(filterMissions(MISSIONS).length, 3)
   assert.equal(filterMissions(MISSIONS, { query: '   ' }).length, 3)
@@ -138,6 +153,7 @@ test('un filtre actif est détecté, le type et le statut compris', () => {
   assert.equal(hasActiveFilters({ type: null, state: null, epic: 'Workspace', priority: null, project: null }), true)
   assert.equal(hasActiveFilters({ type: null, state: null, epic: null, priority: 'normal', project: null }), true)
   assert.equal(hasActiveFilters({ type: null, state: null, epic: null, priority: null, project: 'missions' }), true)
+  assert.equal(hasActiveFilters({ type: null, state: null, epic: null, priority: null, project: null, missing: 'any' }), true)
 })
 
 test('les groupes suivent l’ordre du workflow, done puis l’inconnu en dernier', () => {
