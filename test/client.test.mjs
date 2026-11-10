@@ -83,4 +83,6 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   assert.match(SOURCE, /Naruto theme/)
   assert.match(flat, /missions-drawer--empty/)
   assert.doesNotMatch(SOURCE, /missions-drawer--empty \{ display: none; \}/)
+  assert.match(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*background: color-mix/)
+  assert.doesNotMatch(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*translateY/)
 })
