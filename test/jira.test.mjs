@@ -5,6 +5,7 @@ import { forgetToken, list } from '../lib/trackers/jira.js'
 
 const PROJECT = {
   id: 'manager',
+  name: 'Manager',
   tracker: 'jira',
   jira: {
     site: 'https://example.atlassian.net',
@@ -116,6 +117,7 @@ test('Jira issues are normalized through the project map', async () => {
 
   assert.deepEqual(missions[0], {
     project: 'manager',
+    projectName: 'Manager',
     key: 'SO-1207',
     number: null,
     title: 'Mission SO-1207',

@@ -5,6 +5,7 @@ import { firstKnown, invertMap, normalizeIssue } from '../lib/mission.js'
 
 const PROJECT = {
   id: 'missions',
+  name: 'Workspace missions',
   map: {
     states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
     types: { bug: 'Bug', story: 'Feature' },
@@ -55,6 +56,7 @@ test('an issue takes its state and type from the tracker vocabulary', () => {
   assert.equal(mission.type, 'story')
   assert.equal(mission.epic, 'Workspace')
   assert.equal(mission.project, 'missions')
+  assert.equal(mission.projectName, 'Workspace missions')
 })
 
 test('an unknown state stays null instead of being guessed', () => {
