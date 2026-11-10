@@ -244,17 +244,30 @@ window.__ModuleLoader__.load({
       }, [onClose])
 
       const startSession = () => {
-        const workspace = appContext?.uiWorkspace
+        const workspace =
+          appContext?.uiWorkspace ??
+          (typeof appContext?.get === 'function' ? appContext.get('uiWorkspace') : null)
+
         if (!workspace || typeof workspace.startSession !== 'function') {
-          setNote('Sessions are not available from this panel.')
+          setNote('uiWorkspace is not exposed to this panel: cannot start a session here.')
           return
         }
+
         const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.`
+        setNote('Starting a session…')
+
         try {
-          workspace.startSession(undefined, { prompt, whenDraftExists: 'append' })
-          onClose()
+          const outcome = workspace.startSession(undefined, { prompt, whenDraftExists: 'append' })
+          if (outcome && typeof outcome.then === 'function') {
+            outcome.then(
+              () => setNote('Session started.'),
+              (error) => setNote(`Session failed: ${error?.message ?? error}`),
+            )
+            return
+          }
+          setNote('Session started.')
         } catch (error) {
-          setNote(error?.message ?? 'session could not start')
+          setNote(`Session failed: ${error?.message ?? error}`)
         }
       }
 
