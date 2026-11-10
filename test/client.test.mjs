@@ -81,4 +81,6 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   assert.match(flat, /missions-hero/)
   assert.match(flat, /data:image\/webp;base64,/)
   assert.match(SOURCE, /Naruto theme/)
+  assert.match(flat, /missions-drawer--empty/)
+  assert.doesNotMatch(SOURCE, /missions-drawer--empty \{ display: none; \}/)
 })

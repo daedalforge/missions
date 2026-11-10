@@ -459,7 +459,6 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-action--primary { background: var(--mm-ink); color: var(--mm-page); }
 .missions-panel[data-theme="manga"] .missions-drawer-note { padding: 6px 9px; border-left: 3px solid var(--mm-orange); background: color-mix(in srgb, var(--mm-orange) 12%, var(--mm-page)); color: var(--mm-ink-2); font-size: 10.5px; }
 .missions-panel[data-theme="manga"] .missions-drawer--empty { border-left: 1.5px dashed var(--mm-line-strong); }
-.missions-panel[data-theme="manga"] .missions-drawer--empty { display: none; }
 .missions-panel[data-theme="manga"] .missions-drawer-hint { color: var(--mm-ink-3); }
 
 /* Empty result: a tilted Konoha print, the portrait and a speech bubble. */
