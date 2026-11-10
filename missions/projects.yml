@@ -17,7 +17,9 @@
 #   name     nom lisible
 #   repo     chemin du clone sur le poste
 #   tracker  jira | github
-#   jira     site et préfixe des clés (tracker: jira)
+#   jira     site, préfixe des clés et adresse du compte (tracker: jira) ;
+#            le jeton vient du Trousseau (service « atlassian-token ») ou de
+#            JIRA_API_TOKEN, jamais de ce fichier
 #   github   owner et repo du dépôt distant (tracker: github)
 #   map      correspondance canonique -> tracker (obligatoire)
 #

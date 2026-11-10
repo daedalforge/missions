@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
 import { listerTout, viderCache } from '../lib/trackers/index.js'
+import { oublierJeton } from '../lib/trackers/jira.js'
 
 const MAP = {
   states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
@@ -31,8 +32,21 @@ function reponse(corps) {
   }
 }
 
+const PROJET_JIRA = {
+  id: 'manager',
+  tracker: 'jira',
+  jira: { site: 'https://exemple.atlassian.net', key_prefix: 'SO', email: 'moi@exemple.test' },
+  map: {
+    states: { 'to-refine': 'To Do', ready: 'Ready', 'in-progress': 'In Progress', 'in-review': 'In Review', done: 'Done' },
+    types: { bug: 'Bug', story: 'Story' },
+  },
+}
+
 beforeEach(() => {
   process.env.GH_TOKEN = 'jeton-de-test'
+  process.env.JIRA_API_TOKEN = 'jeton-jira-de-test'
+  process.env.JIRA_EMAIL = 'moi@exemple.test'
+  oublierJeton()
   viderCache()
 })
 
@@ -75,4 +89,26 @@ test('les missions sont triées par état puis par clé', async () => {
   const { missions } = await listerTout([PROJET_OK], { fetchImpl })
 
   assert.deepEqual(missions.map((m) => m.numero), [1, 3, 5])
+})
+
+test('GitHub et Jira cohabitent dans la même liste', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes('api.github.com')) {
+      return reponse([{ number: 2, title: 'Mission GitHub', labels: [{ name: 'story' }, { name: 'ready' }] }])
+    }
+    return reponse({
+      issues: [
+        {
+          key: 'SO-1207',
+          fields: { summary: 'Mission Jira', status: { name: 'In Progress' }, issuetype: { name: 'Story' } },
+        },
+      ],
+    })
+  }
+
+  const { missions, erreurs } = await listerTout([PROJET_OK, PROJET_JIRA], { fetchImpl })
+
+  assert.equal(erreurs.length, 0)
+  assert.deepEqual(missions.map((m) => m.cle).sort(), ['SO-1207', 'daedalforge/missions#2'])
+  assert.deepEqual(missions.map((m) => m.projet).sort(), ['manager', 'missions'])
 })

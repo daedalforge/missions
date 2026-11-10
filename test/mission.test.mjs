@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { inverser, normaliserIssue } from '../lib/mission.js'
+import { inverser, normaliserIssue, premierConnu } from '../lib/mission.js'
 
 const PROJET = {
   id: 'missions',
@@ -18,20 +18,25 @@ test('le map est inversé, les valeurs nulles ignorées', () => {
   assert.equal(inverses.types.get('story'), 'story')
 })
 
-test('une issue prend son état et son type dans ses libellés', () => {
+test('premierConnu retient la première valeur connue', () => {
+  const inverses = inverser(PROJET.map)
+  assert.equal(premierConnu(['urgent', 'ready', 'in-review'], inverses.etats), 'ready')
+  assert.equal(premierConnu(['urgent'], inverses.etats), null)
+})
+
+test('une issue prend son état et son type dans le vocabulaire du tracker', () => {
   const inverses = inverser(PROJET.map)
   const mission = normaliserIssue({
-    issue: {
-      number: 2,
-      title: 'Le panneau lit chaque projet indépendamment',
-      labels: [{ name: 'story' }, { name: 'ready' }, { name: 'other' }],
-      milestone: { title: 'Workspace' },
-      html_url: 'https://github.com/daedalforge/missions/issues/2',
-      updated_at: '2026-11-10T15:56:47Z',
-    },
     projet: PROJET,
-    inverses,
     cle: 'daedalforge/missions#2',
+    numero: 2,
+    titre: 'Le panneau lit chaque projet indépendamment',
+    etatBrut: 'ready',
+    typeBrut: 'story',
+    epic: 'Workspace',
+    url: 'https://github.com/daedalforge/missions/issues/2',
+    maj: '2026-11-10T15:56:47Z',
+    inverses,
   })
 
   assert.equal(mission.cle, 'daedalforge/missions#2')
@@ -41,13 +46,15 @@ test('une issue prend son état et son type dans ses libellés', () => {
   assert.equal(mission.projet, 'missions')
 })
 
-test('un libellé inconnu laisse l’état à null plutôt que de deviner', () => {
+test('un état inconnu reste null plutôt que d’être deviné', () => {
   const inverses = inverser(PROJET.map)
   const mission = normaliserIssue({
-    issue: { number: 3, title: 'sans libellé', labels: [{ name: 'urgent' }] },
     projet: PROJET,
-    inverses,
     cle: 'daedalforge/missions#3',
+    titre: 'sans état',
+    etatBrut: 'urgent',
+    typeBrut: null,
+    inverses,
   })
 
   assert.equal(mission.etat, null)
