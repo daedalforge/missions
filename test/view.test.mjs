@@ -766,6 +766,66 @@ test('chaque condition s’affiche en entier, sans sortir du cadre ni recouvrir 
   }
 })
 
+test('aucune étiquette de condition n’en recouvre une autre, sur les quatre modèles', async () => {
+  const { workflows } = await loadWorkflows(MODELS_DIR, { states: [] })
+
+  for (const model of workflows) {
+    const graph = layoutWorkflow(model)
+    const labels = graph.links.filter((link) => link.when).map((link) => {
+      const half = link.labelAnchor === 'middle' ? link.labelWidth / 2 : 0
+      const left = link.labelX - half
+      return { link, left, right: left + link.labelWidth, top: link.labelY - 9, bottom: link.labelY + 3 }
+    })
+    for (let i = 0; i < labels.length; i += 1) {
+      for (let j = i + 1; j < labels.length; j += 1) {
+        const a = labels[i]
+        const b = labels[j]
+        const overlap = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+        assert.equal(overlap, false, `${model.workflow} : « ${a.link.when} » recouvre « ${b.link.when} »`)
+      }
+    }
+  }
+})
+
+test('la géométrie reste déterministe d’un calcul à l’autre', async () => {
+  const { workflows } = await loadWorkflows(MODELS_DIR, { states: [] })
+
+  for (const model of workflows) {
+    // L'empilement des retours ne dépend d'aucun état de module : deux calculs
+    // successifs donnent la même géométrie, boîtes et étiquettes comprises.
+    assert.deepEqual(layoutWorkflow(model), layoutWorkflow(model))
+  }
+})
+
+test('sur cadrage, les deux retours vers la fiche tiennent sur deux lignes', async () => {
+  const { workflows } = await loadWorkflows(MODELS_DIR, { states: [] })
+  const model = workflows.find((item) => item.workflow === 'cadrage')
+  const graph = layoutWorkflow(model)
+  const target = graph.boxes.find((box) => box.id === 'ecrire-fiche')
+  const backs = graph.links.filter((link) => link.back && link.to === 'ecrire-fiche' && link.when)
+
+  assert.equal(backs.length, 2)
+  assert.deepEqual(
+    backs.map((link) => link.when).sort(),
+    ['chaque nouveau ticket repart au cadrage', 'une case n\'est pas cochée'].sort(),
+    'les deux conditions sont affichées en entier',
+  )
+  // Le premier retour garde la ligne de bf9e191 ; le second descend d'une ligne
+  // de texte, assez pour que les deux rectangles ne se touchent pas.
+  const first = target.y + target.height / 2 + 4
+  assert.deepEqual(backs.map((link) => link.labelY), [first, first + 12])
+  // L'empilement reste dans la bande de rangée : il n'entre ni dans une boîte
+  // déjà en place, ni dans la rangée suivante.
+  const below = Math.min(...graph.boxes.filter((box) => box.level > target.level).map((box) => box.y))
+  for (const link of backs) {
+    assert.ok(link.labelY + 3 <= below, `« ${link.when} » entre dans la rangée suivante`)
+    for (const box of graph.boxes) {
+      const crosses = link.labelX < box.x + box.width && link.labelX + link.labelWidth > box.x && link.labelY - 9 < box.y + box.height && link.labelY + 3 > box.y
+      assert.equal(crosses, false, `« ${link.when} » recouvre ${box.id}`)
+    }
+  }
+})
+
 test('trois branches empilent leurs conditions sans se recouvrir', () => {
   const model = {
     workflow: 'essai',
