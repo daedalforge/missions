@@ -31,6 +31,32 @@ test('a canonical state may name several tracker values', () => {
   assert.equal(inverse.states.get('Released'), 'done')
 })
 
+test('a canonical type may name several tracker values', () => {
+  const inverse = invertMap({
+    states: {},
+    types: { bug: 'Bug', story: ['Story', 'Task'] },
+  })
+
+  assert.equal(inverse.types.get('Story'), 'story')
+  assert.equal(inverse.types.get('Task'), 'story')
+  assert.equal(inverse.types.get('Bug'), 'bug')
+})
+
+test('a type outside the map stays null instead of being guessed', () => {
+  const inverse = invertMap({ ...PROJECT.map, types: { bug: 'Bug', story: ['Story', 'Task'] } })
+  const mission = normalizeIssue({
+    project: PROJECT,
+    key: 'SO-483',
+    title: 'an epic is not a mission',
+    rawState: 'ready',
+    rawType: 'Epic',
+    inverse,
+  })
+
+  assert.equal(mission.type, null)
+  assert.equal(mission.state, 'ready')
+})
+
 test('firstKnown keeps the first known value', () => {
   const inverse = invertMap(PROJECT.map)
   assert.equal(firstKnown(['urgent', 'ready', 'in-review'], inverse.states), 'ready')

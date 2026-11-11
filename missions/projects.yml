@@ -4,7 +4,7 @@
 # `to-refine`, `ready`, `in-progress`, `in-review`, `ready-for-prod`, `done` et
 # les types `bug`, `story`. Les états se projettent sur un libellé GitHub ou un statut Jira ; les
 # types se projettent sur le type natif de l'issue (`Bug`, `Feature`) ou le type
-# Jira (`Bug`, `Story`). C'est ce vocabulaire qu'emploient les documents, les branches et les
+# Jira (`Bug`, `Story`, `Task`). C'est ce vocabulaire qu'emploient les documents, les branches et les
 # commits. Chaque projet le projette sur son tracker par le bloc `map`.
 #
 # Règles de la projection :
@@ -112,7 +112,8 @@ projects:
         done: [Released]
       types:
         bug: Bug
-        story: Story
+        # Jira nomme une tâche `Task` ; localement, c'est une mission `story`.
+        story: [Story, Task]
       priorities:
         urgent: Highest
         high: High
@@ -144,7 +145,8 @@ projects:
         done: Done
       types:
         bug: Bug
-        story: Story
+        # Jira nomme une tâche `Task` ; localement, c'est une mission `story`.
+        story: [Story, Task]
       priorities:
         urgent: Highest
         high: High
