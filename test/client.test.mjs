@@ -35,15 +35,24 @@ function charger(storage, initialStates = [], session = undefined) {
   new Function('window', 'localStorage', 'sessionStorage', SOURCE)({ __ModuleLoader__: { load: (module) => { captured = module } } }, storage, session)
 
   const queue = [...initialStates]
+  // Ce qu'un setter reçoit, dans l'ordre : de quoi prouver qu'un clic bascule
+  // vraiment le panneau, pas seulement que le câblage ressemble à ça.
+  const setters = []
   // Les composants gardent leur nom dans l'arbre : un test peut alors vérifier
-  // quelle vue est rendue, pas seulement qu'un nœud existe.
-  const h = (type, props, ...children) => ({ type: typeof type === 'function' ? type.name : type, props, children })
+  // quelle vue est rendue, pas seulement qu'un nœud existe. `fn` garde la
+  // fonction pour la rendre pour de vrai (voir `renderTree`).
+  const h = (type, props, ...children) => ({
+    type: typeof type === 'function' ? type.name : type,
+    fn: typeof type === 'function' ? type : null,
+    props,
+    children,
+  })
   const React = {
     createElement: h,
     Fragment: 'fragment',
     useState: (initial) => [
       queue.length > 0 ? queue.shift() : (typeof initial === 'function' ? initial() : initial),
-      () => {},
+      (next) => { setters.push(next) },
     ],
     useCallback: (fn) => fn,
     useEffect: () => {},
@@ -68,7 +77,65 @@ function charger(storage, initialStates = [], session = undefined) {
     if (name === 'react') return React
     throw new Error(`unexpected require: ${name}`)
   })
-  return { api, ctx, registered, id: captured.id }
+  return { api, ctx, registered, id: captured.id, setters }
+}
+
+/** Aplatit les listes d'enfants que `Array#map` imbrique. */
+function flat(children) {
+  return children.reduce((all, child) => all.concat(Array.isArray(child) ? flat(child) : [child]), [])
+}
+
+/**
+ * Rend un arbre comme React le ferait : chaque composant sans état est appelé
+ * avec ses props, chaque nœud hôte garde ses enfants. Le panneau lui-même a des
+ * hooks, on ne le rend donc pas — seulement le dashboard, qui n'en a aucun.
+ */
+function renderTree(node) {
+  if (node === null || node === undefined || node === false) return null
+  if (Array.isArray(node)) return flat(node.map(renderTree).filter((child) => child !== null))
+  if (typeof node !== 'object') return node
+
+  if (node.fn) {
+    const children = node.children.length === 1 ? node.children[0] : node.children
+    return renderTree(node.fn({ ...node.props, children }))
+  }
+
+  return {
+    type: node.type,
+    props: node.props ?? {},
+    children: flat(node.children.map(renderTree).filter((child) => child !== null)),
+  }
+}
+
+/** Tout le texte rendu sous un nœud, dans l'ordre du document. */
+function textOf(node) {
+  if (node === null || node === undefined || node === false) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(textOf).join('')
+  return textOf(node.children)
+}
+
+/** Tous les nœuds d'un type donné, en profondeur d'abord. */
+function findAll(node, type, found = []) {
+  if (node === null || node === undefined || typeof node !== 'object') return found
+  if (Array.isArray(node)) {
+    for (const child of node) findAll(child, type, found)
+    return found
+  }
+  if (node.type === type) found.push(node)
+  findAll(node.children, type, found)
+  return found
+}
+
+/** Le dashboard que le panneau rend, résolu en arbre ordinaire. */
+function renderDashboard(initialStates, props = {}) {
+  const { api, ctx, registered, setters } = charger(undefined, initialStates)
+  api.apply(ctx)
+
+  const view = findAll(registered.main({}), 'DashboardView')[0]
+  assert.ok(view, 'le panneau doit rendre DashboardView')
+
+  return { view, tree: renderTree({ ...view, props: { ...view.props, ...props } }), setters }
 }
 
 test('le bundle charge et déclare ses slots', () => {
@@ -286,6 +353,131 @@ test('le loader ne déborde pas sur l’onglet Dashboard', () => {
   assert.match(flat, /"type":"DashboardView"/)
   assert.doesNotMatch(flat, /"type":"PanelLoader"/)
   assert.doesNotMatch(flat, /missions-loader/)
+})
+
+/**
+ * Le jeu de données du dashboard, à dates fixes : sans elles, un âge dépendrait
+ * du jour où la suite tourne.
+ */
+const DASH_NOW = Date.parse('2026-11-11T12:00:00Z')
+const DASH_MISSIONS = [
+  { key: 'MIS-1', title: 'reload onglet mission', state: 'in-review', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T12:00:00Z' },
+  { key: 'MIS-2', title: 'thème manga', state: 'ready', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-10T12:00:00Z' },
+  { key: 'MIS-3', title: 'export CSV du planning', state: 'in-progress', project: 'socle', projectName: 'Socle', updatedAt: '2026-10-31T12:00:00Z', points: 5 },
+  { key: 'MIS-4', title: 'densité compacte', state: 'in-progress', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-07T12:00:00Z', points: 3 },
+  { key: 'MIS-5', title: 'statut non mappé', state: null, project: 'socle', projectName: 'Socle', updatedAt: '2026-11-05T12:00:00Z' },
+  // Une mission close ne doit ni s'afficher ni compter : le tracker ne devrait
+  // pas l'envoyer, mais la section ne dépend pas de cette promesse.
+  { key: 'MIS-6', title: 'mission close', state: 'done', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
+]
+
+function dashboardView(missions, loading = false) {
+  return { loading, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+}
+
+test('le dashboard rend les deux cartes, une ligne par mission de la file', () => {
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
+
+  const cards = findAll(tree, 'article')
+  assert.equal(cards.length, 2, 'deux cartes : la file et l’en-cours')
+
+  const [queue, flight] = cards
+  assert.match(textOf(queue), /Needs you/)
+  assert.match(textOf(flight), /In flight/)
+
+  // La file : un rang par état (in-review, ready), puis la mission sans état
+  // connu en dernier — celle qui demande un arbitrage.
+  const queueRows = findAll(queue, 'button').filter((button) => button.props['data-state'] !== undefined)
+  assert.deepEqual(
+    queueRows.map((button) => button.props['data-state']),
+    ['in-review', 'ready', null],
+  )
+  assert.deepEqual(
+    findAll(queue, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf),
+    ['MIS-1', 'MIS-2', 'MIS-5'],
+  )
+
+  // Les verbes ne vivent que dans la file, et suivent l'état.
+  const verbs = findAll(queue, 'span').filter((span) => span.props.className === 'missions-rowverb').map(textOf)
+  assert.deepEqual(verbs, ['Review→', 'Start→', 'Open→'])
+
+  // Le nom accessible porte le verbe affiché, pas seulement la clé et l'âge.
+  assert.match(queueRows[1].props['aria-label'], /thème manga, 1 d, Start$/)
+  assert.equal(findAll(flight, 'span').filter((span) => span.props.className === 'missions-rowverb').length, 0)
+
+  // L'en-cours ne garde que les missions in-progress, la plus ancienne d'abord.
+  assert.deepEqual(
+    findAll(flight, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf),
+    ['MIS-3', 'MIS-4'],
+  )
+
+  // Le pied additionne les points et reprend l'âge de la plus ancienne.
+  assert.match(textOf(findAll(flight, 'p').at(-1)), /8 pts in flight · oldest 11 d/)
+})
+
+test('la bande résume le périmètre et compte les missions qu’elle montre', () => {
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
+
+  // 5 missions ouvertes, 3 dans la file, 2 projets : le compte annoncé doit
+  // correspondre au nombre de lignes rendues, mission sans état comprise.
+  const rendered = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
+  const scope = findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope')
+  assert.equal(textOf(scope), '3 need you · 5 open · 2 projects')
+  assert.equal(rendered.length, 5)
+})
+
+test('cliquer une ligne ouvre la mission dans l’onglet Missions', () => {
+  const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
+
+  const row = findAll(tree, 'button').find((button) => textOf(button).includes('MIS-2'))
+  row.props.onClick()
+
+  // Le panneau reçoit la mission puis bascule d'onglet : le dashboard choisit ce
+  // que l'onglet montre, il ne route pas.
+  assert.ok(setters.some((next) => next === 'missions'), 'le clic doit basculer sur l’onglet Missions')
+  assert.ok(setters.some((next) => next && next.key === 'MIS-2'), 'le clic doit sélectionner la mission')
+})
+
+test('la sortie « Open Missions » ouvre l’onglet sans sélection', () => {
+  const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
+
+  const link = findAll(tree, 'button').find((button) => textOf(button).includes('Open Missions'))
+  link.props.onClick()
+
+  assert.ok(setters.some((next) => next === 'missions'))
+  assert.ok(setters.some((next) => next === null), 'la sortie ne garde aucune mission sélectionnée')
+})
+
+test('une mission qui dort est signalée, sa ligne le dit aussi', () => {
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
+
+  const rows = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
+  const quiet = rows.filter((button) => button.props['aria-label'].includes('not updated for a week'))
+  // MIS-1 (9 j), MIS-3 (11 j), MIS-5 (6 j → non), MIS-2 (1 j), MIS-4 (4 j).
+  assert.deepEqual(quiet.map((button) => button.props['aria-label'].split(' ')[0]), ['MIS-1', 'MIS-3'])
+
+  const ages = findAll(tree, 'span').filter((span) => span.props.className === 'missions-rowage')
+  assert.deepEqual(ages.map((span) => span.props['data-quiet']), ['true', 'false', 'false', 'true', 'false'])
+})
+
+test('sans mission, le dashboard rend son état vide', () => {
+  // Le premier mount n'a rien à montrer : la section garde son cadre et son
+  // texte, plutôt qu'une grille vide ou une erreur.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView([]), 'dashboard'], { now: DASH_NOW })
+
+  assert.equal(findAll(tree, 'article').length, 0)
+  assert.match(textOf(tree), /No mission is assigned to you yet\./)
+  assert.equal(findAll(tree, 'div').filter((div) => div.props.className === 'missions-dash-empty').length, 1)
+})
+
+test('un chargement sans donnée rend le loader, un refresh garde les lignes', () => {
+  const cold = renderDashboard([EMPTY_BAR, dashboardView([], true), 'dashboard'], { now: DASH_NOW })
+  assert.equal(findAll(cold.tree, 'div').filter((div) => div.props.className === 'missions-loader').length, 1)
+
+  // Un refresh lancé depuis un autre onglet ne doit pas vider le dashboard.
+  const warm = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS, true), 'dashboard'], { now: DASH_NOW })
+  assert.equal(findAll(warm.tree, 'div').filter((div) => div.props.className === 'missions-loader').length, 0)
+  assert.equal(findAll(warm.tree, 'button').filter((button) => button.props['data-state'] !== undefined).length, 5)
 })
 
 test('le panneau relit la barre de la session au montage', () => {

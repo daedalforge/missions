@@ -313,10 +313,51 @@ window.__ModuleLoader__.load({
 @keyframes missions-run { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-7px) rotate(4deg); } }
 @keyframes missions-lines { from { transform: translateX(0); } to { transform: translateX(-9px); } }
 @media (prefers-reduced-motion: reduce) { .missions-spinner { animation: none; } .missions-sharingan-tomoe { animation: missions-sharingan-spin 4s linear infinite; } .missions-sharingan { animation: none; } }
-.missions-dashboard { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; max-width: 520px; padding-top: 8px; }
-.missions-dashboard-card { width: 100%; padding: 18px 20px; border: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.16)); border-radius: 10px; }
-.missions-dashboard-card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
-.missions-dashboard-card p { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12.5px; }
+/* Dashboard: a section per domain, a card per widget inside it. */
+.missions-dashboard { display: flex; flex-direction: column; gap: 14px; padding-top: 2px; container-type: inline-size; }
+.missions-sect { padding: 14px; border-radius: 12px; background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 4%, transparent); }
+.missions-sect-head { display: flex; align-items: baseline; gap: 10px; }
+.missions-sect-title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.missions-sect-scope { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.missions-sect-link { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font: inherit; font-size: 11.5px; cursor: pointer; }
+.missions-sect-link:hover, .missions-sect-link:focus-visible { color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-sect-arrow { transition: transform .15s ease; }
+.missions-sect-link:hover .missions-sect-arrow { transform: translateX(2px); }
+.missions-sectgrid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); gap: 10px; margin-top: 11px; align-items: stretch; }
+.missions-dash-card { display: flex; flex-direction: column; min-width: 0; background: var(--dsw-alias-bg-base, #fff); border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 9px; }
+.missions-dash-card-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 13px 4px; }
+.missions-dash-card-title { margin: 0; font-size: 12px; font-weight: 600; }
+.missions-dash-card-meta { margin-left: auto; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.missions-dash-card-body { flex: 1; padding: 5px 13px 11px; }
+.missions-dash-card--flight .missions-dash-card-body { display: flex; flex-direction: column; }
+.missions-dash-card-empty { margin: 8px 0 6px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
+.missions-dash-card-foot { margin: auto 0 0; padding: 10px 13px 11px; border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.missions-dash-empty { padding: 16px 2px 4px; }
+.missions-dash-empty p { margin: 0; font-size: 12.5px; }
+.missions-dash-empty .missions-dash-empty-hint { margin-top: 4px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-rows { margin: 0; padding: 0; list-style: none; }
+.missions-rowitem { border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.07)); }
+.missions-rowitem:last-child { border-bottom: 0; }
+.missions-row { display: grid; grid-template-columns: 6px 56px minmax(0, 1fr) 42px 66px; align-items: center; gap: 9px; width: 100%; height: 33px; padding: 0 1px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.missions-dash-card--flight .missions-row { grid-template-columns: 6px 56px minmax(0, 1fr) 46px; }
+.missions-row:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 5%, transparent); }
+.missions-row:focus-visible { outline: 2px solid color-mix(in srgb, #0969da 78%, transparent); outline-offset: -2px; }
+.missions-rowdot { width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-rowkey { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-rowtitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.missions-rowage { justify-self: end; font-size: 10.5px; color: var(--dsw-alias-label-tertiary, #7a7168); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.missions-rowage[data-quiet="true"] { color: #a06a00; font-weight: 600; }
+.missions-rowverb { display: inline-flex; align-items: center; gap: 5px; justify-self: end; font-size: 10.5px; color: var(--dsw-alias-label-tertiary, #7a7168); white-space: nowrap; }
+.missions-row:hover .missions-rowverb { color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-rowarrow { transition: transform .15s ease; }
+.missions-row:hover .missions-rowarrow { transform: translateX(2px); }
+.missions-row[data-state="in-review"] .missions-rowdot { background: #0969da; }
+.missions-row[data-state="ready-for-prod"] .missions-rowdot { background: #0e7c86; }
+.missions-row[data-state="in-progress"] .missions-rowdot { background: #bf8700; }
+.missions-row[data-state="ready"] .missions-rowdot { background: #1a7f37; }
+.missions-row[data-state="to-refine"] .missions-rowdot { background: #8250df; }
+@media (prefers-reduced-motion: reduce) { .missions-sect-arrow, .missions-rowarrow { transition: none; } }
+@container (max-width: 820px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } }
 .missions-drawer { flex: none; width: 380px; max-width: 46%; display: flex; flex-direction: column; gap: 16px; padding: 16px 22px 24px; overflow: auto; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); animation: missions-slide .14s ease; }
 @keyframes missions-slide { from { opacity: 0 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
@@ -492,6 +533,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-group[data-state="in-progress"] { --state-tint: var(--mm-butter); --group-ink: #8a6a1f; }
 .missions-panel[data-theme="manga"] .missions-group[data-state="ready"] { --state-tint: var(--mm-sage); --group-ink: var(--mm-sage-deep); }
 .missions-panel[data-theme="manga"] .missions-group[data-state="to-refine"] { --state-tint: var(--mm-lilac); --group-ink: var(--mm-lilac-deep); }
+.missions-panel[data-theme="manga"] .missions-sect { background: color-mix(in srgb, var(--mm-ink) 6%, transparent); }
+.missions-panel[data-theme="manga"] .missions-dash-card { background: var(--mm-page-2); border: 1.5px solid var(--mm-line-strong); border-radius: 11px; }
+.missions-panel[data-theme="manga"] .missions-dash-card-foot, .missions-panel[data-theme="manga"] .missions-rowitem { border-color: var(--mm-line); }
+.missions-panel[data-theme="manga"] .missions-rowage[data-quiet="true"] { color: #8a5a00; }
+.missions-panel[data-theme="manga"] .missions-row { font-family: var(--mm-display); }
+.missions-panel[data-theme="manga"] .missions-rowkey { font-family: var(--mm-mono); }
+.missions-panel[data-theme="manga"] .missions-row[data-state="in-review"] .missions-rowdot { background: var(--mm-sky-deep); }
+.missions-panel[data-theme="manga"] .missions-row[data-state="ready-for-prod"] .missions-rowdot { background: var(--mm-teal-deep); }
+.missions-panel[data-theme="manga"] .missions-row[data-state="in-progress"] .missions-rowdot { background: #8a6a1f; }
+.missions-panel[data-theme="manga"] .missions-row[data-state="ready"] .missions-rowdot { background: var(--mm-sage-deep); }
+.missions-panel[data-theme="manga"] .missions-row[data-state="to-refine"] .missions-rowdot { background: var(--mm-lilac-deep); }
+:root[data-ds-dark-theme] .missions-rowage[data-quiet="true"],
+body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
 
 /* Cards: ink frame, folded corner, speech-bubble type, dashed points. */
 .missions-panel[data-theme="manga"] .missions-cards { gap: 10px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
@@ -609,11 +663,117 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       )
     }
 
-    function DashboardView() {
+    /**
+     * One card of a dashboard section: a title, a count, a body, an optional
+     * footer that keeps the total when the card is taller than its rows.
+     */
+    function DashboardCard({ title, meta, className, footer, children }) {
+      return h('article', { className: `missions-dash-card ${className ?? ''}`.trim() },
+        h('header', { className: 'missions-dash-card-head' },
+          h('h3', { className: 'missions-dash-card-title' }, title),
+          h('span', { className: 'missions-dash-card-meta' }, meta),
+        ),
+        h('div', { className: 'missions-dash-card-body' }, children),
+        footer ? h('p', { className: 'missions-dash-card-foot' }, footer) : null,
+      )
+    }
+
+    /**
+     * One row of a dashboard card: state dot, key, title, age, and — in the
+     * queue only — the verb the state asks for. The whole row is the button:
+     * the dashboard's job is to get the mission open, not to act on it.
+     */
+    function DashboardRow({ mission, now, verb, onOpen }) {
+      const age = missionAge(mission.updatedAt, now)
+      const verbLabel = verb ? actionVerb(mission.state) : ''
+      return h('li', { className: 'missions-rowitem' },
+        h('button', {
+          type: 'button',
+          className: 'missions-row',
+          'data-state': mission.state,
+          onClick: () => onOpen(mission),
+          title: `Open ${mission.key}`,
+          'aria-label': `${mission.key} ${mission.title}${age.label ? `, ${age.label}` : ''}${
+            age.quiet ? ', not updated for a week' : ''
+          }${verbLabel ? `, ${verbLabel}` : ''}`,
+        },
+          h('span', { className: 'missions-rowdot', 'aria-hidden': 'true' }),
+          h('span', { className: 'missions-rowkey' }, mission.key),
+          h('span', { className: 'missions-rowtitle' }, mission.title),
+          h('span', { className: 'missions-rowage', 'data-quiet': age.quiet ? 'true' : 'false' }, age.label),
+          verb
+            ? h('span', { className: 'missions-rowverb' },
+                verbLabel,
+                h('span', { className: 'missions-rowarrow', 'aria-hidden': 'true' }, '→'),
+              )
+            : null,
+        ),
+      )
+    }
+
+    /**
+     * The dashboard: a section per domain, a card per widget. The only section
+     * today is Missions, with the queue and the work already running; both read
+     * the same mission list the panel already loaded.
+     */
+    function DashboardView({ missions = [], loading, theme, now = Date.now(), onOpen, onOpenAll }) {
+      const queue = needsYou(missions)
+      const flight = inFlight(missions)
+      const scope = dashboardScope(missions)
+      const points = pointsTotal(flight)
+
+      // In flight is sorted oldest first, so the first row carries the oldest
+      // age; it formats like the rows do (hours below a day, empty when the date
+      // is unreadable) so the foot never claims "oldest 0 d".
+      const oldest = flight.length > 0 ? missionAge(flight[0].updatedAt, now).label : ''
+
+      const scopeLabel = [
+        `${scope.needYou} ${scope.needYou === 1 ? 'needs' : 'need'} you`,
+        `${scope.open} open`,
+        `${scope.projects} ${scope.projects === 1 ? 'project' : 'projects'}`,
+      ].join(' · ')
+
+      const foot = []
+      if (points.counted > 0) foot.push(`${points.total} pt${points.total === 1 ? '' : 's'} in flight`)
+      if (oldest) foot.push(`oldest ${oldest}`)
+
+      // The dashboard keeps what it already shows while a refresh runs: only a
+      // cold mount has nothing to keep.
+      const body = loading && missions.length === 0
+        ? h(PanelLoader, { theme })
+        : missions.length === 0
+          ? h('div', { className: 'missions-dash-empty' },
+              h('p', null, 'No mission is assigned to you yet.'),
+              h('p', { className: 'missions-dash-empty-hint' }, 'This is where your queue will appear as soon as the tracker returns one.'),
+            )
+          : h('div', { className: 'missions-sectgrid' },
+              h(DashboardCard, { title: 'Needs you', meta: queue.length, className: 'missions-dash-card--queue' },
+                queue.length === 0
+                  ? h('p', { className: 'missions-dash-card-empty' }, 'Nothing is waiting on you.')
+                  : h('ul', { className: 'missions-rows' },
+                      queue.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: true, onOpen })),
+                    ),
+              ),
+              h(DashboardCard, { title: 'In flight', meta: flight.length, className: 'missions-dash-card--flight', footer: foot.length > 0 ? foot.join(' · ') : null },
+                flight.length === 0
+                  ? h('p', { className: 'missions-dash-card-empty' }, 'Nothing is in progress.')
+                  : h('ul', { className: 'missions-rows' },
+                      flight.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
+                    ),
+              ),
+            )
+
       return h('div', { className: 'missions-dashboard' },
-        h('div', { className: 'missions-dashboard-card' },
-          h('h2', null, 'Nothing to show yet'),
-          h('p', null, 'This is where the workspace overview will live: missions by state, active projects, and what moved today.'),
+        h('section', { className: 'missions-sect', 'aria-labelledby': 'missions-sect-missions' },
+          h('header', { className: 'missions-sect-head' },
+            h('h2', { className: 'missions-sect-title', id: 'missions-sect-missions' }, 'Missions'),
+            h('span', { className: 'missions-sect-scope' }, scopeLabel),
+            h('button', { type: 'button', className: 'missions-sect-link', onClick: onOpenAll },
+              'Open Missions',
+              h('span', { className: 'missions-sect-arrow', 'aria-hidden': 'true' }, '→'),
+            ),
+          ),
+          body,
         ),
       )
     }
@@ -1258,7 +1418,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
             'aria-labelledby': `missions-tab-${tab}`,
           },
             tab === 'dashboard'
-              ? h(DashboardView, null)
+              ? h(DashboardView, {
+                  missions,
+                  loading,
+                  theme,
+                  onOpen: (mission) => { setSelected(mission); setTab('missions') },
+                  onOpenAll: () => { setSelected(null); setTab('missions') },
+                })
               : loading
                 ? h(PanelLoader, { theme })
                 : h(MissionsView, { missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort, filtered, groups, onSelect: setSelected, theme }),
