@@ -18,15 +18,21 @@ globalThis.document = {
   head: { append() {} },
 }
 
-function charger(storage) {
+function charger(storage, initialStates = []) {
   let captured = null
   new Function('window', 'localStorage', SOURCE)({ __ModuleLoader__: { load: (module) => { captured = module } } }, storage)
 
-  const h = (type, props, ...children) => ({ type, props, children })
+  const queue = [...initialStates]
+  // Les composants gardent leur nom dans l'arbre : un test peut alors vérifier
+  // quelle vue est rendue, pas seulement qu'un nœud existe.
+  const h = (type, props, ...children) => ({ type: typeof type === 'function' ? type.name : type, props, children })
   const React = {
     createElement: h,
     Fragment: 'fragment',
-    useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+    useState: (initial) => [
+      queue.length > 0 ? queue.shift() : (typeof initial === 'function' ? initial() : initial),
+      () => {},
+    ],
     useCallback: (fn) => fn,
     useEffect: () => {},
   }
@@ -204,4 +210,41 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   assert.doesNotMatch(SOURCE, /missions-drawer--empty \{ display: none; \}/)
   assert.match(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*background: color-mix/)
   assert.doesNotMatch(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*translateY/)
+})
+
+/** Une ligne complète, telle que `missions/api/list` la renvoie. */
+const MISSION = {
+  key: 'MIS-42', project: 'missions', projectName: 'Missions', title: 'Reload onglet mission',
+  type: 'feat', state: 'in-progress', priority: 'high', epic: null, points: null,
+  updated: '2026-11-11T10:00:00Z', folder: '/w/missions/MIS-42', branch: 'fix/mis-42', base: 'main',
+}
+
+test('un refresh affiche le loader de la vue, même avec des missions chargées', () => {
+  // L'état de départ reproduit un clic sur Refresh : des missions déjà là et un
+  // chargement en cours. Le loader remplace alors la liste, pas seulement le
+  // premier montage.
+  const view = { loading: true, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger(undefined, [view])
+  api.apply(ctx)
+
+  const flat = JSON.stringify(registered.main({}))
+  // La liste est remplacée par le loader de la vue, malgré les missions en état.
+  assert.match(flat, /"type":"PanelLoader"/)
+  assert.doesNotMatch(flat, /"type":"MissionsView"/)
+  assert.doesNotMatch(flat, /"type":"DashboardView"/)
+  // Le bouton reste rendu, désactivé pendant le chargement, mais sans spinner.
+  assert.match(flat, /"aria-busy":"true"/)
+  assert.match(flat, /"disabled":true/)
+  assert.doesNotMatch(flat, /missions-btn-spinner/)
+})
+
+test('le montage initial garde le loader et le polling reste silencieux', () => {
+  const { api, ctx, registered } = charger()
+  api.apply(ctx)
+  assert.match(JSON.stringify(registered.main({})), /"type":"PanelLoader"/)
+  // Seul un chargement non silencieux lève l'état de chargement : le timer de
+  // 60 s recharge sans vider la liste ni afficher le loader.
+  assert.match(SOURCE, /if \(!silent\) setView/)
+  assert.match(SOURCE, /load\(\{ silent: true \}\)/)
+  assert.doesNotMatch(SOURCE, /missions-btn-spinner/)
 })
