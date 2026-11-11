@@ -173,7 +173,6 @@ window.__ModuleLoader__.load({
       'in-progress': 'in progress',
       'in-review': 'in review',
       'ready-for-prod': 'ready for prod',
-      done: 'done',
       unknown: 'unknown state',
     }
     const TYPE_LABELS = { bug: 'bug', story: 'story' }

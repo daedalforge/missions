@@ -97,6 +97,11 @@ test('le prompt de session reprend la branche et la base déclarées', () => {
   assert.match(SOURCE, /Branche : \$\{mission\.branch\} ; base : \$\{mission\.base\}\./)
 })
 
+test('le bundle ne propose plus l’état done', () => {
+  assert.match(SOURCE, /STATE_FILTER_ORDER = \['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod'\]/)
+  assert.doesNotMatch(SOURCE, /done: 'done'/)
+})
+
 test('les erreurs du bandeau ont une clé unique par ligne', () => {
   assert.ok(SOURCE.includes('key: `${error.project}-${index}`'))
 })

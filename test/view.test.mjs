@@ -76,7 +76,6 @@ test('le filtre de statut isole un groupe et distingue unknown', () => {
   assert.deepEqual(filterMissions(MISSIONS, { state: 'in-review' }).map((m) => m.key), ['a#1'])
   assert.deepEqual(filterMissions(MISSIONS, { state: 'to-refine' }).map((m) => m.key), ['a#2'])
   assert.deepEqual(filterMissions(MISSIONS, { state: 'ready' }).map((m) => m.key), ['a#3'])
-  assert.deepEqual(filterMissions(MISSIONS, { state: 'done' }), [])
 
   const withUnknown = [...MISSIONS, { key: 'a#4', state: null, type: 'story', priority: null, points: null }]
   assert.deepEqual(filterMissions(withUnknown, { state: 'unknown' }).map((m) => m.key), ['a#4'])
@@ -87,15 +86,20 @@ test('les statuts proposés suivent l’ordre du workflow, unknown en dernier', 
   assert.deepEqual(stateOptions(MISSIONS), ['to-refine', 'ready', 'in-review'])
   const withMore = [
     ...MISSIONS,
-    { key: 'a#5', state: 'done' },
     { key: 'a#6', state: null },
   ]
-  assert.deepEqual(stateOptions(withMore), ['to-refine', 'ready', 'in-review', 'done', 'unknown'])
+  assert.deepEqual(stateOptions(withMore), ['to-refine', 'ready', 'in-review', 'unknown'])
   assert.deepEqual(
     stateOptions([...withMore, { key: 'a#7', state: 'ready-for-prod' }]),
-    ['to-refine', 'ready', 'in-review', 'ready-for-prod', 'done', 'unknown'],
+    ['to-refine', 'ready', 'in-review', 'ready-for-prod', 'unknown'],
   )
   assert.deepEqual(stateOptions([]), [])
+})
+
+test('done n’est plus un état du panneau : ni groupe, ni option de filtre', () => {
+  const done = [{ key: 'a#5', state: 'done' }]
+  assert.deepEqual(groupByState(done).map((g) => g.state), ['unknown'])
+  assert.deepEqual(stateOptions(done), ['unknown'])
 })
 
 test('le tri priorité va du plus haut au plus bas, les sans-priorité en fin', () => {
@@ -164,11 +168,10 @@ test('un filtre actif est détecté, le type et le statut compris', () => {
 test('les groupes suivent l’ordre du workflow, l’attente de prod après la revue', () => {
   const groupes = groupByState([
     ...MISSIONS,
-    { key: 'a#5', state: 'done' },
     { key: 'a#6', state: 'ready-for-prod' },
     { key: 'a#4', state: null },
   ])
-  assert.deepEqual(groupes.map((g) => g.state), ['in-review', 'ready-for-prod', 'ready', 'to-refine', 'done', 'unknown'])
+  assert.deepEqual(groupes.map((g) => g.state), ['in-review', 'ready-for-prod', 'ready', 'to-refine', 'unknown'])
   assert.equal(groupes[0].missions.length, 1)
   assert.deepEqual(groupes[1].missions.map((m) => m.key), ['a#6'])
 })
