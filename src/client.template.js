@@ -314,7 +314,7 @@ window.__ModuleLoader__.load({
 @keyframes missions-lines { from { transform: translateX(0); } to { transform: translateX(-9px); } }
 @media (prefers-reduced-motion: reduce) { .missions-spinner { animation: none; } .missions-sharingan-tomoe { animation: missions-sharingan-spin 4s linear infinite; } .missions-sharingan { animation: none; } }
 /* Dashboard: a section per domain, a card per widget inside it. */
-.missions-dashboard { display: flex; flex-direction: column; gap: 14px; padding-top: 2px; }
+.missions-dashboard { display: flex; flex-direction: column; gap: 14px; padding-top: 2px; container-type: inline-size; }
 .missions-sect { padding: 14px; border-radius: 12px; background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 4%, transparent); }
 .missions-sect-head { display: flex; align-items: baseline; gap: 10px; }
 .missions-sect-title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
@@ -341,12 +341,12 @@ window.__ModuleLoader__.load({
 .missions-row { display: grid; grid-template-columns: 6px 56px minmax(0, 1fr) 42px 66px; align-items: center; gap: 9px; width: 100%; height: 33px; padding: 0 1px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .missions-dash-card--flight .missions-row { grid-template-columns: 6px 56px minmax(0, 1fr) 46px; }
 .missions-row:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 5%, transparent); }
-.missions-row:focus-visible { outline: 2px solid color-mix(in srgb, #0969da 55%, transparent); outline-offset: -2px; }
+.missions-row:focus-visible { outline: 2px solid color-mix(in srgb, #0969da 78%, transparent); outline-offset: -2px; }
 .missions-rowdot { width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-label-tertiary, #7a7168); }
-.missions-rowkey { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-rowkey { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-rowtitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .missions-rowage { justify-self: end; font-size: 10.5px; color: var(--dsw-alias-label-tertiary, #7a7168); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.missions-rowage[data-quiet="true"] { color: #bf8700; }
+.missions-rowage[data-quiet="true"] { color: #a06a00; font-weight: 600; }
 .missions-rowverb { display: inline-flex; align-items: center; gap: 5px; justify-self: end; font-size: 10.5px; color: var(--dsw-alias-label-tertiary, #7a7168); white-space: nowrap; }
 .missions-row:hover .missions-rowverb { color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-rowarrow { transition: transform .15s ease; }
@@ -357,7 +357,7 @@ window.__ModuleLoader__.load({
 .missions-row[data-state="ready"] .missions-rowdot { background: #1a7f37; }
 .missions-row[data-state="to-refine"] .missions-rowdot { background: #8250df; }
 @media (prefers-reduced-motion: reduce) { .missions-sect-arrow, .missions-rowarrow { transition: none; } }
-@media (max-width: 900px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 680px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } }
 .missions-drawer { flex: none; width: 380px; max-width: 46%; display: flex; flex-direction: column; gap: 16px; padding: 16px 22px 24px; overflow: auto; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); animation: missions-slide .14s ease; }
 @keyframes missions-slide { from { opacity: 0 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
@@ -543,7 +543,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-row[data-state="in-progress"] .missions-rowdot { background: #8a6a1f; }
 .missions-panel[data-theme="manga"] .missions-row[data-state="ready"] .missions-rowdot { background: var(--mm-sage-deep); }
 .missions-panel[data-theme="manga"] .missions-row[data-state="to-refine"] .missions-rowdot { background: var(--mm-lilac-deep); }
-.missions-panel[data-theme="manga"] .missions-rowage[data-quiet="true"] { color: #8a6a1f; }
+:root[data-ds-dark-theme] .missions-rowage[data-quiet="true"],
+body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
 
 /* Cards: ink frame, folded corner, speech-bubble type, dashed points. */
 .missions-panel[data-theme="manga"] .missions-cards { gap: 10px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
@@ -690,6 +691,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           'data-state': mission.state,
           onClick: () => onOpen(mission),
           title: `Open ${mission.key}`,
+          'aria-label': `${mission.key} ${mission.title}${age.label ? `, ${age.label}` : ''}${
+            age.quiet ? ', not updated for a week' : ''
+          }`,
         },
           h('span', { className: 'missions-rowdot', 'aria-hidden': 'true' }),
           h('span', { className: 'missions-rowkey' }, mission.key),
@@ -716,20 +720,20 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       const scope = dashboardScope(missions)
       const points = pointsTotal(flight)
 
-      const oldest = flight.reduce((days, mission) => {
-        const age = ageDays(mission.updatedAt, now)
-        return age === null ? days : Math.max(days, age)
-      }, 0)
+      // In flight is sorted oldest first, so the first row carries the oldest
+      // age; it formats like the rows do (hours below a day, empty when the date
+      // is unreadable) so the foot never claims "oldest 0 d".
+      const oldest = flight.length > 0 ? missionAge(flight[0].updatedAt, now).label : ''
 
       const scopeLabel = [
-        `${scope.needYou} need you`,
+        `${scope.needYou} ${scope.needYou === 1 ? 'needs' : 'need'} you`,
         `${scope.open} open`,
         `${scope.projects} ${scope.projects === 1 ? 'project' : 'projects'}`,
       ].join(' · ')
 
       const foot = []
-      if (points.counted > 0) foot.push(`${points.total} pts in flight`)
-      if (flight.length > 0) foot.push(`oldest ${Math.round(oldest)} d`)
+      if (points.counted > 0) foot.push(`${points.total} pt${points.total === 1 ? '' : 's'} in flight`)
+      if (oldest) foot.push(`oldest ${oldest}`)
 
       // The dashboard keeps what it already shows while a refresh runs: only a
       // cold mount has nothing to keep.

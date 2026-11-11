@@ -420,13 +420,38 @@ test('le périmètre résume la file, l’ouvert et les projets ; les points sau
   const missions = [
     { key: 'a#1', state: 'ready', project: 'a', projectName: 'Alpha', points: 3 },
     { key: 'a#2', state: 'in-progress', project: 'a', projectName: 'Alpha', points: 5 },
-    { key: 'b#3', state: 'done', project: 'b', projectName: 'Beta' },
+    { key: 'b#3', state: null, project: 'b', projectName: 'Beta' },
   ]
 
-  assert.deepEqual(dashboardScope(missions), { needYou: 1, open: 3, projects: 2 })
+  // Une mission sans état connu compte dans la file : sans elle, le périmètre
+  // annoncerait plus de missions ouvertes que les cartes n'en montrent.
+  assert.deepEqual(dashboardScope(missions), { needYou: 2, open: 3, projects: 2 })
   assert.deepEqual(dashboardScope([]), { needYou: 0, open: 0, projects: 0 })
 
   // Une mission sans points compte comme une mission, pas comme zéro point.
   assert.deepEqual(pointsTotal(missions), { total: 8, counted: 2 })
   assert.deepEqual(pointsTotal([]), { total: 0, counted: 0 })
+})
+
+test('une mission sans état connu reste dans la file, en dernier', () => {
+  const missions = [
+    { key: 'inconnue', state: null, updatedAt: '2026-11-01T00:00:00Z' },
+    { key: 'à raffiner', state: 'to-refine', updatedAt: '2026-11-10T00:00:00Z' },
+    { key: 'en cours', state: 'in-progress', updatedAt: '2026-11-02T00:00:00Z' },
+  ]
+
+  // C'est la mission qui demande un arbitrage : la cacher rendrait le compte de
+  // la bande faux, et l'arbitrage invisible.
+  assert.deepEqual(needsYou(missions).map((mission) => mission.key), ['à raffiner', 'inconnue'])
+  assert.deepEqual(inFlight(missions).map((mission) => mission.key), ['en cours'])
+})
+
+test('une mission close ne compte ni dans la file ni dans le périmètre', () => {
+  const missions = [
+    { key: 'close', state: 'done', project: 'p', projectName: 'Projet' },
+    { key: 'ouverte', state: 'ready', project: 'p', projectName: 'Projet' },
+  ]
+
+  assert.deepEqual(needsYou(missions).map((mission) => mission.key), ['ouverte'])
+  assert.deepEqual(dashboardScope(missions), { needYou: 1, open: 1, projects: 1 })
 })
