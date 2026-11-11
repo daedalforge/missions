@@ -80,6 +80,12 @@ test('le volet déclare la branche et la base, et bloque sans elles', () => {
   assert.match(SOURCE, /className: 'missions-declare-label' \}, 'Base'/)
   assert.match(SOURCE, /key: mission\.key, branch: branch\.trim\(\), base: base\.trim\(\)/)
   assert.match(SOURCE, /disabled: saving \|\| !dirty/)
+  // Le champ est prérempli avec le nom conventionnel tant que rien n'est
+  // déclaré ; une valeur déclarée reste prioritaire et rien n'est écrit avant
+  // Save.
+  assert.match(SOURCE, /React\.useState\(branchFieldValue\(mission\)\)/)
+  assert.match(SOURCE, /function branchFieldValue\(mission = \{\}\)/)
+  assert.match(SOURCE, /function suggestBranch\(mission = \{\}\)/)
   assert.match(SOURCE, /onSaved: applyDeclaration/)
   // Le volet est remonté quand la mission change : sinon Save écrirait les
   // valeurs de la mission précédente dans la suivante.

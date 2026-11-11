@@ -51,8 +51,11 @@ d'acceptation ou une mission à part entière.
 Deux propriétés d'une mission n'existent ni sur GitHub ni sur Jira : la **branche
 de travail** et sa **branche de base**, celle d'où elle part et où revient sa PR
 (c'est ce qui permet de suivre l'arbre gitmachete et de viser la bonne branche).
-Elles sont **déclarées**, jamais déduites : le panneau les lit dans le dépôt, il
-n'interroge ni git ni gitmachete et ne devine pas un nom de branche.
+Elles sont **déclarées**, jamais déduites : le panneau les lit dans le dépôt et
+n'interroge ni git ni gitmachete. Tant qu'aucune branche n'est déclarée, il
+préremplit le champ avec le nom conventionnel — `<type>/<clé>` en minuscules,
+`fix/` pour un bug, `epic/` pour un epic, `feat/` sinon — mais ne l'enregistre
+pas : seule la valeur déclarée après Save fait foi.
 
 Chaque mission exécutable a **un dossier** sous `missions/`, avec un
 `mission.yml` :
