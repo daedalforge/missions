@@ -112,7 +112,7 @@ test('le volet lit le journal de mission, sans dépendance de rendu', () => {
   // L'onglet s'appelle Journal : la section ne répète pas le titre, elle garde
   // le chemin et la date.
   assert.match(SOURCE, /className: 'missions-journal-meta' \}/)
-  assert.match(SOURCE, /className: 'missions-journal-text' \}, journal\.source/)
+  assert.match(SOURCE, /className: 'missions-journal-text', tabIndex: 0 \}, journal\.source/)
   assert.match(SOURCE, /No journal yet — it is written at cadrage\./)
   assert.match(SOURCE, /mission\.folder \? `missions\/\$\{mission\.folder\}\/journal\.md`/)
   assert.match(SOURCE, /Journal de mission : \$\{journalPath\}/)
@@ -132,8 +132,8 @@ test('le volet découpe le détail en trois onglets', () => {
   assert.match(SOURCE, /'aria-labelledby': `missions-drawer-tab-\$\{section\}`/)
   // Un seul panneau, un id stable : aucun aria-controls ne pointe dans le vide.
   assert.match(SOURCE, /id: 'missions-drawer-panel'/)
-  // Journal et checklist défilent : leur panneau est atteignable au clavier.
-  assert.match(SOURCE, /tabIndex: section === 'details' \? undefined : 0/)
+  // Journal et checklist défilent : la zone elle-même prend le focus clavier.
+  assert.match(SOURCE, /h\('pre', \{ className: 'missions-journal-text', tabIndex: 0 \}/)
   // Les deux thèmes stylent la barre : le défaut et le manga.
   assert.match(SOURCE, /\.missions-drawer-tabs \{/)
   assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-tabs \{/)
@@ -163,6 +163,23 @@ test('le volet range l’existant dans Details, chaque fichier dans son onglet',
   assert.ok(SOURCE.indexOf('h(ChecklistBlocks, { blocks: checklistView.blocks })') > checklist)
   // Les actions restent hors du panneau : accessibles depuis les trois onglets.
   assert.ok(actions > checklist)
+})
+
+test('le journal et la checklist prennent la hauteur restante du volet', () => {
+  // Le modificateur n'est posé que hors Details : le volet garde son défilement
+  // pour les propriétés et les champs.
+  assert.match(SOURCE, /const filling = section !== 'details'/)
+  assert.match(SOURCE, /className: filling \? 'missions-drawer missions-drawer--fill' : 'missions-drawer'/)
+  // La hauteur se propage du panneau à la section puis à la zone.
+  assert.match(SOURCE, /\.missions-drawer--fill \.missions-drawer-panel \{ flex: 1; min-height: 120px; \}/)
+  // Sans align-content, la grille étire ses lignes sur toute la hauteur.
+  assert.match(SOURCE, /\.missions-drawer--fill \.missions-checklist-body \{ align-content: start; \}/)
+  // Les zones défilantes prennent le focus : c'est elles que le clavier fait défiler.
+  assert.match(SOURCE, /h\('pre', \{ className: 'missions-journal-text', tabIndex: 0 \}/)
+  assert.match(SOURCE, /h\('div', \{ className: 'missions-checklist-body', tabIndex: 0 \}/)
+  assert.match(SOURCE, /\.missions-drawer--fill \.missions-drawer-panel > section \{ display: flex; flex-direction: column; flex: 1; min-height: 0; \}/)
+  // Plus de hauteur fixe héritée : la zone prend la place disponible.
+  assert.match(SOURCE, /\.missions-drawer--fill \.missions-journal-text, \.missions-drawer--fill \.missions-checklist-body \{ max-height: none; flex: 1; min-height: 0; \}/)
 })
 
 test('le bundle ne propose plus l’état done', () => {

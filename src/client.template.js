@@ -318,6 +318,11 @@ window.__ModuleLoader__.load({
 .missions-drawer-tab[aria-selected="true"] { color: var(--dsw-alias-label-primary, #1f1f1f); border-bottom-color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
 .missions-drawer-panel { display: flex; flex-direction: column; gap: 16px; }
 .missions-drawer-panel .missions-props, .missions-drawer-panel .missions-journal, .missions-drawer-panel .missions-checklist { padding-top: 0; border-top: 0; }
+.missions-drawer--fill .missions-drawer-panel { flex: 1; min-height: 120px; }
+.missions-drawer--fill .missions-drawer-panel > section { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.missions-drawer--fill .missions-journal-text, .missions-drawer--fill .missions-checklist-body { max-height: none; flex: 1; min-height: 0; }
+.missions-drawer--fill .missions-checklist-body { align-content: start; }
+.missions-drawer--fill .missions-journal-text:focus-visible, .missions-drawer--fill .missions-checklist-body:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .missions-props { display: grid; grid-template-columns: 96px 1fr; gap: 9px 12px; margin: 0; font-size: 12px; }
 .missions-props dt { color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-props dd { margin: 0; color: var(--dsw-alias-label-primary, #1f1f1f); overflow-wrap: anywhere; }
@@ -805,7 +810,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 
     /** Read-only checklist: the file is written by the agent, the panel shows it. */
     function ChecklistBlocks({ blocks }) {
-      return h('div', { className: 'missions-checklist-body' },
+      return h('div', { className: 'missions-checklist-body', tabIndex: 0 },
         blocks.map((block, index) => {
           if (block.type === 'heading') {
             return h('div', {
@@ -986,7 +991,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           : journal.error
             ? h('p', { className: 'missions-journal-hint' }, 'Journal unavailable: the host did not answer.')
             : journal.exists
-              ? h('pre', { className: 'missions-journal-text' }, journal.source)
+              ? h('pre', { className: 'missions-journal-text', tabIndex: 0 }, journal.source)
               : h('p', { className: 'missions-journal-hint' }, journal.folder
                   ? 'No journal yet — it is written at cadrage.'
                   : 'No mission folder yet — declare a branch to create it.'),
@@ -1028,7 +1033,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
         }, entry.label)),
       )
 
-      return h('aside', { className: 'missions-drawer', role: 'complementary', 'aria-label': `Mission ${mission.key}` },
+      // Journal and checklist fill the drawer: the body scrolls on its own and
+      // the drawer stops scrolling. Details keeps the drawer's own scroll.
+      const filling = section !== 'details'
+
+      return h('aside', { className: filling ? 'missions-drawer missions-drawer--fill' : 'missions-drawer', role: 'complementary', 'aria-label': `Mission ${mission.key}` },
           h('div', { className: 'missions-drawer-head' },
             theme === 'manga' ? h('div', { className: 'missions-drawer-portrait' }, h('img', { src: ART.avatar, alt: '' })) : null,
             h('div', null,
@@ -1048,10 +1057,6 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
             className: 'missions-drawer-panel',
             role: 'tabpanel',
             id: 'missions-drawer-panel',
-            // Journal et checklist défilent : le panneau prend le focus pour
-            // qu'on puisse les parcourir au clavier. Details porte déjà des
-            // champs, il n'a pas besoin de ce relais.
-            tabIndex: section === 'details' ? undefined : 0,
             'aria-labelledby': `missions-drawer-tab-${section}`,
           }, panelContent),
 
