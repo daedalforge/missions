@@ -1780,16 +1780,22 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           .finally(() => setSaving(false))
       }
 
-      if (!entry) {
+      // Deux attentes : le parcours (la liste) puis le modèle de l'étape. Entre
+      // les deux, l'entrée existe et le brouillon n'est pas encore posé — lire
+      // `draft` ici ferait tomber le panneau entier, pas seulement le graphe.
+      if (!entry || !draft) {
         return h('div', { className: 'wf-view' },
           h('div', { className: 'wf-toolbar' },
-            h('span', { className: 'wf-note' }, view.loading ? 'Chargement du parcours…' : view.error ?? 'Aucun modèle de workflow.'),
+            h('span', { className: 'wf-note' },
+              view.loading ? 'Chargement du parcours…'
+                : !entry ? view.error ?? 'Aucun modèle de workflow.'
+                  : 'Chargement du modèle du parcours…'),
             h('button', { type: 'button', className: 'missions-btn', onClick: load }, 'Recharger'),
           ),
         )
       }
 
-      const graph = draft ? layoutWorkflow(draft) : { boxes: [], links: [], width: 0, height: 0 }
+      const graph = layoutWorkflow(draft)
       const node = draft && chosen ? draft.nodes.find((item) => item.id === chosen) ?? null : null
       const clip = (text, max) => {
         const value = String(text ?? '')
@@ -1797,7 +1803,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       }
       const headingTexts = (entry.headings ?? []).map((heading) => heading.text)
       const sectionChoices = node && node.section && !headingTexts.includes(node.section) ? [node.section, ...headingTexts] : headingTexts
-      const ends = [{ id: draft.entry, kind: 'etat' }, ...draft.nodes.map((item) => ({ id: item.id, kind: 'geste' })), ...(draft.exit ?? []).map((state) => ({ id: state, kind: 'etat' }))]
+      const ends = endPoints(draft)
 
       return h('div', { className: 'wf-view' },
         h('div', { className: 'wf-toolbar' },
