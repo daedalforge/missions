@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   branchFieldValue,
   epicOptions,
+  parseChecklist,
   executionBlocker,
   filterMissions,
   groupByState,
@@ -216,4 +217,36 @@ test('une branche déclarée prime sur le nom suggéré', () => {
   assert.equal(branchFieldValue({ key: 'MIS-1', type: 'bug', branch: 'fix/mis-1' }), 'fix/mis-1')
   assert.equal(branchFieldValue({ key: 'MIS-1', type: 'story', branch: '' }), 'feat/mis-1')
   assert.equal(branchFieldValue({}), '')
+})
+
+test('la checklist se lit en blocs : titres, cases et texte', () => {
+  const source = [
+    '# Checklist — MIS-70',
+    '',
+    '## Cadrage',
+    '',
+    '- [x] Le cadrage est validé. — *commentaire* : #issuecomment-1',
+    '- [ ] La branche est ouverte.',
+    '- [~] Le rendu visuel a été joué.',
+    '',
+    'Une phrase de contexte.',
+    '- une puce libre',
+  ].join('\n')
+
+  const { blocks, counts } = parseChecklist(source)
+  assert.deepEqual(counts, { total: 3, checked: 1, partial: 1, open: 1 })
+  assert.deepEqual(blocks.map((block) => block.type), [
+    'heading', 'heading', 'item', 'item', 'item', 'text', 'bullet',
+  ])
+  assert.deepEqual(blocks[2], { type: 'item', state: 'checked', text: 'Le cadrage est validé. — *commentaire* : #issuecomment-1' })
+  assert.equal(blocks[3].state, 'open')
+  assert.equal(blocks[4].state, 'partial')
+  assert.equal(blocks[0].level, 1)
+})
+
+test('une checklist vide ou absente ne casse pas le rendu', () => {
+  assert.deepEqual(parseChecklist(''), { blocks: [], counts: { total: 0, checked: 0, partial: 0, open: 0 } })
+  assert.deepEqual(parseChecklist(null), { blocks: [], counts: { total: 0, checked: 0, partial: 0, open: 0 } })
+  const { blocks } = parseChecklist('- [X] Majuscule acceptée.\r\n')
+  assert.equal(blocks[0].state, 'checked')
 })

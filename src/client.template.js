@@ -166,6 +166,7 @@ window.__ModuleLoader__.load({
     const LIST_URL = 'missions/api/list'
     const DECLARE_URL = 'missions/api/branches'
     const JOURNAL_URL = 'missions/api/journal'
+    const CHECKLIST_URL = 'missions/api/checklist'
     const REFRESH_MS = 60000
 
     const STATE_LABELS = {
@@ -330,6 +331,24 @@ window.__ModuleLoader__.load({
 .missions-journal-meta { margin-left: auto; min-width: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .missions-journal-text { max-height: 220px; margin: 0; padding: 9px 10px; overflow: auto; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); border-radius: 6px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-secondary, #5c534b); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .missions-journal-hint { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
+.missions-checklist { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
+.missions-checklist-head { display: flex; align-items: baseline; gap: 8px; }
+.missions-checklist-label { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+.missions-checklist-meta { margin-left: auto; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; white-space: nowrap; }
+.missions-checklist-body { display: grid; gap: 4px; max-height: 260px; padding: 9px 10px; overflow: auto; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); border-radius: 6px; background: var(--dsw-alias-bg-layer-1, #ffffff); }
+.missions-checklist-title { margin-top: 6px; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 11.5px; font-weight: 600; }
+.missions-checklist-title:first-child { margin-top: 0; }
+.missions-checklist-subtitle { margin-top: 4px; color: var(--dsw-alias-label-secondary, #5c534b); font-size: 11px; font-weight: 600; }
+.missions-checklist-item { display: grid; grid-template-columns: 12px 1fr; gap: 7px; align-items: start; color: var(--dsw-alias-label-secondary, #5c534b); font-size: 11.5px; line-height: 1.5; }
+.missions-checklist-box { width: 11px; height: 11px; margin-top: 3px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.35)); border-radius: 2px; }
+.missions-checklist-box[aria-checked="true"] { border-color: var(--dsw-alias-label-primary, #1f1f1f); background: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-checklist-box[aria-checked="true"]::after { content: '✓'; display: block; color: var(--dsw-alias-bg-layer-1, #ffffff); font-size: 9px; line-height: 10px; text-align: center; }
+.missions-checklist-box[aria-checked="mixed"] { border-color: var(--dsw-alias-label-tertiary, #7a7168); background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #7a7168) 30%, transparent); }
+.missions-checklist-box[aria-checked="mixed"]::after { content: '–'; display: block; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 9px; line-height: 9px; text-align: center; }
+.missions-checklist-item[data-state="checked"] .missions-checklist-text { color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-checklist-bullet { padding-left: 19px; color: var(--dsw-alias-label-secondary, #5c534b); font-size: 11.5px; line-height: 1.5; }
+.missions-checklist-text, .missions-checklist-note { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; line-height: 1.5; }
+.missions-checklist-hint { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-drawer--empty { justify-content: center; align-items: center; border-left: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
 .missions-drawer-hint { max-width: 220px; margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 12px; text-align: center; }
 `
@@ -485,6 +504,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-journal-meta { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-journal-text { border: 1.5px solid var(--mm-line); border-radius: 8px; background: var(--mm-page-2); color: var(--mm-ink-2); }
 .missions-panel[data-theme="manga"] .missions-journal-hint { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-checklist { border-top: 1.5px solid var(--mm-line); }
+.missions-panel[data-theme="manga"] .missions-checklist-label { color: var(--mm-ink-3); font-weight: 800; }
+.missions-panel[data-theme="manga"] .missions-checklist-meta { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-checklist-body { border: 1.5px solid var(--mm-line); border-radius: 8px; background: var(--mm-page-2); }
+.missions-panel[data-theme="manga"] .missions-checklist-title { color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-checklist-item, .missions-panel[data-theme="manga"] .missions-checklist-bullet { color: var(--mm-ink-2); }
+.missions-panel[data-theme="manga"] .missions-checklist-text, .missions-panel[data-theme="manga"] .missions-checklist-note, .missions-panel[data-theme="manga"] .missions-checklist-hint { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-checklist-box { border: 1.5px solid var(--mm-line-strong); border-radius: 3px; }
+.missions-panel[data-theme="manga"] .missions-checklist-box[aria-checked="true"] { border-color: var(--mm-ink); background: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-checklist-box[aria-checked="true"]::after { color: var(--mm-page); }
 .missions-panel[data-theme="manga"] .missions-drawer--empty { border-left: 1.5px dashed var(--mm-line-strong); }
 .missions-panel[data-theme="manga"] .missions-drawer-hint { color: var(--mm-ink-3); }
 
@@ -761,6 +790,31 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       return h(React.Fragment, null, h('dt', null, label), h('dd', null, value))
     }
 
+    /** Read-only checklist: the file is written by the agent, the panel shows it. */
+    function ChecklistBlocks({ blocks }) {
+      return h('div', { className: 'missions-checklist-body' },
+        blocks.map((block, index) => {
+          if (block.type === 'heading') {
+            return h('div', {
+              key: index,
+              className: block.level <= 2 ? 'missions-checklist-title' : 'missions-checklist-subtitle',
+            }, block.text)
+          }
+          if (block.type === 'item') {
+            const checked = block.state === 'partial' ? 'mixed' : block.state === 'checked'
+            return h('div', { key: index, className: 'missions-checklist-item', 'data-state': block.state },
+              h('span', { className: 'missions-checklist-box', role: 'checkbox', 'aria-checked': checked, 'aria-disabled': 'true', 'aria-label': block.state === 'checked' ? 'checked' : block.state === 'partial' ? 'not exercised' : 'open' }),
+              h('span', { className: 'missions-checklist-text' }, block.text),
+            )
+          }
+          if (block.type === 'bullet') {
+            return h('div', { key: index, className: 'missions-checklist-bullet' }, `• ${block.text}`)
+          }
+          return h('p', { key: index, className: 'missions-checklist-note' }, block.text)
+        }),
+      )
+    }
+
     function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, theme }) {
       const [note, setNote] = React.useState(null)
       // A declared branch always wins; otherwise show the convention's name.
@@ -772,6 +826,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       // The journal is read when the drawer opens: it is a local file, not part
       // of the tracker list, and it changes between two visits.
       const [journal, setJournal] = React.useState(null)
+      // The checklist is read with the journal, for the same reason: it is a
+      // local file that changes between two visits.
+      const [checklist, setChecklist] = React.useState(null)
 
       React.useEffect(() => {
         let alive = true
@@ -779,6 +836,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           .then((response) => response.json())
           .then((data) => { if (alive) setJournal(data) })
           .catch(() => { if (alive) setJournal({ exists: false, source: '', error: true }) })
+        fetch(`${CHECKLIST_URL}?key=${encodeURIComponent(mission.key)}`, { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => { if (alive) setChecklist(data) })
+          .catch(() => { if (alive) setChecklist({ exists: false, source: '', error: true }) })
         return () => { alive = false }
       }, [mission.key, mission.folder])
 
@@ -792,7 +853,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 
       const blocker = executionBlocker(mission)
       const journalPath = mission.folder ? `missions/${mission.folder}/journal.md` : null
-      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.${blocker === null ? `\n\nBranche : ${mission.branch} ; base : ${mission.base}.` : ''}${journalPath ? `\n\nJournal de mission : ${journalPath} — ouvre-le au cadrage et tiens-le à jour à chaque étape.` : ''}`
+      const checklistPath = mission.folder ? `missions/${mission.folder}/checklist.md` : null
+      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.${blocker === null ? `\n\nBranche : ${mission.branch} ; base : ${mission.base}.` : ''}${journalPath ? `\n\nJournal de mission : ${journalPath} — ouvre-le au cadrage et tiens-le à jour à chaque étape.` : ''}${checklistPath ? `\n\nChecklist de mission : ${checklistPath} — ouvre-la au cadrage, coche chaque point avec sa preuve.` : ''}`
 
       const startSession = async () => {
         setNote('Starting a session…')
@@ -843,6 +905,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       const savedBranch = mission.branch ?? ''
       const savedBase = mission.base ?? ''
       const dirty = branch.trim() !== savedBranch || base.trim() !== savedBase
+      const checklistView = checklist?.exists ? parseChecklist(checklist.source) : null
 
       return h('aside', { className: 'missions-drawer', role: 'complementary', 'aria-label': `Mission ${mission.key}` },
           h('div', { className: 'missions-drawer-head' },
@@ -921,6 +984,28 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
                   ? h('pre', { className: 'missions-journal-text' }, journal.source)
                   : h('p', { className: 'missions-journal-hint' }, journal.folder
                       ? 'No journal yet — it is written at cadrage.'
+                      : 'No mission folder yet — declare a branch to create it.'),
+          ),
+
+          h('section', { className: 'missions-checklist', 'aria-label': 'Mission checklist' },
+            h('div', { className: 'missions-checklist-head' },
+              h('span', { className: 'missions-checklist-label' }, 'Checklist'),
+              checklist?.exists
+                ? h('span', { className: 'missions-checklist-meta' }, checklistView.counts.total > 0
+                    ? `${checklistView.counts.checked}/${checklistView.counts.total} · ${relativeAge(checklist.mtimeMs)}`
+                    : relativeAge(checklist.mtimeMs))
+                : null,
+            ),
+            checklist === null
+              ? h('p', { className: 'missions-checklist-hint' }, 'Loading the checklist…')
+              : checklist.error
+                ? h('p', { className: 'missions-checklist-hint' }, 'Checklist unavailable: the host did not answer.')
+                : checklist.exists
+                  ? checklistView.blocks.length > 0
+                    ? h(ChecklistBlocks, { blocks: checklistView.blocks })
+                    : h('p', { className: 'missions-checklist-hint' }, 'Empty checklist — it is filled at cadrage.')
+                  : h('p', { className: 'missions-checklist-hint' }, checklist.folder
+                      ? 'No checklist yet — it is written at cadrage.'
                       : 'No mission folder yet — declare a branch to create it.'),
           ),
 
