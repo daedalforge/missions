@@ -109,13 +109,52 @@ test('le prompt de session reprend la branche et la base déclarées', () => {
 
 test('le volet lit le journal de mission, sans dépendance de rendu', () => {
   assert.match(SOURCE, /const JOURNAL_URL = 'missions\/api\/journal'/)
-  assert.match(SOURCE, /className: 'missions-journal-label' \}, 'Journal'/)
+  // L'onglet s'appelle Journal : la section ne répète pas le titre, elle garde
+  // le chemin et la date.
+  assert.match(SOURCE, /className: 'missions-journal-meta' \}/)
   assert.match(SOURCE, /className: 'missions-journal-text' \}, journal\.source/)
   assert.match(SOURCE, /No journal yet — it is written at cadrage\./)
   assert.match(SOURCE, /mission\.folder \? `missions\/\$\{mission\.folder\}\/journal\.md`/)
   assert.match(SOURCE, /Journal de mission : \$\{journalPath\}/)
   // Le journal n'est pas dans la liste : le volet le demande à l'ouverture.
   assert.match(SOURCE, /fetch\(`\$\{JOURNAL_URL\}\?key=\$\{encodeURIComponent\(mission\.key\)\}`/)
+})
+
+test('le volet découpe le détail en trois onglets', () => {
+  assert.match(SOURCE, /const DRAWER_TABS = \[\n\s+\{ id: 'details', label: 'Details' \},\n\s+\{ id: 'journal', label: 'Journal' \},\n\s+\{ id: 'checklist', label: 'Checklist' \},\n\s+\]/)
+  // Le volet s'ouvre sur Details : c'est l'onglet qui porte l'existant.
+  assert.match(SOURCE, /const \[section, setSection\] = React\.useState\('details'\)/)
+  assert.match(SOURCE, /className: 'missions-drawer-tabs', role: 'tablist'/)
+  assert.match(SOURCE, /'aria-selected': section === entry\.id \? 'true' : 'false'/)
+  assert.match(SOURCE, /'aria-controls': `missions-drawer-panel-\$\{entry\.id\}`/)
+  assert.match(SOURCE, /onClick: \(\) => setSection\(entry\.id\)/)
+  assert.match(SOURCE, /role: 'tabpanel'/)
+  assert.match(SOURCE, /'aria-labelledby': `missions-drawer-tab-\$\{section\}`/)
+  // Les deux thèmes stylent la barre : le défaut et le manga.
+  assert.match(SOURCE, /\.missions-drawer-tabs \{/)
+  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-tabs \{/)
+  // Un seul bloc à la fois : le panneau ne rend que la section active.
+  assert.match(SOURCE, /const panelContent = section === 'journal' \? journalPanel : section === 'checklist' \? checklistPanel : detailsPanel/)
+})
+
+test('le volet range l’existant dans Details, chaque fichier dans son onglet', () => {
+  const details = SOURCE.indexOf('const detailsPanel')
+  const journal = SOURCE.indexOf('const journalPanel')
+  const checklist = SOURCE.indexOf('const checklistPanel')
+  const actions = SOURCE.indexOf("className: 'missions-drawer-actions'")
+  assert.ok(details > 0 && details < journal && journal < checklist, 'ordre des panneaux')
+  // Propriétés et déclaration sont dans Details, pas dans les onglets.
+  assert.ok(SOURCE.indexOf("className: 'missions-props'") > details)
+  assert.ok(SOURCE.indexOf("className: 'missions-props'") < journal)
+  assert.ok(SOURCE.indexOf("className: 'missions-declare'") > details)
+  assert.ok(SOURCE.indexOf("className: 'missions-declare'") < journal)
+  // Le journal n'est rendu que par son panneau.
+  assert.ok(SOURCE.indexOf("className: 'missions-journal-text'") > journal)
+  assert.ok(SOURCE.indexOf("className: 'missions-journal-text'") < checklist)
+  // La checklist n'est rendue que par le sien.
+  assert.ok(SOURCE.indexOf('h(ChecklistBlocks, { blocks: checklistView.blocks })') > checklist)
+  // Les actions restent hors du panneau : accessibles depuis les trois onglets.
+  assert.ok(actions > checklist)
 })
 
 test('le bundle ne propose plus l’état done', () => {

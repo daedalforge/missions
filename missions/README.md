@@ -88,7 +88,10 @@ base: main
 - **Le dossier se crée au cadrage**, quand la fiche est validée ; la branche
   elle-même ne s'ouvre qu'à l'exécution, depuis `base`.
 
-**Depuis le panneau** : le volet de détail porte deux champs, « Branch » et
+**Depuis le panneau** : le volet de détail se lit en trois onglets —
+**Details** (propriétés et champs ci-dessous), **Journal** et **Checklist** —
+et les actions (ouvrir le ticket, démarrer une session) restent en pied de
+volet, sous les onglets. L'onglet Details porte deux champs, « Branch » et
 « Base », et un bouton « Save ». L'enregistrement réutilise le dossier qui
 déclare déjà la clé, ou le crée (`missions/<nom dérivé de la clé>/`), et
 n'écrit que ce `mission.yml`. Le panneau n'édite ni la clé ni le nom du dossier ;
@@ -116,8 +119,8 @@ l'intention de faire.
   hypothèses, points ouverts, plan), puis complété à chaque étape : changements
   et preuves à l'exécution, décision et critères vérifiés à la revue, merge et
   suites à la clôture.
-- **Qui.** L'agent de la session écrit ; le panneau lit. Le volet affiche le
-  journal de la mission, en texte, avec sa date, et ne le modifie pas.
+- **Qui.** L'agent de la session écrit ; le panneau lit. Le volet l'affiche
+  dans l'onglet **Journal**, en texte, avec sa date, et ne le modifie pas.
 - **Jamais versionné.** `missions/*/` reste ignoré par git, comme
   `mission.yml` : le journal ne se commit pas et ne se partage pas.
 
@@ -139,8 +142,9 @@ vérifie.
 - **Quand.** Ouverte au cadrage avec les gestes du plan, cochée à l'exécution au
   fur et à mesure, revue avec les preuves de la PR, soldée à la clôture : une
   case restée ouverte est une suite nommée, pas un oubli.
-- **Qui.** L'agent écrit, le panneau lit : le volet affiche le compteur
-  `cochées/total`, les sections et les cases, et ne modifie jamais le fichier.
+- **Qui.** L'agent écrit, le panneau lit : le volet l'affiche dans l'onglet
+  **Checklist** — compteur `cochées/total`, sections et cases — sans jamais
+  modifier le fichier.
 - **Ce n'est pas une preuve.** Les preuves opposables vivent dans le ticket et
   la PR ; la checklist est le carnet de vérification local de la session.
 - **Jamais versionné.** `missions/*/` reste ignoré par git, comme `mission.yml`
