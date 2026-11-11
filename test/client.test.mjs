@@ -12,6 +12,13 @@ import test from 'node:test'
  */
 const SOURCE = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 
+/** Le corps d'une règle CSS du bundle : de quoi la juger sans la recopier. */
+function regle(selector) {
+  const at = SOURCE.indexOf(`${selector} {`)
+  assert.ok(at >= 0, `règle absente : ${selector}`)
+  return SOURCE.slice(at + selector.length, SOURCE.indexOf('}', at))
+}
+
 // Minimal DOM surface: the bundle mounts one <style> and nothing else.
 globalThis.document = {
   createElement: () => ({ dataset: {}, remove() {} }),
@@ -296,6 +303,58 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   assert.doesNotMatch(SOURCE, /missions-drawer--empty \{ display: none; \}/)
   assert.match(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*background: color-mix/)
   assert.doesNotMatch(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*translateY/)
+})
+
+test('le compteur de l’onglet prend l’anneau des groupes, pas une pastille pâle', () => {
+  const ring = regle('.missions-panel[data-theme="manga"] .missions-tab-count')
+  // Même dessin que `.missions-group-ring` : le trait, la taille, le chiffre.
+  assert.match(ring, /display: grid/)
+  assert.match(ring, /width: 24px/)
+  assert.match(ring, /height: 24px/)
+  assert.match(ring, /border: 1\.5px solid var\(--mm-ink\)/)
+  assert.match(ring, /border-radius: 50%/)
+  assert.match(ring, /font: 700 11px\/1 var\(--mm-mono\)/)
+  // Un compteur d'onglet n'a pas d'état : l'accent du panneau remplace la
+  // teinte d'état que l'anneau des groupes reçoit de son groupe.
+  assert.match(ring, /background: var\(--mm-orange\)/)
+  // La pastille du thème par défaut ne bouge pas.
+  assert.match(regle('.missions-tab-count'), /border-radius: 9px/)
+  // En thème sombre, le chiffre reste en encre sombre sur l'orange, comme
+  // l'anneau et la marque du titre.
+  assert.ok(SOURCE.includes(':root[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-tab-count,'))
+  assert.ok(SOURCE.includes('body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-tab-count,'))
+})
+
+test('le thème Naruto finit le formulaire de branche, le filtre et la liste vide', () => {
+  const manga = (name) => regle(`.missions-panel[data-theme="manga"] ${name}`)
+
+  // Le formulaire du volet suivait le thème par défaut : champs blancs, bordure
+  // grise. Il prend le cadre encre, le fond page-2 et l'ombre papier.
+  for (const field of ['.missions-declare-input', '.missions-declare-save']) {
+    assert.match(manga(field), /border: 1\.5px solid var\(--mm-ink\)/)
+    assert.match(manga(field), /background: var\(--mm-page-2\)/)
+    assert.match(manga(field), /box-shadow: [12]px [12]px 0 var\(--mm-shadow\)/)
+  }
+  assert.match(manga('.missions-declare'), /border-top: 1\.5px solid var\(--mm-ink\)/)
+  // Les cases du filtre Statut prennent les teintes du thème ; la palette
+  // GitHub ne reste que sur le thème par défaut.
+  const accents = [
+    ['in-review', 'var(--mm-sky-deep)'],
+    ['ready-for-prod', 'var(--mm-teal-deep)'],
+    ['in-progress', '#8a6a1f'],
+    ['ready', 'var(--mm-sage-deep)'],
+    ['to-refine', 'var(--mm-lilac-deep)'],
+  ]
+  for (const [state, color] of accents) {
+    assert.ok(
+      manga(`.missions-status-option[data-state="${state}"] input`).includes(`accent-color: ${color};`),
+      `accent manga manquant pour ${state}`,
+    )
+  }
+  assert.match(regle('.missions-status-option[data-state="to-refine"] input'), /accent-color: #8250df/)
+  // La liste vide n'est plus un texte gris nu : un bandeau pointillé.
+  assert.match(manga('.missions-empty'), /border: 1\.5px dashed var\(--mm-line-strong\)/)
+  assert.match(manga('.missions-empty'), /background: var\(--mm-page-2\)/)
 })
 
 /** Une ligne complète, telle que `missions/api/list` la renvoie. */
