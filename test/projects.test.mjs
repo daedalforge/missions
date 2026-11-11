@@ -55,7 +55,8 @@ test('the workspace file declares its projects, complete', async () => {
   assert.deepEqual(manager.map.states['ready-for-prod'], ['Local Testing', 'Staging Test', 'Ready for prod'])
   assert.deepEqual(manager.map.states.done, ['Released'])
   assert.deepEqual(manager.map.labels, products)
-  assert.equal(manager.map.types.story, 'Story')
+  // Jira nomme `Story` et `Task` : les deux se lisent `story` en local.
+  assert.deepEqual(manager.map.types.story, ['Story', 'Task'])
 
   assert.equal(connect.name, 'Connect')
   assert.equal(connect.reference, 'SOC')
@@ -68,7 +69,7 @@ test('the workspace file declares its projects, complete', async () => {
   assert.equal(connect.map.states['in-review'], 'Code review')
   assert.equal(connect.map.states['ready-for-prod'], 'Ready for prod')
   assert.equal(connect.map.states.done, 'Done')
-  assert.equal(connect.map.types.story, 'Story')
+  assert.deepEqual(connect.map.types.story, ['Story', 'Task'])
 })
 
 test('the connect map covers the statuses of the SOC workflow', async () => {

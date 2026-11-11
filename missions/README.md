@@ -255,9 +255,13 @@ n'a pas de représentation propre (la fermeture de l'issue, par exemple).
 | `ready-for-prod` | label `ready-for-prod` | `Ready for prod`, ou les statuts de déploiement du projet (`Local Testing`, `Staging Test`) |
 | `done` | fermeture de l'issue | `Released` (Manager), `Done` (Connect) |
 | `bug` | type `Bug` | type `Bug` |
-| `story` | type `Feature` | type `Story` |
+| `story` | type `Feature` | type `Story`, `Task` |
 | `urgent` / `high` / `normal` / `low` | label `priority:*` | `Highest` / `High` / `Medium` / `Low` |
 | story points | label `sp:N` | champ `story_points_field` (défaut `customfield_10016`) |
+
+Jira nomme `Story` et `Task` deux types distincts : le workspace n'en fait
+qu'un, la mission `story`. `Epic` et `Sub-task` restent sans traduction — un
+epic n'est pas une mission.
 
 Deux conséquences :
 

@@ -112,7 +112,8 @@ projects:
         done: [Released]
       types:
         bug: Bug
-        story: Story
+        # Jira nomme une tâche `Task` ; localement, c'est une mission `story`.
+        story: [Story, Task]
       priorities:
         urgent: Highest
         high: High
@@ -144,7 +145,8 @@ projects:
         done: Done
       types:
         bug: Bug
-        story: Story
+        # Jira nomme une tâche `Task` ; localement, c'est une mission `story`.
+        story: [Story, Task]
       priorities:
         urgent: Highest
         high: High

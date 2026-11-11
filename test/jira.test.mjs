@@ -135,6 +135,18 @@ test('Jira issues are normalized through the project map', async () => {
   })
 })
 
+test('a Task issue is read as a story', async () => {
+  const project = {
+    ...PROJECT,
+    map: { ...PROJECT.map, types: { bug: 'Bug', story: ['Story', 'Task'] } },
+  }
+  const fetchImpl = reading(async () => response({ issues: [issue('SO-1208', { type: 'Task' })] }))
+
+  const missions = await list(project, { fetchImpl })
+
+  assert.equal(missions[0].type, 'story')
+})
+
 test('a status outside the mapping leaves the state null', async () => {
   const fetchImpl = reading(async () => response({ issues: [issue('SO-1', { status: 'Waiting for client' })] }))
 
