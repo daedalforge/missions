@@ -25,11 +25,14 @@ import {
   projectOptions,
   QUIET_AFTER_DAYS,
   readFilterSnapshot,
+  readTab,
   relativeAge,
   sortMissions,
   stateOptions,
   suggestBranch,
+  TAB_KEY,
   writeFilterSnapshot,
+  writeTab,
 } from '../lib/view.js'
 
 /** Un stockage de session en mémoire, comme celui de la fenêtre. */
@@ -364,6 +367,52 @@ test('un stockage absent ou en panne laisse la barre par défaut', () => {
   assert.doesNotThrow(() => writeFilterSnapshot(throwing, {}))
   // Pas de stockage du tout : écrire est un no-op, pas une erreur.
   assert.doesNotThrow(() => writeFilterSnapshot(null, { query: 'x' }))
+})
+
+test('la session retient l’onglet ouvert, et rien de plus', () => {
+  const tabs = ['dashboard', 'missions']
+  const storage = memoryStorage()
+
+  // Rien de rangé : le panneau ouvre sur le premier onglet, le dashboard.
+  assert.equal(readTab(storage, tabs), 'dashboard')
+  assert.equal(storage.entries.has(TAB_KEY), false)
+
+  writeTab(storage, 'missions', tabs)
+  assert.deepEqual([...storage.entries.keys()], [TAB_KEY])
+  assert.equal(readTab(storage, tabs), 'missions')
+
+  // Revenir au repos ne laisse pas de clé : la prochaine session rouvre sur le
+  // dashboard sans avoir à lire une valeur par défaut.
+  writeTab(storage, 'dashboard', tabs)
+  assert.equal(storage.entries.has(TAB_KEY), false)
+  assert.equal(readTab(storage, tabs), 'dashboard')
+})
+
+test('un onglet rangé qui n’existe plus retombe sur le dashboard', () => {
+  const tabs = ['dashboard', 'missions']
+  const storage = memoryStorage()
+  storage.setItem(TAB_KEY, 'epics')
+  assert.equal(readTab(storage, tabs), 'dashboard')
+
+  // Une écriture inconnue ne remplace pas l'onglet courant par une vue absente.
+  writeTab(storage, 'epics', tabs)
+  assert.equal(storage.entries.has(TAB_KEY), false)
+})
+
+test('un stockage absent ou en panne ne casse pas l’onglet', () => {
+  const tabs = ['dashboard', 'missions']
+  assert.equal(readTab(undefined, tabs), 'dashboard')
+  assert.equal(readTab({}, tabs), 'dashboard')
+
+  const throwing = {
+    getItem: () => { throw new Error('blocked') },
+    setItem: () => { throw new Error('quota') },
+    removeItem: () => { throw new Error('blocked') },
+  }
+  assert.equal(readTab(throwing, tabs), 'dashboard')
+  assert.doesNotThrow(() => writeTab(throwing, 'missions', tabs))
+  assert.doesNotThrow(() => writeTab(throwing, 'dashboard', tabs))
+  assert.doesNotThrow(() => writeTab(null, 'missions', tabs))
 })
 
 test('la file du dashboard suit l’urgence, puis la plus ancienne, sans l’en-cours', () => {

@@ -47,6 +47,10 @@ function charger(storage, initialStates = [], session = undefined) {
     props,
     children,
   })
+  // Les effets sont collectés, pas exécutés : un montage de test ne doit ni
+  // lancer la requête ni armer le timer de 60 s. Un test qui vise une écriture
+  // de session appelle l'effet lui-même.
+  const effects = []
   const React = {
     createElement: h,
     Fragment: 'fragment',
@@ -55,7 +59,7 @@ function charger(storage, initialStates = [], session = undefined) {
       (next) => { setters.push(next) },
     ],
     useCallback: (fn) => fn,
-    useEffect: () => {},
+    useEffect: (fn, deps) => { effects.push({ fn, deps }) },
   }
 
   const registered = {}
@@ -77,7 +81,7 @@ function charger(storage, initialStates = [], session = undefined) {
     if (name === 'react') return React
     throw new Error(`unexpected require: ${name}`)
   })
-  return { api, ctx, registered, id: captured.id, setters }
+  return { api, ctx, registered, id: captured.id, setters, effects }
 }
 
 /** Aplatit les listes d'enfants que `Array#map` imbrique. */
@@ -317,7 +321,8 @@ test('un refresh affiche le loader de la vue, même avec des missions chargées'
   // chargement en cours. Le loader remplace alors la liste, pas seulement le
   // premier montage.
   const view = { loading: true, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view])
+  // Le refresh est lancé depuis l'onglet Missions : c'est la vue qui recharge.
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
   api.apply(ctx)
 
   const flat = JSON.stringify(registered.main({}))
@@ -330,10 +335,15 @@ test('un refresh affiche le loader de la vue, même avec des missions chargées'
   assert.doesNotMatch(flat, /missions-btn-spinner/)
 })
 
-test('le montage initial garde le loader et le polling reste silencieux', () => {
+test('le montage initial ouvre sur le dashboard, en chargement, et le polling reste silencieux', () => {
   const { api, ctx, registered } = charger()
   api.apply(ctx)
-  assert.match(JSON.stringify(registered.main({})), /"type":"PanelLoader"/)
+  const flat = JSON.stringify(registered.main({}))
+  // Sans session, le panneau atterrit sur le dashboard : c'est lui qui porte le
+  // chargement, pas le loader de la liste.
+  assert.match(flat, /"type":"DashboardView"/)
+  assert.match(flat, /"loading":true/)
+  assert.doesNotMatch(flat, /"type":"PanelLoader"/)
   // Seul un chargement non silencieux lève l'état de chargement : le timer de
   // 60 s recharge sans vider la liste ni afficher le loader.
   assert.match(SOURCE, /if \(!silent\) setView/)
@@ -374,6 +384,79 @@ const DASH_MISSIONS = [
 function dashboardView(missions, loading = false) {
   return { loading, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
 }
+
+/**
+ * Un `sessionStorage` en mémoire : l'onglet et la barre y écrivent, comme dans
+ * la fenêtre, sans toucher au global de Node.
+ */
+function memorySession(entries = {}) {
+  const map = new Map(Object.entries(entries))
+  return {
+    entries: map,
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    setItem: (key, value) => map.set(key, String(value)),
+    removeItem: (key) => map.delete(key),
+  }
+}
+
+/** Le panneau monté tel quel, avec sa session et ses états initiaux. */
+function monter(initialStates, session) {
+  const { api, ctx, registered } = charger(undefined, initialStates, session)
+  api.apply(ctx)
+  return registered.main({})
+}
+
+test('sans onglet retenu, le panneau ouvre sur le dashboard', () => {
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+
+  assert.equal(findAll(tree, 'DashboardView').length, 1, 'le panneau doit atterrir sur le dashboard')
+  assert.equal(findAll(tree, 'MissionsView').length, 0)
+})
+
+test("l'onglet rangé par la session est rouvert au montage", () => {
+  // « missions.tab » vient de `TAB_KEY` : la clé est le contrat, pas un détail.
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+
+  assert.equal(findAll(tree, 'MissionsView').length, 1, 'le panneau doit rouvrir sur la liste')
+  assert.equal(findAll(tree, 'DashboardView').length, 0)
+})
+
+/** L'effet qui range l'onglet dans la session, retrouvé par ce qu'il appelle. */
+function tabEffect(effects) {
+  const found = effects.find(({ fn }) => String(fn).includes('writeTab('))
+  assert.ok(found, "le panneau doit persister l'onglet, pas seulement le lire")
+  return found
+}
+
+test("le panneau range l'onglet ouvert dans la session", () => {
+  const session = memorySession()
+  const { api, ctx, registered, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'], session)
+  api.apply(ctx)
+  registered.main({})
+
+  // L'onglet vaut « missions » : l'effet doit l'écrire, pas le laisser filer.
+  tabEffect(effects).fn()
+  assert.equal(session.entries.get('missions.tab'), 'missions')
+  // L'effet de l'onglet n'écrit que sa clé : la barre garde la sienne.
+  assert.equal(session.entries.has('missions.filters'), false)
+})
+
+test("revenir sur le dashboard retire la clé de l'onglet", () => {
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const { api, ctx, registered, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], session)
+  api.apply(ctx)
+  registered.main({})
+
+  tabEffect(effects).fn()
+  assert.equal(session.entries.has('missions.tab'), false, 'le repos ne laisse pas de clé derrière lui')
+})
+
+test("un onglet rangé qui n'existe plus retombe sur le dashboard", () => {
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'epics' }))
+
+  assert.equal(findAll(tree, 'DashboardView').length, 1)
+})
 
 test('le dashboard rend les deux cartes, une ligne par mission de la file', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
@@ -497,9 +580,9 @@ test('le panneau relit la barre de la session au montage', () => {
   api.apply(ctx)
 
   assert.doesNotThrow(() => registered.main({}))
-  // Une seule lecture, de la bonne clé : le montage reprend la session telle
-  // qu'elle a été laissée.
-  assert.deepEqual(reads, ['missions.filters'])
+  // Deux lectures au montage, dans cet ordre : la barre, puis l'onglet. Le
+  // montage reprend la session telle qu'elle a été laissée.
+  assert.deepEqual(reads, ['missions.filters', 'missions.tab'])
 })
 
 test('une barre corrompue ou un stockage en panne ne casse pas le montage', () => {
