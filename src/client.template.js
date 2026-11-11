@@ -313,7 +313,6 @@ window.__ModuleLoader__.load({
 .missions-prio[data-priority="urgent"] { width: 14px; height: 14px; color: #cf222e; }
 .missions-prio[data-priority="high"] { color: #bf8700; }
 .missions-prio[data-priority="normal"] { color: var(--dsw-alias-label-secondary, #4a4a4a); }
-.missions-prio[data-priority="none"] { opacity: .55; }
 .missions-prio .prio-bar, .missions-prio .prio-mark { fill: currentColor; }
 .missions-prio .prio-bar--off { opacity: .22; }
 .missions-prio .prio-chip { fill: currentColor; opacity: .13; }
@@ -589,6 +588,7 @@ body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
 .missions-panel[data-theme="manga"] .missions-prio[data-priority="urgent"] { color: var(--mm-coral-deep); }
 .missions-panel[data-theme="manga"] .missions-prio[data-priority="urgent"] .prio-chip { fill: var(--mm-coral); opacity: 1; }
 .missions-panel[data-theme="manga"] .missions-prio[data-priority="urgent"] .prio-mark { fill: var(--mm-ink); }
+body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data-priority="high"] { color: var(--mm-orange); }
 body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data-priority="urgent"] .prio-chip { fill: var(--mm-coral-deep); }
 .missions-panel[data-theme="manga"] .missions-sp { border: 1px dashed var(--mm-line-strong); background: var(--mm-page); color: var(--mm-ink-2); font-size: 9.5px; padding: 1px 6px; border-radius: 5px; }
 .missions-panel[data-theme="manga"] .missions-card-title { color: var(--mm-ink); font-size: 14.5px; font-weight: 600; line-height: 1.35; }

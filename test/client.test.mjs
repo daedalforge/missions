@@ -334,6 +334,25 @@ test('chaque carte porte un repère de priorité qui se lit sans la couleur', ()
   assert.equal(findAll(marks[0], 'rect').filter((rect) => rect.props.className === 'prio-mark').length, 2)
   // Sans priorité : un carré pointillé, jamais un vide.
   assert.equal(findAll(marks[4], 'rect').filter((rect) => rect.props.className === 'prio-none').length, 1)
+
+  // Chaque repère est annoncé : rôle, nom accessible et infobulle.
+  assert.deepEqual(marks.map((mark) => mark.props.role), ['img', 'img', 'img', 'img', 'img'])
+  assert.deepEqual(marks.map((mark) => mark.props.title), marks.map((mark) => mark.props['aria-label']))
+
+  // Les barres éteintes restent des barres (elles gardent leur classe) et la
+  // hauteur croît de gauche à droite : le niveau se lit même sans couleur.
+  const bars = (mark) => findAll(mark, 'rect').filter((rect) => String(rect.props.className).startsWith('prio-bar'))
+  assert.deepEqual(bars(marks[3]).map((rect) => rect.props.className), [
+    'prio-bar', 'prio-bar prio-bar--off', 'prio-bar prio-bar--off',
+  ])
+  assert.deepEqual(bars(marks[1]).map((rect) => rect.props.height), [4.5, 7.5, 10.5])
+
+  // Le CSS porte le rendu : éteintes discrètes, pointillé lisible, orange de
+  // manga contrasté en thème sombre, et aucun voile sur l'absence.
+  assert.match(SOURCE, /\.missions-prio \.prio-bar--off \{ opacity: \.22; \}/)
+  assert.ok(SOURCE.includes('.prio-none { fill: none; stroke: currentColor; stroke-width: 1.25; stroke-dasharray: 2.4 2; }'))
+  assert.ok(SOURCE.includes('body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data-priority="high"] { color: var(--mm-orange); }'))
+  assert.ok(!SOURCE.includes('.missions-prio[data-priority="none"] { opacity: .55; }'))
 })
 
 test('le montage lit le cache ; seuls le bouton et le tick forcent', () => {
