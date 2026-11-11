@@ -107,6 +107,17 @@ test('le prompt de session reprend la branche et la base déclarées', () => {
   assert.match(SOURCE, /Branche : \$\{mission\.branch\} ; base : \$\{mission\.base\}\./)
 })
 
+test('le volet lit le journal de mission, sans dépendance de rendu', () => {
+  assert.match(SOURCE, /const JOURNAL_URL = 'missions\/api\/journal'/)
+  assert.match(SOURCE, /className: 'missions-journal-label' \}, 'Journal'/)
+  assert.match(SOURCE, /className: 'missions-journal-text' \}, journal\.source/)
+  assert.match(SOURCE, /No journal yet — it is written at cadrage\./)
+  assert.match(SOURCE, /mission\.folder \? `missions\/\$\{mission\.folder\}\/journal\.md`/)
+  assert.match(SOURCE, /Journal de mission : \$\{journalPath\}/)
+  // Le journal n'est pas dans la liste : le volet le demande à l'ouverture.
+  assert.match(SOURCE, /fetch\(`\$\{JOURNAL_URL\}\?key=\$\{encodeURIComponent\(mission\.key\)\}`/)
+})
+
 test('le bundle ne propose plus l’état done', () => {
   assert.match(SOURCE, /STATE_FILTER_ORDER = \['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod'\]/)
   assert.doesNotMatch(SOURCE, /done: 'done'/)

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createServer, request } from 'node:http'
 import { join } from 'node:path'
@@ -199,6 +199,54 @@ test('un chemin ne peut pas sortir de missions : le dossier vient de la clé', a
   assert.equal(response.status, 200)
   assert.equal(response.body.folder, 'escape')
   assert.deepEqual(await readdir(dir), ['escape'])
+})
+
+test('GET journal lit le fichier de la mission déclarée', async (t) => {
+  const { dir, handler } = await mount(t)
+  await mkdir(join(dir, 'MIS-69'), { recursive: true })
+  await writeFile(join(dir, 'MIS-69', MISSION_FILE), 'key: MIS-69\nbranch: feat/mis-69\nbase: main\n')
+  await writeFile(join(dir, 'MIS-69', 'journal.md'), '# Journal — MIS-69\n\n## 2026-11-11 — Cadrage\n')
+
+  const response = await call(handler, { path: '/missions/api/journal?key=MIS-69' })
+  assert.equal(response.status, 200)
+  assert.equal(response.body.key, 'MIS-69')
+  assert.equal(response.body.folder, 'MIS-69')
+  assert.equal(response.body.path, 'MIS-69/journal.md')
+  assert.equal(response.body.exists, true)
+  assert.equal(response.body.source, '# Journal — MIS-69\n\n## 2026-11-11 — Cadrage\n')
+  assert.ok(response.body.mtimeMs > 0)
+})
+
+test('GET journal ne lève pas sur une clé inconnue et refuse une autre méthode', async (t) => {
+  const { dir, handler } = await mount(t)
+
+  const undeclared = await call(handler, { path: '/missions/api/journal?key=MIS-404' })
+  assert.equal(undeclared.status, 200)
+  assert.deepEqual(undeclared.body, { key: 'MIS-404', folder: null, path: null, exists: false, source: '', mtimeMs: 0 })
+
+  // Le dossier déclaré existe mais le journal n'a pas encore été écrit : c'est
+  // la forme vide, pas une erreur.
+  const declared = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/branches',
+    body: { key: 'MIS-69', branch: 'feat/mis-69', base: 'main' },
+  })
+  assert.equal(declared.status, 200)
+  const noFile = await call(handler, { path: '/missions/api/journal?key=MIS-69' })
+  assert.equal(noFile.status, 200)
+  assert.equal(noFile.body.folder, 'MIS-69')
+  assert.equal(noFile.body.exists, false)
+  assert.equal(noFile.body.source, '')
+  assert.equal(noFile.body.mtimeMs, 0)
+  assert.deepEqual(await readdir(join(dir, 'MIS-69')), [MISSION_FILE])
+
+  const missing = await call(handler, { path: '/missions/api/journal' })
+  assert.equal(missing.status, 400)
+  assert.match(missing.body.error, /key is missing/)
+
+  const refused = await call(handler, { method: 'POST', path: '/missions/api/journal?key=MIS-69' })
+  assert.equal(refused.status, 405)
+  assert.equal(refused.headers.allow, 'GET')
 })
 
 test('une route inconnue répond 404, un appel non local répond 403', async (t) => {

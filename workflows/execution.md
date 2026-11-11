@@ -19,6 +19,8 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
    fait ce que le cadrage annonce.
 5. **Ouvrir la PR** vers la `base` déclarée : titre préfixé de la clé,
    description qui dit ce que ça change et comment le vérifier.
+6. **Tenir le journal** : ajouter la section du jour à
+   `missions/<dossier>/journal.md` — ce qui a changé, les preuves, les écarts.
 
 ## Condition de sortie — la mission est « en revue »
 
@@ -28,6 +30,7 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
 - [ ] Les tests du projet passent (ou l'absence de tests est justifiée dans la PR).
 - [ ] La PR est ouverte, liée au ticket.
 - [ ] Chaque critère d'acceptation porte sa preuve dans la description de la PR.
+- [ ] Le journal porte la section d'exécution (changements, preuves, écarts).
 
 ## Renseigner la PR
 

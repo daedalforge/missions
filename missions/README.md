@@ -38,6 +38,7 @@ workflow ; le filtre de statut, lui, garde l'ordre du workflow.
 | Fiche de mission (titre, description, critères) | Tracker | Non |
 | État, assignation, commentaires | Tracker | Non |
 | Branche et base (déclarées) | `missions/<dossier>/mission.yml` | Non — local, ignoré par git |
+| Journal de mission (récit de la session) | `missions/<dossier>/journal.md` | Non — local, ignoré par git |
 | Branche et commits | Dépôt du projet | Selon le projet |
 | Preuves de clôture | Commentaire du ticket | Non |
 | Méthode (ce document, workflows) | Ce dépôt | Oui |
@@ -97,6 +98,27 @@ disparaît du fichier.
 locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
 part donc sans déclaration : on les repose depuis le panneau au premier cadrage.
 Le panneau n'écrit que ce fichier, le versionnement n'est pas son affaire.
+
+## Journal de mission
+
+Chaque mission tient son récit dans `missions/<dossier>/journal.md`, à côté de
+`mission.yml` : ce que la session a lu, décidé et prouvé — pas ce qu'elle a
+l'intention de faire.
+
+- **Il ne remplace pas la fiche.** L'état, les décisions opposables et les
+  preuves de clôture restent dans le ticket. Le journal est le carnet de bord
+  local ; un clone neuf ne le porte pas.
+- **Forme.** Un titre `# Journal — <clé>`, puis une section par étape :
+  `## <date> — Cadrage`, `— Exécution`, `— Revue`, `— Clôture`. On ajoute, on ne
+  réécrit pas.
+- **Quand.** Ouvert au cadrage (demande verbatim, lectures, état relevé,
+  hypothèses, points ouverts, plan), puis complété à chaque étape : changements
+  et preuves à l'exécution, décision et critères vérifiés à la revue, merge et
+  suites à la clôture.
+- **Qui.** L'agent de la session écrit ; le panneau lit. Le volet affiche le
+  journal de la mission, en texte, avec sa date, et ne le modifie pas.
+- **Jamais versionné.** `missions/*/` reste ignoré par git, comme
+  `mission.yml` : le journal ne se commit pas et ne se partage pas.
 
 ## Le projet décide du tracker
 
