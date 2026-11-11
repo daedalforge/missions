@@ -589,13 +589,13 @@ test('le dashboard rend les quatre cartes, dans l’ordre', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
   const cards = findAll(tree, 'article')
-  assert.equal(cards.length, 4, 'quatre cartes : l’en-cours, la file, les bugs, les stories')
+  assert.equal(cards.length, 4, 'quatre cartes : les bugs, les stories, l’en-cours, la file')
 
-  const [flight, queue, bugs, stories] = cards
-  assert.match(textOf(flight), /In flight/, 'l’en-cours passe en premier')
-  assert.match(textOf(queue), /Needs you/)
-  assert.match(textOf(bugs), /Bugs/)
+  const [bugs, stories, flight, queue] = cards
+  assert.match(textOf(bugs), /Bugs/, 'les bugs passent en premier')
   assert.match(textOf(stories), /High-priority stories/)
+  assert.match(textOf(flight), /In flight/)
+  assert.match(textOf(queue), /Needs you/)
 
   // Les deux nouveaux widgets prennent les missions que la file et l'en-cours
   // laissent de côté, et les trient comme eux : la plus ancienne d'abord.
@@ -681,7 +681,7 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
     missions.push({ key: `F-${index}`, title: `vol ${index}`, state: 'in-progress', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString(), points: 2 })
   }
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
-  const [flight, queue, bugs, stories] = findAll(tree, 'article')
+  const [bugs, stories, flight, queue] = findAll(tree, 'article')
 
   const rows = (card) => findAll(card, 'button').filter((button) => button.props['data-state'] !== undefined)
   for (const [name, card] of [['file', queue], ['en-cours', flight], ['bugs', bugs], ['stories', stories]]) {
@@ -714,7 +714,7 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
 
 test('une carte qui tient en dix lignes n’a ni compte ni lien', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
-  const [flight, queue] = findAll(tree, 'article')
+  const [, , flight, queue] = findAll(tree, 'article')
 
   // Rien à annoncer, rien à ouvrir : la file n'a même pas de pied.
   assert.equal(findAll(queue, 'p').length, 1, 'seul le sous-titre reste')
@@ -739,7 +739,8 @@ test('dix lignes pile : la carte est pleine, mais complète', () => {
     })
   }
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
-  const flight = findAll(tree, 'article')[0]
+  const flight = findAll(tree, 'article').find((article) => textOf(findAll(article, 'h3')[0]) === 'In flight')
+  assert.ok(flight, 'la carte In flight doit être rendue')
   const rows = findAll(flight, 'button').filter((button) => button.props['data-state'] === 'in-progress')
 
   assert.equal(rows.length, 10, 'dix lignes rendues')
@@ -874,10 +875,10 @@ test('une mission qui dort est signalée, sa ligne le dit aussi', () => {
 
   const rows = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
   const quiet = rows.filter((button) => button.props['aria-label'].includes('not updated for a week'))
-  // L'en-cours : MIS-3 (11 j), MIS-4 (4 j). La file : MIS-1 (9 j), MIS-2 (1 j),
-  // MIS-5 (6 j). Puis les widgets reprennent les mêmes missions : MIS-1 dans
-  // Bugs, MIS-3 dans Stories.
-  assert.deepEqual(quiet.map((button) => button.props['aria-label'].split(' ')[0]), ['MIS-3', 'MIS-1', 'MIS-1', 'MIS-3'])
+  // Les widgets : MIS-1 dans Bugs (9 j), MIS-3 dans Stories (11 j). Puis
+  // l'en-cours : MIS-3 (11 j), MIS-4 (4 j) ; la file : MIS-1 (9 j), MIS-2 (1 j),
+  // MIS-5 (6 j).
+  assert.deepEqual(quiet.map((button) => button.props['aria-label'].split(' ')[0]), ['MIS-1', 'MIS-3', 'MIS-3', 'MIS-1'])
 
   const ages = findAll(tree, 'span').filter((span) => span.props.className === 'missions-rowage')
   assert.deepEqual(ages.map((span) => span.props['data-quiet']), ['true', 'false', 'true', 'false', 'false', 'true', 'false', 'true', 'false', 'false'])
@@ -888,10 +889,10 @@ test('chaque carte dit à quoi elle sert, sous son titre', () => {
   const subs = findAll(tree, 'p').filter((node) => node.props.className === 'missions-dash-card-sub')
 
   assert.deepEqual(subs.map(textOf), [
-    'Started, not shipped.',
-    'Waiting on your next move, most urgent first.',
     'Unresolved, assigned to you. Oldest first.',
     'Urgent or high, oldest first.',
+    'Started, not shipped.',
+    'Waiting on your next move, most urgent first.',
   ])
   // « sous le titre » : la ligne vient juste après l'en-tête, pas au bas de la carte.
   for (const card of findAll(tree, 'article')) {
@@ -917,7 +918,7 @@ test('les widgets sans ligne disent ce qui manque, sans lien', () => {
     { key: 'S-1', title: 'story normale', state: 'ready', type: 'story', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-01T12:00:00Z' },
   ]
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
-  const [, , bugs, stories] = findAll(tree, 'article')
+  const [bugs, stories] = findAll(tree, 'article')
 
   assert.match(textOf(bugs), /No unresolved bug assigned to you\./)
   assert.match(textOf(stories), /No high-priority story\./)
