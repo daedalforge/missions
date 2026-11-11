@@ -4,6 +4,10 @@ Un seul parcours, le même pour toutes les missions : **cadrage → exécution �
 revue → clôture**. Ce qui change d'un projet à l'autre est le tracker, pas le
 workflow.
 
+Une session joue une seule étape : elle s'arrête à sa sortie, et l'étape suivante
+se joue dans une nouvelle session. Le prompt du panneau nomme l'étape du statut
+courant, et le bouton qui l'ouvre la nomme aussi.
+
 ```
   à cadrer ──▶ prête ──▶ en cours ──▶ en revue ──▶ prête à partir ──▶ terminée
       │           │          │            │              │
@@ -56,7 +60,7 @@ rattachée à un epic, qui est un milestone (voir
 | Cadrage | ticket à cadrer | ticket **prête** : périmètre, critères, plan | [cadrage.md](cadrage.md) |
 | Exécution | ticket prête | ticket **en revue** : branche, commits, PR | [execution.md](execution.md) |
 | Revue | ticket en revue | décision : approuvé (ticket **prêt à partir**) ou à reprendre | [review.md](review.md) |
-| Clôture | ticket prêt à partir | ticket **terminée**, branche supprimée | [cloture.md](cloture.md) |
+| Clôture | ticket prêt à partir | ticket **terminée** par le demandeur : merge, ticket fermé, branche supprimée ; journal et checklist soldés par la session | [cloture.md](cloture.md) |
 
 Une étape peut renvoyer à la précédente — un cadrage faux se refait, un diff hors
 périmètre retourne en cadrage — mais jamais sauter une étape.

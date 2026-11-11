@@ -1437,9 +1437,15 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       }, [onClose])
 
       const blocker = executionBlocker(mission)
+      const step = missionStep(mission)
+      const sessionLabel = step ? `Start a session — ${step}` : 'Start a session'
       const journalPath = mission.folder ? `missions/${mission.folder}/journal.md` : null
       const checklistPath = mission.folder ? `missions/${mission.folder}/checklist.md` : null
-      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.${blocker === null ? `\n\nBranche : ${mission.branch} ; base : ${mission.base}.` : ''}${journalPath ? `\n\nJournal de mission : ${journalPath} — ouvre-le au cadrage et tiens-le à jour à chaque étape.` : ''}${checklistPath ? `\n\nChecklist de mission : ${checklistPath} — ouvre-la au cadrage, coche chaque point avec sa preuve.` : ''}`
+      const stepLine = step
+        ? `Étape en cours : ${step} (statut ${mission.state}).`
+        : `Étape en cours : à déterminer (statut ${mission.state ?? 'inconnu'}).`
+      const stepBrief = STEP_BRIEFS[step] ?? 'Lis le ticket et le workflow avant d’agir : ce statut ne dit pas quelle étape jouer.'
+      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\n${stepLine} ${stepBrief}\n\nChaque étape se joue dans une nouvelle session : à la fin de celle-ci, arrête-toi ; l'étape suivante sera une nouvelle session.${blocker === null ? `\n\nBranche : ${mission.branch} ; base : ${mission.base}.` : ''}${journalPath ? `\n\nJournal de mission : ${journalPath} — tiens-le à jour à chaque étape.` : ''}${checklistPath ? `\n\nChecklist de mission : ${checklistPath} — coche chaque point avec sa preuve.` : ''}\n\nGarde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande.`
 
       const startSession = async () => {
         setNote('Starting a session…')
@@ -1629,7 +1635,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             mission.url
               ? h('a', { className: 'missions-action', href: mission.url, target: '_blank', rel: 'noreferrer noopener' }, 'Open on the tracker')
               : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
-            h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession, disabled: blocker !== null, title: blocker ?? undefined, 'aria-describedby': blocker ? 'missions-session-blocked' : undefined }, 'Start a session'),
+            h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession, disabled: blocker !== null, title: blocker ?? undefined, 'aria-describedby': blocker ? 'missions-session-blocked' : undefined }, sessionLabel),
         ),
       )
     }
