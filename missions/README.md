@@ -135,7 +135,7 @@ vérifie.
   (`— *test* : npm test`, `— *relevé* : …`). Le marqueur `- [~]` de l'ancien
   système reste lu comme « non exercé ». Les checklists reprises de l'ancien
   système gardent leur titre d'origine (`# Checklist manuelle — SLV-114`) : la
-  forme ci-dessus est celle des checklists écrites par le panneau.
+  forme ci-dessus est celle des checklists écrites par l'agent au cadrage.
 - **Quand.** Ouverte au cadrage avec les gestes du plan, cochée à l'exécution au
   fur et à mesure, revue avec les preuves de la PR, soldée à la clôture : une
   case restée ouverte est une suite nommée, pas un oubli.
