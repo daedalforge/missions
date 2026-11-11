@@ -41,6 +41,16 @@ function declarationFor(key) {
   ].join('\n')
 }
 
+/**
+ * Une clé est un nom de dossier, pas un chemin : `..` ou `/` écrirait hors de
+ * `missions/` et sortirait de la migration.
+ */
+function assertKey(key) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(key)) || String(key).includes('..')) {
+    throw new Error(`clé invalide : ${key}`)
+  }
+}
+
 const exists = (path) =>
   access(path).then(
     () => true,
@@ -70,6 +80,7 @@ export async function importChecklists({ from, to = BRANCHES_DIR, keys = null, l
   const report = []
 
   for (const folder of folders) {
+    assertKey(folder)
     const file = join(source, folder, OLD_CHECKLIST_FILE)
     if (!(await exists(file))) {
       report.push({ key: folder, status: 'absent' })
@@ -115,6 +126,10 @@ async function main(argv) {
   const keys = []
   for (let index = 0; index < args.length; index += 1) {
     if (args[index] === '--to') {
+      if (!args[index + 1]) {
+        console.error('usage : node tools/import-checklists.mjs <ancien-dossier> [--to <missions-dir>] [clé…]')
+        process.exit(1)
+      }
       to = args[index + 1]
       index += 1
       continue

@@ -39,7 +39,7 @@ workflow ; le filtre de statut, lui, garde l'ordre du workflow.
 | État, assignation, commentaires | Tracker | Non |
 | Branche et base (déclarées) | `missions/<dossier>/mission.yml` | Non — local, ignoré par git |
 | Journal de mission (récit de la session) | `missions/<dossier>/journal.md` | Non — local, ignoré par git |
-| Checklist de mission (gestes et preuves) | `missions/<dossier>/checklist.md` | Non — local, ignoré par git |
+| Checklist de mission (gestes à vérifier) | `missions/<dossier>/checklist.md` | Non — local, ignoré par git |
 | Branche et commits | Dépôt du projet | Selon le projet |
 | Preuves de clôture | Commentaire du ticket | Non |
 | Méthode (ce document, workflows) | Ce dépôt | Oui |
@@ -133,7 +133,9 @@ vérifie.
   étape ou par thème (`## Cadrage`, `## Exécution`…), et un geste par case :
   `- [ ]` à faire, `- [x]` fait, la preuve sur la même ligne
   (`— *test* : npm test`, `— *relevé* : …`). Le marqueur `- [~]` de l'ancien
-  système reste lu comme « non exercé ».
+  système reste lu comme « non exercé ». Les checklists reprises de l'ancien
+  système gardent leur titre d'origine (`# Checklist manuelle — SLV-114`) : la
+  forme ci-dessus est celle des checklists écrites par le panneau.
 - **Quand.** Ouverte au cadrage avec les gestes du plan, cochée à l'exécution au
   fur et à mesure, revue avec les preuves de la PR, soldée à la clôture : une
   case restée ouverte est une suite nommée, pas un oubli.

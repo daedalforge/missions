@@ -837,7 +837,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           .then((data) => { if (alive) setJournal(data) })
           .catch(() => { if (alive) setJournal({ exists: false, source: '', error: true }) })
         fetch(`${CHECKLIST_URL}?key=${encodeURIComponent(mission.key)}`, { headers: { accept: 'application/json' } })
-          .then((response) => response.json())
+          .then((response) => {
+            if (!response.ok) throw new Error(String(response.status))
+            return response.json()
+          })
           .then((data) => { if (alive) setChecklist(data) })
           .catch(() => { if (alive) setChecklist({ exists: false, source: '', error: true }) })
         return () => { alive = false }

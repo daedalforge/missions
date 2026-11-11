@@ -71,3 +71,11 @@ test('une clé demandée mais absente est signalée, pas inventée', async (t) =
   assert.deepEqual(report.map((line) => [line.key, line.status]), [['SO-1185', 'imported'], ['SO-404', 'absent']])
   await assert.rejects(readFile(join(dest, 'SO-404', 'checklist.md'), 'utf8'), { code: 'ENOENT' })
 })
+
+test('refuse une clé qui sortirait du dossier de missions', async (t) => {
+  const source = await fixtures(t, { 'SO-1185/checklist-manuelle.md': 'x\n' })
+  const dest = await fixtures(t, {})
+
+  await assert.rejects(importChecklists({ from: source, to: dest, keys: ['../evade'] }), /clé invalide/)
+  await assert.rejects(readFile(join(dest, '..', 'evade', 'checklist.md'), 'utf8'), { code: 'ENOENT' })
+})
