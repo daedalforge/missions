@@ -19,9 +19,10 @@ dont l'URL reste `…/issues/52`.
 
 ## États
 
-Cinq états, dans cet ordre : **à cadrer**, **prête**, **en cours**, **en revue**,
-**terminée**. Ils sont décrits dans [`../workflows/README.md`](../workflows/README.md),
-qui porte aussi leur correspondance Jira et GitHub.
+Six états, dans cet ordre : **à cadrer**, **prête**, **en cours**, **en revue**,
+**prête à partir**, **terminée**. Ils sont décrits dans
+[`../workflows/README.md`](../workflows/README.md), qui porte aussi leur
+correspondance Jira et GitHub.
 
 Un ticket ne saute pas d'état : chaque transition a une condition de sortie
 écrite dans la page de l'étape correspondante.
