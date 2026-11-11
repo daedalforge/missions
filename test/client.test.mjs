@@ -274,6 +274,31 @@ test('le loader ne déborde pas sur l’onglet Dashboard', () => {
   assert.doesNotMatch(flat, /missions-loader/)
 })
 
+test('le dashboard ouvre la mission cliquée dans l’onglet Missions', () => {
+  // Une ligne ouvre la mission et bascule sur l'onglet Missions ; « Open
+  // Missions » bascule sans sélection. Les deux passent par le panneau, jamais
+  // par une route : le dashboard ne fait que choisir ce que l'onglet montre.
+  assert.match(SOURCE, /onOpen: \(mission\) => \{ setSelected\(mission\); setTab\('missions'\) \}/)
+  assert.match(SOURCE, /onOpenAll: \(\) => \{ setSelected\(null\); setTab\('missions'\) \}/)
+  // La carte vide de la v0 a disparu : le dashboard rend la section Missions.
+  assert.doesNotMatch(SOURCE, /Nothing to show yet/)
+  assert.match(SOURCE, /'Needs you'/)
+  assert.match(SOURCE, /'In flight'/)
+})
+
+test('sans mission, le dashboard rend son état vide', () => {
+  // Le premier mount n'a rien à montrer : la section garde son cadre et son
+  // texte, plutôt qu'une grille vide ou une erreur.
+  const view = { loading: false, missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'dashboard'])
+  api.apply(ctx)
+
+  const flat = JSON.stringify(registered.main({}))
+  assert.match(flat, /"type":"DashboardView"/)
+  assert.match(SOURCE, /No mission is assigned to you yet\./)
+  assert.match(SOURCE, /missions-dash-empty/)
+})
+
 test('le panneau relit la barre de la session au montage', () => {
   const reads = []
   const session = {
