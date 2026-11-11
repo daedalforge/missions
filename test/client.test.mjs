@@ -60,6 +60,9 @@ function charger(storage, initialStates = [], session = undefined) {
     ],
     useCallback: (fn) => fn,
     useEffect: (fn, deps) => { effects.push({ fn, deps }) },
+    // Un `ref` n'a pas de nœud DOM à recevoir ici : le conteneur reste vide, ce
+    // qui suffit au rendu (seul le menu ouvert lit `.contains`).
+    useRef: () => ({ current: null }),
   }
 
   const registered = {}
@@ -585,6 +588,104 @@ test('la sortie « Open Missions » ouvre l’onglet sans sélection', () => {
 
   assert.ok(setters.some((next) => next === 'missions'))
   assert.ok(setters.some((next) => next === null), 'la sortie ne garde aucune mission sélectionnée')
+})
+
+test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
+  // 14 en file, 12 en vol : les deux cartes débordent, comme le vrai tracker.
+  const missions = []
+  for (let index = 0; index < 14; index += 1) {
+    // Une date distincte par rang : la file trie la plus ancienne d'abord, et
+    // l'ordre attendu ne doit pas dépendre du départage par clé.
+    missions.push({ key: `Q-${index}`, title: `file ${index}`, state: 'ready', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString() })
+  }
+  for (let index = 0; index < 12; index += 1) {
+    missions.push({ key: `F-${index}`, title: `vol ${index}`, state: 'in-progress', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString(), points: 2 })
+  }
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const [queue, flight] = findAll(tree, 'article')
+
+  const rows = (card) => findAll(card, 'button').filter((button) => button.props['data-state'] !== undefined)
+  assert.equal(rows(queue).length, 10, 'la file s’arrête à dix lignes')
+  assert.equal(rows(flight).length, 10, 'l’en-cours s’arrête à dix lignes')
+  const keys = (card) => findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  assert.deepEqual(keys(queue), ['Q-0', 'Q-1', 'Q-2', 'Q-3', 'Q-4', 'Q-5', 'Q-6', 'Q-7', 'Q-8', 'Q-9'])
+  assert.deepEqual(keys(flight), ['F-0', 'F-1', 'F-2', 'F-3', 'F-4', 'F-5', 'F-6', 'F-7', 'F-8', 'F-9'])
+
+  // Le compte de l'en-tête reste le total : le plafond ne réécrit pas la donnée.
+  const meta = (card) => textOf(findAll(card, 'span').find((span) => span.props.className === 'missions-dash-card-meta'))
+  assert.equal(meta(queue), '14')
+  assert.equal(meta(flight), '12')
+
+  // Le pied dit ce qui reste, puis le lien porte le total de la liste.
+  const foot = (card) => textOf(findAll(card, 'p').at(-1))
+  assert.match(foot(queue), /4 more waiting/)
+  assert.match(foot(queue), /View all 14/)
+  assert.match(foot(flight), /24 pts in flight/)
+  assert.match(foot(flight), /View all 12/)
+})
+
+test('une carte qui tient en dix lignes n’a ni compte ni lien', () => {
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
+  const [queue, flight] = findAll(tree, 'article')
+
+  // Rien à annoncer, rien à ouvrir : la file n'a même pas de pied.
+  assert.equal(findAll(queue, 'p').length, 1, 'seul le sous-titre reste')
+  assert.equal(findAll(tree, 'button').filter((button) => textOf(button).includes('View all')).length, 0)
+  // L'en-cours garde son pied — les points et l'âge — mais sans lien.
+  assert.match(textOf(findAll(flight, 'p').at(-1)), /8 pts in flight · oldest 11 d/)
+})
+
+test('le lien du widget ouvre la liste sur les états de la carte', () => {
+  const missions = []
+  for (let index = 0; index < 11; index += 1) {
+    // Une date distincte par rang : la file trie la plus ancienne d'abord, et
+    // l'ordre attendu ne doit pas dépendre du départage par clé.
+    missions.push({ key: `Q-${index}`, title: `file ${index}`, state: 'ready', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString() })
+  }
+  // Une mission sans état connu : la file la montre, la liste doit la retrouver.
+  missions.push({ key: 'Q-x', title: 'sans état', state: null, project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T12:00:00Z' })
+  const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+
+  const link = findAll(tree, 'button').find((button) => textOf(button).includes('View all 12'))
+  assert.ok(link, 'la file doit lier ses douze lignes')
+  link.props.onClick()
+
+  const filters = setters.find((next) => next && typeof next === 'object' && Array.isArray(next.state))
+  assert.deepEqual(filters.state, ['ready', 'unknown'], 'les états viennent de la carte, dans l’ordre du panneau')
+  // La barre est remise à zéro : seul le statut reste, sinon le compte mentirait.
+  assert.equal(filters.type, null)
+  assert.equal(filters.epic, null)
+  assert.equal(filters.missing, null)
+  assert.ok(setters.includes('missions'), 'le clic bascule sur l’onglet Missions')
+  assert.ok(setters.includes(''), 'le clic efface la recherche')
+})
+
+test('le statut montre « 2 selected » quand le panneau en porte deux', () => {
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+  api.apply(ctx)
+  const view = findAll(registered.main({}), 'MissionsView')[0]
+  assert.ok(view, 'le panneau doit rendre la liste')
+
+  // Rejouer la vue avec une barre à deux états : la session ne peut pas porter
+  // une barre à plusieurs valeurs au montage, la vue se rend donc seule.
+  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, filters }, children: [] })
+  const chip = (node) => findAll(node, 'button').find((button) => button.props.className === 'missions-select')
+
+  const both = chip(rerender({ ...view.props.filters, state: ['ready', 'in-review'] }))
+  assert.equal(both.props['data-active'], 'true')
+  assert.equal(both.props['aria-expanded'], 'false', 'le menu reste fermé tant qu’on ne l’ouvre pas')
+  assert.match(textOf(both), /Status2 selected/)
+
+  // Un seul état garde son libellé, une majuscule en tête : le chip se lit seul.
+  assert.match(textOf(chip(rerender({ ...view.props.filters, state: ['ready'] }))), /StatusReady/)
+  // Aucun état : le chip retombe sur « All » et n'est plus actif.
+  const none = chip(rerender({ ...view.props.filters, state: null }))
+  assert.equal(none.props['data-active'], 'false')
+  assert.match(textOf(none), /StatusAll/)
+  // Le clic bascule bien l'ouverture : le menu est câblé, pas décoratif.
+  both.props.onClick()
+  assert.ok(setters.length > 0)
 })
 
 test('une mission qui dort est signalée, sa ligne le dit aussi', () => {
