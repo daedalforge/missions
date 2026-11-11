@@ -126,17 +126,21 @@ test('le volet découpe le détail en trois onglets', () => {
   assert.match(SOURCE, /const \[section, setSection\] = React\.useState\('details'\)/)
   assert.match(SOURCE, /className: 'missions-drawer-tabs', role: 'tablist'/)
   assert.match(SOURCE, /'aria-selected': section === entry\.id \? 'true' : 'false'/)
-  assert.match(SOURCE, /'aria-controls': `missions-drawer-panel-\$\{entry\.id\}`/)
+  assert.match(SOURCE, /'aria-controls': section === entry\.id \? 'missions-drawer-panel' : undefined/)
   assert.match(SOURCE, /onClick: \(\) => setSection\(entry\.id\)/)
   assert.match(SOURCE, /role: 'tabpanel'/)
   assert.match(SOURCE, /'aria-labelledby': `missions-drawer-tab-\$\{section\}`/)
+  // Un seul panneau, un id stable : aucun aria-controls ne pointe dans le vide.
+  assert.match(SOURCE, /id: 'missions-drawer-panel'/)
+  // Journal et checklist défilent : leur panneau est atteignable au clavier.
+  assert.match(SOURCE, /tabIndex: section === 'details' \? undefined : 0/)
   // Les deux thèmes stylent la barre : le défaut et le manga.
   assert.match(SOURCE, /\.missions-drawer-tabs \{/)
   assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-tabs \{/)
   // Le panneau est déjà séparé par le trait des onglets : aucun bloc ne
   // rajoute une bordure haute, propriétés comprises.
   assert.match(SOURCE, /\.missions-drawer-panel \.missions-props, \.missions-drawer-panel \.missions-journal, \.missions-drawer-panel \.missions-checklist \{ padding-top: 0; border-top: 0; \}/)
-  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-panel \.missions-props,/)
+  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-panel \.missions-props \{ border-top: 0; \}/)
   // Un seul bloc à la fois : le panneau ne rend que la section active.
   assert.match(SOURCE, /const panelContent = section === 'journal' \? journalPanel : section === 'checklist' \? checklistPanel : detailsPanel/)
 })

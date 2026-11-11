@@ -316,7 +316,7 @@ window.__ModuleLoader__.load({
 .missions-drawer-tab { height: 30px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font: inherit; font-size: 11.5px; display: inline-flex; align-items: center; cursor: pointer; }
 .missions-drawer-tab:hover { color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-drawer-tab[aria-selected="true"] { color: var(--dsw-alias-label-primary, #1f1f1f); border-bottom-color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
-.missions-drawer-panel { display: flex; flex-direction: column; gap: 14px; }
+.missions-drawer-panel { display: flex; flex-direction: column; gap: 16px; }
 .missions-drawer-panel .missions-props, .missions-drawer-panel .missions-journal, .missions-drawer-panel .missions-checklist { padding-top: 0; border-top: 0; }
 .missions-props { display: grid; grid-template-columns: 96px 1fr; gap: 9px 12px; margin: 0; font-size: 12px; }
 .missions-props dt { color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -508,7 +508,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-drawer-tab { height: 32px; color: var(--mm-ink-3); font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .missions-panel[data-theme="manga"] .missions-drawer-tab:hover { color: var(--mm-ink); }
 .missions-panel[data-theme="manga"] .missions-drawer-tab[aria-selected="true"] { color: var(--mm-ink); border-bottom: 3px solid var(--mm-orange-deep); }
-.missions-panel[data-theme="manga"] .missions-drawer-panel .missions-props, .missions-panel[data-theme="manga"] .missions-drawer-panel .missions-journal, .missions-panel[data-theme="manga"] .missions-drawer-panel .missions-checklist { border-top: 0; }
+.missions-panel[data-theme="manga"] .missions-drawer-panel .missions-props { border-top: 0; }
 .missions-panel[data-theme="manga"] .missions-props { grid-template-columns: 92px 1fr; gap: 0 12px; border-top: 1.5px solid var(--mm-ink); }
 .missions-panel[data-theme="manga"] .missions-props dt, .missions-panel[data-theme="manga"] .missions-props dd { padding: 6px 0; border-bottom: 1px dashed var(--mm-line); }
 .missions-panel[data-theme="manga"] .missions-props dt { color: var(--mm-ink-3); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
@@ -516,11 +516,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-action { border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); color: var(--mm-ink); box-shadow: 2px 2px 0 var(--mm-shadow); font-size: 11.5px; }
 .missions-panel[data-theme="manga"] .missions-action--primary { background: var(--mm-ink); color: var(--mm-page); }
 .missions-panel[data-theme="manga"] .missions-drawer-note { padding: 6px 9px; border-left: 3px solid var(--mm-orange); background: color-mix(in srgb, var(--mm-orange) 12%, var(--mm-page)); color: var(--mm-ink-2); font-size: 10.5px; }
-.missions-panel[data-theme="manga"] .missions-journal { border-top: 1.5px solid var(--mm-line); }
 .missions-panel[data-theme="manga"] .missions-journal-meta { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-journal-text { border: 1.5px solid var(--mm-line); border-radius: 8px; background: var(--mm-page-2); color: var(--mm-ink-2); }
 .missions-panel[data-theme="manga"] .missions-journal-hint { color: var(--mm-ink-3); }
-.missions-panel[data-theme="manga"] .missions-checklist { border-top: 1.5px solid var(--mm-line); }
 .missions-panel[data-theme="manga"] .missions-checklist-meta { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-checklist-body { border: 1.5px solid var(--mm-line); border-radius: 8px; background: var(--mm-page-2); }
 .missions-panel[data-theme="manga"] .missions-checklist-title { color: var(--mm-ink); }
@@ -1025,7 +1023,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           className: 'missions-drawer-tab',
           id: `missions-drawer-tab-${entry.id}`,
           'aria-selected': section === entry.id ? 'true' : 'false',
-          'aria-controls': `missions-drawer-panel-${entry.id}`,
+          'aria-controls': section === entry.id ? 'missions-drawer-panel' : undefined,
           onClick: () => setSection(entry.id),
         }, entry.label)),
       )
@@ -1049,7 +1047,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           h('div', {
             className: 'missions-drawer-panel',
             role: 'tabpanel',
-            id: `missions-drawer-panel-${section}`,
+            id: 'missions-drawer-panel',
+            // Journal et checklist défilent : le panneau prend le focus pour
+            // qu'on puisse les parcourir au clavier. Details porte déjà des
+            // champs, il n'a pas besoin de ce relais.
+            tabIndex: section === 'details' ? undefined : 0,
             'aria-labelledby': `missions-drawer-tab-${section}`,
           }, panelContent),
 
