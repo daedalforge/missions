@@ -14,7 +14,9 @@ ticket le dit, et rien ne reste en suspens.
 3. **Supprimer la branche**, locale et distante.
 4. **Fermer l'epic s'il est complet** : si c'était la dernière mission de son
    milestone, fermer le milestone — GitHub ne le fait pas tout seul.
-5. **Noter les suites** : tickets créés pendant la mission, dette assumée,
+5. **Clore le journal** : y ajouter la section de clôture — lien du merge,
+   preuves après merge, suites.
+6. **Noter les suites** : tickets créés pendant la mission, dette assumée,
    décisions prises hors cadrage. Rien d'implicite.
 
 ## Condition de sortie — la mission est « terminée »
@@ -24,6 +26,7 @@ ticket le dit, et rien ne reste en suspens.
 - [ ] Le ticket est fermé avec le lien du merge.
 - [ ] La branche est supprimée (locale et distante).
 - [ ] Les suites éventuelles sont des tickets, pas des notes orales.
+- [ ] Le journal porte la clôture (merge, preuves, suites).
 
 ## Cas particuliers
 

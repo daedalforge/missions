@@ -36,7 +36,10 @@ déploiement, Connect son unique `Ready for prod` ; `Released` et `Done` restent
 « terminée ».
 
 Le tracker porte l'état. Rien dans le workspace ne le duplique : pas de fichier
-de statut, pas de tableau local, pas de journal d'avancement.
+de statut, pas de tableau local, pas de journal d'avancement. Le journal de
+mission, lui, garde le récit de la session — ce qui a été lu, décidé et prouvé —
+jamais l'état, qui reste celui du ticket (voir
+[`../missions/README.md`](../missions/README.md#journal-de-mission)).
 
 Sur GitHub, le tracker se limite à la liste des issues : **pas de board GitHub
 Projects**. Une mission est une issue, ses sous-étapes sont des critères

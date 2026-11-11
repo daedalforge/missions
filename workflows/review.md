@@ -11,6 +11,7 @@ contre les goûts du relecteur.
    effets de bord, cas d'erreur.
 3. **Le périmètre** : ce qui est dans la PR était dans le cadrage.
 4. **Les tests** : ils passent, et ils couvrent le comportement ajouté.
+5. **Le journal** : il dit la même chose que la PR — changements et preuves.
 
 ## Décisions possibles
 
@@ -26,6 +27,7 @@ contre les goûts du relecteur.
 - [ ] Chaque refus nomme ce qui manque et où.
 - [ ] La décision est écrite dans le ticket (approuvée / à reprendre / retour
       cadrage), avec la date.
+- [ ] Le journal porte la section de revue (décision, critères vérifiés).
 
 ## Ce qui n'est pas un motif de refus
 

@@ -140,18 +140,18 @@ test('attachBranches pose les valeurs déclarées et null pour les autres', () =
     { key: 'daedalforge/missions#41', title: 'Props' },
     { key: 'SO-1184', title: 'Autre' },
   ]
-  const index = new Map([['daedalforge/missions#41', { branch: 'gh-41', base: 'main' }]])
+  const index = new Map([['daedalforge/missions#41', { folder: 'MIS-41', branch: 'gh-41', base: 'main' }]])
 
   const attached = attachBranches(missions, index)
   assert.deepEqual(attached, [
-    { key: 'daedalforge/missions#41', title: 'Props', branch: 'gh-41', base: 'main' },
-    { key: 'SO-1184', title: 'Autre', branch: null, base: null },
+    { key: 'daedalforge/missions#41', title: 'Props', folder: 'MIS-41', branch: 'gh-41', base: 'main' },
+    { key: 'SO-1184', title: 'Autre', folder: null, branch: null, base: null },
   ])
   // La liste du tracker n'est pas modifiée en place.
   assert.equal(missions[0].branch, undefined)
   assert.deepEqual(attachBranches(missions), [
-    { key: 'daedalforge/missions#41', title: 'Props', branch: null, base: null },
-    { key: 'SO-1184', title: 'Autre', branch: null, base: null },
+    { key: 'daedalforge/missions#41', title: 'Props', folder: null, branch: null, base: null },
+    { key: 'SO-1184', title: 'Autre', folder: null, branch: null, base: null },
   ])
   assert.deepEqual(attachBranches(), [])
 })

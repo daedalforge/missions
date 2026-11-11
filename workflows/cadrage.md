@@ -24,6 +24,10 @@ moins cher et qui évite le plus de travail perdu.
    qui autorise la session d'exécution. Le panneau crée le dossier de la
    mission s'il manque ; le fichier reste local (ignoré par git), il n'est
    jamais commité.
+7. **Ouvrir le journal de mission** dans `missions/<dossier>/journal.md` : la
+   demande verbatim, les lectures, l'état relevé, les hypothèses et les points
+   ouverts (forme dans
+   [`../missions/README.md`](../missions/README.md#journal-de-mission)).
 
 ## Condition de sortie — la mission est « prête »
 
@@ -34,6 +38,7 @@ moins cher et qui évite le plus de travail perdu.
 - [ ] Aucun critère ne dépend d'une décision non tranchée.
 - [ ] Le plan d'exécution est écrit et tient en quelques étapes.
 - [ ] La branche et sa base sont déclarées dans `missions/<dossier>/mission.yml`.
+- [ ] Le journal est ouvert dans le dossier (demande, lectures, hypothèses, plan).
 - [ ] Le demandeur a validé — explicitement, dans le ticket.
 
 ## Signaux d'arrêt
