@@ -352,6 +352,9 @@ const DASH_MISSIONS = [
   { key: 'MIS-3', title: 'export CSV du planning', state: 'in-progress', project: 'socle', projectName: 'Socle', updatedAt: '2026-10-31T12:00:00Z', points: 5 },
   { key: 'MIS-4', title: 'densité compacte', state: 'in-progress', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-07T12:00:00Z', points: 3 },
   { key: 'MIS-5', title: 'statut non mappé', state: null, project: 'socle', projectName: 'Socle', updatedAt: '2026-11-05T12:00:00Z' },
+  // Une mission close ne doit ni s'afficher ni compter : le tracker ne devrait
+  // pas l'envoyer, mais la section ne dépend pas de cette promesse.
+  { key: 'MIS-6', title: 'mission close', state: 'done', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
 ]
 
 function dashboardView(missions, loading = false) {
@@ -383,6 +386,9 @@ test('le dashboard rend les deux cartes, une ligne par mission de la file', () =
   // Les verbes ne vivent que dans la file, et suivent l'état.
   const verbs = findAll(queue, 'span').filter((span) => span.props.className === 'missions-rowverb').map(textOf)
   assert.deepEqual(verbs, ['Review→', 'Start→', 'Open→'])
+
+  // Le nom accessible porte le verbe affiché, pas seulement la clé et l'âge.
+  assert.match(queueRows[1].props['aria-label'], /thème manga, 1 d, Start$/)
   assert.equal(findAll(flight, 'span').filter((span) => span.props.className === 'missions-rowverb').length, 0)
 
   // L'en-cours ne garde que les missions in-progress, la plus ancienne d'abord.

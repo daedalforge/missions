@@ -357,7 +357,7 @@ window.__ModuleLoader__.load({
 .missions-row[data-state="ready"] .missions-rowdot { background: #1a7f37; }
 .missions-row[data-state="to-refine"] .missions-rowdot { background: #8250df; }
 @media (prefers-reduced-motion: reduce) { .missions-sect-arrow, .missions-rowarrow { transition: none; } }
-@container (max-width: 680px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 820px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } }
 .missions-drawer { flex: none; width: 380px; max-width: 46%; display: flex; flex-direction: column; gap: 16px; padding: 16px 22px 24px; overflow: auto; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); animation: missions-slide .14s ease; }
 @keyframes missions-slide { from { opacity: 0 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
@@ -536,6 +536,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 .missions-panel[data-theme="manga"] .missions-sect { background: color-mix(in srgb, var(--mm-ink) 6%, transparent); }
 .missions-panel[data-theme="manga"] .missions-dash-card { background: var(--mm-page-2); border: 1.5px solid var(--mm-line-strong); border-radius: 11px; }
 .missions-panel[data-theme="manga"] .missions-dash-card-foot, .missions-panel[data-theme="manga"] .missions-rowitem { border-color: var(--mm-line); }
+.missions-panel[data-theme="manga"] .missions-rowage[data-quiet="true"] { color: #8a5a00; }
 .missions-panel[data-theme="manga"] .missions-row { font-family: var(--mm-display); }
 .missions-panel[data-theme="manga"] .missions-rowkey { font-family: var(--mm-mono); }
 .missions-panel[data-theme="manga"] .missions-row[data-state="in-review"] .missions-rowdot { background: var(--mm-sky-deep); }
@@ -684,6 +685,7 @@ body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
      */
     function DashboardRow({ mission, now, verb, onOpen }) {
       const age = missionAge(mission.updatedAt, now)
+      const verbLabel = verb ? actionVerb(mission.state) : ''
       return h('li', { className: 'missions-rowitem' },
         h('button', {
           type: 'button',
@@ -693,7 +695,7 @@ body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
           title: `Open ${mission.key}`,
           'aria-label': `${mission.key} ${mission.title}${age.label ? `, ${age.label}` : ''}${
             age.quiet ? ', not updated for a week' : ''
-          }`,
+          }${verbLabel ? `, ${verbLabel}` : ''}`,
         },
           h('span', { className: 'missions-rowdot', 'aria-hidden': 'true' }),
           h('span', { className: 'missions-rowkey' }, mission.key),
@@ -701,7 +703,7 @@ body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
           h('span', { className: 'missions-rowage', 'data-quiet': age.quiet ? 'true' : 'false' }, age.label),
           verb
             ? h('span', { className: 'missions-rowverb' },
-                actionVerb(mission.state),
+                verbLabel,
                 h('span', { className: 'missions-rowarrow', 'aria-hidden': 'true' }, '→'),
               )
             : null,
