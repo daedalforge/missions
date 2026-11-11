@@ -133,6 +133,10 @@ test('le volet découpe le détail en trois onglets', () => {
   // Les deux thèmes stylent la barre : le défaut et le manga.
   assert.match(SOURCE, /\.missions-drawer-tabs \{/)
   assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-tabs \{/)
+  // Le panneau est déjà séparé par le trait des onglets : aucun bloc ne
+  // rajoute une bordure haute, propriétés comprises.
+  assert.match(SOURCE, /\.missions-drawer-panel \.missions-props, \.missions-drawer-panel \.missions-journal, \.missions-drawer-panel \.missions-checklist \{ padding-top: 0; border-top: 0; \}/)
+  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-panel \.missions-props,/)
   // Un seul bloc à la fois : le panneau ne rend que la section active.
   assert.match(SOURCE, /const panelContent = section === 'journal' \? journalPanel : section === 'checklist' \? checklistPanel : detailsPanel/)
 })
