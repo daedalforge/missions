@@ -193,6 +193,10 @@ window.__ModuleLoader__.load({
       { id: 'missions', label: 'Missions' },
     ]
 
+    // What the tab state may hold: the ids the bar actually renders, so a
+    // stored tab that no longer exists falls back to the first one.
+    const TAB_IDS = TABS.map((entry) => entry.id)
+
     // The drawer keeps its own sections: the panel tabs above switch views, these
     // switch what a single mission shows. 'details' is the resting tab.
     const DRAWER_TABS = [
@@ -1274,7 +1278,9 @@ body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
       // order. Nothing outlives the app: session storage dies with the window.
       const [restored] = React.useState(() => filterBarState(readFilterSnapshot(filterStorage())))
       const [view, setView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
-      const [tab, setTab] = React.useState('missions')
+      // The open tab is remembered the same way, and opens on the dashboard:
+      // the panel lands on what waits, not on the list.
+      const [tab, setTab] = React.useState(() => readTab(filterStorage(), TAB_IDS))
       const [query, setQuery] = React.useState(restored.query)
       const [filters, setFilters] = React.useState(restored.filters)
       const [sort, setSort] = React.useState(restored.sort)
@@ -1285,6 +1291,11 @@ body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
       React.useEffect(() => {
         writeFilterSnapshot(filterStorage(), { query, filters, sort })
       }, [query, filters, sort])
+
+      // The resting tab drops its key, so an untouched session stores nothing.
+      React.useEffect(() => {
+        writeTab(filterStorage(), tab, TAB_IDS)
+      }, [tab])
 
       // The panel is remounted on every view switch: forcing a fresh read at
       // mount would pay the whole tracker round-trip on every return to
