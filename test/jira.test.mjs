@@ -42,13 +42,13 @@ function response(body, { status = 200 } = {}) {
   }
 }
 
-function issue(key, { status = 'In Progress', type = 'Story', parent = null, labels = [] } = {}) {
+function issue(key, { status = 'In Progress', type = 'Story', hierarchyLevel = 0, parent = null, labels = [] } = {}) {
   return {
     key,
     fields: {
       summary: `Mission ${key}`,
       status: { name: status },
-      issuetype: { name: type },
+      issuetype: { name: type, hierarchyLevel },
       priority: { name: 'High' },
       customfield_10016: 5,
       parent: parent ? { key: parent, fields: { summary: `Épic ${parent}` } } : undefined,
@@ -145,6 +145,34 @@ test('a Task issue is read as a story', async () => {
   const missions = await list(project, { fetchImpl })
 
   assert.equal(missions[0].type, 'story')
+})
+
+test('an epic is not a mission', async () => {
+  const fetchImpl = reading(async () =>
+    response({
+      issues: [
+        issue('SO-483', { type: 'Epic', hierarchyLevel: 1 }),
+        issue('SO-1208'),
+        issue('SO-1209', { type: 'Epic', hierarchyLevel: 2 }),
+      ],
+    }),
+  )
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.deepEqual(missions.map((m) => m.key), ['SO-1208'])
+})
+
+test('epics stay in the JQL: they are read, then dropped', async () => {
+  const calls = []
+  const fetchImpl = reading(async (url) => {
+    calls.push(String(url))
+    return response({ issues: [] })
+  })
+
+  await list(PROJECT, { fetchImpl })
+
+  assert.doesNotMatch(new URL(calls[0]).searchParams.get('jql'), /issuetype/)
 })
 
 test('a status outside the mapping leaves the state null', async () => {
