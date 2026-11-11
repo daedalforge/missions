@@ -92,7 +92,8 @@ base: main
 **Details** (propriétés et champs ci-dessous), **Journal** et **Checklist** —
 et les actions (ouvrir le ticket, démarrer une session) restent en pied de
 volet, sous les onglets. Journal et Checklist prennent la hauteur restante,
-du trait des onglets aux actions : c'est leur contenu qui défile, pas le
+du trait des onglets à la note de session ou à l'avertissement de blocage
+quand ils sont là, aux actions sinon : c'est leur contenu qui défile, pas le
 volet. Details garde le défilement du volet. L'onglet Details porte deux
 champs, « Branch » et
 « Base », et un bouton « Save ». L'enregistrement réutilise le dossier qui
