@@ -62,7 +62,7 @@ Chaque mission exécutable a **un dossier** sous `missions/`, avec un
 
 ```yaml
 key: MIS-41
-branch: mis-41
+branch: feat/mis-41
 base: main
 ```
 
