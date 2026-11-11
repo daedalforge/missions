@@ -231,6 +231,20 @@ const MISSION = {
   updated: '2026-11-11T10:00:00Z', folder: '/w/missions/MIS-42', branch: 'fix/mis-42', base: 'main',
 }
 
+test('le montage lit le cache ; seuls le bouton et le tick forcent', () => {
+  // Le panneau est remonté à chaque changement de vue : forcer au montage
+  // paierait tout le trajet tracker à chaque retour sur Missions. Le cache
+  // serveur de 60 s est lu ; le bouton Refresh et le tick de 60 s forcent.
+  assert.match(SOURCE, /const load = React\.useCallback\(\(\{ silent = false, refresh = false \} = \{\}\) => \{/)
+  assert.match(SOURCE, /const url = refresh \? `\$\{LIST_URL\}\?refresh=1` : LIST_URL/)
+  // Le montage appelle load() sans option ; le tick et le bouton forcent.
+  assert.match(SOURCE, /React\.useEffect\(\(\) => \{\n\s+load\(\)\n\s+const timer = setInterval/)
+  assert.match(SOURCE, /load\(\{ silent: true, refresh: true \}\)/)
+  assert.match(SOURCE, /onClick: \(\) => load\(\{ refresh: true \}\)/)
+  // Aucun autre appel ne force : le seul refresh=1 est derrière `refresh`.
+  assert.equal((SOURCE.match(/\?refresh=1/g) ?? []).length, 1)
+})
+
 test('un refresh affiche le loader de la vue, même avec des missions chargées', () => {
   // L'état de départ reproduit un clic sur Refresh : des missions déjà là et un
   // chargement en cours. Le loader remplace alors la liste, pas seulement le
@@ -256,7 +270,7 @@ test('le montage initial garde le loader et le polling reste silencieux', () => 
   // Seul un chargement non silencieux lève l'état de chargement : le timer de
   // 60 s recharge sans vider la liste ni afficher le loader.
   assert.match(SOURCE, /if \(!silent\) setView/)
-  assert.match(SOURCE, /load\(\{ silent: true \}\)/)
+  assert.match(SOURCE, /load\(\{ silent: true, refresh: true \}\)/)
   assert.doesNotMatch(SOURCE, /missions-btn-spinner/)
 })
 
