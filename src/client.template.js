@@ -267,7 +267,7 @@ window.__ModuleLoader__.load({
 .missions-search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; }
 .missions-search input::placeholder { color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.missions-select { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 11.5px; max-width: 300px; cursor: pointer; }
+.missions-select { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-secondary, #4a4a4a); font: inherit; font-size: 11.5px; max-width: 300px; cursor: pointer; }
 .missions-select-label { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
 .missions-select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .missions-select svg { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -1092,9 +1092,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   ),
                 )),
               ),
+              // « All states » is the absence of a filter, not the list of the
+              // states known today: a state that appears tomorrow must not be
+              // filtered out by a bar saved yesterday.
               h('div', { className: 'missions-status-actions' },
-                h('button', { type: 'button', onClick: () => choose(states) }, 'All'),
-                h('button', { type: 'button', onClick: () => onChange(null) }, 'None'),
+                h('button', { type: 'button', onClick: () => onChange(null) }, 'All states'),
               ),
             )
           : null,

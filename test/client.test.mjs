@@ -635,6 +635,34 @@ test('une carte qui tient en dix lignes n’a ni compte ni lien', () => {
   assert.match(textOf(findAll(flight, 'p').at(-1)), /8 pts in flight · oldest 11 d/)
 })
 
+test('dix lignes pile : la carte est pleine, mais complète', () => {
+  // Le plafond se joue à une ligne près : dix tient, onze déborde. Un `>=`
+  // dans `widgetFoot` ne se verrait que sur ce cas-là.
+  const missions = []
+  for (let index = 0; index < 10; index += 1) {
+    missions.push({
+      key: `T-${index}`,
+      title: `en cours ${index}`,
+      state: 'in-progress',
+      project: 'missions',
+      projectName: 'Missions',
+      points: 1,
+      updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString(),
+    })
+  }
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const flight = findAll(tree, 'article').at(-1)
+  const rows = findAll(flight, 'button').filter((button) => button.props['data-state'] === 'in-progress')
+
+  assert.equal(rows.length, 10, 'dix lignes rendues')
+  const links = findAll(flight, 'button').filter((button) => textOf(button).includes('View all'))
+  assert.equal(links.length, 0, 'aucun lien : la carte ne cache rien')
+  // Les points restent comptés sur la liste entière ; aucun reste à annoncer.
+  const foot = textOf(findAll(flight, 'p').at(-1))
+  assert.match(foot, /10 pts in flight/)
+  assert.doesNotMatch(foot, /more/)
+})
+
 test('le lien du widget ouvre la liste sur les états de la carte', () => {
   const missions = []
   for (let index = 0; index < 11; index += 1) {
