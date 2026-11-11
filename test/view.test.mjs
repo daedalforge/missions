@@ -165,15 +165,16 @@ test('un filtre actif est détecté, le type et le statut compris', () => {
   assert.equal(hasActiveFilters({ type: null, state: null, epic: null, priority: null, project: null, missing: 'any' }), true)
 })
 
-test('les groupes suivent l’ordre du workflow, l’attente de prod après la revue', () => {
+test('les groupes suivent l’ordre d’attention, l’inconnu en dernier', () => {
   const groupes = groupByState([
     ...MISSIONS,
+    { key: 'a#5', state: 'in-progress' },
     { key: 'a#6', state: 'ready-for-prod' },
     { key: 'a#4', state: null },
   ])
-  assert.deepEqual(groupes.map((g) => g.state), ['in-review', 'ready-for-prod', 'ready', 'to-refine', 'unknown'])
+  assert.deepEqual(groupes.map((g) => g.state), ['in-progress', 'in-review', 'ready', 'to-refine', 'ready-for-prod', 'unknown'])
   assert.equal(groupes[0].missions.length, 1)
-  assert.deepEqual(groupes[1].missions.map((m) => m.key), ['a#6'])
+  assert.deepEqual(groupes[4].missions.map((m) => m.key), ['a#6'])
 })
 
 test('l’âge relatif reste court et lisible', () => {
