@@ -185,11 +185,16 @@ test('l’âge relatif reste court et lisible', () => {
   assert.equal(relativeAge(null, now), '')
 })
 
-test('une session exige une branche et une base déclarées', () => {
+test('une session exige un état unique, une branche et une base déclarées', () => {
   assert.equal(executionBlocker({ branch: 'gh-41', base: 'main' }), null)
-  assert.equal(executionBlocker({ branch: 'gh-41' }), 'base branch is not declared')
-  assert.equal(executionBlocker({ base: 'main' }), 'branch is not declared')
-  assert.equal(executionBlocker({}), 'branch is not declared')
-  assert.equal(executionBlocker({ branch: null, base: null }), 'branch is not declared')
-  assert.equal(executionBlocker(), 'branch is not declared')
+  assert.equal(executionBlocker({ branch: 'gh-41', base: 'main', stateConflict: [] }), null)
+  assert.equal(
+    executionBlocker({ branch: 'gh-41', base: 'main', stateConflict: ['in-review', 'ready-for-prod'] }),
+    'state labels conflict (in-review, ready-for-prod), keep one',
+  )
+  assert.equal(executionBlocker({ branch: 'gh-41' }), 'base branch is not declared, set it below or in the mission folder')
+  assert.equal(executionBlocker({ base: 'main' }), 'branch is not declared, set it below or in the mission folder')
+  assert.equal(executionBlocker({}), 'branch is not declared, set it below or in the mission folder')
+  assert.equal(executionBlocker({ branch: null, base: null }), 'branch is not declared, set it below or in the mission folder')
+  assert.equal(executionBlocker(), 'branch is not declared, set it below or in the mission folder')
 })

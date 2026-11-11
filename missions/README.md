@@ -136,7 +136,10 @@ en revue, un bug peut être prêt.
 | `priority:urgent` · `priority:high` · `priority:normal` · `priority:low` | priorité, une seule par issue |
 | `sp:1` · `sp:2` · `sp:3` · `sp:5` · `sp:8` · `sp:13` | story points, un seul par issue |
 
-Une issue porte **un seul** type natif et **un seul** état. Fermer l'issue est
+Une issue porte **un seul** type natif et **un seul** état. Deux libellés d'état ne
+s'arbitrent pas : l'état devient indéterminé, le panneau le signale en erreur et la
+session de la mission reste bloquée jusqu'à ce qu'il n'en reste qu'un. Changer
+d'état, c'est poser le nouveau libellé en retirant l'ancien. Fermer l'issue est
 l'état terminé : il n'y a pas de libellé `done`. Un blocage se dit en commentaire, pas
 par un libellé. L'epic n'est pas un libellé : c'est un milestone.
 

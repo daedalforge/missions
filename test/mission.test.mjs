@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { firstKnown, invertMap, normalizeIssue } from '../lib/mission.js'
+import { firstKnown, invertMap, normalizeIssue, onlyKnown } from '../lib/mission.js'
 
 const PROJECT = {
   id: 'missions',
@@ -35,6 +35,18 @@ test('firstKnown keeps the first known value', () => {
   const inverse = invertMap(PROJECT.map)
   assert.equal(firstKnown(['urgent', 'ready', 'in-review'], inverse.states), 'ready')
   assert.equal(firstKnown(['urgent'], inverse.states), null)
+})
+
+test('onlyKnown returns the one value, or names the conflict', () => {
+  const inverse = invertMap(PROJECT.map)
+
+  assert.deepEqual(onlyKnown(['urgent', 'ready', 'sp:2'], inverse.states), { value: 'ready', conflict: [] })
+  assert.deepEqual(onlyKnown(['urgent', 'done'], inverse.states), { value: null, conflict: [] })
+  assert.deepEqual(onlyKnown([], inverse.states), { value: null, conflict: [] })
+  // The same label twice is not a conflict: only distinct states are.
+  assert.deepEqual(onlyKnown(['ready', 'ready'], inverse.states), { value: 'ready', conflict: [] })
+  assert.deepEqual(onlyKnown(['in-review', 'ready'], inverse.states), { value: null, conflict: ['in-review', 'ready'] })
+  assert.deepEqual(onlyKnown(['ready', 'in-review'], inverse.states), { value: null, conflict: ['in-review', 'ready'] })
 })
 
 test('an issue takes its state and type from the tracker vocabulary', () => {

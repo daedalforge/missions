@@ -125,6 +125,7 @@ test('Jira issues are normalized through the project map', async () => {
     number: null,
     title: 'Mission SO-1207',
     state: 'in-progress',
+    stateConflict: [],
     type: 'story',
     priority: 'high',
     points: 5,

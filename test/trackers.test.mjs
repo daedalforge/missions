@@ -5,7 +5,14 @@ import { clearCache, listAll } from '../lib/trackers/index.js'
 import { forgetToken as forgetJiraToken } from '../lib/trackers/jira.js'
 
 const MAP = {
-  states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
+  states: {
+    'to-refine': 'to-refine',
+    ready: 'ready',
+    'in-progress': 'in-progress',
+    'in-review': 'in-review',
+    'ready-for-prod': 'ready-for-prod',
+    done: null,
+  },
   types: { bug: 'Bug', story: 'Feature' },
 }
 
@@ -111,6 +118,27 @@ test('a mission in the done state is not listed', async () => {
   const { missions } = await listAll([PROJECT_JIRA], { fetchImpl })
 
   assert.deepEqual(missions.map((m) => m.key), ['SO-2'])
+})
+
+test('two state labels leave the state unknown and raise a project error', async () => {
+  const fetchImpl = routeIssues([
+    {
+      number: 7,
+      title: 'Ambiguous',
+      labels: [{ name: 'in-review' }, { name: 'ready-for-prod' }],
+      type: { name: 'Feature' },
+    },
+  ])
+
+  const { missions, errors } = await listAll([PROJECT_OK], { fetchImpl })
+
+  assert.equal(missions[0].state, null)
+  assert.deepEqual(missions[0].stateConflict, ['in-review', 'ready-for-prod'])
+  assert.equal(errors.length, 1)
+  assert.equal(errors[0].project, 'missions')
+  assert.match(errors[0].message, /MIS-7/)
+  assert.match(errors[0].message, /in-review/)
+  assert.match(errors[0].message, /ready-for-prod/)
 })
 
 test('GitHub and Jira share the same list', async () => {

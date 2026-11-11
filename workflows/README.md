@@ -71,3 +71,6 @@ périmètre retourne en cadrage — mais jamais sauter une étape.
    devient un ticket, pas un commit supplémentaire.
 6. **Le demandeur valide le cadrage.** Sans validation explicite, la mission
    reste à l'état « prête » ou « à cadrer ».
+7. **Un seul état par mission.** Une issue porte exactement un libellé d'état.
+   Plusieurs laissent l'état indéterminé et bloquent le passage à l'étape
+   suivante : on retire l'ancien libellé en posant le nouveau.

@@ -85,6 +85,10 @@ test('le volet déclare la branche et la base, et bloque sans elles', () => {
   // valeurs de la mission précédente dans la suivante.
   assert.match(SOURCE, /h\(MissionDrawer, \{ key: selected\.key, mission: selected/)
   assert.match(SOURCE, /local only, nothing to commit/)
+  // Un conflit d'états bloque la session : le volet doit le dire, et la note ne
+  // renvoie plus au dossier pour un état qu'aucun formulaire ne corrige.
+  assert.match(SOURCE, /state labels conflict/)
+  assert.match(SOURCE, /Session blocked: \$\{blocker\}\./)
   assert.match(SOURCE, /role: declareNote\.error \? 'alert' : 'status'/)
   assert.match(SOURCE, /onSaved\?\.\(data\)/)
   assert.match(SOURCE, /function executionBlocker\(mission = \{\}\)/)
