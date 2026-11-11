@@ -4,6 +4,10 @@ Un seul parcours, le même pour toutes les missions : **cadrage → exécution �
 revue → clôture**. Ce qui change d'un projet à l'autre est le tracker, pas le
 workflow.
 
+Une session joue une seule étape : elle s'arrête à sa sortie, et l'étape suivante
+se joue dans une nouvelle session. Le prompt du panneau nomme l'étape du statut
+courant, et le bouton qui l'ouvre la nomme aussi.
+
 ```
   à cadrer ──▶ prête ──▶ en cours ──▶ en revue ──▶ prête à partir ──▶ terminée
       │           │          │            │              │

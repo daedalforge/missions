@@ -212,6 +212,19 @@ test('le prompt de session interdit le merge et l’écriture sur main', () => {
   assert.match(SOURCE, /les gestes du demandeur/)
 })
 
+test('le prompt de session nomme l’étape en cours, pas la chaîne entière', () => {
+  assert.match(SOURCE, /const step = missionStep\(mission\)/)
+  assert.match(SOURCE, /Étape en cours : \$\{step\} \(statut \$\{mission\.state\}\)/)
+  assert.match(SOURCE, /Chaque étape se joue dans une nouvelle session/)
+  // La chaîne complète invitait une session à courir plusieurs étapes.
+  assert.doesNotMatch(SOURCE, /Suis le workflow du workspace/)
+})
+
+test('le bouton de session nomme l’étape courante', () => {
+  assert.match(SOURCE, /const sessionLabel = step \? `Start a session — \$\{step\}` : 'Start a session'/)
+  assert.match(SOURCE, /\}, sessionLabel\)/)
+})
+
 test('le volet lit le journal de mission, sans dépendance de rendu', () => {
   assert.match(SOURCE, /const JOURNAL_URL = 'missions\/api\/journal'/)
   // L'onglet s'appelle Journal : la section ne répète pas le titre, elle garde

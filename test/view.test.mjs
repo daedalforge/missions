@@ -20,6 +20,9 @@ import {
   parseChecklist,
   dashboardScope,
   executionBlocker,
+  missionStep,
+  STEP_BRIEFS,
+  STEP_BY_STATE,
   FILTERS_KEY,
   filterBarState,
   filterMissions,
@@ -271,6 +274,23 @@ test('une session exige un état unique, une branche et une base déclarées', (
   assert.equal(executionBlocker({}), 'branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker({ branch: null, base: null }), 'branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker(), 'branch is not declared, set it below or in the mission folder')
+})
+
+test('chaque statut nomme l’étape de son workflow, et done n’en a pas', () => {
+  assert.equal(missionStep({ state: 'to-refine' }), 'cadrage')
+  assert.equal(missionStep({ state: 'ready' }), 'exécution')
+  // La revue renvoie en in-progress : c'est encore l'exécution qu'on reprend.
+  assert.equal(missionStep({ state: 'in-progress' }), 'exécution')
+  assert.equal(missionStep({ state: 'in-review' }), 'revue')
+  assert.equal(missionStep({ state: 'ready-for-prod' }), 'clôture')
+  assert.equal(missionStep({ state: 'done' }), null)
+  // Un statut hors des six états ne joue aucune étape : la session relit le ticket.
+  assert.equal(missionStep({ state: 'blocked' }), null)
+  assert.equal(missionStep({}), null)
+  // Chaque étape a son brief : le prompt ne retombe jamais sur du vide.
+  for (const step of Object.values(STEP_BY_STATE)) {
+    assert.ok(STEP_BRIEFS[step], `brief missing for ${step}`)
+  }
 })
 
 test('le nom de branche suggéré suit le type et la clé de la mission', () => {
