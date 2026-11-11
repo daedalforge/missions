@@ -83,6 +83,7 @@ test('issues are normalized and pull requests dropped', async () => {
     number: 2,
     title: 'Mission 2',
     state: 'ready',
+    stateConflict: [],
     type: 'story',
     priority: 'high',
     points: 3,
@@ -102,6 +103,23 @@ test('a ready-for-prod label is read as its own state', async () => {
   assert.equal(missions[0].state, 'ready-for-prod')
   assert.equal(missions[0].priority, 'normal')
   assert.equal(missions[0].points, 2)
+})
+
+test('two state labels leave the state unknown instead of picking one', async () => {
+  const fetchImpl = route(async () =>
+    response([
+      issue(4, { labels: ['in-review', 'ready-for-prod'] }),
+      issue(5, { labels: ['ready-for-prod', 'in-review'] }),
+    ]),
+  )
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.deepEqual(missions.map((m) => m.state), [null, null])
+  assert.deepEqual(missions.map((m) => m.stateConflict), [
+    ['in-review', 'ready-for-prod'],
+    ['in-review', 'ready-for-prod'],
+  ])
 })
 
 test('pagination follows the Link header', async () => {

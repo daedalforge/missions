@@ -880,7 +880,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
           ),
 
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
-          blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}. Declare it below, or in the mission's folder.`) : null,
+          blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}.`) : null,
 
           h('div', { className: 'missions-drawer-actions' },
             mission.url
