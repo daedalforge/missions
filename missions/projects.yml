@@ -21,9 +21,10 @@
 # Champs d'un projet :
 #   id         identifiant court du workspace (minuscules)
 #   name       nom lisible
-#   reference  référence courte, en majuscules et unique entre projets : elle
-#              préfixe les clés de mission (MIS-52) et les epics (MIS-1 · …) ;
-#              côté Jira, c'est aussi la clé du projet interrogé par la JQL
+#   reference  référence courte obligatoire, en majuscules et unique entre
+#              projets : elle préfixe les clés de mission (MIS-52) et les
+#              epics (MIS-1 · …) ; côté Jira, c'est aussi la clé du projet
+#              interrogé par la JQL
 #   repo       chemin du clone sur le poste
 #   tracker    jira | github
 #   jira       site, cloud_id (facultatif, résolu depuis le site sinon), adresse

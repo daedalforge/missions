@@ -59,8 +59,12 @@ base: main
 ```
 
 - **`key` fait foi** : c'est lui qui relie le fichier à la mission du tracker
-  (`MIS-52` ou clé Jira). Le nom du dossier est libre ; le panneau le crée à
-  partir du slug de la clé (`mis-41`).
+  (`MIS-52` ou clé Jira). Le nom du dossier est libre ; quand il manque, le
+  panneau le crée à partir de la clé en remplaçant les caractères non
+  alphanumériques par des tirets (`MIS-41`, `daedalforge-missions-41`). La
+  correspondance est exacte : après le passage à `MIS-n`, une déclaration
+  restée sur l'ancienne clé `daedalforge/missions#n` ne correspond plus à la
+  mission ; renommer `key` dans le fichier (le dossier peut garder son nom).
 - **Pas de session sans les deux** : un dossier absent, ou un champ manquant,
   laisse `branch`/`base` vides ; le volet de détail laisse alors les champs
   vides et désactive « Start a session » plutôt que de supposer une branche.
@@ -76,9 +80,9 @@ base: main
 
 **Depuis le panneau** : le volet de détail porte deux champs, « Branch » et
 « Base », et un bouton « Save ». L'enregistrement réutilise le dossier qui
-déclare déjà la clé, ou le crée (`missions/<slug de la clé>/`), et n'écrit que
-ce `mission.yml` — la clé et le dossier ne s'éditent pas à la main ; un champ
-vidé disparaît du fichier.
+déclare déjà la clé, ou le crée (`missions/<nom dérivé de la clé>/`), et
+n'écrit que ce `mission.yml` — la clé et le dossier ne s'éditent pas à la main ;
+un champ vidé disparaît du fichier.
 
 **Jamais versionné** : `missions/*/` est ignoré par git. Une déclaration reste
 locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
