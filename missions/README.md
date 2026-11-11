@@ -187,9 +187,9 @@ n'y a pas d'engagement de date : un epic est thématique, pas calendaire.
 ## Libellés GitHub
 
 Une issue porte **un type** natif et **un état** en libellé. Le type dit la
-nature du travail — `Bug` ou `Feature` sur GitHub, `Bug` ou `Story` sur Jira —,
-l'état dit où en est la mission. Les deux sont indépendants : une story peut être
-en revue, un bug peut être prêt.
+nature du travail — `Bug` ou `Feature` sur GitHub, `Bug`, `Story` ou `Task` sur
+Jira —, l'état dit où en est la mission. Les deux sont indépendants : une story
+peut être en revue, un bug peut être prêt.
 
 | Libellé | Rôle |
 |---|---|
