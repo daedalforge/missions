@@ -81,8 +81,9 @@ base: main
 **Depuis le panneau** : le volet de détail porte deux champs, « Branch » et
 « Base », et un bouton « Save ». L'enregistrement réutilise le dossier qui
 déclare déjà la clé, ou le crée (`missions/<nom dérivé de la clé>/`), et
-n'écrit que ce `mission.yml` — la clé et le dossier ne s'éditent pas à la main ;
-un champ vidé disparaît du fichier.
+n'écrit que ce `mission.yml`. Le panneau n'édite ni la clé ni le nom du dossier ;
+pour une migration de clé, on modifie `key` dans le fichier. Un champ vidé
+disparaît du fichier.
 
 **Jamais versionné** : `missions/*/` est ignoré par git. Une déclaration reste
 locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
