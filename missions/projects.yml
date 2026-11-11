@@ -19,18 +19,21 @@
 #     rabattu sur un voisin.
 #
 # Champs d'un projet :
-#   id       identifiant court du workspace (minuscules)
-#   name     nom lisible
-#   repo     chemin du clone sur le poste
-#   tracker  jira | github
-#   jira     site, cloud_id (facultatif, résolu depuis le site sinon), préfixe
-#            des clés, adresse du compte et champ des story points (tracker:
-#            jira) ; l'API passe par la passerelle api.atlassian.com, seule à
-#            accepter les jetons « scoped » ;
-#            le jeton vient du Trousseau (service « atlassian-token ») ou de
-#            JIRA_API_TOKEN, jamais de ce fichier
-#   github   owner et repo du dépôt distant (tracker: github)
-#   map      correspondance canonique -> tracker (obligatoire)
+#   id         identifiant court du workspace (minuscules)
+#   name       nom lisible
+#   reference  référence courte obligatoire, en majuscules et unique entre
+#              projets : elle préfixe les clés de mission (MIS-52) et les
+#              epics (MIS-1 · …) ; côté Jira, c'est aussi la clé du projet
+#              interrogé par la JQL
+#   repo       chemin du clone sur le poste
+#   tracker    jira | github
+#   jira       site, cloud_id (facultatif, résolu depuis le site sinon), adresse
+#              du compte et champ des story points (tracker: jira) ; l'API passe
+#              par la passerelle api.atlassian.com, seule à accepter les jetons
+#              « scoped » ; le jeton vient du Trousseau (service
+#              « atlassian-token ») ou de JIRA_API_TOKEN, jamais de ce fichier
+#   github     owner et repo du dépôt distant (tracker: github)
+#   map        correspondance canonique -> tracker (obligatoire)
 #
 # Trois projets sont déclarés. Les `map` de `manager` et `connect` ont été
 # relevés sur le site (voir le commentaire au-dessus de chaque entrée) : ils ne
@@ -58,6 +61,7 @@ products:
 projects:
   - id: missions
     name: Workspace missions
+    reference: MIS
     repo: ~/projects/missions
     tracker: github
     github:
@@ -86,12 +90,12 @@ projects:
   # reste inconnu, plutôt que d'être confondu avec `done`.
   - id: manager
     name: Manager
+    reference: SO
     repo: ~/projects/Manager
     tracker: jira
     jira:
       site: https://saas-office.atlassian.net
       cloud_id: 1e424f0c-65f2-4aab-aa05-ba0d359fa1f0
-      key_prefix: SO
       email: stephane.lucien-vauthier@saas-office.com
       story_points_field: customfield_10032
     map:
@@ -116,12 +120,12 @@ projects:
   # pas `done` ; `Done` seul ferme la mission.
   - id: connect
     name: Connect
+    reference: SOC
     repo: ~/projects/Connect
     tracker: jira
     jira:
       site: https://saas-office.atlassian.net
       cloud_id: 1e424f0c-65f2-4aab-aa05-ba0d359fa1f0
-      key_prefix: SOC
       email: stephane.lucien-vauthier@saas-office.com
       story_points_field: customfield_10032
     map:

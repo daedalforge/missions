@@ -6,6 +6,7 @@ import { forgetToken, list } from '../lib/trackers/github.js'
 const PROJECT = {
   id: 'missions',
   name: 'Workspace missions',
+  reference: 'MIS',
   tracker: 'github',
   github: { owner: 'daedalforge', repo: 'missions' },
   map: {
@@ -71,14 +72,14 @@ test('issues are normalized and pull requests dropped', async () => {
   assert.deepEqual(missions[0], {
     project: 'missions',
     projectName: 'Workspace missions',
-    key: 'daedalforge/missions#2',
+    key: 'MIS-2',
     number: 2,
     title: 'Mission 2',
     state: 'ready',
     type: 'story',
     priority: 'high',
     points: 3,
-    epic: '#1 · Workspace',
+    epic: 'MIS-1 · Workspace',
     url: 'https://github.com/daedalforge/missions/issues/2',
     updatedAt: '2026-11-10T10:00:00Z',
   })
@@ -130,4 +131,23 @@ test('an exhausted rate limit gives the retry time', async () => {
 test('a project without owner or repo is rejected', async () => {
   const withoutRepo = { ...PROJECT, github: {} }
   await assert.rejects(() => list(withoutRepo, { fetchImpl: async () => response([]) }), /owner and repo/)
+})
+
+test('a project without a reference is rejected', async () => {
+  const { reference: _ignored, ...withoutReference } = PROJECT
+  await assert.rejects(
+    () => list(withoutReference, { fetchImpl: async () => response([]) }),
+    /reference is required/,
+  )
+})
+
+test('two projects may share a milestone number: the reference disambiguates the epic', async () => {
+  const fetchImpl = route(async () => response([issue(2, { milestone: { number: 1, title: 'Workspace' } })]))
+  const other = { ...PROJECT, id: 'other', name: 'Other', reference: 'OTH' }
+
+  const [mine] = await list(PROJECT, { fetchImpl })
+  const [theirs] = await list(other, { fetchImpl })
+
+  assert.equal(mine.epic, 'MIS-1 · Workspace')
+  assert.equal(theirs.epic, 'OTH-1 · Workspace')
 })

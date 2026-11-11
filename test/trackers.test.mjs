@@ -11,6 +11,7 @@ const MAP = {
 
 const PROJECT_OK = {
   id: 'missions',
+  reference: 'MIS',
   tracker: 'github',
   github: { owner: 'daedalforge', repo: 'missions' },
   map: MAP,
@@ -25,8 +26,9 @@ const PROJECT_BROKEN = {
 
 const PROJECT_JIRA = {
   id: 'manager',
+  reference: 'SO',
   tracker: 'jira',
-  jira: { site: 'https://example.atlassian.net', cloud_id: 'cloud-1', key_prefix: 'SO', email: 'me@example.test' },
+  jira: { site: 'https://example.atlassian.net', cloud_id: 'cloud-1', email: 'me@example.test' },
   map: {
     states: { 'to-refine': 'To Do', ready: 'Ready', 'in-progress': 'In Progress', 'in-review': 'In Review', done: 'Done' },
     types: { bug: 'Bug', story: 'Story' },
@@ -62,7 +64,7 @@ test('a failing project does not prevent the others from being read', async () =
   const { missions, errors } = await listAll([PROJECT_BROKEN, PROJECT_OK], { fetchImpl })
 
   assert.equal(missions.length, 1)
-  assert.equal(missions[0].key, 'daedalforge/missions#2')
+  assert.equal(missions[0].key, 'MIS-2')
   assert.equal(errors.length, 1)
   assert.equal(errors[0].project, 'broken')
   assert.match(errors[0].message, /owner and repo/)
@@ -115,6 +117,6 @@ test('GitHub and Jira share the same list', async () => {
   const { missions, errors } = await listAll([PROJECT_OK, PROJECT_JIRA], { fetchImpl })
 
   assert.equal(errors.length, 0)
-  assert.deepEqual(missions.map((m) => m.key).sort(), ['SO-1207', 'daedalforge/missions#2'])
+  assert.deepEqual(missions.map((m) => m.key).sort(), ['MIS-2', 'SO-1207'])
   assert.deepEqual(missions.map((m) => m.project).sort(), ['manager', 'missions'])
 })

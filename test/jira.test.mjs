@@ -6,11 +6,11 @@ import { forgetToken, list } from '../lib/trackers/jira.js'
 const PROJECT = {
   id: 'manager',
   name: 'Manager',
+  reference: 'SO',
   tracker: 'jira',
   jira: {
     site: 'https://example.atlassian.net',
     cloud_id: 'cloud-1',
-    key_prefix: 'SO',
     email: 'me@example.test',
   },
   map: {
@@ -80,6 +80,7 @@ test('the JQL is scoped to the current assignee', async () => {
   await list(PROJECT, { fetchImpl })
 
   const jql = decodeURIComponent(calls[0]).replaceAll('+', ' ')
+  assert.match(jql, /project = "SO"/)
   assert.match(jql, /assignee = currentUser\(\)/)
 })
 
@@ -187,14 +188,15 @@ test('an invalid token raises before any search, naming the token', async () => 
   assert.match(calls[0], /\/myself$/)
 })
 
-test('a project without site or prefix is rejected', async () => {
+test('a project without site or reference is rejected', async () => {
   await assert.rejects(
-    () => list({ ...PROJECT, jira: { key_prefix: 'SO' } }, { fetchImpl: async () => response({}) }),
+    () => list({ ...PROJECT, jira: {} }, { fetchImpl: async () => response({}) }),
     /jira\.site/,
   )
+  const { reference: _ignored, ...withoutReference } = PROJECT
   await assert.rejects(
-    () => list({ ...PROJECT, jira: { site: 'https://x' } }, { fetchImpl: async () => response({}) }),
-    /key_prefix/,
+    () => list({ ...withoutReference, jira: { site: 'https://x' } }, { fetchImpl: async () => response({}) }),
+    /reference is required/,
   )
 })
 

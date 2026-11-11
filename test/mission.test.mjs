@@ -41,7 +41,7 @@ test('an issue takes its state and type from the tracker vocabulary', () => {
   const inverse = invertMap(PROJECT.map)
   const mission = normalizeIssue({
     project: PROJECT,
-    key: 'daedalforge/missions#2',
+    key: 'MIS-2',
     number: 2,
     title: 'The panel reads every project independently',
     rawState: 'ready',
@@ -53,7 +53,7 @@ test('an issue takes its state and type from the tracker vocabulary', () => {
     inverse,
   })
 
-  assert.equal(mission.key, 'daedalforge/missions#2')
+  assert.equal(mission.key, 'MIS-2')
   assert.equal(mission.state, 'ready')
   assert.equal(mission.type, 'story')
   assert.equal(mission.epic, 'Workspace')
@@ -65,7 +65,7 @@ test('an unknown state stays null instead of being guessed', () => {
   const inverse = invertMap(PROJECT.map)
   const mission = normalizeIssue({
     project: PROJECT,
-    key: 'daedalforge/missions#3',
+    key: 'MIS-3',
     title: 'no state',
     rawState: 'urgent',
     rawType: null,
