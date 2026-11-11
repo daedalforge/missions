@@ -1082,8 +1082,19 @@ test('le blocage écrit par la route de l’hôte, jamais vers le tracker', () =
   assert.match(SOURCE, /if \(next && !message\) return/)
 })
 
-test('une mission bloquée se signale sur sa carte', () => {
-  assert.match(SOURCE, /mission\.blocked \? h\('span', \{ className: 'missions-blocked-badge'/)
+test('une carte bloquée se teinte entièrement et porte un cadenas, sans mot', () => {
+  // Plus visuel que textuel (retour du demandeur) : la carte entière prend la
+  // teinte, le cadenas porte le sens, le mot ne vit plus que dans l'infobulle.
+  assert.match(SOURCE, /'data-blocked': mission\.blocked \? 'true' : 'false'/)
+  assert.match(SOURCE, /className: 'missions-lock'/)
+  assert.match(SOURCE, /'aria-label': 'Bloqué'/)
+  assert.ok(!/missions-blocked-badge/.test(SOURCE), 'la pastille textuelle a disparu')
+  assert.match(regle('.missions-card[data-blocked="true"]'), /background: color-mix/)
+  assert.match(regle('.missions-lock'), /border-radius: 999px/)
+  assert.match(
+    regle('.missions-panel[data-theme="manga"] .missions-card[data-blocked="true"]'),
+    /border-color: var\(--mm-coral-deep\)/,
+  )
 })
 
 test('le volet bloque avec un champ de raison et un bouton désarmé sans raison', () => {
