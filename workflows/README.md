@@ -27,7 +27,7 @@ ci-dessous en donne la forme courante pour les deux trackers.
 | **en cours** | In Progress | label `in-progress`, branche poussée |
 | **en revue** | In Review | label `in-review`, PR ouverte |
 | **prête à partir** | `Ready for prod` (Manager : `Local Testing`, `Staging Test`) | label `ready-for-prod` |
-| **terminée** | Done | PR mergée, issue fermée |
+| **terminée** | `Released` (Manager), `Done` (Connect) | PR mergée, issue fermée |
 
 L'état **prête à partir** est posé par la revue, pas par l'exécution : la PR est
 approuvée, la mission n'est pas encore livrée. Sur Jira, plusieurs statuts
