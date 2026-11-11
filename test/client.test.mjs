@@ -353,6 +353,9 @@ test('chaque carte porte un repère de priorité qui se lit sans la couleur', ()
   assert.ok(SOURCE.includes('.prio-none { fill: none; stroke: currentColor; stroke-width: 1.25; stroke-dasharray: 2.4 2; }'))
   assert.ok(SOURCE.includes('body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data-priority="high"] { color: var(--mm-orange); }'))
   assert.ok(!SOURCE.includes('.missions-prio[data-priority="none"] { opacity: .55; }'))
+  // Le remplissage est la seule chose qui rend les barres visibles : sans lui
+  // elles prennent le noir par défaut et disparaissent en thème sombre.
+  assert.ok(SOURCE.includes('.missions-prio .prio-bar, .missions-prio .prio-mark { fill: currentColor; }'))
 })
 
 test('le montage lit le cache ; seuls le bouton et le tick forcent', () => {
