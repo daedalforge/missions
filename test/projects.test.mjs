@@ -20,7 +20,7 @@ async function writeProjects(projects) {
 test('the workspace file declares its projects, complete', async () => {
   const { canonical, products, projects } = await loadProjects()
 
-  assert.deepEqual(canonical.states, ['to-refine', 'ready', 'in-progress', 'in-review', 'done'])
+  assert.deepEqual(canonical.states, ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'])
   assert.deepEqual(canonical.types, ['bug', 'story'])
   assert.deepEqual(canonical.priorities, ['urgent', 'high', 'normal', 'low'])
   assert.deepEqual(products, {
@@ -42,6 +42,7 @@ test('the workspace file declares its projects, complete', async () => {
   assert.equal(missions.github.repo, 'missions')
   assert.equal(missions.map.states.done, null)
   assert.equal(missions.map.states.ready, 'ready')
+  assert.equal(missions.map.states['ready-for-prod'], 'ready-for-prod')
   assert.equal(missions.map.types.story, 'Feature')
   assert.equal(missions.map.priorities.urgent, 'priority:urgent')
   assert.equal(missions.map.points, 'sp:')
@@ -50,8 +51,9 @@ test('the workspace file declares its projects, complete', async () => {
   assert.equal(manager.reference, 'SO')
   assert.equal(manager.jira.site, 'https://saas-office.atlassian.net')
   assert.equal(manager.jira.story_points_field, 'customfield_10032')
-  assert.deepEqual(manager.map.states['in-progress'], ['In Progress', 'Local Testing', 'Staging Test'])
-  assert.deepEqual(manager.map.states.done, ['Released', 'Ready for prod'])
+  assert.deepEqual(manager.map.states['in-progress'], ['In Progress'])
+  assert.deepEqual(manager.map.states['ready-for-prod'], ['Local Testing', 'Staging Test', 'Ready for prod'])
+  assert.deepEqual(manager.map.states.done, ['Released'])
   assert.deepEqual(manager.map.labels, products)
   assert.equal(manager.map.types.story, 'Story')
 
@@ -62,8 +64,9 @@ test('the workspace file declares its projects, complete', async () => {
   assert.equal(connect.jira.story_points_field, 'customfield_10032')
   assert.deepEqual(connect.map.states['to-refine'], ['To Refine', 'Inbox'])
   assert.equal(connect.map.states.ready, 'Ready for dev')
-  assert.deepEqual(connect.map.states['in-progress'], ['In Progress', 'Ready for prod'])
+  assert.deepEqual(connect.map.states['in-progress'], ['In Progress'])
   assert.equal(connect.map.states['in-review'], 'Code review')
+  assert.equal(connect.map.states['ready-for-prod'], 'Ready for prod')
   assert.equal(connect.map.states.done, 'Done')
   assert.equal(connect.map.types.story, 'Story')
 })

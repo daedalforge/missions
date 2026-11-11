@@ -7,7 +7,8 @@ ticket le dit, et rien ne reste en suspens.
 
 1. **Merger la PR** dans la branche principale du projet, selon la méthode du
    projet (merge, squash, rebase) — le résultat doit rester lisible dans
-   l'historique.
+   l'historique. C'est ce merge qui fait passer la mission de « prête à
+   partir » à « terminée ».
 2. **Fermer le ticket** en y déposant les preuves : liste des critères cochés,
    lien du merge, ce qui a changé pour l'utilisateur.
 3. **Supprimer la branche**, locale et distante.
@@ -36,6 +37,6 @@ ticket le dit, et rien ne reste en suspens.
 
 | Geste | Jira | GitHub |
 |---|---|---|
-| Merger | transition Done après merge | merge de la PR (`Closes #<numéro>`) |
+| Merger | transition `Done` (ou `Released`) après merge | merge de la PR (`Closes #<numéro>`) |
 | Fermer | statut Done, commentaire de clôture | issue fermée automatiquement ou à la main |
 | Nettoyer | lien branche supprimée | branche supprimée, PR archivée |

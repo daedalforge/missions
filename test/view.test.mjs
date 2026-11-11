@@ -91,6 +91,10 @@ test('les statuts proposés suivent l’ordre du workflow, unknown en dernier', 
     { key: 'a#6', state: null },
   ]
   assert.deepEqual(stateOptions(withMore), ['to-refine', 'ready', 'in-review', 'done', 'unknown'])
+  assert.deepEqual(
+    stateOptions([...withMore, { key: 'a#7', state: 'ready-for-prod' }]),
+    ['to-refine', 'ready', 'in-review', 'ready-for-prod', 'done', 'unknown'],
+  )
   assert.deepEqual(stateOptions([]), [])
 })
 
@@ -157,10 +161,16 @@ test('un filtre actif est détecté, le type et le statut compris', () => {
   assert.equal(hasActiveFilters({ type: null, state: null, epic: null, priority: null, project: null, missing: 'any' }), true)
 })
 
-test('les groupes suivent l’ordre du workflow, done puis l’inconnu en dernier', () => {
-  const groupes = groupByState([...MISSIONS, { key: 'a#5', state: 'done' }, { key: 'a#4', state: null }])
-  assert.deepEqual(groupes.map((g) => g.state), ['in-review', 'ready', 'to-refine', 'done', 'unknown'])
+test('les groupes suivent l’ordre du workflow, l’attente de prod après la revue', () => {
+  const groupes = groupByState([
+    ...MISSIONS,
+    { key: 'a#5', state: 'done' },
+    { key: 'a#6', state: 'ready-for-prod' },
+    { key: 'a#4', state: null },
+  ])
+  assert.deepEqual(groupes.map((g) => g.state), ['in-review', 'ready-for-prod', 'ready', 'to-refine', 'done', 'unknown'])
   assert.equal(groupes[0].missions.length, 1)
+  assert.deepEqual(groupes[1].missions.map((m) => m.key), ['a#6'])
 })
 
 test('l’âge relatif reste court et lisible', () => {

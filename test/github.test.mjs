@@ -10,7 +10,14 @@ const PROJECT = {
   tracker: 'github',
   github: { owner: 'daedalforge', repo: 'missions' },
   map: {
-    states: { 'to-refine': 'to-refine', ready: 'ready', 'in-progress': 'in-progress', 'in-review': 'in-review', done: null },
+    states: {
+      'to-refine': 'to-refine',
+      ready: 'ready',
+      'in-progress': 'in-progress',
+      'in-review': 'in-review',
+      'ready-for-prod': 'ready-for-prod',
+      done: null,
+    },
     types: { bug: 'Bug', story: 'Feature' },
     priorities: { urgent: 'priority:urgent', high: 'priority:high', normal: 'priority:normal', low: 'priority:low' },
     points: 'sp:',
@@ -83,6 +90,18 @@ test('issues are normalized and pull requests dropped', async () => {
     url: 'https://github.com/daedalforge/missions/issues/2',
     updatedAt: '2026-11-10T10:00:00Z',
   })
+})
+
+test('a ready-for-prod label is read as its own state', async () => {
+  const fetchImpl = route(async () =>
+    response([issue(3, { labels: ['priority:normal', 'ready-for-prod', 'sp:2'] })]),
+  )
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.equal(missions[0].state, 'ready-for-prod')
+  assert.equal(missions[0].priority, 'normal')
+  assert.equal(missions[0].points, 2)
 })
 
 test('pagination follows the Link header', async () => {

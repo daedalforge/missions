@@ -5,15 +5,16 @@ revue → clôture**. Ce qui change d'un projet à l'autre est le tracker, pas l
 workflow.
 
 ```
-  à cadrer ──▶ prête ──▶ en cours ──▶ en revue ──▶ terminée
-      │           │          │            │
-      │           │          │            └─ PR approuvée puis mergée
+  à cadrer ──▶ prête ──▶ en cours ──▶ en revue ──▶ prête à partir ──▶ terminée
+      │           │          │            │              │
+      │           │          │            │              └─ livrée : merge, issue fermée
+      │           │          │            └─ PR approuvée
       │           │          └─ branche poussée, PR ouverte, tests verts
       │           └─ cadrage validé : périmètre, critères, plan
       └─ ticket créé, rien n'est encore décidé
 ```
 
-## Les cinq états
+## Les six états
 
 La projection exacte, projet par projet, est déclarée dans
 [`../missions/projects.yml`](../missions/projects.yml), bloc `map` ; le tableau
@@ -25,7 +26,14 @@ ci-dessous en donne la forme courante pour les deux trackers.
 | **prête** | To Do | label `ready` |
 | **en cours** | In Progress | label `in-progress`, branche poussée |
 | **en revue** | In Review | label `in-review`, PR ouverte |
+| **prête à partir** | `Ready for prod` (Manager : `Local Testing`, `Staging Test`) | label `ready-for-prod` |
 | **terminée** | Done | PR mergée, issue fermée |
+
+L'état **prête à partir** est posé par la revue, pas par l'exécution : la PR est
+approuvée, la mission n'est pas encore livrée. Sur Jira, plusieurs statuts
+peuvent y mener selon le projet — Manager y range ses trois temps de
+déploiement, Connect son unique `Ready for prod` ; `Released` et `Done` restent
+« terminée ».
 
 Le tracker porte l'état. Rien dans le workspace ne le duplique : pas de fichier
 de statut, pas de tableau local, pas de journal d'avancement.
@@ -42,8 +50,8 @@ rattachée à un epic, qui est un milestone (voir
 |---|---|---|---|
 | Cadrage | ticket à cadrer | ticket **prête** : périmètre, critères, plan | [cadrage.md](cadrage.md) |
 | Exécution | ticket prête | ticket **en revue** : branche, commits, PR | [execution.md](execution.md) |
-| Revue | ticket en revue | décision : approuvé ou à reprendre | [review.md](review.md) |
-| Clôture | ticket approuvé | ticket **terminée**, branche supprimée | [cloture.md](cloture.md) |
+| Revue | ticket en revue | décision : approuvé (ticket **prêt à partir**) ou à reprendre | [review.md](review.md) |
+| Clôture | ticket prêt à partir | ticket **terminée**, branche supprimée | [cloture.md](cloture.md) |
 
 Une étape peut renvoyer à la précédente — un cadrage faux se refait, un diff hors
 périmètre retourne en cadrage — mais jamais sauter une étape.
