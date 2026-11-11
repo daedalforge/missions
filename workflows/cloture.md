@@ -37,6 +37,6 @@ ticket le dit, et rien ne reste en suspens.
 
 | Geste | Jira | GitHub |
 |---|---|---|
-| Merger | transition `Done` (ou `Released`) après merge | merge de la PR (`Closes #<numéro>`) |
-| Fermer | statut Done, commentaire de clôture | issue fermée automatiquement ou à la main |
+| Merger | transition `Released` (Manager) ou `Done` (Connect) après merge | merge de la PR (`Closes #<numéro>`) |
+| Fermer | statut `Released` (Manager) ou `Done` (Connect), commentaire de clôture | issue fermée automatiquement ou à la main |
 | Nettoyer | lien branche supprimée | branche supprimée, PR archivée |
