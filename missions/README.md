@@ -193,7 +193,7 @@ n'a pas de représentation propre (la fermeture de l'issue, par exemple).
 | `in-progress` | label `in-progress` | `In Progress` |
 | `in-review` | label `in-review` | `In Review` |
 | `ready-for-prod` | label `ready-for-prod` | `Ready for prod`, ou les statuts de déploiement du projet (`Local Testing`, `Staging Test`) |
-| `done` | fermeture de l'issue | `Done`, `Released` |
+| `done` | fermeture de l'issue | `Released` (Manager), `Done` (Connect) |
 | `bug` | type `Bug` | type `Bug` |
 | `story` | type `Feature` | type `Story` |
 | `urgent` / `high` / `normal` / `low` | label `priority:*` | `Highest` / `High` / `Medium` / `Low` |
