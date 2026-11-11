@@ -318,6 +318,9 @@ window.__ModuleLoader__.load({
 .missions-drawer-tab[aria-selected="true"] { color: var(--dsw-alias-label-primary, #1f1f1f); border-bottom-color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
 .missions-drawer-panel { display: flex; flex-direction: column; gap: 16px; }
 .missions-drawer-panel .missions-props, .missions-drawer-panel .missions-journal, .missions-drawer-panel .missions-checklist { padding-top: 0; border-top: 0; }
+.missions-drawer--fill .missions-drawer-panel { flex: 1; min-height: 0; }
+.missions-drawer--fill .missions-drawer-panel > section { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.missions-drawer--fill .missions-journal-text, .missions-drawer--fill .missions-checklist-body { max-height: none; flex: 1; min-height: 0; }
 .missions-props { display: grid; grid-template-columns: 96px 1fr; gap: 9px 12px; margin: 0; font-size: 12px; }
 .missions-props dt { color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-props dd { margin: 0; color: var(--dsw-alias-label-primary, #1f1f1f); overflow-wrap: anywhere; }
@@ -1028,7 +1031,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
         }, entry.label)),
       )
 
-      return h('aside', { className: 'missions-drawer', role: 'complementary', 'aria-label': `Mission ${mission.key}` },
+      // Journal and checklist fill the drawer: the body scrolls on its own and
+      // the drawer stops scrolling. Details keeps the drawer's own scroll.
+      const filling = section !== 'details'
+
+      return h('aside', { className: filling ? 'missions-drawer missions-drawer--fill' : 'missions-drawer', role: 'complementary', 'aria-label': `Mission ${mission.key}` },
           h('div', { className: 'missions-drawer-head' },
             theme === 'manga' ? h('div', { className: 'missions-drawer-portrait' }, h('img', { src: ART.avatar, alt: '' })) : null,
             h('div', null,

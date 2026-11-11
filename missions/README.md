@@ -91,7 +91,10 @@ base: main
 **Depuis le panneau** : le volet de détail se lit en trois onglets —
 **Details** (propriétés et champs ci-dessous), **Journal** et **Checklist** —
 et les actions (ouvrir le ticket, démarrer une session) restent en pied de
-volet, sous les onglets. L'onglet Details porte deux champs, « Branch » et
+volet, sous les onglets. Journal et Checklist prennent la hauteur restante,
+du trait des onglets aux actions : c'est leur contenu qui défile, pas le
+volet. Details garde le défilement du volet. L'onglet Details porte deux
+champs, « Branch » et
 « Base », et un bouton « Save ». L'enregistrement réutilise le dossier qui
 déclare déjà la clé, ou le crée (`missions/<nom dérivé de la clé>/`), et
 n'écrit que ce `mission.yml`. Le panneau n'édite ni la clé ni le nom du dossier ;
@@ -120,7 +123,8 @@ l'intention de faire.
   et preuves à l'exécution, décision et critères vérifiés à la revue, merge et
   suites à la clôture.
 - **Qui.** L'agent de la session écrit ; le panneau lit. Le volet l'affiche
-  dans l'onglet **Journal**, en texte, avec sa date, et ne le modifie pas.
+  dans l'onglet **Journal**, en texte, avec sa date, sur la hauteur restante
+  du volet, et ne le modifie pas.
 - **Jamais versionné.** `missions/*/` reste ignoré par git, comme
   `mission.yml` : le journal ne se commit pas et ne se partage pas.
 
@@ -143,8 +147,8 @@ vérifie.
   fur et à mesure, revue avec les preuves de la PR, soldée à la clôture : une
   case restée ouverte est une suite nommée, pas un oubli.
 - **Qui.** L'agent écrit, le panneau lit : le volet l'affiche dans l'onglet
-  **Checklist** — compteur `cochées/total`, sections et cases — sans jamais
-  modifier le fichier.
+  **Checklist** — compteur `cochées/total`, sections et cases, sur la hauteur
+  restante du volet — sans jamais modifier le fichier.
 - **Ce n'est pas une preuve.** Les preuves opposables vivent dans le ticket et
   la PR ; la checklist est le carnet de vérification local de la session.
 - **Jamais versionné.** `missions/*/` reste ignoré par git, comme `mission.yml`

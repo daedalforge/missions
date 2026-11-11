@@ -165,6 +165,18 @@ test('le volet range l’existant dans Details, chaque fichier dans son onglet',
   assert.ok(actions > checklist)
 })
 
+test('le journal et la checklist prennent la hauteur restante du volet', () => {
+  // Le modificateur n'est posé que hors Details : le volet garde son défilement
+  // pour les propriétés et les champs.
+  assert.match(SOURCE, /const filling = section !== 'details'/)
+  assert.match(SOURCE, /className: filling \? 'missions-drawer missions-drawer--fill' : 'missions-drawer'/)
+  // La hauteur se propage du panneau à la section puis à la zone.
+  assert.match(SOURCE, /\.missions-drawer--fill \.missions-drawer-panel \{ flex: 1; min-height: 0; \}/)
+  assert.match(SOURCE, /\.missions-drawer--fill \.missions-drawer-panel > section \{ display: flex; flex-direction: column; flex: 1; min-height: 0; \}/)
+  // Plus de hauteur fixe héritée : la zone prend la place disponible.
+  assert.match(SOURCE, /\.missions-drawer--fill \.missions-journal-text, \.missions-drawer--fill \.missions-checklist-body \{ max-height: none; flex: 1; min-height: 0; \}/)
+})
+
 test('le bundle ne propose plus l’état done', () => {
   assert.match(SOURCE, /STATE_FILTER_ORDER = \['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod'\]/)
   assert.doesNotMatch(SOURCE, /done: 'done'/)
