@@ -208,7 +208,7 @@ test('blocking adds the label, then the reason as a comment', async () => {
     blocked: true,
     comment: 'https://github.com/daedalforge/missions/issues/110#issuecomment-1',
   })
-  // Deux écritures, dans cet ordre : le label, puis la raison.
+  // Two writes, in this order: the label, then the reason.
   assert.deepEqual(calls.map((call) => `${call.method} ${call.url}`), [
     'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
     'POST https://api.github.com/repos/daedalforge/missions/issues/110/comments',
@@ -230,6 +230,20 @@ test('unblocking removes the label and writes nothing else', async () => {
   assert.deepEqual(calls, ['DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/blocked'])
 })
 
+test('unblocking a label that is already absent is a success, not a failure', async () => {
+  const fetchImpl = async () => response({ message: 'Label does not exist' }, { status: 404 })
+
+  const result = await setBlocked(PROJECT, 'MIS-110', { blocked: false, fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', blocked: false, comment: null })
+})
+
+test('unblocking keeps a real refusal: only a 404 means "already gone"', async () => {
+  const fetchImpl = async () => response({ message: 'Bad credentials' }, { status: 401 })
+
+  await assert.rejects(() => setBlocked(PROJECT, 'MIS-110', { blocked: false, fetchImpl }), /GitHub token missing or invalid/)
+})
+
 test('a blocked write needs a project with owner and repo', async () => {
   await assert.rejects(
     () => setBlocked({ ...PROJECT, github: {} }, 'MIS-110', { blocked: true, message: 'x', fetchImpl: async () => response({}) }),
@@ -244,9 +258,9 @@ test('a blocked write needs an issue key, not a folder name', async () => {
   )
 })
 
-test('le libellé bloqué revient en drapeau, sans toucher à l’état', async () => {
-  // La régression trouvée par la vraie mission : l'adaptateur oubliait ses
-  // libellés bruts, donc `blocked` était écrit sur GitHub mais jamais lu.
+test('the blocked label comes back as a flag, without touching the state', async () => {
+  // The regression the real mission found: the adapter normalized without its
+  // raw labels, so `blocked` was written on GitHub but never read back.
   const fetchImpl = route(async () => response([issue(110, { labels: ['ready', 'blocked'] })]))
 
   const [mission] = await list(PROJECT, { fetchImpl })
