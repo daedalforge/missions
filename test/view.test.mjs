@@ -104,6 +104,21 @@ test('les filtres epic, priorité et projet se combinent en ET', () => {
   assert.deepEqual(filterMissions(MISSIONS, { project: 'manager', type: 'bug' }), [])
 })
 
+test('le statut prend plusieurs valeurs, et un tableau vide ne filtre rien', () => {
+  // Un widget du dashboard ouvre la liste sur tous ses états d'un coup : le
+  // filtre doit donc accepter une liste, pas seulement une valeur.
+  assert.deepEqual(filterMissions(MISSIONS, { state: ['ready', 'in-review'] }).map((m) => m.key), ['a#1', 'a#3'])
+  assert.deepEqual(filterMissions(MISSIONS, { state: ['in-review'] }).map((m) => m.key), ['a#1'])
+  // Aucun état coché, c'est la barre au repos : tout passe.
+  assert.deepEqual(filterMissions(MISSIONS, { state: [] }).map((m) => m.key), ['a#1', 'a#2', 'a#3'])
+  // « unknown » dans une liste garde les états hors workflow, sans les autres.
+  const withUnknown = [...MISSIONS, { key: 'a#4', state: null, type: 'story', priority: null, points: null }]
+  assert.deepEqual(
+    filterMissions(withUnknown, { state: ['ready', 'unknown'] }).map((m) => m.key),
+    ['a#3', 'a#4'],
+  )
+})
+
 test('le filtre de statut isole un groupe et distingue unknown', () => {
   assert.deepEqual(filterMissions(MISSIONS, { state: 'in-review' }).map((m) => m.key), ['a#1'])
   assert.deepEqual(filterMissions(MISSIONS, { state: 'to-refine' }).map((m) => m.key), ['a#2'])
@@ -195,6 +210,10 @@ test('un filtre actif est détecté, le type et le statut compris', () => {
   assert.equal(hasActiveFilters({ type: null, state: null, epic: null, priority: 'normal', project: null }), true)
   assert.equal(hasActiveFilters({ type: null, state: null, epic: null, priority: null, project: 'missions' }), true)
   assert.equal(hasActiveFilters({ type: null, state: null, epic: null, priority: null, project: null, missing: 'any' }), true)
+  // Une liste d'états compte quand elle porte quelque chose ; vide, elle est
+  // le repos, pas un filtre qui ne rendrait rien.
+  assert.equal(hasActiveFilters({ type: null, state: ['ready'], epic: null, priority: null, project: null }), true)
+  assert.equal(hasActiveFilters({ type: null, state: [], epic: null, priority: null, project: null }), false)
 })
 
 test('les groupes suivent l’ordre d’attention, l’inconnu en dernier', () => {
@@ -283,14 +302,14 @@ test('une checklist vide ou absente ne casse pas le rendu', () => {
 test('l’instantané de la barre garde recherche, filtres et tri', () => {
   const bar = {
     query: 'panneau',
-    filters: { type: 'bug', state: 'ready', epic: 'Workspace', priority: 'urgent', project: 'missions', missing: 'any' },
+    filters: { type: 'bug', state: ['ready'], epic: 'Workspace', priority: 'urgent', project: 'missions', missing: 'any' },
     sort: 'points',
   }
   const snapshot = filterSnapshot(bar)
   assert.deepEqual(snapshot, {
     query: 'panneau',
     type: 'bug',
-    state: 'ready',
+    state: ['ready'],
     epic: 'Workspace',
     priority: 'urgent',
     project: 'missions',
@@ -301,6 +320,14 @@ test('l’instantané de la barre garde recherche, filtres et tri', () => {
   assert.deepEqual(filterBarState(snapshot), bar)
   // Une barre vide n'a rien d'actif : le panneau la traite comme au repos.
   assert.equal(hasActiveFilters(filterBarState(filterSnapshot({})).filters), false)
+})
+
+test('un statut unique rangé par une barre d’avant la liste se relit en liste', () => {
+  // La session d'avant MIS-94 garde un statut seul : le relire ne doit ni le
+  // perdre ni le rendre en texte, sinon le menu ne le cocherait pas.
+  const legacy = filterSnapshot({ filters: { state: 'ready' } })
+  assert.deepEqual(legacy.state, ['ready'])
+  assert.deepEqual(filterBarState({ state: 'ready' }).filters.state, ['ready'])
 })
 
 test('un instantané ne retient que ce que la barre peut sélectionner', () => {
