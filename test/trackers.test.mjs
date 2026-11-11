@@ -97,6 +97,22 @@ test('missions are sorted by state then key', async () => {
   assert.deepEqual(missions.map((m) => m.number), [1, 3, 5])
 })
 
+test('a mission in the done state is not listed', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/myself')) return response({ accountId: 'me' })
+    return response({
+      issues: [
+        { key: 'SO-1', fields: { summary: 'Terminée', status: { name: 'Done' }, issuetype: { name: 'Story' } } },
+        { key: 'SO-2', fields: { summary: 'En cours', status: { name: 'In Progress' }, issuetype: { name: 'Story' } } },
+      ],
+    })
+  }
+
+  const { missions } = await listAll([PROJECT_JIRA], { fetchImpl })
+
+  assert.deepEqual(missions.map((m) => m.key), ['SO-2'])
+})
+
 test('GitHub and Jira share the same list', async () => {
   const fetchImpl = async (url) => {
     if (String(url).endsWith('/user')) return response({ login: 'slucienvauthier-so' })

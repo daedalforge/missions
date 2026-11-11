@@ -37,6 +37,10 @@ client. `lib/client.js` est **généré** — éditer `src/client.template.js` e
 `lib/view.js`, puis `node tools/build.mjs`. Les helpers de `lib/view.js`
 (filtre, groupes, âge relatif) sont purs et testés sans DOM.
 
+Le panneau ne liste que les missions **ouvertes** : une mission `done` — issue
+fermée sur GitHub, statut terminé sur Jira — n'apparaît ni dans la liste ni dans
+le filtre de statut.
+
 ## Conventions
 
 - **Le code est en anglais** : identifiants, chaînes, commentaires, messages
