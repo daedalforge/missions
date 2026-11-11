@@ -231,7 +231,6 @@ test('un refresh affiche le loader de la vue, même avec des missions chargées'
   // La liste est remplacée par le loader de la vue, malgré les missions en état.
   assert.match(flat, /"type":"PanelLoader"/)
   assert.doesNotMatch(flat, /"type":"MissionsView"/)
-  assert.doesNotMatch(flat, /"type":"DashboardView"/)
   // Le bouton reste rendu, désactivé pendant le chargement, mais sans spinner.
   assert.match(flat, /"aria-busy":"true"/)
   assert.match(flat, /"disabled":true/)
@@ -247,4 +246,18 @@ test('le montage initial garde le loader et le polling reste silencieux', () => 
   assert.match(SOURCE, /if \(!silent\) setView/)
   assert.match(SOURCE, /load\(\{ silent: true \}\)/)
   assert.doesNotMatch(SOURCE, /missions-btn-spinner/)
+})
+
+test('le loader ne déborde pas sur l’onglet Dashboard', () => {
+  // Un refresh lancé depuis Missions ne doit pas remplacer le Dashboard par le
+  // loader si l'on change d'onglet pendant la requête : le Dashboard est hors
+  // périmètre et reste rendu tel quel.
+  const view = { loading: true, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger(undefined, [view, 'dashboard'])
+  api.apply(ctx)
+
+  const flat = JSON.stringify(registered.main({}))
+  assert.match(flat, /"type":"DashboardView"/)
+  assert.doesNotMatch(flat, /"type":"PanelLoader"/)
+  assert.doesNotMatch(flat, /missions-loader/)
 })
