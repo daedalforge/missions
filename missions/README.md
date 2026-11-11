@@ -8,12 +8,14 @@ le tracker ne sait pas porter : la branche de la mission et sa base.
 
 | Tracker | Forme | Exemple |
 |---|---|---|
-| Jira | `<PROJET>-<numéro>` | `SOC-1541`, `SO-1207` |
-| GitHub | `<owner>/<repo>#<numéro>` | `daedalforge/missions#12` |
+| Jira | `<RÉFÉRENCE>-<numéro>` | `SOC-1541`, `SO-1207` |
+| GitHub | `<RÉFÉRENCE>-<numéro>` | `MIS-52` |
 
 La clé est l'identifiant de travail, partout et sans exception : nom de branche,
 préfixe de commit, message de PR, liens entre tickets. On ne réinvente pas de
-numérotation locale.
+numérotation locale. La référence est déclarée par le projet dans
+[`projects.yml`](projects.yml) ; sur GitHub, elle préfixe le numéro de l'issue,
+dont l'URL reste `…/issues/52`.
 
 ## États
 
@@ -51,14 +53,14 @@ Chaque mission exécutable a **un dossier** sous `missions/`, avec un
 `mission.yml` :
 
 ```yaml
-key: daedalforge/missions#41
-branch: gh-41
+key: MIS-41
+branch: mis-41
 base: main
 ```
 
 - **`key` fait foi** : c'est lui qui relie le fichier à la mission du tracker
-  (`owner/repo#n` ou clé Jira). Le nom du dossier est libre — `GH-41` pour
-  `daedalforge/missions#41`.
+  (`MIS-52` ou clé Jira). Le nom du dossier est libre ; le panneau le crée à
+  partir du slug de la clé (`mis-41`).
 - **Pas de session sans les deux** : un dossier absent, ou un champ manquant,
   laisse `branch`/`base` vides ; le volet de détail laisse alors les champs
   vides et désactive « Start a session » plutôt que de supposer une branche.
@@ -146,7 +148,7 @@ projet est une source : il se lit seul, avec ses propres identifiants, et son
   pagination, ni cadence de lecture. Ce qui vaut pour l'un n'est pas supposé
   pour l'autre.
 - **Identité complète.** Une mission affichée porte toujours son projet et sa
-  clé (`owner/repo#12`, `SOC-1234`). Deux clés identiques dans deux projets
+  clé (`MIS-52`, `SOC-1234`). Deux clés identiques dans deux projets
   restent deux missions distinctes.
 - **Lecture seule.** Lire un tracker ne modifie rien : ni le tracker, ni le
   dépôt, ni un fichier local.
