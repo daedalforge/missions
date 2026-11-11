@@ -26,6 +26,10 @@ qui porte aussi leur correspondance Jira et GitHub.
 Un ticket ne saute pas d'état : chaque transition a une condition de sortie
 écrite dans la page de l'étape correspondante.
 
+Dans le panneau, les groupes sont rangés par attention — **en cours**, **en
+revue**, **prête**, **à cadrer**, **prête à partir** — et non dans l'ordre du
+workflow ; le filtre de statut, lui, garde l'ordre du workflow.
+
 ## Où vit quoi
 
 | Élément | Emplacement | Versionné ici |
