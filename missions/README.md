@@ -125,6 +125,7 @@ en revue, un bug peut être prêt.
 | `ready` | cadrage validé, prête à exécuter |
 | `in-progress` | branche ouverte, exécution en cours |
 | `in-review` | PR ouverte, en attente de revue |
+| `ready-for-prod` | revue faite, en attente de livraison |
 | `priority:urgent` · `priority:high` · `priority:normal` · `priority:low` | priorité, une seule par issue |
 | `sp:1` · `sp:2` · `sp:3` · `sp:5` · `sp:8` · `sp:13` | story points, un seul par issue |
 
@@ -160,7 +161,8 @@ projet est une source : il se lit seul, avec ses propres identifiants, et son
 ## Correspondance avec le tracker
 
 Le workspace a un **vocabulaire canonique**, le même partout : états `to-refine`,
-`ready`, `in-progress`, `in-review`, `done`, types `bug`, `story`. Les documents,
+`ready`, `in-progress`, `in-review`, `ready-for-prod`, `done`, types `bug`,
+`story`. Les documents,
 les branches et les commits l'emploient ; c'est seulement à la frontière du
 tracker qu'une traduction a lieu.
 
@@ -175,7 +177,8 @@ n'a pas de représentation propre (la fermeture de l'issue, par exemple).
 | `ready` | label `ready` | `To Do` + libellé `ready` |
 | `in-progress` | label `in-progress` | `In Progress` |
 | `in-review` | label `in-review` | `In Review` |
-| `done` | fermeture de l'issue | `Done` |
+| `ready-for-prod` | label `ready-for-prod` | `Ready for prod`, ou les statuts de déploiement du projet (`Local Testing`, `Staging Test`) |
+| `done` | fermeture de l'issue | `Done`, `Released` |
 | `bug` | type `Bug` | type `Bug` |
 | `story` | type `Feature` | type `Story` |
 | `urgent` / `high` / `normal` / `low` | label `priority:*` | `Highest` / `High` / `Medium` / `Low` |
