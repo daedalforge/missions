@@ -523,9 +523,9 @@ test('le dashboard rend les deux cartes, une ligne par mission de la file', () =
   const cards = findAll(tree, 'article')
   assert.equal(cards.length, 2, 'deux cartes : la file et l’en-cours')
 
-  const [queue, flight] = cards
+  const [flight, queue] = cards
+  assert.match(textOf(flight), /In flight/, 'l’en-cours passe en premier')
   assert.match(textOf(queue), /Needs you/)
-  assert.match(textOf(flight), /In flight/)
 
   // La file : un rang par état (in-review, ready), puis la mission sans état
   // connu en dernier — celle qui demande un arbitrage.
@@ -602,7 +602,7 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
     missions.push({ key: `F-${index}`, title: `vol ${index}`, state: 'in-progress', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString(), points: 2 })
   }
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
-  const [queue, flight] = findAll(tree, 'article')
+  const [flight, queue] = findAll(tree, 'article')
 
   const rows = (card) => findAll(card, 'button').filter((button) => button.props['data-state'] !== undefined)
   assert.equal(rows(queue).length, 10, 'la file s’arrête à dix lignes')
@@ -626,7 +626,7 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
 
 test('une carte qui tient en dix lignes n’a ni compte ni lien', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
-  const [queue, flight] = findAll(tree, 'article')
+  const [flight, queue] = findAll(tree, 'article')
 
   // Rien à annoncer, rien à ouvrir : la file n'a même pas de pied.
   assert.equal(findAll(queue, 'p').length, 1, 'seul le sous-titre reste')
@@ -651,7 +651,7 @@ test('dix lignes pile : la carte est pleine, mais complète', () => {
     })
   }
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
-  const flight = findAll(tree, 'article').at(-1)
+  const flight = findAll(tree, 'article')[0]
   const rows = findAll(flight, 'button').filter((button) => button.props['data-state'] === 'in-progress')
 
   assert.equal(rows.length, 10, 'dix lignes rendues')
@@ -724,11 +724,12 @@ test('une mission qui dort est signalée, sa ligne le dit aussi', () => {
 
   const rows = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
   const quiet = rows.filter((button) => button.props['aria-label'].includes('not updated for a week'))
-  // MIS-1 (9 j), MIS-3 (11 j), MIS-5 (6 j → non), MIS-2 (1 j), MIS-4 (4 j).
-  assert.deepEqual(quiet.map((button) => button.props['aria-label'].split(' ')[0]), ['MIS-1', 'MIS-3'])
+  // L'en-cours d'abord : MIS-3 (11 j) puis MIS-4 (4 j). Puis la file : MIS-1
+  // (9 j), MIS-5 (6 j → non), MIS-2 (1 j).
+  assert.deepEqual(quiet.map((button) => button.props['aria-label'].split(' ')[0]), ['MIS-3', 'MIS-1'])
 
   const ages = findAll(tree, 'span').filter((span) => span.props.className === 'missions-rowage')
-  assert.deepEqual(ages.map((span) => span.props['data-quiet']), ['true', 'false', 'false', 'true', 'false'])
+  assert.deepEqual(ages.map((span) => span.props['data-quiet']), ['true', 'false', 'true', 'false', 'false'])
 })
 
 test('chaque carte dit à quoi elle sert, sous son titre', () => {
@@ -736,8 +737,8 @@ test('chaque carte dit à quoi elle sert, sous son titre', () => {
   const subs = findAll(tree, 'p').filter((node) => node.props.className === 'missions-dash-card-sub')
 
   assert.deepEqual(subs.map(textOf), [
-    'Waiting on your next move, most urgent first.',
     'Started, not shipped.',
+    'Waiting on your next move, most urgent first.',
   ])
   // « sous le titre » : la ligne vient juste après l'en-tête, pas au bas de la carte.
   for (const card of findAll(tree, 'article')) {
