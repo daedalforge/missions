@@ -317,7 +317,7 @@ test('unblocking removes the label without a comment', async () => {
   assert.match(calls[0], /^PUT /)
 })
 
-test('le libellé bloqué revient en drapeau, sans toucher à l’état', async () => {
+test('the blocked label comes back as a flag, without touching the state', async () => {
   const fetchImpl = reading(async () => response({ issues: [issue('SO-1', { labels: ['blocked'] })] }))
 
   const [mission] = await list(PROJECT, { fetchImpl })

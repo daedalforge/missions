@@ -128,7 +128,7 @@ test('the blocked label is read as a flag, never as a state', () => {
   })
 
   assert.equal(mission.blocked, true)
-  // Le label ne traduit rien : l'etat vient toujours de la table du projet.
+  // The label translates nothing: the state still comes from the project map.
   assert.equal(mission.state, 'in-progress')
   assert.deepEqual(mission.stateConflict, [])
 })
