@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { forgetToken, list } from '../lib/trackers/jira.js'
+import { forgetToken, list, setBlocked } from '../lib/trackers/jira.js'
 
 const PROJECT = {
   id: 'manager',
@@ -126,6 +126,7 @@ test('Jira issues are normalized through the project map', async () => {
     title: 'Mission SO-1207',
     state: 'in-progress',
     stateConflict: [],
+    blocked: false,
     type: 'story',
     priority: 'high',
     points: 5,
@@ -267,4 +268,60 @@ test('a 403 keeps its own message: permissions are not a dead token', async () =
   const fetchImpl = async () => response({ message: 'Forbidden' }, { status: 403 })
 
   await assert.rejects(() => list(PROJECT, { fetchImpl }), /Jira access denied/)
+})
+
+test('blocking updates the labels and posts the reason as ADF', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null, auth: init.headers?.authorization })
+    return String(url).endsWith('/comment')
+      ? response({ id: '10001', self: 'https://example.atlassian.net/rest/api/3/issue/SO-1/comment/10001' })
+      : response(undefined, { status: 204 })
+  }
+
+  const result = await setBlocked(PROJECT, 'SO-1', {
+    blocked: true,
+    message: 'Attente du contrat.\nDépend de l’API.',
+    fetchImpl,
+  })
+
+  assert.equal(result.key, 'SO-1')
+  assert.equal(result.blocked, true)
+  assert.match(result.comment, /comment\/10001$/)
+  assert.equal(calls.length, 2)
+  // `update.labels` ajoute ou retire un label sans renvoyer les autres.
+  assert.equal(calls[0].method, 'PUT')
+  assert.match(calls[0].url, /\/rest\/api\/3\/issue\/SO-1$/)
+  assert.deepEqual(JSON.parse(calls[0].body), { update: { labels: [{ add: 'blocked' }] } })
+  // Un commentaire v3 est de l'ADF : un paragraphe par ligne, jamais une chaîne.
+  assert.equal(calls[1].method, 'POST')
+  assert.match(calls[1].url, /\/issue\/SO-1\/comment$/)
+  const body = JSON.parse(calls[1].body)
+  assert.equal(body.body.type, 'doc')
+  assert.equal(body.body.content.length, 2)
+  assert.deepEqual(body.body.content[0], { type: 'paragraph', content: [{ type: 'text', text: 'Attente du contrat.' }] })
+  assert.match(calls[1].auth, /^Basic /)
+})
+
+test('unblocking removes the label without a comment', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${String(url)}`)
+    return response(undefined, { status: 204 })
+  }
+
+  const result = await setBlocked(PROJECT, 'SO-1', { blocked: false, fetchImpl })
+
+  assert.deepEqual(result, { key: 'SO-1', blocked: false, comment: null })
+  assert.equal(calls.length, 1)
+  assert.match(calls[0], /^PUT /)
+})
+
+test('the blocked label comes back as a flag, without touching the state', async () => {
+  const fetchImpl = reading(async () => response({ issues: [issue('SO-1', { labels: ['blocked'] })] }))
+
+  const [mission] = await list(PROJECT, { fetchImpl })
+
+  assert.equal(mission.blocked, true)
+  assert.equal(mission.state, 'in-progress')
 })

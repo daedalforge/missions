@@ -165,6 +165,7 @@ window.__ModuleLoader__.load({
 
     const LIST_URL = 'missions/api/list'
     const DECLARE_URL = 'missions/api/branches'
+    const BLOCKED_URL = 'missions/api/blocked'
     const JOURNAL_URL = 'missions/api/journal'
     const CHECKLIST_URL = 'missions/api/checklist'
     const WORKFLOWS_URL = 'missions/api/workflows'
@@ -491,6 +492,29 @@ window.__ModuleLoader__.load({
 .missions-declare-save:disabled { opacity: .55; cursor: default; }
 .missions-declare-note { margin: 0; color: var(--dsw-alias-label-secondary, #5c534b); font-size: 11.5px; }
 .missions-declare-note--error { color: var(--dsw-alias-label-danger, #b42318); }
+/* Blocked: a label of the tracker, whose reason is a comment of the ticket. */
+.missions-blocked { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 8px; }
+.missions-blocked[data-blocked="true"] { border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 38%, transparent); background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 6%, transparent); }
+.missions-blocked-head { display: flex; align-items: center; gap: 8px; }
+.missions-blocked-title { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-blocked-head .missions-switch { margin-left: auto; }
+.missions-blocked-field { display: grid; gap: 4px; }
+.missions-blocked-label { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+.missions-blocked-input { width: 100%; min-height: 56px; padding: 6px 8px; resize: vertical; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 6px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12px; line-height: 1.45; }
+.missions-blocked-input:focus { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 40%, transparent); outline-offset: 1px; }
+.missions-blocked-actions { display: flex; gap: 6px; }
+.missions-blocked-apply, .missions-blocked-cancel { height: 28px; padding: 0 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 6px; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12px; cursor: pointer; }
+.missions-blocked-apply { border-color: transparent; background: var(--dsw-alias-label-danger, #b42318); color: #ffffff; font-weight: 600; }
+.missions-blocked-apply:hover:not(:disabled) { filter: brightness(1.06); }
+.missions-blocked-cancel:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
+.missions-blocked-apply:disabled, .missions-blocked-cancel:disabled { opacity: .55; cursor: default; }
+.missions-blocked-hint, .missions-blocked-note { margin: 0; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-blocked-note--error { color: var(--dsw-alias-label-danger, #b42318); }
+.missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 13%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 46%, transparent); }
+.missions-card[data-blocked="true"]:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 14%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 52%, transparent); }
+.missions-lock { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: auto; border-radius: 999px; background: var(--dsw-alias-label-danger, #b42318); color: #ffffff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 15%, transparent); }
+.missions-lock svg { display: block; width: 11px; height: 11px; }
+.missions-lock + .missions-sp { margin-left: 0; }
 .missions-journal { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
 .missions-journal-head { display: flex; align-items: baseline; gap: 8px; }
 .missions-journal-meta { min-width: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -705,6 +729,15 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 .missions-panel[data-theme="manga"] .missions-action--primary { background: var(--mm-ink); color: var(--mm-page); }
 .missions-panel[data-theme="manga"] .missions-drawer-note { padding: 6px 9px; border-left: 3px solid var(--mm-orange); background: color-mix(in srgb, var(--mm-orange) 12%, var(--mm-page)); color: var(--mm-ink-2); font-size: 10.5px; }
 .missions-panel[data-theme="manga"] .missions-declare { gap: 7px; border-top: 1.5px solid var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-blocked { border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); box-shadow: 2px 2px 0 var(--mm-shadow); }
+.missions-panel[data-theme="manga"] .missions-blocked[data-blocked="true"] { border-color: var(--mm-coral-deep); background: color-mix(in srgb, var(--mm-coral) 10%, var(--mm-page-2)); }
+.missions-panel[data-theme="manga"] .missions-blocked-title { font-family: var(--mm-display, inherit); letter-spacing: .01em; }
+.missions-panel[data-theme="manga"] .missions-blocked-input { border: 1.5px solid var(--mm-ink); border-radius: 6px; background: var(--mm-page); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-blocked-apply { border: 1.5px solid var(--mm-coral-deep); border-radius: 6px; background: var(--mm-coral); color: var(--mm-page); box-shadow: 2px 2px 0 var(--mm-shadow); }
+.missions-panel[data-theme="manga"] .missions-blocked-cancel { border: 1.5px solid var(--mm-ink); border-radius: 6px; color: var(--mm-ink-2); }
+.missions-panel[data-theme="manga"] .missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--mm-coral) 12%, var(--mm-page-2)); border-color: var(--mm-coral-deep); }
+.missions-panel[data-theme="manga"] .missions-card[data-blocked="true"]:hover { background: color-mix(in srgb, var(--mm-coral) 18%, var(--mm-page-2)); border-color: var(--mm-coral-deep); }
+.missions-panel[data-theme="manga"] .missions-lock { background: var(--mm-coral-deep); color: var(--mm-page); box-shadow: 2px 2px 0 var(--mm-shadow); }
 .missions-panel[data-theme="manga"] .missions-declare-label { color: var(--mm-ink-3); font-family: var(--mm-mono); font-size: 9.5px; letter-spacing: .08em; }
 .missions-panel[data-theme="manga"] .missions-declare-input { height: 30px; border: 1.5px solid var(--mm-ink); border-radius: 7px; background: var(--mm-page-2); color: var(--mm-ink); font-size: 11.5px; box-shadow: 1px 1px 0 var(--mm-shadow); }
 .missions-panel[data-theme="manga"] .missions-declare-input:focus { outline: 2px solid var(--mm-orange-deep); outline-offset: 1px; }
@@ -1048,6 +1081,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         role: 'button',
         'aria-pressed': 'false',
         'data-priority': mission.priority ?? 'none',
+        'data-blocked': mission.blocked ? 'true' : 'false',
         onClick: () => onSelect(mission),
         onKeyDown: (event) => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -1064,6 +1098,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           h('span', { className: 'missions-type', 'data-type': mission.type ?? 'none' }, TYPE_LABELS[mission.type] ?? '—'),
           h(PriorityMark, { priority: mission.priority }),
           mission.points !== null && mission.points !== undefined ? h('span', { className: 'missions-sp' }, `${mission.points} pts`) : null,
+          mission.blocked
+            ? h('span', {
+                className: 'missions-lock',
+                role: 'img',
+                'aria-label': 'Bloqué',
+                title: 'Bloqué : la raison est en commentaire du ticket',
+              },
+                h('svg', { viewBox: '0 0 12 12', 'aria-hidden': 'true' },
+                  h('path', { className: 'lock-shackle', d: 'M3.6 5.2V4a2.4 2.4 0 0 1 4.8 0v1.2', fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }),
+                  h('rect', { className: 'lock-body', x: 2.5, y: 5.1, width: 7, height: 4.7, rx: 1.2, fill: 'currentColor' }),
+                ),
+              )
+            : null,
         ),
         h('div', { className: 'missions-card-title' }, mission.title),
         h('div', { className: 'missions-card-foot' },
@@ -1266,13 +1313,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
     }
 
     /** A boolean filter as a switch, pushed to the right of the bar. */
-    function Switch({ label, checked, onChange }) {
+    function Switch({ label, checked, onChange, disabled = false }) {
       return h('button', {
         type: 'button',
         role: 'switch',
         'aria-checked': checked ? 'true' : 'false',
         className: 'missions-switch',
-        onClick: () => onChange(!checked),
+        disabled,
+        onClick: () => { if (!disabled) onChange(!checked) },
       },
         h('span', { className: 'missions-switch-track', 'aria-hidden': 'true' },
           h('span', { className: 'missions-switch-thumb' }),
@@ -1411,6 +1459,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const [checklist, setChecklist] = React.useState(null)
       // Which tab of the drawer is showing: the drawer rests on the details.
       const [section, setSection] = React.useState('details')
+      // Blocked is a label of the tracker, not a field of the panel: the switch
+      // shows what the tracker holds and the write goes through the host.
+      const [blockedNow, setBlockedNow] = React.useState(Boolean(mission.blocked))
+      const [armedBlock, setArmedBlock] = React.useState(false)
+      const [reason, setReason] = React.useState('')
+      const [writingBlock, setWritingBlock] = React.useState(false)
+      const [blockNote, setBlockNote] = React.useState(null)
 
       React.useEffect(() => {
         let alive = true
@@ -1427,6 +1482,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           .catch(() => { if (alive) setChecklist({ exists: false, source: '', error: true }) })
         return () => { alive = false }
       }, [mission.key, mission.folder])
+
+      // A refreshed list carries the tracker's answer: the switch follows it.
+      React.useEffect(() => {
+        setBlockedNow(Boolean(mission.blocked))
+        setArmedBlock(false)
+        setReason('')
+        setBlockNote(null)
+      }, [mission.key, mission.blocked])
 
       React.useEffect(() => {
         const onKey = (event) => {
@@ -1493,6 +1556,51 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         }
       }
 
+      const writeBlocked = async (next) => {
+        const message = reason.trim()
+        if (next && !message) return
+        setWritingBlock(true)
+        setBlockNote(null)
+        try {
+          const response = await fetch(BLOCKED_URL, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ key: mission.key, blocked: next, message }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `blocked failed (${response.status})`)
+          setBlockedNow(next)
+          setArmedBlock(false)
+          setReason('')
+          setBlockNote({
+            error: false,
+            text: next
+              ? 'Label `blocked` posé et raison postée en commentaire du ticket.'
+              : 'Label `blocked` retiré.',
+          })
+          onSaved?.(data)
+        } catch (error) {
+          setBlockNote({ error: true, text: `Block failed: ${error?.message ?? error}` })
+        } finally {
+          setWritingBlock(false)
+        }
+      }
+
+      // Turning it on only opens the field; turning it off is the unblock.
+      const toggleBlocked = (next) => {
+        if (next) {
+          setBlockNote(null)
+          setArmedBlock(true)
+          return
+        }
+        if (blockedNow) {
+          writeBlocked(false)
+          return
+        }
+        setArmedBlock(false)
+        setReason('')
+      }
+
       const savedBranch = mission.branch ?? ''
       const savedBase = mission.base ?? ''
       const dirty = branch.trim() !== savedBranch || base.trim() !== savedBase
@@ -1507,6 +1615,56 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           h(DrawerRow, { label: 'Project', value: mission.projectName ?? mission.project }),
           h(DrawerRow, { label: 'Epic', value: mission.epic }),
           h(DrawerRow, { label: 'Updated', value: relativeAge(mission.updatedAt) }),
+        ),
+
+        h('div', { className: 'missions-blocked', 'data-blocked': blockedNow || armedBlock ? 'true' : 'false' },
+          h('div', { className: 'missions-blocked-head' },
+            h('span', { className: 'missions-blocked-title' },
+              blockedNow ? 'Mission bloquée' : 'Signaler un blocage',
+            ),
+            h(Switch, {
+              label: 'Bloqué',
+              checked: blockedNow || armedBlock,
+              disabled: writingBlock,
+              onChange: toggleBlocked,
+            }),
+          ),
+          armedBlock && !blockedNow
+            ? h('div', { className: 'missions-blocked-form' },
+                h('label', { className: 'missions-blocked-field' },
+                  h('span', { className: 'missions-blocked-label' }, 'Raison du blocage'),
+                  h('textarea', {
+                    className: 'missions-blocked-input',
+                    rows: 3,
+                    value: reason,
+                    disabled: writingBlock,
+                    placeholder: 'Ce qui empêche la mission d’avancer.',
+                    onChange: (event) => setReason(event.target.value),
+                  }),
+                ),
+                h('div', { className: 'missions-blocked-actions' },
+                  h('button', {
+                    type: 'button',
+                    className: 'missions-blocked-apply',
+                    disabled: writingBlock || !reason.trim(),
+                    onClick: () => writeBlocked(true),
+                  }, writingBlock ? 'Envoi…' : 'Bloquer'),
+                  h('button', {
+                    type: 'button',
+                    className: 'missions-blocked-cancel',
+                    disabled: writingBlock,
+                    onClick: () => { setArmedBlock(false); setReason(''); setBlockNote(null) },
+                  }, 'Annuler'),
+                ),
+              )
+            : h('p', { className: 'missions-blocked-hint' },
+                blockedNow
+                  ? 'Le label `blocked` est posé sur le ticket ; sa raison est en commentaire.'
+                  : 'Le label `blocked` et sa raison partent dans le tracker ; rien n’est gardé ici.',
+              ),
+          blockNote
+            ? h('p', { className: blockNote.error ? 'missions-blocked-note missions-blocked-note--error' : 'missions-blocked-note', role: blockNote.error ? 'alert' : 'status' }, blockNote.text)
+            : null,
         ),
 
         h('div', { className: 'missions-declare' },
