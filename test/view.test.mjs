@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   actionVerb,
+  endPoints,
   layoutWorkflow,
   modelOf,
   readStep,
@@ -737,4 +738,25 @@ test('modelOf ne renvoie que le modèle, jamais les champs d’affichage du serv
   assert.deepEqual(modele.nodes, entree.nodes)
   assert.deepEqual(modelOf(), {}, 'une entrée absente ne lève pas')
   assert.deepEqual(modelOf(null), {})
+})
+
+test('endPoints énumère entrée, gestes et sorties, et tolère un modèle absent', () => {
+  const modele = {
+    entry: 'to-refine',
+    exit: ['ready'],
+    nodes: [
+      { id: 'lire', label: 'Lire', section: 'Ce qu’on fait', writer: 'session' },
+      { id: 'ecrire', label: 'Écrire', section: 'Ce qu’on fait', writer: 'session' },
+    ],
+    edges: [],
+  }
+  assert.deepEqual(endPoints(null), [], 'un brouillon absent ne lève pas')
+  assert.deepEqual(endPoints(undefined), [])
+  assert.deepEqual(endPoints(modele), [
+    { id: 'to-refine', kind: 'etat' },
+    { id: 'lire', kind: 'geste' },
+    { id: 'ecrire', kind: 'geste' },
+    { id: 'ready', kind: 'etat' },
+  ], 'l’entrée d’abord, les gestes dans l’ordre du fichier, les sorties ensuite')
+  assert.deepEqual(endPoints({ entry: 'a', nodes: [] }), [{ id: 'a', kind: 'etat' }], 'une étape sans sortie déclarée')
 })

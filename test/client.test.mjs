@@ -1045,3 +1045,13 @@ test('le graphe a ses règles : nœuds, sélection, retour en pointillé', () =>
   // thème, pas des couleurs figées — le thème manga suit sans règle de plus.
   assert.match(regle('.wf-card'), /border-radius: 12px/)
 })
+
+test('l’éditeur attend le modèle au lieu de lire un brouillon absent', () => {
+  // La régression MIS-102 : entre la réponse du serveur (l'entrée est trouvée)
+  // et l'effet qui pose le brouillon, le rendu lisait `draft.entry` et levait —
+  // React démontait alors le panneau entier, onglets compris.
+  assert.match(SOURCE, /if \(!entry \|\| !draft\) \{/, 'le rendu garde les deux attentes')
+  assert.match(SOURCE, /'Chargement du modèle du parcours…'/, 'l’attente du modèle se dit')
+  assert.ok(!/draft\.entry/.test(SOURCE), 'aucun accès direct à un brouillon peut-être absent')
+  assert.match(SOURCE, /const ends = endPoints\(draft\)/, 'les extrémités passent par le helper qui tolère l’absence')
+})
