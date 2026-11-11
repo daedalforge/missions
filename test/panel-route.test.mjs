@@ -22,9 +22,13 @@ async function mount(t) {
   t.after(() => rm(dir, { recursive: true, force: true }))
 
   let handler = null
+  // Le dossier temporaire reproduit le dépôt : `missions/projects.yml` d'un
+  // côté, `workflows/model/` de l'autre — un modèle cherché au mauvais endroit
+  // ne doit pas passer pour un modèle trouvé.
+  await mkdir(join(dir, 'missions'), { recursive: true })
   apply(
     { effect: (fn) => fn(), webServer: { register: (route) => { handler = route.handler } } },
-    { projectsFile: join(dir, 'projects.yml') },
+    { projectsFile: join(dir, 'missions', 'projects.yml') },
   )
   assert.ok(handler, 'la route est enregistrée')
   return { dir, handler }
@@ -76,7 +80,7 @@ test('POST déclare la branche et la base dans le dossier de la mission', async 
     branch: 'gh-49',
     base: 'main',
   })
-  const text = await readFile(join(dir, 'daedalforge-missions-49', MISSION_FILE), 'utf8')
+  const text = await readFile(join(dir, 'missions', 'daedalforge-missions-49', MISSION_FILE), 'utf8')
   assert.match(text, /^key: daedalforge\/missions#49$/m)
   assert.match(text, /^branch: gh-49$/m)
 })
@@ -96,7 +100,7 @@ test('POST vide un champ retiré, GET est refusé', async (t) => {
   })
   assert.equal(cleared.status, 200)
   assert.equal(cleared.body.base, null)
-  const text = await readFile(join(dir, 'daedalforge-missions-49', MISSION_FILE), 'utf8')
+  const text = await readFile(join(dir, 'missions', 'daedalforge-missions-49', MISSION_FILE), 'utf8')
   assert.equal(parse(text).base, undefined)
 
   const refused = await call(handler, { method: 'GET', path: '/missions/api/branches' })
@@ -133,7 +137,7 @@ test('un corps invalide ou une déclaration invalide répond 400', async (t) => 
   assert.match(notAString.body.error, /branch must be a string/)
 
   // Rien n'a été créé par les requêtes refusées.
-  assert.deepEqual(await readdir(dir), [])
+  assert.deepEqual(await readdir(join(dir, 'missions')), [])
 })
 
 test('un corps trop gros est refusé sur son en-tête', async (t) => {
@@ -147,7 +151,7 @@ test('un corps trop gros est refusé sur son en-tête', async (t) => {
   })
   assert.equal(tooBig.status, 400)
   assert.match(tooBig.body.error, /too large/)
-  assert.deepEqual(await readdir(dir), [])
+  assert.deepEqual(await readdir(join(dir, 'missions')), [])
 })
 
 test('un corps trop gros reçoit son 400 sur un vrai socket', async (t) => {
@@ -186,7 +190,7 @@ test('un corps trop gros reçoit son 400 sur un vrai socket', async (t) => {
   assert.match(JSON.parse(chunked.body).error, /too large/)
 
   // Rien n'a été écrit par les requêtes refusées.
-  assert.deepEqual(await readdir(dir), [])
+  assert.deepEqual(await readdir(join(dir, 'missions')), [])
 })
 
 test('un chemin ne peut pas sortir de missions : le dossier vient de la clé', async (t) => {
@@ -199,14 +203,14 @@ test('un chemin ne peut pas sortir de missions : le dossier vient de la clé', a
   })
   assert.equal(response.status, 200)
   assert.equal(response.body.folder, 'escape')
-  assert.deepEqual(await readdir(dir), ['escape'])
+  assert.deepEqual(await readdir(join(dir, 'missions')), ['escape'])
 })
 
 test('GET journal lit le fichier de la mission déclarée', async (t) => {
   const { dir, handler } = await mount(t)
-  await mkdir(join(dir, 'MIS-69'), { recursive: true })
-  await writeFile(join(dir, 'MIS-69', MISSION_FILE), 'key: MIS-69\nbranch: feat/mis-69\nbase: main\n')
-  await writeFile(join(dir, 'MIS-69', 'journal.md'), '# Journal — MIS-69\n\n## 2026-11-11 — Cadrage\n')
+  await mkdir(join(dir, 'missions', 'MIS-69'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-69', MISSION_FILE), 'key: MIS-69\nbranch: feat/mis-69\nbase: main\n')
+  await writeFile(join(dir, 'missions', 'MIS-69', 'journal.md'), '# Journal — MIS-69\n\n## 2026-11-11 — Cadrage\n')
 
   const response = await call(handler, { path: '/missions/api/journal?key=MIS-69' })
   assert.equal(response.status, 200)
@@ -239,7 +243,7 @@ test('GET journal ne lève pas sur une clé inconnue et refuse une autre méthod
   assert.equal(noFile.body.exists, false)
   assert.equal(noFile.body.source, '')
   assert.equal(noFile.body.mtimeMs, 0)
-  assert.deepEqual(await readdir(join(dir, 'MIS-69')), [MISSION_FILE])
+  assert.deepEqual(await readdir(join(dir, 'missions', 'MIS-69')), [MISSION_FILE])
 
   const missing = await call(handler, { path: '/missions/api/journal' })
   assert.equal(missing.status, 400)
@@ -252,9 +256,9 @@ test('GET journal ne lève pas sur une clé inconnue et refuse une autre méthod
 
 test('GET checklist lit le fichier de la mission déclarée', async (t) => {
   const { dir, handler } = await mount(t)
-  await mkdir(join(dir, 'MIS-70'), { recursive: true })
-  await writeFile(join(dir, 'MIS-70', MISSION_FILE), 'key: MIS-70\nbranch: feat/mis-70\nbase: main\n')
-  await writeFile(join(dir, 'MIS-70', 'checklist.md'), '# Checklist — MIS-70\n\n- [x] Les tests passent.\n')
+  await mkdir(join(dir, 'missions', 'MIS-70'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-70', MISSION_FILE), 'key: MIS-70\nbranch: feat/mis-70\nbase: main\n')
+  await writeFile(join(dir, 'missions', 'MIS-70', 'checklist.md'), '# Checklist — MIS-70\n\n- [x] Les tests passent.\n')
 
   const response = await call(handler, { path: '/missions/api/checklist?key=MIS-70' })
   assert.equal(response.status, 200)
@@ -287,7 +291,7 @@ test('GET checklist ne lève pas sur une clé inconnue et refuse une autre méth
   assert.equal(noFile.body.exists, false)
   assert.equal(noFile.body.source, '')
   assert.equal(noFile.body.mtimeMs, 0)
-  assert.deepEqual(await readdir(join(dir, 'MIS-70')), [MISSION_FILE])
+  assert.deepEqual(await readdir(join(dir, 'missions', 'MIS-70')), [MISSION_FILE])
 
   const missing = await call(handler, { path: '/missions/api/checklist' })
   assert.equal(missing.status, 400)
@@ -324,8 +328,9 @@ test('une route inconnue répond 404, un appel non local répond 403', async (t)
 /** Les modèles vivent à côté de `projects.yml`, comme dans le dépôt. */
 async function copyWorkflows(dir) {
   const root = fileURLToPath(new URL('../', import.meta.url))
+  await mkdir(join(dir, 'missions'), { recursive: true })
   await mkdir(join(dir, 'workflows', 'model'), { recursive: true })
-  await writeFile(join(dir, 'projects.yml'), await readFile(join(root, 'missions', 'projects.yml')))
+  await writeFile(join(dir, 'missions', 'projects.yml'), await readFile(join(root, 'missions', 'projects.yml')))
   for (const workflow of ['cadrage', 'execution', 'review', 'cloture']) {
     await writeFile(join(dir, 'workflows', `${workflow}.md`), await readFile(join(root, 'workflows', `${workflow}.md`)))
     await writeFile(
