@@ -451,11 +451,39 @@ test('la file du dashboard suit l’urgence, puis la plus ancienne, sans l’en-
     { key: 'M-5', state: 'ready', updatedAt: '2026-11-11T11:00:00Z' },
   ]
 
+  // Une mission prête pour la prod attend une mise en production, pas une
+  // décision : elle n'entre pas dans la file, même très ancienne.
+  missions.push({ key: 'M-6', state: 'ready-for-prod', updatedAt: '2026-10-01T12:00:00Z' })
+
   // Deux en revue : la plus ancienne passe devant. L'en-cours n'est jamais
   // dans la file, il vit dans In flight.
   assert.deepEqual(needsYou(missions).map((mission) => mission.key), ['M-4', 'M-2', 'M-5', 'M-1'])
   assert.deepEqual(inFlight(missions).map((mission) => mission.key), ['M-3'])
   assert.deepEqual(needsYou([]), [])
+})
+
+test('rien à décider ne fait pas une file : le prêt pour la prod n’y est pas', () => {
+  const missions = [
+    { key: 'prod', state: 'ready-for-prod', updatedAt: '2026-09-01T12:00:00Z' },
+    { key: 'prod-2', state: 'ready-for-prod', updatedAt: '2026-10-01T12:00:00Z' },
+  ]
+  assert.deepEqual(needsYou(missions), [])
+
+  // Le rang des états qui restent ne bouge pas : revue, prêt, à raffiner,
+  // puis l'état inconnu en dernier.
+  const mixed = [
+    { key: 'raffiner', state: 'to-refine', updatedAt: '2026-11-01T00:00:00Z' },
+    { key: 'prête', state: 'ready', updatedAt: '2026-11-01T00:00:00Z' },
+    { key: 'revue', state: 'in-review', updatedAt: '2026-11-01T00:00:00Z' },
+    { key: 'inconnue', state: null, updatedAt: '2026-11-01T00:00:00Z' },
+    { key: 'prod', state: 'ready-for-prod', updatedAt: '2026-11-01T00:00:00Z' },
+  ]
+  assert.deepEqual(needsYou(mixed).map((mission) => mission.key), ['revue', 'prête', 'raffiner', 'inconnue'])
+
+  // Le périmètre de la section compte la même file que les cartes.
+  const scope = dashboardScope([...mixed, { key: 'en cours', state: 'in-progress', project: 'p', projectName: 'P' }])
+  assert.equal(scope.needYou, 4)
+  assert.equal(scope.open, 6)
 })
 
 test('une date illisible ne casse pas la file : elle passe en dernier', () => {

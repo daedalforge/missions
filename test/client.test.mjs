@@ -672,6 +672,9 @@ test('le lien du widget ouvre la liste sur les états de la carte', () => {
   }
   // Une mission sans état connu : la file la montre, la liste doit la retrouver.
   missions.push({ key: 'Q-x', title: 'sans état', state: null, project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T12:00:00Z' })
+  // Une mission prête pour la prod : elle ne demande rien, la file et le lien
+  // l'ignorent — le total reste douze, pas treize.
+  missions.push({ key: 'Q-p', title: 'prête pour la prod', state: 'ready-for-prod', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' })
   const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
 
   const link = findAll(tree, 'button').find((button) => textOf(button).includes('View all 12'))
