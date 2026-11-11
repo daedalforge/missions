@@ -40,7 +40,7 @@
 # la lecture des autres, et rien n'est supposé partagé entre deux projets.
 
 canonical:
-  states: [to-refine, ready, in-progress, in-review, done]
+  states: [to-refine, ready, in-progress, in-review, ready-for-prod, done]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
 
@@ -69,6 +69,7 @@ projects:
         ready: ready
         in-progress: in-progress
         in-review: in-review
+        ready-for-prod: ready-for-prod
         done: null
       types:
         bug: Bug
@@ -80,10 +81,13 @@ projects:
         low: priority:low
       points: "sp:"
 
-  # Relevé le 2026-11-10 sur https://saas-office.atlassian.net :
+  # Relevé le 2026-11-11 sur https://saas-office.atlassian.net :
   # `GET /rest/api/3/project/SO/statuses` donne, pour tous les types, treize
-  # statuts — d'où les listes. `Rejected` n'a pas d'équivalent canonique et
-  # reste inconnu, plutôt que d'être confondu avec `done`.
+  # statuts — d'où les listes. Le déploiement y tient en trois temps, après le
+  # développement : `Local Testing`, `Staging Test`, `Ready for prod` ; tous
+  # trois sont `ready-for-prod` (pas `in-progress`, pas `done`), seul `Released`
+  # ferme la mission. `Rejected` n'a pas d'équivalent canonique et reste
+  # inconnu, plutôt que d'être confondu avec `done`.
   - id: manager
     name: Manager
     repo: ~/projects/Manager
@@ -98,9 +102,10 @@ projects:
       states:
         to-refine: [To Refine, Inbox, To Qualify, Analysis done]
         ready: [Ready to Dev, To Dev]
-        in-progress: [In Progress, Local Testing, Staging Test]
+        in-progress: [In Progress]
         in-review: [Code review]
-        done: [Released, Ready for prod]
+        ready-for-prod: [Local Testing, Staging Test, Ready for prod]
+        done: [Released]
       types:
         bug: Bug
         story: Story
@@ -110,10 +115,11 @@ projects:
         normal: Medium
         low: Low
 
-  # Relevé le 2026-11-10 sur le site : SOC (Connect) a sept statuts — To Refine,
+  # Relevé le 2026-11-11 sur le site : SOC (Connect) a sept statuts — To Refine,
   # Inbox, Ready for dev, In Progress, Ready for prod, Code review, Done.
-  # « Ready for prod » est en catégorie In Progress : il reste `in-progress`,
-  # pas `done` ; `Done` seul ferme la mission.
+  # « Ready for prod » est en catégorie In Progress, mais c'est le seul statut
+  # entre la revue et la fin : il est `ready-for-prod`, pas `in-progress` ;
+  # `Done` seul ferme la mission.
   - id: connect
     name: Connect
     repo: ~/projects/Connect
@@ -128,8 +134,9 @@ projects:
       states:
         to-refine: [To Refine, Inbox]
         ready: Ready for dev
-        in-progress: [In Progress, Ready for prod]
+        in-progress: [In Progress]
         in-review: Code review
+        ready-for-prod: Ready for prod
         done: Done
       types:
         bug: Bug
