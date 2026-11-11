@@ -16,7 +16,9 @@ ticket le dit, et rien ne reste en suspens.
    milestone, fermer le milestone — GitHub ne le fait pas tout seul.
 5. **Clore le journal** : y ajouter la section de clôture — lien du merge,
    preuves après merge, suites.
-6. **Noter les suites** : tickets créés pendant la mission, dette assumée,
+6. **Solder la checklist** : toutes les cases cochées, ou nommées comme suite.
+   Elle ne fait pas foi — les preuves opposables sont dans le ticket et la PR.
+7. **Noter les suites** : tickets créés pendant la mission, dette assumée,
    décisions prises hors cadrage. Rien d'implicite.
 
 ## Condition de sortie — la mission est « terminée »
@@ -27,6 +29,7 @@ ticket le dit, et rien ne reste en suspens.
 - [ ] La branche est supprimée (locale et distante).
 - [ ] Les suites éventuelles sont des tickets, pas des notes orales.
 - [ ] Le journal porte la clôture (merge, preuves, suites).
+- [ ] La checklist est soldée (cases cochées ou suites nommées).
 
 ## Cas particuliers
 

@@ -39,6 +39,7 @@ workflow ; le filtre de statut, lui, garde l'ordre du workflow.
 | État, assignation, commentaires | Tracker | Non |
 | Branche et base (déclarées) | `missions/<dossier>/mission.yml` | Non — local, ignoré par git |
 | Journal de mission (récit de la session) | `missions/<dossier>/journal.md` | Non — local, ignoré par git |
+| Checklist de mission (gestes à vérifier) | `missions/<dossier>/checklist.md` | Non — local, ignoré par git |
 | Branche et commits | Dépôt du projet | Selon le projet |
 | Preuves de clôture | Commentaire du ticket | Non |
 | Méthode (ce document, workflows) | Ce dépôt | Oui |
@@ -119,6 +120,31 @@ l'intention de faire.
   journal de la mission, en texte, avec sa date, et ne le modifie pas.
 - **Jamais versionné.** `missions/*/` reste ignoré par git, comme
   `mission.yml` : le journal ne se commit pas et ne se partage pas.
+
+## Checklist de mission
+
+Chaque mission tient sa feuille de vérification dans
+`missions/<dossier>/checklist.md`, à côté de `mission.yml` : les gestes concrets
+à exécuter et leur preuve, cochés au fil de l'exécution. Elle ne remplace pas
+les critères d'acceptation, qui restent dans le ticket ; elle dit comment on les
+vérifie.
+
+- **Forme.** Du markdown : un titre `# Checklist — <clé>`, puis une section par
+  étape ou par thème (`## Cadrage`, `## Exécution`…), et un geste par case :
+  `- [ ]` à faire, `- [x]` fait, la preuve sur la même ligne
+  (`— *test* : npm test`, `— *relevé* : …`). Le marqueur `- [~]` de l'ancien
+  système reste lu comme « non exercé ». Les checklists reprises de l'ancien
+  système gardent leur titre d'origine (`# Checklist manuelle — SLV-114`) : la
+  forme ci-dessus est celle des checklists écrites par l'agent au cadrage.
+- **Quand.** Ouverte au cadrage avec les gestes du plan, cochée à l'exécution au
+  fur et à mesure, revue avec les preuves de la PR, soldée à la clôture : une
+  case restée ouverte est une suite nommée, pas un oubli.
+- **Qui.** L'agent écrit, le panneau lit : le volet affiche le compteur
+  `cochées/total`, les sections et les cases, et ne modifie jamais le fichier.
+- **Ce n'est pas une preuve.** Les preuves opposables vivent dans le ticket et
+  la PR ; la checklist est le carnet de vérification local de la session.
+- **Jamais versionné.** `missions/*/` reste ignoré par git, comme `mission.yml`
+  et le journal : la checklist ne se commit pas et ne se partage pas.
 
 ## Le projet décide du tracker
 
