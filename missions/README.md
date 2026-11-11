@@ -200,13 +200,19 @@ peut être en revue, un bug peut être prêt.
 | `ready-for-prod` | revue faite, en attente de livraison |
 | `priority:urgent` · `priority:high` · `priority:normal` · `priority:low` | priorité, une seule par issue |
 | `sp:1` · `sp:2` · `sp:3` · `sp:5` · `sp:8` · `sp:13` | story points, un seul par issue |
+| `blocked` | mission bloquée : la raison est en commentaire de l'issue |
 
 Une issue porte **un seul** type natif et **un seul** état. Deux libellés d'état ne
 s'arbitrent pas : l'état devient indéterminé, le panneau le signale en erreur et la
 session de la mission reste bloquée jusqu'à ce qu'il n'en reste qu'un. Changer
 d'état, c'est poser le nouveau libellé en retirant l'ancien. Fermer l'issue est
-l'état terminé : il n'y a pas de libellé `done`. Un blocage se dit en commentaire, pas
-par un libellé. L'epic n'est pas un libellé : c'est un milestone.
+l'état terminé : il n'y a pas de libellé `done`. Un blocage se dit par le libellé
+`blocked` **et** sa raison en commentaire : le libellé dit qu'on est bloqué, le
+commentaire dit pourquoi et par quoi. `blocked` n'est pas un état — il ne
+remplace jamais l'état en cours, et une mission bloquée garde son état — il
+n'empêche pas non plus de démarrer une session : il informe. Le retirer, c'est
+débloquer, et cela ne poste rien d'autre. L'epic n'est pas un libellé : c'est un
+milestone.
 
 
 ## Lecture
@@ -242,7 +248,9 @@ les branches et les commits l'emploient ; c'est seulement à la frontière du
 tracker qu'une traduction a lieu.
 
 Cette traduction est une donnée, pas une convention : chaque projet la déclare
-dans [`projects.yml`](projects.yml), bloc `map`. Une clé canonique sans valeur
+dans [`projects.yml`](projects.yml), bloc `map`. Seul `blocked` échappe à la
+table : il ne se traduit pas, il se pose tel quel sur le ticket — et c'est le
+panneau qui l'écrit, par la route de l'hôte, parce qu'il n'a pas de jeton. Une clé canonique sans valeur
 dans le tracker se compense par un libellé ; une valeur `null` dit que l'état
 n'a pas de représentation propre (la fermeture de l'issue, par exemple).
 

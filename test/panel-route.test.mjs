@@ -17,7 +17,7 @@ import { apply } from '../lib/index.js'
  * choisit le dossier, valide et écrit. Ces tests montent le vrai handler avec un
  * faux serveur web et de vraies requêtes, dans un dossier temporaire.
  */
-async function mount(t) {
+async function mount(t, config = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'missions-route-'))
   t.after(() => rm(dir, { recursive: true, force: true }))
 
@@ -28,7 +28,7 @@ async function mount(t) {
   await mkdir(join(dir, 'missions'), { recursive: true })
   apply(
     { effect: (fn) => fn(), webServer: { register: (route) => { handler = route.handler } } },
-    { projectsFile: join(dir, 'missions', 'projects.yml') },
+    { projectsFile: join(dir, 'missions', 'projects.yml'), ...config },
   )
   assert.ok(handler, 'la route est enregistrée')
   return { dir, handler }
@@ -420,4 +420,164 @@ test('GET /workflows/model rend le YAML, un couple inconnu répond 400', async (
     body: { workflow: 'deploy', model: {} },
   })
   assert.equal(refused.status, 400)
+})
+
+/** Réponse d'un tracker : ce que `requestJson` lit d'un vrai `fetch`. */
+function trackerResponse(body, { status = 200 } = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null },
+    text: async () => (body === undefined ? '' : JSON.stringify(body)),
+  }
+}
+
+/**
+ * Une déclaration de projet complète : le chargement valide la table de
+ * correspondance, donc un projet nu serait refusé avant même la route.
+ */
+const BLOCKED_PROJECTS = `canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`
+
+async function mountBlocked(t, fetchImpl) {
+  const mounted = await mount(t, { fetchImpl })
+  await mkdir(join(mounted.dir, 'missions'), { recursive: true })
+  await writeFile(join(mounted.dir, 'missions', 'projects.yml'), BLOCKED_PROJECTS)
+  return mounted
+}
+
+test('POST pose le label bloqué puis commente la raison', async (t) => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    return trackerResponse({
+      html_url: 'https://github.com/daedalforge/missions/issues/110#issuecomment-9',
+    })
+  }
+  const { handler } = await mountBlocked(t, fetchImpl)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/blocked',
+    body: { key: 'MIS-110', blocked: true, message: 'Attente du ticket de données.' },
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body, {
+    key: 'MIS-110',
+    blocked: true,
+    comment: 'https://github.com/daedalforge/missions/issues/110#issuecomment-9',
+    project: 'missions',
+  })
+  assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), [
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/comments',
+  ])
+  assert.deepEqual(JSON.parse(calls[0].body), { labels: ['blocked'] })
+})
+
+test('POST retire le label sans commentaire', async (t) => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${String(url)}`)
+    return trackerResponse({})
+  }
+  const { handler } = await mountBlocked(t, fetchImpl)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/blocked',
+    body: { key: 'MIS-110', blocked: false },
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body, { key: 'MIS-110', blocked: false, comment: null, project: 'missions' })
+  assert.deepEqual(calls, ['DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/blocked'])
+})
+
+test('un blocage sans raison est refusé avant tout appel au tracker', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/blocked',
+    body: { key: 'MIS-110', blocked: true, message: '   ' },
+  })
+
+  assert.equal(response.status, 400)
+  assert.match(response.body.error, /a reason is required to block a mission/)
+  assert.equal(touched, 0)
+})
+
+test('une clé absente ou inconnue ne touche pas le tracker', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const withoutKey = await call(handler, { method: 'POST', path: '/missions/api/blocked', body: { blocked: false } })
+  assert.equal(withoutKey.status, 400)
+  assert.match(withoutKey.body.error, /key is missing/)
+
+  const unknown = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/blocked',
+    body: { key: 'ZZZ-1', blocked: false },
+  })
+  assert.equal(unknown.status, 404)
+  assert.match(unknown.body.error, /no project declares ZZZ-1/)
+  assert.equal(touched, 0)
+})
+
+test('GET est refusé : la route n’écrit qu’en POST', async (t) => {
+  const { handler } = await mountBlocked(t, async () => trackerResponse({}))
+
+  const response = await call(handler, { method: 'GET', path: '/missions/api/blocked' })
+
+  assert.equal(response.status, 405)
+  assert.equal(response.headers.allow, 'POST')
+  assert.match(response.body.error, /method not allowed/)
+})
+
+test('un refus du tracker devient une erreur d’amont, pas une faute du panneau', async (t) => {
+  const { handler } = await mountBlocked(t, async () => trackerResponse({ message: 'Bad credentials' }, { status: 401 }))
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/blocked',
+    body: { key: 'MIS-110', blocked: true, message: 'Attente.' },
+  })
+
+  assert.equal(response.status, 502)
+  assert.match(response.body.error, /GitHub token missing or invalid/)
 })

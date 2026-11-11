@@ -114,3 +114,32 @@ test('an unknown state stays null instead of being guessed', () => {
   assert.equal(mission.type, null)
   assert.equal(mission.epic, null)
 })
+
+test('the blocked label is read as a flag, never as a state', () => {
+  const inverse = invertMap(PROJECT.map)
+  const mission = normalizeIssue({
+    project: PROJECT,
+    key: 'MIS-110',
+    title: 'Label Bloqué',
+    rawState: 'in-progress',
+    rawType: 'Feature',
+    rawLabels: ['blocked', 'priority:high'],
+    inverse,
+  })
+
+  assert.equal(mission.blocked, true)
+  // Le label ne traduit rien : l'etat vient toujours de la table du projet.
+  assert.equal(mission.state, 'in-progress')
+  assert.deepEqual(mission.stateConflict, [])
+})
+
+test('a mission without the label is not blocked', () => {
+  const mission = normalizeIssue({
+    project: PROJECT,
+    key: 'MIS-111',
+    rawLabels: ['ready', 'priority:normal'],
+    inverse: invertMap(PROJECT.map),
+  })
+
+  assert.equal(mission.blocked, false)
+})

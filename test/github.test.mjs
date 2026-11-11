@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { forgetToken, list } from '../lib/trackers/github.js'
+import { forgetToken, list, setBlocked } from '../lib/trackers/github.js'
 
 const PROJECT = {
   id: 'missions',
@@ -84,6 +84,7 @@ test('issues are normalized and pull requests dropped', async () => {
     title: 'Mission 2',
     state: 'ready',
     stateConflict: [],
+    blocked: false,
     type: 'story',
     priority: 'high',
     points: 3,
@@ -187,4 +188,69 @@ test('two projects may share a milestone number: the reference disambiguates the
 
   assert.equal(mine.epic, 'MIS-1 · Workspace')
   assert.equal(theirs.epic, 'OTH-1 · Workspace')
+})
+
+test('blocking adds the label, then the reason as a comment', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    return response({ html_url: 'https://github.com/daedalforge/missions/issues/110#issuecomment-1' })
+  }
+
+  const result = await setBlocked(PROJECT, 'MIS-110', {
+    blocked: true,
+    message: 'En attente du ticket de données.',
+    fetchImpl,
+  })
+
+  assert.deepEqual(result, {
+    key: 'MIS-110',
+    blocked: true,
+    comment: 'https://github.com/daedalforge/missions/issues/110#issuecomment-1',
+  })
+  // Deux écritures, dans cet ordre : le label, puis la raison.
+  assert.deepEqual(calls.map((call) => `${call.method} ${call.url}`), [
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/comments',
+  ])
+  assert.deepEqual(JSON.parse(calls[0].body), { labels: ['blocked'] })
+  assert.deepEqual(JSON.parse(calls[1].body), { body: 'En attente du ticket de données.' })
+})
+
+test('unblocking removes the label and writes nothing else', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${String(url)}`)
+    return response({})
+  }
+
+  const result = await setBlocked(PROJECT, 'MIS-110', { blocked: false, fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', blocked: false, comment: null })
+  assert.deepEqual(calls, ['DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/blocked'])
+})
+
+test('a blocked write needs a project with owner and repo', async () => {
+  await assert.rejects(
+    () => setBlocked({ ...PROJECT, github: {} }, 'MIS-110', { blocked: true, message: 'x', fetchImpl: async () => response({}) }),
+    /owner and repo/,
+  )
+})
+
+test('a blocked write needs an issue key, not a folder name', async () => {
+  await assert.rejects(
+    () => setBlocked(PROJECT, 'MIS-blocked', { blocked: true, message: 'x', fetchImpl: async () => response({}) }),
+    /not an issue key/,
+  )
+})
+
+test('le libellé bloqué revient en drapeau, sans toucher à l’état', async () => {
+  // La régression trouvée par la vraie mission : l'adaptateur oubliait ses
+  // libellés bruts, donc `blocked` était écrit sur GitHub mais jamais lu.
+  const fetchImpl = route(async () => response([issue(110, { labels: ['ready', 'blocked'] })]))
+
+  const [mission] = await list(PROJECT, { fetchImpl })
+
+  assert.equal(mission.blocked, true)
+  assert.equal(mission.state, 'ready')
 })

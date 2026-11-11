@@ -1074,3 +1074,24 @@ test('l’éditeur attend le modèle au lieu de lire un brouillon absent', () =>
   assert.ok(!/draft\.entry/.test(SOURCE), 'aucun accès direct à un brouillon peut-être absent')
   assert.match(SOURCE, /const ends = endPoints\(draft\)/, 'les extrémités passent par le helper qui tolère l’absence')
 })
+
+test('le blocage écrit par la route de l’hôte, jamais vers le tracker', () => {
+  // Le panneau n'a pas de jeton : la seule écriture passe par la route hôte.
+  assert.match(SOURCE, /missions\/api\/blocked/)
+  assert.match(SOURCE, /blocked: next/)
+  assert.match(SOURCE, /if \(next && !message\) return/)
+})
+
+test('une mission bloquée se signale sur sa carte', () => {
+  assert.match(SOURCE, /mission\.blocked \? h\('span', \{ className: 'missions-blocked-badge'/)
+})
+
+test('le volet bloque avec un champ de raison et un bouton désarmé sans raison', () => {
+  assert.match(SOURCE, /className: 'missions-blocked-input'/)
+  // Le bouton reste désarmé tant que la raison est vide : la route exige le
+  // texte, le panneau ne laisse pas envoyer un blocage muet.
+  assert.match(SOURCE, /disabled: writingBlock \|\| !reason\.trim\(\)/)
+  assert.match(regle('.missions-blocked'), /display: grid/)
+  assert.match(regle('.missions-blocked-input'), /resize: vertical/)
+  assert.match(regle('.missions-panel[data-theme="manga"] .missions-blocked'), /border: 1\.5px solid var\(--mm-ink\)/)
+})
