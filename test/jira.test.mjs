@@ -163,6 +163,28 @@ test('an epic is not a mission', async () => {
   assert.deepEqual(missions.map((m) => m.key), ['SO-1208'])
 })
 
+test('a ticket without hierarchyLevel stays a mission', async () => {
+  const fetchImpl = reading(async () =>
+    response({
+      issues: [
+        {
+          key: 'SO-1',
+          fields: {
+            summary: 'Mission sans niveau',
+            status: { name: 'In Progress' },
+            issuetype: { name: 'Story' },
+          },
+        },
+      ],
+    }),
+  )
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.deepEqual(missions.map((m) => m.key), ['SO-1'])
+  assert.equal(missions[0].type, 'story')
+})
+
 test('epics stay in the JQL: they are read, then dropped', async () => {
   const calls = []
   const fetchImpl = reading(async (url) => {
