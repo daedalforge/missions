@@ -365,7 +365,7 @@ window.__ModuleLoader__.load({
 .missions-sect-link:hover, .missions-sect-link:focus-visible { color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-sect-arrow { transition: transform .15s ease; }
 .missions-sect-link:hover .missions-sect-arrow { transform: translateX(2px); }
-.missions-sectgrid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); gap: 10px; margin-top: 11px; align-items: stretch; }
+.missions-sectgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.85fr); gap: 10px; margin-top: 11px; align-items: stretch; }
 .missions-dash-card { display: flex; flex-direction: column; min-width: 0; background: var(--dsw-alias-bg-base, #fff); border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 9px; }
 .missions-dash-card-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 13px 4px; }
 .missions-dash-card-title { margin: 0; font-size: 12px; font-weight: 600; }
@@ -844,23 +844,6 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             )
           : h('div', { className: 'missions-sectgrid' },
               h(DashboardCard, {
-                title: 'Needs you',
-                sub: 'Waiting on your next move, most urgent first.',
-                meta: queue.length,
-                className: 'missions-dash-card--queue',
-                footer: widgetFoot({
-                  note: queueHidden > 0 ? `${queueHidden} more waiting` : null,
-                  total: queue.length,
-                  onViewAll: () => onViewAll(stateOptions(queue)),
-                }),
-              },
-                queue.length === 0
-                  ? h('p', { className: 'missions-dash-card-empty' }, 'Nothing is waiting on you.')
-                  : h('ul', { className: 'missions-rows' },
-                      queueShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: true, onOpen })),
-                    ),
-              ),
-              h(DashboardCard, {
                 title: 'In flight',
                 sub: 'Started, not shipped.',
                 meta: flight.length,
@@ -875,6 +858,23 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   ? h('p', { className: 'missions-dash-card-empty' }, 'Nothing is in progress.')
                   : h('ul', { className: 'missions-rows' },
                       flightShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
+                    ),
+              ),
+              h(DashboardCard, {
+                title: 'Needs you',
+                sub: 'Waiting on your next move, most urgent first.',
+                meta: queue.length,
+                className: 'missions-dash-card--queue',
+                footer: widgetFoot({
+                  note: queueHidden > 0 ? `${queueHidden} more waiting` : null,
+                  total: queue.length,
+                  onViewAll: () => onViewAll(stateOptions(queue)),
+                }),
+              },
+                queue.length === 0
+                  ? h('p', { className: 'missions-dash-card-empty' }, 'Nothing is waiting on you.')
+                  : h('ul', { className: 'missions-rows' },
+                      queueShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: true, onOpen })),
                     ),
               ),
             )
