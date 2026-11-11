@@ -551,6 +551,13 @@ test('chaque carte dit à quoi elle sert, sous son titre', () => {
     'Waiting on your next move, most urgent first.',
     'Started, not shipped.',
   ])
+  // « sous le titre » : la ligne vient juste après l'en-tête, pas au bas de la carte.
+  for (const card of findAll(tree, 'article')) {
+    const line = card.children.findIndex((child) => child?.props?.className === 'missions-dash-card-sub')
+    assert.equal(line, 1, 'la ligne se place entre l’en-tête et le corps')
+    assert.equal(card.children[0].type, 'header')
+  }
+  assert.match(SOURCE, /^\.missions-dash-card-sub \{/m, 'la règle de style est présente')
 })
 
 test('sans mission, le dashboard rend son état vide', () => {
