@@ -38,5 +38,5 @@ contre les goûts du relecteur.
 | Geste | Jira | GitHub |
 |---|---|---|
 | Demander des changements | statut In Review + commentaires | review « Request changes » |
-| Approuver | statut `Ready for prod` + commentaire d'approbation | review « Approve » + label `ready-for-prod` |
+| Approuver | statut `Ready for prod` + commentaire d'approbation | review « Approve » + label `ready-for-prod`, en retirant `in-review` |
 | Renvoyer au cadrage | statut To Do + commentaire de motif | label `to-refine`, issue rouverte si besoin |
