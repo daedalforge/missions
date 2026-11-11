@@ -320,9 +320,13 @@ test('le compteur de l’onglet prend l’anneau des groupes, pas une pastille p
   // La pastille du thème par défaut ne bouge pas.
   assert.match(regle('.missions-tab-count'), /border-radius: 9px/)
   // En thème sombre, le chiffre reste en encre sombre sur l'orange, comme
-  // l'anneau et la marque du titre.
-  assert.ok(SOURCE.includes(':root[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-tab-count,'))
-  assert.ok(SOURCE.includes('body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-tab-count,'))
+  // l'anneau et la marque du titre : c'est le bloc, pas seulement l'entrée de
+  // la liste, qui doit porter la couleur.
+  for (const prefix of [':root[data-ds-dark-theme]', 'body[data-ds-dark-theme]']) {
+    const at = SOURCE.indexOf(`${prefix} .missions-panel[data-theme="manga"] .missions-tab-count,`)
+    assert.ok(at >= 0, `sélecteur sombre manquant : ${prefix}`)
+    assert.match(SOURCE.slice(at, SOURCE.indexOf('}', at)), /color: #2c2621/)
+  }
 })
 
 test('le thème Naruto finit le formulaire de branche, le filtre et la liste vide', () => {
@@ -355,6 +359,10 @@ test('le thème Naruto finit le formulaire de branche, le filtre et la liste vid
   // La liste vide n'est plus un texte gris nu : un bandeau pointillé.
   assert.match(manga('.missions-empty'), /border: 1\.5px dashed var\(--mm-line-strong\)/)
   assert.match(manga('.missions-empty'), /background: var\(--mm-page-2\)/)
+  // L'aide d'erreur repasse au corail clair en thème sombre : le corail profond
+  // du thème clair tomberait à 2,6:1 sur le fond sombre.
+  const darkError = SOURCE.slice(SOURCE.indexOf(':root[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-declare-note--error,'))
+  assert.match(darkError.slice(0, darkError.indexOf('}')), /color: var\(--mm-coral\)/)
 })
 
 /** Une ligne complète, telle que `missions/api/list` la renvoie. */

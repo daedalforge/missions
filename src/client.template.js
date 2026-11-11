@@ -521,6 +521,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-title-mar
 body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-drawer::before { color: #2c2621; }
 :root[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-name,
 body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-name { color: var(--mm-ink-2); }
+:root[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-declare-note--error,
+body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-declare-note--error { color: var(--mm-coral); }
 
 /* The select, in the themed header. */
 .missions-panel[data-theme="manga"] .missions-theme { border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); box-shadow: 2px 2px 0 var(--mm-shadow); color: var(--mm-ink); }
