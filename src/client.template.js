@@ -183,7 +183,6 @@ window.__ModuleLoader__.load({
       { id: 'story', name: 'Story' },
     ]
     const PRIORITY_LABELS = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' }
-    const EMPTY_FILTERS = { type: null, state: null, epic: null, priority: null, project: null, missing: null }
     const SORT_OPTIONS = [
       { id: 'priority', name: 'Priority (high → low)' },
       { id: 'points', name: 'Story points (low → high)' },
@@ -215,6 +214,21 @@ window.__ModuleLoader__.load({
         return localStorage.getItem(THEME_KEY) === 'manga' ? 'manga' : 'default'
       } catch {
         return 'default'
+      }
+    }
+
+    /**
+     * The session storage the filter bar lives in, or null.
+     *
+     * Session storage is the app's lifetime: the bar survives a view switch and
+     * a reload, and the window closing is what clears it. A storage that is
+     * missing or throws leaves the panel working, on the empty bar.
+     */
+    function filterStorage() {
+      try {
+        return typeof sessionStorage === 'undefined' ? null : sessionStorage
+      } catch {
+        return null
       }
     }
 
@@ -1095,13 +1109,22 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
     }
 
     function MissionsPanel({ services }) {
+      // The bar comes back from the session: the panel is remounted on every
+      // view switch, and a reload must not lose the search, the filters or the
+      // order. Nothing outlives the app: session storage dies with the window.
+      const [restored] = React.useState(() => filterBarState(readFilterSnapshot(filterStorage())))
       const [view, setView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
       const [tab, setTab] = React.useState('missions')
-      const [query, setQuery] = React.useState('')
-      const [filters, setFilters] = React.useState(EMPTY_FILTERS)
-      const [sort, setSort] = React.useState(null)
+      const [query, setQuery] = React.useState(restored.query)
+      const [filters, setFilters] = React.useState(restored.filters)
+      const [sort, setSort] = React.useState(restored.sort)
       const [selected, setSelected] = React.useState(null)
       const [theme, setTheme] = React.useState(readTheme)
+
+      // One write per change, the clear included: an empty bar drops its key.
+      React.useEffect(() => {
+        writeFilterSnapshot(filterStorage(), { query, filters, sort })
+      }, [query, filters, sort])
 
       const load = React.useCallback(({ silent = false } = {}) => {
         if (!silent) setView((previous) => ({ ...previous, loading: true }))
@@ -1166,7 +1189,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
       const filtered = filterMissions(missions, { query, ...filters })
       const groups = groupByState(sortMissions(filtered, sort))
       const onFilter = (key, value) => setFilters((previous) => ({ ...previous, [key]: value }))
-      const onClear = () => setFilters(EMPTY_FILTERS)
+      const onClear = () => setFilters({ ...EMPTY_FILTERS })
 
       const tabBar = h('div', { className: 'missions-tabs', role: 'tablist', 'aria-label': 'Missions views' },
         TABS.map((entry) => h('button', {
