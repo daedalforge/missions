@@ -56,7 +56,7 @@ rattachée à un epic, qui est un milestone (voir
 | Cadrage | ticket à cadrer | ticket **prête** : périmètre, critères, plan | [cadrage.md](cadrage.md) |
 | Exécution | ticket prête | ticket **en revue** : branche, commits, PR | [execution.md](execution.md) |
 | Revue | ticket en revue | décision : approuvé (ticket **prêt à partir**) ou à reprendre | [review.md](review.md) |
-| Clôture | ticket prêt à partir | ticket **terminée**, branche supprimée | [cloture.md](cloture.md) |
+| Clôture | ticket prêt à partir | ticket **terminée** par le demandeur : merge, ticket fermé, branche supprimée ; journal et checklist soldés par la session | [cloture.md](cloture.md) |
 
 Une étape peut renvoyer à la précédente — un cadrage faux se refait, un diff hors
 périmètre retourne en cadrage — mais jamais sauter une étape.

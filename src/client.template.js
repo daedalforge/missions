@@ -1439,7 +1439,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const blocker = executionBlocker(mission)
       const journalPath = mission.folder ? `missions/${mission.folder}/journal.md` : null
       const checklistPath = mission.folder ? `missions/${mission.folder}/checklist.md` : null
-      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.${blocker === null ? `\n\nBranche : ${mission.branch} ; base : ${mission.base}.` : ''}${journalPath ? `\n\nJournal de mission : ${journalPath} — ouvre-le au cadrage et tiens-le à jour à chaque étape.` : ''}${checklistPath ? `\n\nChecklist de mission : ${checklistPath} — ouvre-la au cadrage, coche chaque point avec sa preuve.` : ''}`
+      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\nOuvre d'abord le ticket : ${mission.url ?? '(lien indisponible)'}\nSuis le workflow du workspace : cadrage → exécution → revue → clôture.${blocker === null ? `\n\nBranche : ${mission.branch} ; base : ${mission.base}.` : ''}${journalPath ? `\n\nJournal de mission : ${journalPath} — ouvre-le au cadrage et tiens-le à jour à chaque étape.` : ''}${checklistPath ? `\n\nChecklist de mission : ${checklistPath} — ouvre-la au cadrage, coche chaque point avec sa preuve.` : ''}\n\nGarde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande.`
 
       const startSession = async () => {
         setNote('Starting a session…')

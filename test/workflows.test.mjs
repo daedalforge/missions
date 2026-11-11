@@ -79,6 +79,27 @@ test('les quatre modèles du dépôt sont valides et concordent avec leurs docum
   }
 })
 
+test('la clôture laisse le merge au demandeur, jamais à la session', async () => {
+  const { workflows } = await loadWorkflows(MODELS, { states: STATES })
+  const cloture = workflows.find((entry) => entry.workflow === 'cloture')
+  assert.ok(cloture, 'le modèle de clôture est chargé')
+
+  const merger = cloture.nodes.find((node) => node.id === 'merger')
+  assert.ok(merger, 'le geste de merge existe')
+  assert.equal(merger.writer, 'demandeur', 'le merge est le geste du demandeur')
+
+  // Aucun geste de merge, même futur, ne peut revenir à la session.
+  for (const node of cloture.nodes) {
+    if (/merge/i.test(`${node.id} ${node.label}`)) {
+      assert.equal(node.writer, 'demandeur', `${node.id} ne peut pas être écrit par la session`)
+    }
+  }
+
+  assert.equal(cloture.nodes.find((node) => node.id === 'fermer-ticket')?.writer, 'demandeur')
+  assert.equal(cloture.nodes.find((node) => node.id === 'supprimer-branche')?.writer, 'demandeur')
+  assert.equal(cloture.nodes.find((node) => node.id === 'constater')?.writer, 'session')
+})
+
 test('un titre du document sans geste est une section orpheline, pas une erreur', () => {
   const result = valide(modele())
 

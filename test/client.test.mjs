@@ -206,6 +206,12 @@ test('le prompt de session reprend la branche et la base déclarées', () => {
   assert.match(SOURCE, /Branche : \$\{mission\.branch\} ; base : \$\{mission\.base\}\./)
 })
 
+test('le prompt de session interdit le merge et l’écriture sur main', () => {
+  assert.match(SOURCE, /Garde-fou : tu ne merges jamais la PR/)
+  assert.match(SOURCE, /tu n'écris jamais sur main/)
+  assert.match(SOURCE, /les gestes du demandeur/)
+})
+
 test('le volet lit le journal de mission, sans dépendance de rendu', () => {
   assert.match(SOURCE, /const JOURNAL_URL = 'missions\/api\/journal'/)
   // L'onglet s'appelle Journal : la section ne répète pas le titre, elle garde
