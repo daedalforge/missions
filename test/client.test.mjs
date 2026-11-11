@@ -987,3 +987,61 @@ test('la barre est restaurée au montage et réécrite à chaque changement', ()
   // Aucune clé de barre dans localStorage : elle ne survit pas à l'app.
   assert.doesNotMatch(SOURCE, /localStorage\.(?:get|set)Item\(FILTERS_KEY/)
 })
+
+
+test('la barre d’onglets propose Workflows, et l’onglet ouvre l’éditeur', () => {
+  const session = memorySession({ 'missions.tab': 'workflows' })
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+
+  assert.equal(findAll(tree, 'WorkflowsView').length, 1, 'l’onglet Workflows porte l’éditeur de parcours')
+  assert.equal(findAll(tree, 'MissionsView').length, 0)
+  assert.equal(findAll(tree, 'MissionDrawer').length, 0, 'aucune mission n’a de tiroir dans cet onglet')
+  assert.match(textOf(tree), /Workflows/)
+
+  // L'onglet est bien une vue montée, pas un libellé : rendue pour de vrai, elle
+  // dit ce qu'elle attend avant la première réponse.
+  const inner = renderTree(findAll(tree, 'WorkflowsView')[0])
+  assert.match(textOf(inner), /Chargement du parcours…/)
+  assert.equal(findAll(inner, 'svg').length, 0, 'aucun graphe tant que le modèle n’est pas là')
+})
+
+test('l’éditeur demande le parcours au serveur et garde l’étape ouverte', async () => {
+  // L'effet de chargement est collecté, pas exécuté : le test l'appelle lui-même
+  // avec un `fetch` de circonstance, et lit la requête qui part vraiment.
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url, options })
+    return { json: async () => ({ workflows: [], writers: ['demandeur', 'session', 'outil'], states: ['to-refine'] }) }
+  }
+  try {
+    const session = memorySession({ 'missions.tab': 'workflows', 'missions.workflow-step': 'review' })
+    const { api, ctx, registered, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+    api.apply(ctx)
+    const tree = registered.main({})
+    // Les effets du panneau (dont son rafraîchissement de 60 s) ne sont pas
+    // joués : seuls ceux que la vue de l'onglet arme en se montant le sont.
+    const avant = effects.length
+    renderTree(findAll(tree, 'WorkflowsView')[0])
+    for (const effect of effects.slice(avant)) effect.fn()
+
+    assert.equal(appels[0]?.url, 'missions/api/workflows')
+    assert.equal(appels[0]?.options?.headers?.accept, 'application/json')
+    // L'étape laissée ouverte se réécrit telle quelle : la session la retrouve.
+    assert.equal(session.entries.get('missions.workflow-step'), 'review')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('le graphe a ses règles : nœuds, sélection, retour en pointillé', () => {
+  assert.match(regle('.wf-node'), /stroke-width: 1/)
+  assert.match(regle('.wf-node--geste'), /cursor: pointer/)
+  assert.match(regle('.wf-node--selected'), /stroke-width: 2/)
+  assert.match(regle('.wf-link--back'), /stroke-dasharray/)
+  assert.match(regle('.wf-canvas-wrap'), /overflow: auto/)
+  assert.match(regle('.wf-layout'), /grid-template-columns: minmax\(0, 1fr\) 300px/)
+  // Le graphe reprend le vocabulaire visuel du panneau : les variables du
+  // thème, pas des couleurs figées — le thème manga suit sans règle de plus.
+  assert.match(regle('.wf-card'), /border-radius: 12px/)
+})

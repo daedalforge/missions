@@ -167,6 +167,11 @@ window.__ModuleLoader__.load({
     const DECLARE_URL = 'missions/api/branches'
     const JOURNAL_URL = 'missions/api/journal'
     const CHECKLIST_URL = 'missions/api/checklist'
+    const WORKFLOWS_URL = 'missions/api/workflows'
+    const WORKFLOW_MODEL_URL = 'missions/api/workflows/model'
+  // L'ordre de la méthode, connu avant que le serveur ait répondu : il valide
+  // l'étape que la session a laissée ouverte.
+  const WORKFLOW_STEPS = ['cadrage', 'execution', 'review', 'cloture']
     const REFRESH_MS = 60000
 
     const STATE_LABELS = {
@@ -198,6 +203,7 @@ window.__ModuleLoader__.load({
     const TABS = [
       { id: 'dashboard', label: 'Dashboard' },
       { id: 'missions', label: 'Missions' },
+      { id: 'workflows', label: 'Workflows' },
     ]
 
     // A widget shows this many rows at most, then hands the rest to the list:
@@ -311,6 +317,37 @@ window.__ModuleLoader__.load({
 .missions-error b { font-weight: 600; }
 .missions-content { display: flex; flex: 1; min-height: 0; align-items: stretch; }
 .missions-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 6px 28px 32px; }
+.wf-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0 14px; }
+.wf-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.wf-step { height: 28px; padding: 0 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.wf-step[aria-pressed="true"] { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); border-color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
+.wf-note { font-size: 12px; color: var(--dsw-alias-label-tertiary, #7a7168); margin: 0; }
+.wf-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+.wf-canvas-wrap { overflow: auto; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 12px; background: var(--dsw-alias-bg-base, #fbfaf8); padding: 4px; }
+.wf-canvas { display: block; }
+.wf-node { fill: var(--dsw-alias-bg-base, #fbfaf8); stroke: var(--dsw-alias-border-l2, rgba(0,0,0,.18)); stroke-width: 1; }
+.wf-node--geste { cursor: pointer; }
+.wf-node--geste:hover { stroke: var(--dsw-alias-label-primary, #1f1f1f); }
+.wf-node--etat { fill: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
+.wf-node--selected { stroke: var(--dsw-alias-label-primary, #1f1f1f); stroke-width: 2; }
+.wf-node-label { font-size: 11.5px; fill: var(--dsw-alias-label-primary, #1f1f1f); pointer-events: none; }
+.wf-node-section { font-size: 10px; fill: var(--dsw-alias-label-tertiary, #7a7168); pointer-events: none; }
+.wf-link { fill: none; stroke: var(--dsw-alias-border-l2, rgba(0,0,0,.34)); stroke-width: 1.4; }
+.wf-link--back { stroke-dasharray: 4 3; }
+.wf-link-label { font-size: 9.5px; fill: var(--dsw-alias-label-tertiary, #7a7168); paint-order: stroke; stroke: var(--dsw-alias-bg-base, #fbfaf8); stroke-width: 3px; stroke-linejoin: round; }
+.wf-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.wf-card { border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 12px; padding: 12px; }
+.wf-card-title { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); margin-bottom: 8px; }
+.wf-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
+.wf-field > span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.wf-field input, .wf-field select { font: inherit; font-size: 12px; height: 28px; padding: 0 7px; border-radius: 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); background: transparent; color: inherit; }
+.wf-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.wf-arc { display: flex; align-items: center; gap: 6px; padding: 2px 4px; margin: 0 -4px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.wf-arc:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); }
+.wf-arc-when { color: var(--dsw-alias-label-tertiary, #7a7168); }
+.wf-arc-del { border: 0; background: none; padding: 0 3px; color: #a33a2a; cursor: pointer; font-size: 13px; line-height: 1; }
+.wf-error { color: #a33a2a; font-size: 12px; margin: 2px 0; }
+.wf-ok { color: #3f7a4b; font-size: 12px; margin: 2px 0; }
 .missions-group { margin-top: 20px; }
 .missions-group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); position: sticky; top: 0; background: var(--dsw-alias-bg-base, #fbfaf8); z-index: 1; }
 .missions-group-head .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -1620,6 +1657,259 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       )
     }
 
+
+    // L'onglet Workflows : le parcours se lit et s'édite comme un graphe. Le
+    // fichier ne porte aucune coordonnée — la géométrie se recalcule à chaque
+    // rendu (`layoutWorkflow`), donc deux sauvegardes du même graphe donnent la
+    // même image et le modèle reste lisible à la main.
+    function WorkflowsView() {
+      const [view, setView] = React.useState({ loading: true, error: null, workflows: [], writers: [], states: [] })
+      const [step, setStep] = React.useState(() => readStep(filterStorage(), WORKFLOW_STEPS))
+      const [draft, setDraft] = React.useState(null)
+      const [chosen, setChosen] = React.useState(null)
+      const [status, setStatus] = React.useState(null)
+      const [saving, setSaving] = React.useState(false)
+      const [arc, setArc] = React.useState({ from: '', to: '', when: '' })
+      // Chaque rechargement rend la main au serveur : le brouillon repart du
+      // fichier, les retouches non enregistrées comprises.
+      const [version, setVersion] = React.useState(0)
+
+      const load = React.useCallback(() => {
+        fetch(WORKFLOWS_URL, { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.error) throw new Error(data.error)
+            setView({ loading: false, error: null, workflows: data?.workflows ?? [], writers: data?.writers ?? [], states: data?.states ?? [] })
+            setVersion((previous) => previous + 1)
+          })
+          .catch((error) => setView((previous) => ({ ...previous, loading: false, error: error?.message ?? 'read failed' })))
+      }, [])
+
+      React.useEffect(() => { load() }, [load])
+
+      // L'étape ouverte suit la session, comme l'onglet : fermer le panneau sur
+      // la revue le rouvre sur la revue.
+      React.useEffect(() => { writeStep(filterStorage(), step, WORKFLOW_STEPS) }, [step])
+
+      const entry = view.workflows.find((item) => item.workflow === step) ?? null
+
+      // Le brouillon suit l'étape : la réponse du serveur porte des champs
+      // d'affichage (`errors`, `headings`, `file`) que le fichier ne contient pas.
+      React.useEffect(() => {
+        if (!entry) { setDraft(null); return }
+        setDraft(modelOf(entry))
+        setChosen(null)
+        setStatus(null)
+        setArc({ from: '', to: '', when: '' })
+      }, [entry && entry.workflow, version])
+
+      const patchNode = (key, value) => {
+        if (!chosen) return
+        setDraft((previous) => ({ ...previous, nodes: previous.nodes.map((node) => (node.id === chosen ? { ...node, [key]: value } : node)) }))
+      }
+
+      const labelOf = (id) => (draft ? draft.nodes.find((node) => node.id === id)?.label ?? id : id)
+      const sectionOf = (id) => (draft ? draft.nodes.find((node) => node.id === id)?.section ?? '' : '')
+      const writerOf = (id) => (draft ? draft.nodes.find((node) => node.id === id)?.writer ?? '' : '')
+
+      const addGesture = () => {
+        if (!draft) return
+        const id = nextGestureId(draft)
+        const heading = entry?.headings?.[0]?.text ?? ''
+        setDraft({ ...draft, nodes: [...draft.nodes, { id, label: 'Nouveau geste', section: heading, writer: view.writers[0] ?? 'session' }] })
+        setChosen(id)
+        setStatus(null)
+      }
+
+      const removeGesture = () => {
+        if (!draft || !chosen) return
+        setDraft(withoutNode(draft, chosen))
+        setChosen(null)
+        setStatus(null)
+      }
+
+      // Un même couple (départ, arrivée) ne se double pas : le geste se relit,
+      // il ne s'ajoute pas. Réappliquer le couple met la condition à jour.
+      const addArc = () => {
+        if (!draft || !arc.from || !arc.to) { setStatus({ kind: 'error', message: 'Choisis un départ et une arrivée.' }); return }
+        if (arc.from === arc.to) { setStatus({ kind: 'error', message: 'Un geste ne se suit pas lui-même : passe par un autre geste.' }); return }
+        setDraft(upsertEdge(draft, arc.from, arc.to, arc.when.trim()))
+        setArc({ from: '', to: '', when: '' })
+        setStatus(null)
+      }
+
+      // Cliquer un arc le charge dans le formulaire : le modifier, c'est le
+      // relire puis le reposer, sans le supprimer d'abord.
+      const pickArc = (edge) => {
+        setArc({ from: edge.from, to: edge.to, when: edge.when ?? '' })
+        setStatus(null)
+      }
+
+      const removeArc = (from, to) => {
+        if (!draft) return
+        setDraft(withoutEdge(draft, from, to))
+        setStatus(null)
+      }
+
+      // Le serveur valide, dit non, et n'écrit rien : le bouton ne fait
+      // qu'envoyer, jamais juger.
+      const save = () => {
+        if (!draft || saving) return
+        setSaving(true)
+        setStatus(null)
+        fetch(WORKFLOW_MODEL_URL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({ workflow: draft.workflow, model: draft }),
+        })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) {
+              setStatus({ kind: 'error', message: data?.error ?? 'save failed', errors: data?.errors ?? [] })
+              return
+            }
+            setView((previous) => ({
+              ...previous,
+              workflows: previous.workflows.map((item) => (item.workflow === data.workflow
+                ? { ...item, ...data.model, headings: data.headings, orphanSections: data.orphanSections, errors: [] }
+                : item)),
+            }))
+            setStatus({ kind: 'ok', message: `Enregistré — ${data.file}` })
+          })
+          .catch((error) => setStatus({ kind: 'error', message: error?.message ?? 'save failed' }))
+          .finally(() => setSaving(false))
+      }
+
+      if (!entry) {
+        return h('div', { className: 'wf-view' },
+          h('div', { className: 'wf-toolbar' },
+            h('span', { className: 'wf-note' }, view.loading ? 'Chargement du parcours…' : view.error ?? 'Aucun modèle de workflow.'),
+            h('button', { type: 'button', className: 'missions-btn', onClick: load }, 'Recharger'),
+          ),
+        )
+      }
+
+      const graph = draft ? layoutWorkflow(draft) : { boxes: [], links: [], width: 0, height: 0 }
+      const node = draft && chosen ? draft.nodes.find((item) => item.id === chosen) ?? null : null
+      const clip = (text, max) => {
+        const value = String(text ?? '')
+        return value.length > max ? `${value.slice(0, max - 1)}…` : value
+      }
+      const headingTexts = (entry.headings ?? []).map((heading) => heading.text)
+      const sectionChoices = node && node.section && !headingTexts.includes(node.section) ? [node.section, ...headingTexts] : headingTexts
+      const ends = [{ id: draft.entry, kind: 'etat' }, ...draft.nodes.map((item) => ({ id: item.id, kind: 'geste' })), ...(draft.exit ?? []).map((state) => ({ id: state, kind: 'etat' }))]
+
+      return h('div', { className: 'wf-view' },
+        h('div', { className: 'wf-toolbar' },
+          h('div', { className: 'wf-steps', role: 'group', 'aria-label': 'Étapes du parcours' },
+            view.workflows.map((item) => h('button', {
+              key: item.workflow,
+              type: 'button',
+              className: 'wf-step',
+              'aria-pressed': item.workflow === step,
+              onClick: () => setStep(item.workflow),
+            }, item.title || item.workflow)),
+          ),
+          h('span', { className: 'wf-note' }, `${entry.document} — ${entry.entry ?? '?'} → ${(entry.exit ?? []).join(', ') || '?'}`),
+          h('button', { type: 'button', className: 'missions-btn', onClick: save, disabled: saving }, saving ? 'Enregistrement…' : 'Enregistrer'),
+          h('button', { type: 'button', className: 'missions-btn', onClick: load }, 'Recharger'),
+        ),
+
+        entry.errors && entry.errors.length > 0
+          ? h('div', null, entry.errors.map((error, index) => h('p', { key: `${error.code}-${index}`, className: 'wf-error' }, `${error.field} — ${error.message}`)))
+          : null,
+        entry.orphanSections && entry.orphanSections.length > 0
+          ? h('p', { className: 'wf-note' }, `Sans geste : ${entry.orphanSections.join(' · ')}`)
+          : null,
+        status
+          ? h('div', null,
+              h('p', { className: status.kind === 'ok' ? 'wf-ok' : 'wf-error', role: 'status' }, status.message),
+              (status.errors ?? []).map((error, index) => h('p', { key: `${error.code}-${index}`, className: 'wf-error' }, `${error.field} — ${error.message}`)),
+            )
+          : null,
+
+        h('div', { className: 'wf-layout' },
+          h('div', { className: 'wf-canvas-wrap' },
+            graph.boxes.length === 0
+              ? h('p', { className: 'wf-note' }, 'Ce modèle est vide.')
+              : h('svg', {
+                  className: 'wf-canvas',
+                  viewBox: `0 0 ${graph.width} ${graph.height}`,
+                  width: graph.width,
+                  height: graph.height,
+                  role: 'img',
+                  'aria-label': `${entry.title} — ${graph.boxes.length} gestes, ${graph.links.length} arcs`,
+                },
+                  h('defs', null, h('marker', { id: 'wf-arrow', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor', opacity: 0.45 }))),
+                  graph.links.map((link) => h('g', { key: `${link.from}→${link.to}` },
+                    h('path', { className: link.back ? 'wf-link wf-link--back' : 'wf-link', d: link.path, 'marker-end': 'url(#wf-arrow)' }),
+                    // Seuls les retours portent leur condition : le graphe reste
+                    // lisible, et la carte des arcs donne le texte entier.
+                    link.back && link.when ? h('text', { className: 'wf-link-label', x: link.labelX, y: link.labelY }, clip(link.when, 30)) : null,
+                  )),
+                  graph.boxes.map((box) => h('g', {
+                    key: box.id,
+                    className: 'wf-node-group',
+                    onClick: box.kind === 'geste' ? () => { setChosen(box.id); setStatus(null) } : null,
+                  },
+                    h('rect', { className: `wf-node wf-node--${box.kind}${box.id === chosen ? ' wf-node--selected' : ''}`, x: box.x, y: box.y, width: box.width, height: box.height, rx: 9 }),
+                    h('text', { className: 'wf-node-label', x: box.x + 10, y: box.y + (box.kind === 'etat' ? 22 : 20) }, clip(box.label, box.kind === 'geste' ? 30 : 20)),
+                    box.kind === 'geste' ? h('text', { className: 'wf-node-section', x: box.x + 10, y: box.y + 36 }, clip(`${sectionOf(box.id)} · ${writerOf(box.id)}`, 30)) : null,
+                  )),
+                ),
+          ),
+
+          h('div', { className: 'wf-side' },
+            h('div', { className: 'wf-card' },
+              h('div', { className: 'wf-card-title' }, node ? 'Geste' : 'Graphe'),
+              node
+                ? h('div', null,
+                    h('p', { className: 'wf-note' }, node.id),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Libellé'), h('input', { value: node.label ?? '', onChange: (event) => patchNode('label', event.target.value) })),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Section du document'), h('select', { value: node.section ?? '', onChange: (event) => patchNode('section', event.target.value) }, sectionChoices.map((text) => h('option', { key: text, value: text }, text)))),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Écrivain'), h('select', { value: node.writer ?? '', onChange: (event) => patchNode('writer', event.target.value) }, view.writers.map((writer) => h('option', { key: writer, value: writer }, writer)))),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Condition'), h('input', { value: node.condition ?? '', placeholder: 'Quand ce geste a lieu', onChange: (event) => patchNode('condition', event.target.value) })),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Artefact'), h('input', { value: node.artifact ?? '', placeholder: 'Ce que le geste produit', onChange: (event) => patchNode('artifact', event.target.value) })),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Porte'), h('input', { value: node.gate ?? '', placeholder: 'Ce qui doit être vrai pour avancer', onChange: (event) => patchNode('gate', event.target.value) })),
+                    h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: removeGesture }, 'Supprimer le geste')),
+                  )
+                : h('div', null,
+                    h('p', { className: 'wf-note' }, 'Clique un geste pour le modifier.'),
+                    h('p', { className: 'wf-note' }, `Écrivains : ${view.writers.join(', ') || '—'}`),
+                    h('p', { className: 'wf-note' }, `${draft.nodes.length} gestes · ${draft.edges.length} arcs`),
+                    h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: addGesture }, 'Ajouter un geste')),
+                  ),
+            ),
+
+            h('div', { className: 'wf-card' },
+              h('div', { className: 'wf-card-title' }, 'Arcs'),
+              draft.edges.length === 0
+                ? h('p', { className: 'wf-note' }, 'Aucun arc.')
+                : h('div', null, draft.edges.map((edge) => h('div', {
+                    key: `${edge.from}→${edge.to}`,
+                    className: 'wf-arc',
+                    role: 'button',
+                    tabIndex: 0,
+                    title: 'Reprendre cet arc dans le formulaire',
+                    onClick: () => pickArc(edge),
+                    onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pickArc(edge) } },
+                  },
+                    h('span', null, `${labelOf(edge.from)} → ${labelOf(edge.to)}`),
+                    edge.when ? h('span', { className: 'wf-arc-when' }, edge.when) : null,
+                    h('button', { type: 'button', className: 'wf-arc-del', title: 'Supprimer l’arc', onClick: (event) => { event.stopPropagation(); removeArc(edge.from, edge.to) } }, '×'),
+                  ))),
+              h('label', { className: 'wf-field' }, h('span', null, 'Du'), h('select', { value: arc.from, onChange: (event) => setArc({ ...arc, from: event.target.value }) }, h('option', { value: '' }, '—'), ends.map((end) => h('option', { key: `from-${end.id}`, value: end.id }, end.id)))),
+              h('label', { className: 'wf-field' }, h('span', null, 'Au'), h('select', { value: arc.to, onChange: (event) => setArc({ ...arc, to: event.target.value }) }, h('option', { value: '' }, '—'), ends.map((end) => h('option', { key: `to-${end.id}`, value: end.id }, end.id)))),
+              h('label', { className: 'wf-field' }, h('span', null, 'Quand (facultatif)'), h('input', { value: arc.when, placeholder: 'si …', onChange: (event) => setArc({ ...arc, when: event.target.value }) })),
+              h('div', { className: 'wf-actions' },
+                h('button', { type: 'button', className: 'missions-btn', onClick: addArc }, draft.edges.some((edge) => edge.from === arc.from && edge.to === arc.to && arc.from && arc.to) ? 'Mettre à jour l’arc' : 'Ajouter l’arc'),
+              ),
+            ),
+          ),
+        ),
+      )
+    }
+
     function MissionsPanel({ services }) {
       // The bar comes back from the session: the panel is remounted on every
       // view switch, and a reload must not lose the search, the filters or the
@@ -1788,7 +2078,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             id: `missions-view-${tab}`,
             'aria-labelledby': `missions-tab-${tab}`,
           },
-            tab === 'dashboard'
+            tab === 'workflows'
+              ? h(WorkflowsView, null)
+              : tab === 'dashboard'
               ? h(DashboardView, {
                   missions,
                   loading,
@@ -1801,7 +2093,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                 ? h(PanelLoader, { theme })
                 : h(MissionsView, { missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort, filtered, groups, onSelect: setSelected, theme }),
           ),
-          selected
+          tab === 'workflows'
+            ? null
+            : selected
             ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, theme })
             : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },
                 h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),

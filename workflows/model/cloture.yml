@@ -1,0 +1,88 @@
+workflow: cloture
+title: Clôture
+document: workflows/cloture.md
+entry: ready-for-prod
+exit:
+  - done
+nodes:
+  - id: merger
+    label: Merger la PR
+    section: Ce qu'on fait
+    writer: session
+    gate: la méthode du projet est suivie
+    artifact: le commit de merge
+  - id: fermer-ticket
+    label: Fermer le ticket avec les preuves
+    section: Ce qu'on fait
+    writer: session
+    artifact: les critères cochés dans le ticket
+  - id: supprimer-branche
+    label: Supprimer la branche
+    section: Ce qu'on fait
+    writer: session
+  - id: fermer-epic
+    label: Fermer l'epic s'il est complet
+    section: Ce qu'on fait
+    writer: session
+    condition: c'était la dernière mission de l'epic
+  - id: clore-journal
+    label: Clore le journal
+    section: Ce qu'on fait
+    writer: session
+    artifact: la section de clôture du journal
+  - id: solder-checklist
+    label: Solder la checklist
+    section: Ce qu'on fait
+    writer: session
+    gate: toutes les cases cochées, ou nommées comme suite
+  - id: noter-suites
+    label: Noter les suites
+    section: Ce qu'on fait
+    writer: session
+  - id: laisser-ouverte
+    label: Laisser la mission ouverte
+    section: Cas particuliers
+    writer: demandeur
+    condition: la mission est abandonnée ou partielle
+    gate: le motif est écrit dans le ticket
+  - id: verifier-sortie
+    label: Vérifier la condition de sortie
+    section: Condition de sortie — la mission est « terminée »
+    writer: session
+    gate: les sept cases sont cochées
+  - id: passer-done
+    label: Passer le ticket à terminée
+    section: Sur le tracker
+    writer: session
+    artifact: le libellé done
+edges:
+  - from: ready-for-prod
+    to: merger
+  - from: merger
+    to: fermer-ticket
+  - from: fermer-ticket
+    to: supprimer-branche
+  - from: supprimer-branche
+    to: fermer-epic
+  - from: fermer-epic
+    to: clore-journal
+  - from: clore-journal
+    to: solder-checklist
+  - from: solder-checklist
+    to: noter-suites
+  - from: noter-suites
+    to: verifier-sortie
+  - from: verifier-sortie
+    to: clore-journal
+    when: une case n'est pas cochée
+  - from: verifier-sortie
+    to: passer-done
+    when: les sept cases sont cochées
+  - from: solder-checklist
+    to: laisser-ouverte
+    when: la mission est abandonnée ou partielle
+  - from: laisser-ouverte
+    to: done
+    when: le motif est écrit dans le ticket
+  - from: passer-done
+    to: done

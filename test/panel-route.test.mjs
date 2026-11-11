@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { createServer, request } from 'node:http'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { parse } from 'yaml'
 
@@ -21,9 +22,13 @@ async function mount(t) {
   t.after(() => rm(dir, { recursive: true, force: true }))
 
   let handler = null
+  // Le dossier temporaire reproduit le dépôt : `missions/projects.yml` d'un
+  // côté, `workflows/model/` de l'autre — un modèle cherché au mauvais endroit
+  // ne doit pas passer pour un modèle trouvé.
+  await mkdir(join(dir, 'missions'), { recursive: true })
   apply(
     { effect: (fn) => fn(), webServer: { register: (route) => { handler = route.handler } } },
-    { projectsFile: join(dir, 'projects.yml') },
+    { projectsFile: join(dir, 'missions', 'projects.yml') },
   )
   assert.ok(handler, 'la route est enregistrée')
   return { dir, handler }
@@ -75,7 +80,7 @@ test('POST déclare la branche et la base dans le dossier de la mission', async 
     branch: 'gh-49',
     base: 'main',
   })
-  const text = await readFile(join(dir, 'daedalforge-missions-49', MISSION_FILE), 'utf8')
+  const text = await readFile(join(dir, 'missions', 'daedalforge-missions-49', MISSION_FILE), 'utf8')
   assert.match(text, /^key: daedalforge\/missions#49$/m)
   assert.match(text, /^branch: gh-49$/m)
 })
@@ -95,7 +100,7 @@ test('POST vide un champ retiré, GET est refusé', async (t) => {
   })
   assert.equal(cleared.status, 200)
   assert.equal(cleared.body.base, null)
-  const text = await readFile(join(dir, 'daedalforge-missions-49', MISSION_FILE), 'utf8')
+  const text = await readFile(join(dir, 'missions', 'daedalforge-missions-49', MISSION_FILE), 'utf8')
   assert.equal(parse(text).base, undefined)
 
   const refused = await call(handler, { method: 'GET', path: '/missions/api/branches' })
@@ -132,7 +137,7 @@ test('un corps invalide ou une déclaration invalide répond 400', async (t) => 
   assert.match(notAString.body.error, /branch must be a string/)
 
   // Rien n'a été créé par les requêtes refusées.
-  assert.deepEqual(await readdir(dir), [])
+  assert.deepEqual(await readdir(join(dir, 'missions')), [])
 })
 
 test('un corps trop gros est refusé sur son en-tête', async (t) => {
@@ -146,7 +151,7 @@ test('un corps trop gros est refusé sur son en-tête', async (t) => {
   })
   assert.equal(tooBig.status, 400)
   assert.match(tooBig.body.error, /too large/)
-  assert.deepEqual(await readdir(dir), [])
+  assert.deepEqual(await readdir(join(dir, 'missions')), [])
 })
 
 test('un corps trop gros reçoit son 400 sur un vrai socket', async (t) => {
@@ -185,7 +190,7 @@ test('un corps trop gros reçoit son 400 sur un vrai socket', async (t) => {
   assert.match(JSON.parse(chunked.body).error, /too large/)
 
   // Rien n'a été écrit par les requêtes refusées.
-  assert.deepEqual(await readdir(dir), [])
+  assert.deepEqual(await readdir(join(dir, 'missions')), [])
 })
 
 test('un chemin ne peut pas sortir de missions : le dossier vient de la clé', async (t) => {
@@ -198,14 +203,14 @@ test('un chemin ne peut pas sortir de missions : le dossier vient de la clé', a
   })
   assert.equal(response.status, 200)
   assert.equal(response.body.folder, 'escape')
-  assert.deepEqual(await readdir(dir), ['escape'])
+  assert.deepEqual(await readdir(join(dir, 'missions')), ['escape'])
 })
 
 test('GET journal lit le fichier de la mission déclarée', async (t) => {
   const { dir, handler } = await mount(t)
-  await mkdir(join(dir, 'MIS-69'), { recursive: true })
-  await writeFile(join(dir, 'MIS-69', MISSION_FILE), 'key: MIS-69\nbranch: feat/mis-69\nbase: main\n')
-  await writeFile(join(dir, 'MIS-69', 'journal.md'), '# Journal — MIS-69\n\n## 2026-11-11 — Cadrage\n')
+  await mkdir(join(dir, 'missions', 'MIS-69'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-69', MISSION_FILE), 'key: MIS-69\nbranch: feat/mis-69\nbase: main\n')
+  await writeFile(join(dir, 'missions', 'MIS-69', 'journal.md'), '# Journal — MIS-69\n\n## 2026-11-11 — Cadrage\n')
 
   const response = await call(handler, { path: '/missions/api/journal?key=MIS-69' })
   assert.equal(response.status, 200)
@@ -238,7 +243,7 @@ test('GET journal ne lève pas sur une clé inconnue et refuse une autre méthod
   assert.equal(noFile.body.exists, false)
   assert.equal(noFile.body.source, '')
   assert.equal(noFile.body.mtimeMs, 0)
-  assert.deepEqual(await readdir(join(dir, 'MIS-69')), [MISSION_FILE])
+  assert.deepEqual(await readdir(join(dir, 'missions', 'MIS-69')), [MISSION_FILE])
 
   const missing = await call(handler, { path: '/missions/api/journal' })
   assert.equal(missing.status, 400)
@@ -251,9 +256,9 @@ test('GET journal ne lève pas sur une clé inconnue et refuse une autre méthod
 
 test('GET checklist lit le fichier de la mission déclarée', async (t) => {
   const { dir, handler } = await mount(t)
-  await mkdir(join(dir, 'MIS-70'), { recursive: true })
-  await writeFile(join(dir, 'MIS-70', MISSION_FILE), 'key: MIS-70\nbranch: feat/mis-70\nbase: main\n')
-  await writeFile(join(dir, 'MIS-70', 'checklist.md'), '# Checklist — MIS-70\n\n- [x] Les tests passent.\n')
+  await mkdir(join(dir, 'missions', 'MIS-70'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-70', MISSION_FILE), 'key: MIS-70\nbranch: feat/mis-70\nbase: main\n')
+  await writeFile(join(dir, 'missions', 'MIS-70', 'checklist.md'), '# Checklist — MIS-70\n\n- [x] Les tests passent.\n')
 
   const response = await call(handler, { path: '/missions/api/checklist?key=MIS-70' })
   assert.equal(response.status, 200)
@@ -286,7 +291,7 @@ test('GET checklist ne lève pas sur une clé inconnue et refuse une autre méth
   assert.equal(noFile.body.exists, false)
   assert.equal(noFile.body.source, '')
   assert.equal(noFile.body.mtimeMs, 0)
-  assert.deepEqual(await readdir(join(dir, 'MIS-70')), [MISSION_FILE])
+  assert.deepEqual(await readdir(join(dir, 'missions', 'MIS-70')), [MISSION_FILE])
 
   const missing = await call(handler, { path: '/missions/api/checklist' })
   assert.equal(missing.status, 400)
@@ -318,4 +323,101 @@ test('une route inconnue répond 404, un appel non local répond 403', async (t)
     origin: 'https://evil.example',
   })
   assert.equal(forgedOrigin.status, 403)
+})
+
+/** Les modèles vivent à côté de `projects.yml`, comme dans le dépôt. */
+async function copyWorkflows(dir) {
+  const root = fileURLToPath(new URL('../', import.meta.url))
+  await mkdir(join(dir, 'missions'), { recursive: true })
+  await mkdir(join(dir, 'workflows', 'model'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'projects.yml'), await readFile(join(root, 'missions', 'projects.yml')))
+  for (const workflow of ['cadrage', 'execution', 'review', 'cloture']) {
+    await writeFile(join(dir, 'workflows', `${workflow}.md`), await readFile(join(root, 'workflows', `${workflow}.md`)))
+    await writeFile(
+      join(dir, 'workflows', 'model', `${workflow}.yml`),
+      await readFile(join(root, 'workflows', 'model', `${workflow}.yml`)),
+    )
+  }
+}
+
+/** Le modèle nu, tel que le panneau le renvoie au serveur. */
+function bareModel(entry) {
+  const { errors, orphanSections, headings, file, ...model } = entry
+  return model
+}
+
+test('GET /workflows rend les quatre étapes et le vocabulaire', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const response = await call(handler, { path: '/missions/api/workflows' })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body.workflows.length, 4)
+  assert.deepEqual(response.body.workflows.map((entry) => entry.workflow), ['cadrage', 'execution', 'review', 'cloture'])
+  assert.deepEqual(response.body.writers, ['demandeur', 'session', 'outil'])
+  assert.ok(response.body.states.includes('ready'))
+  for (const entry of response.body.workflows) {
+    assert.deepEqual(entry.errors, [], entry.workflow)
+    assert.ok(entry.nodes.length > 0)
+    assert.ok(entry.headings.length > 0)
+  }
+  assert.equal(response.body.workflows[0].text, undefined, 'le texte reste dans la route du modèle')
+})
+
+test('POST /workflows/model écrit un modèle valide', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const model = bareModel(list.body.workflows[0])
+  model.nodes[0].label = 'Lire le ticket, puis son contexte'
+
+  const saved = await call(handler, { method: 'POST', path: '/missions/api/workflows/model', body: { workflow: 'cadrage', model } })
+
+  assert.equal(saved.status, 200)
+  assert.equal(saved.body.model.nodes[0].label, 'Lire le ticket, puis son contexte')
+  assert.deepEqual(saved.body.errors, [])
+  const written = await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8')
+  assert.match(written, /puis son contexte/)
+})
+
+test('POST /workflows/model refuse un modèle invalide et n’écrit rien', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  const before = await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8')
+
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const model = bareModel(list.body.workflows[0])
+  model.entry = 'refined'
+
+  const refused = await call(handler, { method: 'POST', path: '/missions/api/workflows/model', body: { workflow: 'cadrage', model } })
+
+  assert.equal(refused.status, 400)
+  assert.equal(refused.body.error, 'model invalid')
+  assert.equal(refused.body.errors[0].code, 'etat-inconnu')
+  assert.equal(await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8'), before)
+})
+
+test('GET /workflows/model rend le YAML, un couple inconnu répond 400', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const response = await call(handler, { path: '/missions/api/workflows/model?workflow=review' })
+  assert.equal(response.status, 200)
+  assert.match(response.body.text, /^workflow: review/)
+  assert.equal(response.body.file, 'workflows/model/review.yml')
+
+  const missing = await call(handler, { path: '/missions/api/workflows/model' })
+  assert.equal(missing.status, 400)
+
+  const unknown = await call(handler, { path: '/missions/api/workflows/model?workflow=deploy' })
+  assert.equal(unknown.status, 400)
+
+  const refused = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows/model',
+    body: { workflow: 'deploy', model: {} },
+  })
+  assert.equal(refused.status, 400)
 })

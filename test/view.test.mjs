@@ -3,6 +3,14 @@ import test from 'node:test'
 
 import {
   actionVerb,
+  layoutWorkflow,
+  modelOf,
+  readStep,
+  writeStep,
+  nextGestureId,
+  withoutEdge,
+  upsertEdge,
+  withoutNode,
   ageDays,
   assignedBugs,
   branchFieldValue,
@@ -594,4 +602,139 @@ test('une mission close ne compte ni dans la file ni dans le périmètre', () =>
 
   assert.deepEqual(needsYou(missions).map((mission) => mission.key), ['ouverte'])
   assert.deepEqual(dashboardScope(missions), { needYou: 1, open: 1, projects: 1 })
+})
+
+
+// Le modèle de référence : quatre colonnes, un aller simple et un retour.
+const MODELE = {
+  workflow: 'cadrage',
+  title: 'Cadrage',
+  entry: 'to-refine',
+  exit: ['ready'],
+  nodes: [
+    { id: 'lire', label: 'Lire le ticket' },
+    { id: 'ecrire', label: 'Écrire la fiche' },
+  ],
+  edges: [
+    { from: 'to-refine', to: 'lire' },
+    { from: 'lire', to: 'ecrire' },
+    { from: 'ecrire', to: 'ready' },
+    { from: 'ecrire', to: 'lire', when: 'si le plan manque' },
+  ],
+}
+
+test('la géométrie suit le plus long chemin, et l’entrée passe avant les gestes', () => {
+  const graph = layoutWorkflow(MODELE)
+
+  assert.deepEqual(graph.boxes.map((box) => [box.id, box.kind, box.level]), [
+    ['to-refine', 'etat', 0],
+    ['lire', 'geste', 1],
+    ['ecrire', 'geste', 2],
+    ['ready', 'etat', 3],
+  ])
+  // Deux rangées voisines ne se chevauchent pas : la boîte suivante commence
+  // après la fin de la précédente, et le dessin contient tout le monde.
+  const lire = graph.boxes.find((box) => box.id === 'lire')
+  const ecrire = graph.boxes.find((box) => box.id === 'ecrire')
+  assert.ok(ecrire.y > lire.y + lire.height)
+  assert.ok(graph.height > ecrire.y + ecrire.height - 1)
+  assert.ok(graph.width > lire.x + lire.width)
+})
+
+test('un arc de retour sort à droite du graphe, en pointillé', () => {
+  const graph = layoutWorkflow(MODELE)
+
+  const back = graph.links.find((link) => link.back)
+  assert.ok(back, 'l’arc « si le plan manque » revient en arrière')
+  assert.deepEqual([back.from, back.to], ['ecrire', 'lire'])
+  assert.equal(back.when, 'si le plan manque')
+  assert.equal(graph.links.filter((link) => !link.back).length, 3)
+  // Le retour contourne les rangées par la droite : il ne les traverse pas.
+  const ecrire = graph.boxes.find((box) => box.id === 'ecrire')
+  assert.ok(back.labelX > ecrire.x + ecrire.width)
+  assert.ok(graph.width > back.labelX)
+})
+
+test('un geste injoignable ne se cache pas : il prend sa propre colonne', () => {
+  const graph = layoutWorkflow({ ...MODELE, nodes: [...MODELE.nodes, { id: 'perdu', label: 'Perdu' }] })
+  const perdu = graph.boxes.find((box) => box.id === 'perdu')
+
+  assert.equal(perdu.level, 4, 'après la dernière colonne du chemin')
+})
+
+test('un modèle vide ne lève pas et ne dessine rien', () => {
+  for (const model of [{}, undefined]) {
+    const graph = layoutWorkflow(model)
+    assert.deepEqual(graph.boxes, [])
+    assert.deepEqual(graph.links, [])
+    assert.ok(Number.isFinite(graph.width) && Number.isFinite(graph.height), 'une toile vide a quand même une taille')
+  }
+})
+
+test('retirer un geste retire ses arcs, et un id neuf ne collide pas', () => {
+  const without = withoutNode(MODELE, 'ecrire')
+  assert.deepEqual(without.nodes.map((node) => node.id), ['lire'])
+  assert.deepEqual(without.edges.map((edge) => `${edge.from}→${edge.to}`), ['to-refine→lire'])
+
+  assert.deepEqual(withoutEdge(MODELE, 'to-refine', 'lire').edges.map((edge) => `${edge.from}→${edge.to}`), ['lire→ecrire', 'ecrire→ready', 'ecrire→lire'])
+  assert.equal(nextGestureId({ nodes: [{ id: 'geste-1' }, { id: 'geste-2' }] }), 'geste-3')
+  assert.equal(nextGestureId({ nodes: [] }), 'geste-1')
+})
+
+
+test('une condition d’arc se met à jour sur place, un arc neuf s’ajoute', () => {
+  const updated = upsertEdge(MODELE, 'lire', 'ecrire', 'si le plan manque')
+  assert.deepEqual(updated.edges.map((edge) => `${edge.from}→${edge.to}`), ['to-refine→lire', 'lire→ecrire', 'ecrire→ready', 'ecrire→lire'], 'un arc existant garde sa place')
+  assert.equal(updated.edges[1].when, 'si le plan manque', 'la condition remplace celle qui n’existait pas')
+
+  const added = upsertEdge(MODELE, 'lire', 'ready', 'si la fiche suffit')
+  assert.equal(added.edges.at(-1).to, 'ready')
+  assert.equal(added.edges.length, 5)
+
+  // Vider la condition retire le champ : le fichier ne garde pas de `when: ''`.
+  assert.equal('when' in upsertEdge(MODELE, 'lire', 'ecrire', '').edges[1], false)
+  assert.equal(upsertEdge(MODELE, 'ecrire', 'lire', '').edges.at(-1).when, undefined)
+})
+
+
+test('l’étape ouverte se garde comme l’onglet, et retombe sur la première', () => {
+  const steps = ['cadrage', 'execution', 'review', 'cloture']
+  const memoire = () => {
+    const map = new Map()
+    return { map, getItem: (key) => (map.has(key) ? map.get(key) : null), setItem: (key, value) => map.set(key, String(value)), removeItem: (key) => map.delete(key) }
+  }
+
+  const session = memoire()
+  assert.equal(readStep(session, steps), 'cadrage', 'une session neuve ouvre la première étape')
+  writeStep(session, 'review', steps)
+  assert.equal(session.map.get('missions.workflow-step'), 'review')
+  assert.equal(readStep(session, steps), 'review', 'l’étape survit à un remontage')
+  writeStep(session, 'cadrage', steps)
+  assert.equal(session.map.has('missions.workflow-step'), false, 'la première étape ne laisse pas de clé')
+  writeStep(session, 'archive', steps)
+  assert.equal(session.map.has('missions.workflow-step'), false, 'une étape que le panneau ne rend pas ne s’écrit pas')
+  assert.equal(readStep(session, steps), 'cadrage')
+  assert.equal(readStep(null, steps), 'cadrage')
+})
+
+test('modelOf ne renvoie que le modèle, jamais les champs d’affichage du serveur', () => {
+  const entree = {
+    workflow: 'cadrage',
+    title: 'Cadrage',
+    document: 'workflows/cadrage.md',
+    entry: 'to-refine',
+    exit: ['ready'],
+    nodes: [{ id: 'lire', label: 'Lire', section: 'Ce qu’on fait', writer: 'session' }],
+    edges: [{ from: 'to-refine', to: 'lire' }],
+    errors: [{ field: 'nodes', code: 'x', message: 'y' }],
+    orphanSections: ['Sur le tracker'],
+    headings: [{ level: 2, text: 'Ce qu’on fait' }],
+    file: 'workflows/model/cadrage.yml',
+    text: 'workflow: cadrage',
+  }
+  const modele = modelOf(entree)
+  assert.deepEqual(Object.keys(modele), ['workflow', 'title', 'document', 'entry', 'exit', 'nodes', 'edges'])
+  assert.deepEqual(modele.nodes, entree.nodes)
+  assert.deepEqual(modelOf(), {}, 'une entrée absente ne lève pas')
+  assert.deepEqual(modelOf(null), {})
 })

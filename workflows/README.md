@@ -80,3 +80,15 @@ périmètre retourne en cadrage — mais jamais sauter une étape.
 7. **Un seul état par mission.** Une issue porte exactement un libellé d'état.
    Plusieurs laissent l'état indéterminé et bloquent le passage à l'étape
    suivante : on retire l'ancien libellé en posant le nouveau.
+
+## Le modèle éditable
+
+Chaque étape a son modèle dans `workflows/model/<étape>.yml` : les gestes de ses
+sections, les arcs qui les enchaînent, l'état d'entrée et les états de sortie.
+Le panneau les dessine et les édite dans son onglet **Workflows** ; le format et
+ses règles sont décrits dans `workflows/model/README.md`.
+
+Le document `.md` reste la référence : le modèle en est la vue éditable, et
+`node tools/check-workflows.mjs` signale, étape par étape, une section du
+document restée sans geste (ou un geste qui n'ancre aucune section). Une
+divergence n'est jamais réparée d'office — c'est au rédacteur de trancher.

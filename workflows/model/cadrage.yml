@@ -1,0 +1,110 @@
+workflow: cadrage
+title: Cadrage
+document: workflows/cadrage.md
+entry: to-refine
+exit:
+  - ready
+nodes:
+  - id: lire-ticket
+    label: Lire le ticket et son contexte
+    section: Ce qu'on fait
+    writer: session
+    condition: le ticket est ouvert et lisible
+    artifact: les faits du ticket
+  - id: regarder-terrain
+    label: Regarder le terrain
+    section: Ce qu'on fait
+    writer: session
+    artifact: l'état du code, des données et des tickets voisins
+  - id: traiter-signaux
+    label: Traiter les signaux d'arrêt
+    section: Signaux d'arrêt
+    writer: session
+    condition: un signal d'arrêt apparaît
+    gate: objectif unique, périmètre tenable, critère vérifiable, dépendance disponible
+  - id: ecrire-fiche
+    label: Écrire la fiche
+    section: Ce qu'on fait
+    writer: session
+    artifact: la fiche du ticket
+  - id: decouper
+    label: Découper si le travail dépasse une mission
+    section: Ce qu'on fait
+    writer: session
+    condition: le travail dépasse une mission
+    gate: un ticket par mission, chacun avec son objectif et sa sortie
+  - id: proposer-plan
+    label: Proposer un plan
+    section: Ce qu'on fait
+    writer: session
+    artifact: le plan d'exécution, dans l'ordre
+  - id: declarer-branche
+    label: Déclarer la branche et sa base
+    section: Ce qu'on fait
+    writer: demandeur
+    artifact: missions/<dossier>/mission.yml
+  - id: ouvrir-journal
+    label: Ouvrir le journal de mission
+    section: Ce qu'on fait
+    writer: session
+    artifact: missions/<dossier>/journal.md
+  - id: ouvrir-checklist
+    label: Ouvrir la checklist de mission
+    section: Ce qu'on fait
+    writer: session
+    artifact: missions/<dossier>/checklist.md
+  - id: verifier-sortie
+    label: Vérifier la condition de sortie
+    section: Condition de sortie — la mission est « prête »
+    writer: session
+    gate: les neuf cases sont cochées
+  - id: valider-cadrage
+    label: Faire valider le cadrage
+    section: Sur le tracker
+    writer: demandeur
+    gate: le demandeur a répondu explicitement
+  - id: passer-ready
+    label: Passer le ticket à prête
+    section: Sur le tracker
+    writer: session
+    artifact: le libellé ready sur le ticket
+edges:
+  - from: to-refine
+    to: lire-ticket
+  - from: lire-ticket
+    to: regarder-terrain
+  - from: regarder-terrain
+    to: traiter-signaux
+    when: un signal d'arrêt apparaît
+  - from: traiter-signaux
+    to: ecrire-fiche
+    when: le cadre tient, ou le ticket est reformulé
+  - from: regarder-terrain
+    to: ecrire-fiche
+  - from: ecrire-fiche
+    to: decouper
+    when: le travail dépasse une mission
+  - from: decouper
+    to: ecrire-fiche
+    when: chaque nouveau ticket repart au cadrage
+  - from: ecrire-fiche
+    to: proposer-plan
+  - from: proposer-plan
+    to: declarer-branche
+  - from: declarer-branche
+    to: ouvrir-journal
+  - from: ouvrir-journal
+    to: ouvrir-checklist
+  - from: ouvrir-checklist
+    to: verifier-sortie
+  - from: verifier-sortie
+    to: ecrire-fiche
+    when: une case n'est pas cochée
+  - from: verifier-sortie
+    to: valider-cadrage
+    when: les neuf cases sont cochées
+  - from: valider-cadrage
+    to: passer-ready
+    when: le demandeur a validé
+  - from: passer-ready
+    to: ready

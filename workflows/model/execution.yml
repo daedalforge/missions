@@ -1,0 +1,99 @@
+workflow: execution
+title: Exécution
+document: workflows/execution.md
+entry: ready
+exit:
+  - in-review
+  - to-refine
+nodes:
+  - id: ouvrir-branche
+    label: Ouvrir la branche déclarée
+    section: Ce qu'on fait
+    writer: session
+    condition: la branche et sa base sont déclarées
+    artifact: la branche locale
+  - id: passer-en-cours
+    label: Passer le ticket en cours
+    section: Sur le tracker
+    writer: session
+    condition: la branche est poussée
+    artifact: le libellé in-progress
+  - id: petits-commits
+    label: Travailler par petits commits
+    section: Ce qu'on fait
+    writer: session
+    gate: un sujet par commit, préfixé de la clé
+  - id: verifier-travail
+    label: Vérifier au fur et à mesure
+    section: Ce qu'on fait
+    writer: session
+    artifact: les tests du projet au vert
+  - id: ouvrir-pr
+    label: Ouvrir la PR vers la base
+    section: Ce qu'on fait
+    writer: session
+    artifact: la PR liée au ticket
+  - id: tenir-journal
+    label: Tenir le journal
+    section: Ce qu'on fait
+    writer: session
+  - id: cocher-checklist
+    label: Cocher la checklist
+    section: Ce qu'on fait
+    writer: session
+  - id: renseigner-pr
+    label: Renseigner la PR
+    section: Renseigner la PR
+    writer: session
+    gate: assignée, typée, étiquetée in-review, liée au ticket, même milestone
+  - id: retour-cadrage
+    label: Renvoyer au cadrage
+    section: Règles de conduite
+    writer: demandeur
+    condition: le périmètre change
+  - id: verifier-sortie
+    label: Vérifier la condition de sortie
+    section: Condition de sortie — la mission est « en revue »
+    writer: session
+    gate: les huit cases sont cochées
+  - id: passer-en-revue
+    label: Passer le ticket en revue
+    section: Sur le tracker
+    writer: session
+    artifact: le libellé in-review
+edges:
+  - from: ready
+    to: ouvrir-branche
+  - from: ouvrir-branche
+    to: passer-en-cours
+  - from: passer-en-cours
+    to: petits-commits
+  - from: petits-commits
+    to: verifier-travail
+  - from: verifier-travail
+    to: petits-commits
+    when: un test casse
+  - from: verifier-travail
+    to: ouvrir-pr
+    when: le travail est prêt
+  - from: ouvrir-pr
+    to: tenir-journal
+  - from: tenir-journal
+    to: cocher-checklist
+  - from: cocher-checklist
+    to: renseigner-pr
+  - from: renseigner-pr
+    to: verifier-sortie
+  - from: verifier-sortie
+    to: tenir-journal
+    when: une case n'est pas cochée
+  - from: verifier-sortie
+    to: passer-en-revue
+    when: les huit cases sont cochées
+  - from: passer-en-revue
+    to: in-review
+  - from: petits-commits
+    to: retour-cadrage
+    when: le périmètre change
+  - from: retour-cadrage
+    to: to-refine
