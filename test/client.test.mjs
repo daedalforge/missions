@@ -47,6 +47,10 @@ function charger(storage, initialStates = [], session = undefined) {
     props,
     children,
   })
+  // Les effets sont collectés, pas exécutés : un montage de test ne doit ni
+  // lancer la requête ni armer le timer de 60 s. Un test qui vise une écriture
+  // de session appelle l'effet lui-même.
+  const effects = []
   const React = {
     createElement: h,
     Fragment: 'fragment',
@@ -55,7 +59,7 @@ function charger(storage, initialStates = [], session = undefined) {
       (next) => { setters.push(next) },
     ],
     useCallback: (fn) => fn,
-    useEffect: () => {},
+    useEffect: (fn, deps) => { effects.push({ fn, deps }) },
   }
 
   const registered = {}
@@ -77,7 +81,7 @@ function charger(storage, initialStates = [], session = undefined) {
     if (name === 'react') return React
     throw new Error(`unexpected require: ${name}`)
   })
-  return { api, ctx, registered, id: captured.id, setters }
+  return { api, ctx, registered, id: captured.id, setters, effects }
 }
 
 /** Aplatit les listes d'enfants que `Array#map` imbrique. */
@@ -416,6 +420,36 @@ test("l'onglet rangé par la session est rouvert au montage", () => {
 
   assert.equal(findAll(tree, 'MissionsView').length, 1, 'le panneau doit rouvrir sur la liste')
   assert.equal(findAll(tree, 'DashboardView').length, 0)
+})
+
+/** L'effet qui range l'onglet dans la session, retrouvé par ce qu'il appelle. */
+function tabEffect(effects) {
+  const found = effects.find(({ fn }) => String(fn).includes('writeTab('))
+  assert.ok(found, "le panneau doit persister l'onglet, pas seulement le lire")
+  return found
+}
+
+test("le panneau range l'onglet ouvert dans la session", () => {
+  const session = memorySession()
+  const { api, ctx, registered, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'], session)
+  api.apply(ctx)
+  registered.main({})
+
+  // L'onglet vaut « missions » : l'effet doit l'écrire, pas le laisser filer.
+  tabEffect(effects).fn()
+  assert.equal(session.entries.get('missions.tab'), 'missions')
+  // L'effet de l'onglet n'écrit que sa clé : la barre garde la sienne.
+  assert.equal(session.entries.has('missions.filters'), false)
+})
+
+test("revenir sur le dashboard retire la clé de l'onglet", () => {
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const { api, ctx, registered, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], session)
+  api.apply(ctx)
+  registered.main({})
+
+  tabEffect(effects).fn()
+  assert.equal(session.entries.has('missions.tab'), false, 'le repos ne laisse pas de clé derrière lui')
 })
 
 test("un onglet rangé qui n'existe plus retombe sur le dashboard", () => {
