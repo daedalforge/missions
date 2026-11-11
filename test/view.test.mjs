@@ -4,6 +4,9 @@ import test from 'node:test'
 import {
   actionVerb,
   layoutWorkflow,
+  modelOf,
+  readStep,
+  writeStep,
   nextGestureId,
   withoutEdge,
   upsertEdge,
@@ -691,4 +694,47 @@ test('une condition d’arc se met à jour sur place, un arc neuf s’ajoute', (
   // Vider la condition retire le champ : le fichier ne garde pas de `when: ''`.
   assert.equal('when' in upsertEdge(MODELE, 'lire', 'ecrire', '').edges[1], false)
   assert.equal(upsertEdge(MODELE, 'ecrire', 'lire', '').edges.at(-1).when, undefined)
+})
+
+
+test('l’étape ouverte se garde comme l’onglet, et retombe sur la première', () => {
+  const steps = ['cadrage', 'execution', 'review', 'cloture']
+  const memoire = () => {
+    const map = new Map()
+    return { map, getItem: (key) => (map.has(key) ? map.get(key) : null), setItem: (key, value) => map.set(key, String(value)), removeItem: (key) => map.delete(key) }
+  }
+
+  const session = memoire()
+  assert.equal(readStep(session, steps), 'cadrage', 'une session neuve ouvre la première étape')
+  writeStep(session, 'review', steps)
+  assert.equal(session.map.get('missions.workflow-step'), 'review')
+  assert.equal(readStep(session, steps), 'review', 'l’étape survit à un remontage')
+  writeStep(session, 'cadrage', steps)
+  assert.equal(session.map.has('missions.workflow-step'), false, 'la première étape ne laisse pas de clé')
+  writeStep(session, 'archive', steps)
+  assert.equal(session.map.has('missions.workflow-step'), false, 'une étape que le panneau ne rend pas ne s’écrit pas')
+  assert.equal(readStep(session, steps), 'cadrage')
+  assert.equal(readStep(null, steps), 'cadrage')
+})
+
+test('modelOf ne renvoie que le modèle, jamais les champs d’affichage du serveur', () => {
+  const entree = {
+    workflow: 'cadrage',
+    title: 'Cadrage',
+    document: 'workflows/cadrage.md',
+    entry: 'to-refine',
+    exit: ['ready'],
+    nodes: [{ id: 'lire', label: 'Lire', section: 'Ce qu’on fait', writer: 'session' }],
+    edges: [{ from: 'to-refine', to: 'lire' }],
+    errors: [{ field: 'nodes', code: 'x', message: 'y' }],
+    orphanSections: ['Sur le tracker'],
+    headings: [{ level: 2, text: 'Ce qu’on fait' }],
+    file: 'workflows/model/cadrage.yml',
+    text: 'workflow: cadrage',
+  }
+  const modele = modelOf(entree)
+  assert.deepEqual(Object.keys(modele), ['workflow', 'title', 'document', 'entry', 'exit', 'nodes', 'edges'])
+  assert.deepEqual(modele.nodes, entree.nodes)
+  assert.deepEqual(modelOf(), {}, 'une entrée absente ne lève pas')
+  assert.deepEqual(modelOf(null), {})
 })
