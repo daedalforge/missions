@@ -987,3 +987,32 @@ test('la barre est restaurée au montage et réécrite à chaque changement', ()
   // Aucune clé de barre dans localStorage : elle ne survit pas à l'app.
   assert.doesNotMatch(SOURCE, /localStorage\.(?:get|set)Item\(FILTERS_KEY/)
 })
+
+
+test('la barre d’onglets propose Workflows, et l’onglet ouvre l’éditeur', () => {
+  const session = memorySession({ 'missions.tab': 'workflows' })
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+
+  assert.equal(findAll(tree, 'WorkflowsView').length, 1, 'l’onglet Workflows porte l’éditeur de parcours')
+  assert.equal(findAll(tree, 'MissionsView').length, 0)
+  assert.equal(findAll(tree, 'MissionDrawer').length, 0, 'aucune mission n’a de tiroir dans cet onglet')
+  assert.match(textOf(tree), /Workflows/)
+
+  // L'onglet est bien une vue montée, pas un libellé : rendue pour de vrai, elle
+  // dit ce qu'elle attend avant la première réponse.
+  const inner = renderTree(findAll(tree, 'WorkflowsView')[0])
+  assert.match(textOf(inner), /Chargement du parcours…/)
+  assert.equal(findAll(inner, 'svg').length, 0, 'aucun graphe tant que le modèle n’est pas là')
+})
+
+test('le graphe a ses règles : nœuds, sélection, retour en pointillé', () => {
+  assert.match(regle('.wf-node'), /stroke-width: 1/)
+  assert.match(regle('.wf-node--geste'), /cursor: pointer/)
+  assert.match(regle('.wf-node--selected'), /stroke-width: 2/)
+  assert.match(regle('.wf-link--back'), /stroke-dasharray/)
+  assert.match(regle('.wf-canvas-wrap'), /overflow: auto/)
+  assert.match(regle('.wf-layout'), /grid-template-columns: minmax\(0, 1fr\) 300px/)
+  // Le graphe reprend le vocabulaire visuel du panneau : les variables du
+  // thème, pas des couleurs figées — le thème manga suit sans règle de plus.
+  assert.match(regle('.wf-card'), /border-radius: 12px/)
+})
