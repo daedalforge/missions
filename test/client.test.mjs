@@ -18,9 +18,21 @@ globalThis.document = {
   head: { append() {} },
 }
 
-function charger(storage, initialStates = []) {
+/**
+ * L'état restauré avant le premier rendu de `MissionsPanel` : la barre vide.
+ * `useState` le consomme en premier, comme le ferait `sessionStorage` vide.
+ */
+const EMPTY_BAR = {
+  query: '',
+  filters: { type: null, state: null, epic: null, priority: null, project: null, missing: null },
+  sort: null,
+}
+
+function charger(storage, initialStates = [], session = undefined) {
   let captured = null
-  new Function('window', 'localStorage', SOURCE)({ __ModuleLoader__: { load: (module) => { captured = module } } }, storage)
+  // `sessionStorage` est injecté comme `localStorage` : chaque test tient la
+  // barre de la session dans un faux stockage, sans toucher au global de Node.
+  new Function('window', 'localStorage', 'sessionStorage', SOURCE)({ __ModuleLoader__: { load: (module) => { captured = module } } }, storage, session)
 
   const queue = [...initialStates]
   // Les composants gardent leur nom dans l'arbre : un test peut alors vérifier
@@ -224,7 +236,7 @@ test('un refresh affiche le loader de la vue, même avec des missions chargées'
   // chargement en cours. Le loader remplace alors la liste, pas seulement le
   // premier montage.
   const view = { loading: true, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const { api, ctx, registered } = charger(undefined, [view])
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view])
   api.apply(ctx)
 
   const flat = JSON.stringify(registered.main({}))
@@ -253,11 +265,64 @@ test('le loader ne déborde pas sur l’onglet Dashboard', () => {
   // loader si l'on change d'onglet pendant la requête : le Dashboard est hors
   // périmètre et reste rendu tel quel.
   const view = { loading: true, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const { api, ctx, registered } = charger(undefined, [view, 'dashboard'])
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'dashboard'])
   api.apply(ctx)
 
   const flat = JSON.stringify(registered.main({}))
   assert.match(flat, /"type":"DashboardView"/)
   assert.doesNotMatch(flat, /"type":"PanelLoader"/)
   assert.doesNotMatch(flat, /missions-loader/)
+})
+
+test('le panneau relit la barre de la session au montage', () => {
+  const reads = []
+  const session = {
+    getItem: (key) => {
+      reads.push(key)
+      return JSON.stringify({
+        query: 'panneau', type: 'bug', state: 'ready', epic: 'Workspace',
+        priority: 'urgent', project: 'missions', missing: 'any', sort: 'points',
+      })
+    },
+    setItem: () => {},
+    removeItem: () => {},
+  }
+  const { api, ctx, registered } = charger(undefined, [], session)
+  api.apply(ctx)
+
+  assert.doesNotThrow(() => registered.main({}))
+  // Une seule lecture, de la bonne clé : le montage reprend la session telle
+  // qu'elle a été laissée.
+  assert.deepEqual(reads, ['missions.filters'])
+})
+
+test('une barre corrompue ou un stockage en panne ne casse pas le montage', () => {
+  const sessions = [
+    { getItem: () => 'pas du json', setItem: () => {}, removeItem: () => {} },
+    { getItem: () => { throw new Error('blocked') }, setItem: () => {}, removeItem: () => {} },
+    {},
+    undefined,
+  ]
+  for (const session of sessions) {
+    const { api, ctx, registered } = charger(undefined, [], session)
+    api.apply(ctx)
+    assert.doesNotThrow(() => registered.main({}), 'montage avec un stockage dégradé')
+  }
+})
+
+test('la barre est restaurée au montage et réécrite à chaque changement', () => {
+  // La barre vit dans la session : une seule clé, lue au montage, réécrite par
+  // l'effet dès que la recherche, un filtre ou le tri change.
+  assert.match(SOURCE, /FILTERS_KEY = 'missions\.filters'/)
+  assert.match(SOURCE, /function filterStorage\(\) \{\s+try \{\s+return typeof sessionStorage === 'undefined' \? null : sessionStorage/)
+  assert.match(SOURCE, /const \[restored\] = React\.useState\(\(\) => filterBarState\(readFilterSnapshot\(filterStorage\(\)\)\)\)/)
+  assert.match(SOURCE, /const \[query, setQuery\] = React\.useState\(restored\.query\)/)
+  assert.match(SOURCE, /const \[filters, setFilters\] = React\.useState\(restored\.filters\)/)
+  assert.match(SOURCE, /const \[sort, setSort\] = React\.useState\(restored\.sort\)/)
+  assert.match(SOURCE, /writeFilterSnapshot\(filterStorage\(\), \{ query, filters, sort \}\)/)
+  assert.match(SOURCE, /\}, \[query, filters, sort\]\)/)
+  // `Clear` rend un objet neuf : il vide les filtres sans partager l'état vide.
+  assert.match(SOURCE, /const onClear = \(\) => setFilters\(\{ \.\.\.EMPTY_FILTERS \}\)/)
+  // Aucune clé de barre dans localStorage : elle ne survit pas à l'app.
+  assert.doesNotMatch(SOURCE, /localStorage\.(?:get|set)Item\(FILTERS_KEY/)
 })

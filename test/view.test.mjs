@@ -3,19 +3,37 @@ import test from 'node:test'
 
 import {
   branchFieldValue,
+  EMPTY_FILTERS,
   epicOptions,
   parseChecklist,
   executionBlocker,
+  FILTERS_KEY,
+  filterBarState,
   filterMissions,
+  filterSnapshot,
   groupByState,
   hasActiveFilters,
+  parseFilterSnapshot,
   priorityOptions,
   projectOptions,
+  readFilterSnapshot,
   relativeAge,
   sortMissions,
   stateOptions,
   suggestBranch,
+  writeFilterSnapshot,
 } from '../lib/view.js'
+
+/** Un stockage de session en mémoire, comme celui de la fenêtre. */
+function memoryStorage() {
+  const entries = new Map()
+  return {
+    entries,
+    getItem: (key) => (entries.has(key) ? entries.get(key) : null),
+    setItem: (key, value) => entries.set(key, String(value)),
+    removeItem: (key) => entries.delete(key),
+  }
+}
 
 const MISSIONS = [
   {
@@ -249,4 +267,93 @@ test('une checklist vide ou absente ne casse pas le rendu', () => {
   assert.deepEqual(parseChecklist(null), { blocks: [], counts: { total: 0, checked: 0, partial: 0, open: 0 } })
   const { blocks } = parseChecklist('- [X] Majuscule acceptée.\r\n')
   assert.equal(blocks[0].state, 'checked')
+})
+
+test('l’instantané de la barre garde recherche, filtres et tri', () => {
+  const bar = {
+    query: 'panneau',
+    filters: { type: 'bug', state: 'ready', epic: 'Workspace', priority: 'urgent', project: 'missions', missing: 'any' },
+    sort: 'points',
+  }
+  const snapshot = filterSnapshot(bar)
+  assert.deepEqual(snapshot, {
+    query: 'panneau',
+    type: 'bug',
+    state: 'ready',
+    epic: 'Workspace',
+    priority: 'urgent',
+    project: 'missions',
+    missing: 'any',
+    sort: 'points',
+  })
+  // L'instantané revient en trois états : la barre telle que le panneau la tient.
+  assert.deepEqual(filterBarState(snapshot), bar)
+  // Une barre vide n'a rien d'actif : le panneau la traite comme au repos.
+  assert.equal(hasActiveFilters(filterBarState(filterSnapshot({})).filters), false)
+})
+
+test('un instantané ne retient que ce que la barre peut sélectionner', () => {
+  const snapshot = filterSnapshot({
+    query: 42,
+    filters: { type: 'feat', state: 'done', epic: '  Workspace  ', priority: '', project: 7, missing: 'yes' },
+    sort: 'title',
+  })
+  // Type et état hors vocabulaire, priorité vide, projet non textuel : la barre
+  // ne peut pas les afficher, ils tombent au lieu d'être restaurés.
+  assert.deepEqual(snapshot, {
+    query: '',
+    type: null,
+    state: null,
+    epic: 'Workspace',
+    priority: null,
+    project: null,
+    missing: null,
+    sort: null,
+  })
+  // L'épic d'une mission est du texte libre : il reste tel quel.
+  assert.equal(filterSnapshot({ filters: { epic: 'Hors périmètre' } }).epic, 'Hors périmètre')
+})
+
+test('un contenu illisible redonne la barre par défaut', () => {
+  const empty = filterSnapshot({})
+  for (const raw of [null, undefined, '', '   ', 'pas du json', '[]', '"texte"', 'null', '{}']) {
+    assert.deepEqual(parseFilterSnapshot(raw), empty, `contenu ${String(raw)}`)
+  }
+  // Un instantané partiel garde ce qu'il porte et complète le reste.
+  assert.deepEqual(
+    parseFilterSnapshot(JSON.stringify({ query: 'abc', type: 'story' })),
+    { ...empty, query: 'abc', type: 'story' },
+  )
+})
+
+test('la session écrit la barre et retire la clé quand elle est vide', () => {
+  const storage = memoryStorage()
+  const bar = { query: 'panneau', filters: { ...EMPTY_FILTERS, project: 'missions' }, sort: 'priority' }
+
+  writeFilterSnapshot(storage, bar)
+  assert.deepEqual([...storage.entries.keys()], [FILTERS_KEY])
+  assert.deepEqual(JSON.parse(storage.entries.get(FILTERS_KEY)), filterSnapshot(bar))
+  assert.deepEqual(readFilterSnapshot(storage), filterSnapshot(bar))
+
+  // Effacer la barre ne laisse pas de clé derrière elle : le prochain montage
+  // repart du repos, pas d'une sélection vide.
+  writeFilterSnapshot(storage, { query: '   ', filters: { ...EMPTY_FILTERS }, sort: null })
+  assert.equal(storage.entries.has(FILTERS_KEY), false)
+  assert.deepEqual(readFilterSnapshot(storage), filterSnapshot({}))
+})
+
+test('un stockage absent ou en panne laisse la barre par défaut', () => {
+  assert.deepEqual(readFilterSnapshot(undefined), filterSnapshot({}))
+  assert.deepEqual(readFilterSnapshot({}), filterSnapshot({}))
+
+  const throwing = {
+    getItem: () => { throw new Error('blocked') },
+    setItem: () => { throw new Error('quota') },
+    removeItem: () => { throw new Error('blocked') },
+  }
+  assert.deepEqual(readFilterSnapshot(throwing), filterSnapshot({}))
+  assert.doesNotThrow(() => writeFilterSnapshot(throwing, { query: 'x' }))
+  assert.doesNotThrow(() => writeFilterSnapshot(throwing, {}))
+  // Pas de stockage du tout : écrire est un no-op, pas une erreur.
+  assert.doesNotThrow(() => writeFilterSnapshot(null, { query: 'x' }))
 })
