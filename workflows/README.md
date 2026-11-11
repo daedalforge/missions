@@ -60,8 +60,9 @@ périmètre retourne en cadrage — mais jamais sauter une étape.
 
 1. **Une mission = un ticket = une branche = une PR.** Pas de branche fourre-tout,
    pas de PR qui règle deux missions.
-2. **La clé du ticket préfixe tout.** Branche : clé en minuscules (`soc-1541`,
-   `mis-12`). Commit : `<CLÉ>: <impératif>`. PR : la clé dans le titre.
+2. **La clé du ticket nomme tout.** Branche : `<type>/<clé en minuscules>`
+   (`feat/mis-12`, `fix/soc-1541`). Commit : `<CLÉ>: <impératif>`. PR : la clé
+   dans le titre.
 3. **Un commit, un sujet.** Un commit qui mélange deux sujets se scinde avant la
    revue.
 4. **Chaque critère d'acceptation porte sa preuve.** À la sortie de l'exécution

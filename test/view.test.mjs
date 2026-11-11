@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  branchFieldValue,
   epicOptions,
   executionBlocker,
   filterMissions,
@@ -12,6 +13,7 @@ import {
   relativeAge,
   sortMissions,
   stateOptions,
+  suggestBranch,
 } from '../lib/view.js'
 
 const MISSIONS = [
@@ -198,4 +200,20 @@ test('une session exige un état unique, une branche et une base déclarées', (
   assert.equal(executionBlocker({}), 'branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker({ branch: null, base: null }), 'branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker(), 'branch is not declared, set it below or in the mission folder')
+})
+
+test('le nom de branche suggéré suit le type et la clé de la mission', () => {
+  assert.equal(suggestBranch({ key: 'MIS-1', type: 'story' }), 'feat/mis-1')
+  assert.equal(suggestBranch({ key: 'MIS-1', type: 'bug' }), 'fix/mis-1')
+  assert.equal(suggestBranch({ key: 'MIS-1', type: 'epic' }), 'epic/mis-1')
+  assert.equal(suggestBranch({ key: ' SO-1184 ', type: null }), 'feat/so-1184')
+  assert.equal(suggestBranch({ key: 'MIS-1' }), 'feat/mis-1')
+  assert.equal(suggestBranch({}), '')
+})
+
+test('une branche déclarée prime sur le nom suggéré', () => {
+  assert.equal(branchFieldValue({ key: 'MIS-1', type: 'story' }), 'feat/mis-1')
+  assert.equal(branchFieldValue({ key: 'MIS-1', type: 'bug', branch: 'fix/mis-1' }), 'fix/mis-1')
+  assert.equal(branchFieldValue({ key: 'MIS-1', type: 'story', branch: '' }), 'feat/mis-1')
+  assert.equal(branchFieldValue({}), '')
 })

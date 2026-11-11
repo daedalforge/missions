@@ -751,7 +751,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-group-nam
 
     function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, theme }) {
       const [note, setNote] = React.useState(null)
-      const [branch, setBranch] = React.useState(mission.branch ?? '')
+      // A declared branch always wins; otherwise show the convention's name.
+      // It stays a suggestion: only Save writes it to mission.yml.
+      const [branch, setBranch] = React.useState(branchFieldValue(mission))
       const [base, setBase] = React.useState(mission.base ?? '')
       const [saving, setSaving] = React.useState(false)
       const [declareNote, setDeclareNote] = React.useState(null)
