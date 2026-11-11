@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
+import { MODELS_DIR, readWorkflow } from '../lib/workflows.js'
+
 /**
  * Smoke test for the generated client bundle.
  *
@@ -10,6 +12,7 @@ import test from 'node:test'
  * a render-time crash — the regression that made the panel blank when a
  * missing service was looked up through `ctx.get`.
  */
+
 const SOURCE = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 
 /** Le corps d'une règle CSS du bundle : de quoi la juger sans la recopier. */
@@ -91,7 +94,7 @@ function charger(storage, initialStates = [], session = undefined) {
     if (name === 'react') return React
     throw new Error(`unexpected require: ${name}`)
   })
-  return { api, ctx, registered, id: captured.id, setters, effects }
+  return { api, ctx, registered, id: captured.id, setters, effects, queue }
 }
 
 /** Aplatit les listes d'enfants que `Array#map` imbrique. */
@@ -550,6 +553,23 @@ function monter(initialStates, session) {
   const { api, ctx, registered } = charger(undefined, initialStates, session)
   api.apply(ctx)
   return registered.main({})
+}
+
+/**
+ * L'état initial de `WorkflowsView`, dans l'ordre de ses huit hooks : la vue
+ * reçoit le modèle, le brouillon posé et, si on le donne, le geste choisi.
+ */
+function workflowStates(draft, chosen = null) {
+  return [
+    { loading: false, error: null, workflows: [draft], writers: ['demandeur', 'session', 'outil'], states: [] },
+    'review',
+    draft,
+    chosen,
+    null,
+    false,
+    { from: '', to: '', when: '' },
+    0,
+  ]
 }
 
 test('sans onglet retenu, le panneau ouvre sur le dashboard', () => {
@@ -1063,6 +1083,43 @@ test('le graphe a ses règles : nœuds, sélection, retour en pointillé', () =>
   // Le graphe reprend le vocabulaire visuel du panneau : les variables du
   // thème, pas des couleurs figées — le thème manga suit sans règle de plus.
   assert.match(regle('.wf-card'), /border-radius: 12px/)
+})
+
+test('le losange du choix se dessine, montre les conditions entières et ouvre le geste', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  const session = memorySession({ 'missions.tab': 'workflows' })
+  const { api, ctx, registered, queue, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+  api.apply(ctx)
+  const tree = registered.main({})
+  const vue = findAll(tree, 'WorkflowsView')[0]
+  assert.ok(vue, 'l’onglet Workflows est monté')
+
+  // Premier rendu : le vrai graphe de la revue, sans sélection.
+  queue.push(...workflowStates(review))
+  const graph = renderTree(vue)
+  const diamonds = findAll(graph, 'polygon').filter((node) => /wf-node--decision/.test(node.props.className ?? ''))
+  assert.equal(diamonds.length, 2, '« verifier-perimetre » et « decider » portent un losange')
+
+  const labels = findAll(graph, 'text').filter((node) => /wf-link-label--forward/.test(node.props.className ?? ''))
+  const texts = labels.map((node) => textOf(node))
+  assert.ok(texts.includes('tout est conforme'))
+  assert.ok(texts.includes('un critère ou une preuve manque'), 'la condition longue s’affiche entière')
+  assert.ok(texts.includes('la PR sort du périmètre'))
+  assert.equal(texts.some((text) => text.includes('…')), false, 'aucune étiquette n’est tronquée')
+
+  // Un clic sur le losange choisit le geste qu'il représente.
+  const group = findAll(graph, 'g').find((node) => node.props.key === 'decision-decider')
+  assert.ok(group, 'le losange de « decider » est cliquable')
+  group.props.onClick()
+  assert.deepEqual(setters.slice(-2), ['decider', null])
+
+  // Avec ce choix, la carte « Geste » s’ouvre et le losange se marque.
+  queue.push(...workflowStates(review, 'decider'))
+  const chosen = renderTree(vue)
+  const titles = findAll(chosen, 'div').filter((node) => node.props.className === 'wf-card-title')
+  assert.equal(textOf(titles[0]), 'Geste')
+  const marked = findAll(chosen, 'polygon').filter((node) => /wf-node--decision/.test(node.props.className ?? '') && /wf-node--selected/.test(node.props.className ?? ''))
+  assert.equal(marked.length, 1, 'le losange du geste choisi se marque')
 })
 
 test('l’éditeur attend le modèle au lieu de lire un brouillon absent', () => {

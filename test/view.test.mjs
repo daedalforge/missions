@@ -48,6 +48,7 @@ import {
   writeFilterSnapshot,
   writeTab,
 } from '../lib/view.js'
+import { loadWorkflows, MODELS_DIR, readWorkflow } from '../lib/workflows.js'
 
 /** Un stockage de session en mémoire, comme celui de la fenêtre. */
 function memoryStorage() {
@@ -700,6 +701,123 @@ test('retirer un geste retire ses arcs, et un id neuf ne collide pas', () => {
   assert.deepEqual(withoutEdge(MODELE, 'to-refine', 'lire').edges.map((edge) => `${edge.from}→${edge.to}`), ['lire→ecrire', 'ecrire→ready', 'ecrire→lire'])
   assert.equal(nextGestureId({ nodes: [{ id: 'geste-1' }, { id: 'geste-2' }] }), 'geste-3')
   assert.equal(nextGestureId({ nodes: [] }), 'geste-1')
+})
+
+test('un geste à plusieurs sorties porte un losange, un geste linéaire n’en a pas', () => {
+  const graph = layoutWorkflow(MODELE)
+  const ecrire = graph.boxes.find((box) => box.id === 'ecrire')
+  const decision = graph.decisions.find((item) => item.id === 'ecrire')
+
+  assert.ok(decision, 'deux sorties — la sortie avant et le retour — font un choix')
+  assert.equal(graph.decisions.length, 1)
+  // Le losange se centre sous son geste et reste détaché de sa boîte.
+  assert.equal(decision.x + decision.width / 2, ecrire.x + ecrire.width / 2)
+  assert.ok(decision.y >= ecrire.y + ecrire.height)
+  assert.equal(graph.decisions.some((item) => item.id === 'lire'), false, 'une seule sortie : pas de losange')
+
+  const alone = layoutWorkflow({ ...MODELE, nodes: [...MODELE.nodes, { id: 'isole', label: 'Isolé' }] })
+  assert.equal(alone.decisions.some((item) => item.id === 'isole'), false, 'aucune sortie : pas de losange')
+})
+
+test('les arcs d’un losange partent de son sommet bas, le reste ne bouge pas', () => {
+  const graph = layoutWorkflow(MODELE)
+  const ecrire = graph.boxes.find((box) => box.id === 'ecrire')
+  const decision = graph.decisions.find((item) => item.id === 'ecrire')
+  const vertex = { x: decision.x + decision.width / 2, y: decision.y + decision.height }
+  const startOf = (path) => {
+    const [, x, y] = path.match(/^M (\S+) (\S+)/)
+    return [Number(x), Number(y)]
+  }
+
+  // Les sorties avant quittent le losange, pas le bas de la boîte du geste.
+  for (const link of graph.links.filter((item) => item.from === 'ecrire' && !item.back)) {
+    assert.deepEqual(startOf(link.path), [vertex.x, vertex.y])
+  }
+  // Le retour garde sa sortie à droite, et l'arc entrant arrive sur le geste.
+  const back = graph.links.find((link) => link.from === 'ecrire' && link.back)
+  assert.deepEqual(startOf(back.path), [ecrire.x + ecrire.width, ecrire.y + ecrire.height / 2])
+  const incoming = graph.links.find((link) => link.to === 'ecrire')
+  assert.ok(incoming.path.endsWith(`${ecrire.x + ecrire.width / 2} ${ecrire.y}`), 'l’arc entrant continue d’arriver sur le geste')
+
+  // Deux calculs du même modèle donnent la même image.
+  assert.deepEqual(layoutWorkflow(MODELE), graph)
+})
+
+test('chaque condition s’affiche en entier, sans sortir du cadre ni recouvrir une boîte', async () => {
+  const { workflows } = await loadWorkflows(MODELS_DIR, { states: [] })
+
+  for (const model of workflows) {
+    const graph = layoutWorkflow(model)
+    for (const link of graph.links.filter((item) => item.when)) {
+      const half = link.labelAnchor === 'middle' ? link.labelWidth / 2 : 0
+      const left = link.labelX - half
+      const right = left + link.labelWidth
+      const top = link.labelY - 9
+      const bottom = link.labelY + 3
+
+      assert.ok(left >= 0, `${model.workflow} : « ${link.when} » sort à gauche`)
+      assert.ok(right <= graph.width, `${model.workflow} : « ${link.when} » sort à droite`)
+      assert.ok(top >= 0 && bottom <= graph.height, `${model.workflow} : « ${link.when} » sort du cadre`)
+      for (const box of graph.boxes) {
+        const crosses = left < box.x + box.width && right > box.x && top < box.y + box.height && bottom > box.y
+        assert.equal(crosses, false, `${model.workflow} : « ${link.when} » recouvre ${box.id}`)
+      }
+    }
+  }
+})
+
+test('trois branches empilent leurs conditions sans se recouvrir', () => {
+  const model = {
+    workflow: 'essai',
+    title: 'Essai',
+    entry: 'depart',
+    exit: ['un', 'deux', 'trois'],
+    nodes: [{ id: 'choix', label: 'Choisir' }, { id: 'seul', label: 'Seul' }],
+    edges: [
+      { from: 'depart', to: 'choix' },
+      { from: 'choix', to: 'un', when: 'le premier cas se présente' },
+      { from: 'choix', to: 'deux', when: 'le deuxième cas se présente' },
+      { from: 'choix', to: 'trois', when: 'le troisième cas se présente' },
+      { from: 'depart', to: 'seul' },
+      { from: 'seul', to: 'un' },
+    ],
+  }
+  const graph = layoutWorkflow(model)
+  const decision = graph.decisions.find((item) => item.id === 'choix')
+  const labels = graph.links.filter((link) => link.from === 'choix' && link.when)
+
+  assert.ok(decision)
+  assert.equal(labels.length, 3, 'trois sorties conditionnelles')
+  assert.deepEqual(labels.map((link) => link.labelAnchor), ['start', 'start', 'start'])
+
+  const rectangles = labels.map((link) => ({ left: link.labelX, right: link.labelX + link.labelWidth, top: link.labelY - 9, bottom: link.labelY + 3 }))
+  for (let i = 0; i < rectangles.length; i += 1) {
+    for (let j = i + 1; j < rectangles.length; j += 1) {
+      const a = rectangles[i]
+      const b = rectangles[j]
+      const overlap = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+      assert.equal(overlap, false, `les conditions ${i + 1} et ${j + 1} se recouvrent`)
+    }
+  }
+  // La rangée suivante reste sous le losange et sous la dernière condition.
+  const below = Math.min(...graph.boxes.filter((box) => box.level > decision.level).map((box) => box.y))
+  assert.ok(below > decision.y + decision.height)
+  assert.ok(below > Math.max(...rectangles.map((rect) => rect.bottom)))
+})
+
+test('la revue porte un losange sur chaque geste qui tranche', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  const graph = layoutWorkflow(review)
+  const deciding = graph.decisions.map((item) => item.id).sort()
+
+  assert.deepEqual(deciding, ['decider', 'verifier-perimetre'])
+  const labels = graph.links.filter((link) => link.from === 'decider' && link.when).map((link) => link.when).sort()
+  assert.deepEqual(labels, ['tout est conforme', 'un critère ou une preuve manque'])
+  // Aucun autre geste n'en porte : le losange ne se pose que sur un vrai choix.
+  for (const node of review.nodes) {
+    const outs = review.edges.filter((edge) => edge.from === node.id).length
+    assert.equal(graph.decisions.some((item) => item.id === node.id), outs >= 2, node.id)
+  }
 })
 
 

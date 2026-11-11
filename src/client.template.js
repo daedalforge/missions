@@ -330,6 +330,8 @@ window.__ModuleLoader__.load({
 .wf-node--geste { cursor: pointer; }
 .wf-node--geste:hover { stroke: var(--dsw-alias-label-primary, #1f1f1f); }
 .wf-node--etat { fill: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
+.wf-node--decision { cursor: pointer; stroke-width: 1.2; }
+.wf-node--decision:hover { stroke: var(--dsw-alias-label-primary, #1f1f1f); }
 .wf-node--selected { stroke: var(--dsw-alias-label-primary, #1f1f1f); stroke-width: 2; }
 .wf-node-label { font-size: 11.5px; fill: var(--dsw-alias-label-primary, #1f1f1f); pointer-events: none; }
 .wf-node-section { font-size: 10px; fill: var(--dsw-alias-label-tertiary, #7a7168); pointer-events: none; }
@@ -2013,9 +2015,24 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   h('defs', null, h('marker', { id: 'wf-arrow', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor', opacity: 0.45 }))),
                   graph.links.map((link) => h('g', { key: `${link.from}→${link.to}` },
                     h('path', { className: link.back ? 'wf-link wf-link--back' : 'wf-link', d: link.path, 'marker-end': 'url(#wf-arrow)' }),
-                    // Seuls les retours portent leur condition : le graphe reste
-                    // lisible, et la carte des arcs donne le texte entier.
-                    link.back && link.when ? h('text', { className: 'wf-link-label', x: link.labelX, y: link.labelY }, clip(link.when, 30)) : null,
+                    // Chaque condition s'affiche en entier : le losange dit où
+                    // l'on choisit, l'étiquette dit sur quoi.
+                    link.when ? h('text', {
+                      className: link.back ? 'wf-link-label wf-link-label--back' : 'wf-link-label wf-link-label--forward',
+                      x: link.labelX,
+                      y: link.labelY,
+                      textAnchor: link.labelAnchor,
+                    }, link.when) : null,
+                  )),
+                  graph.decisions.map((decision) => h('g', {
+                    key: `decision-${decision.id}`,
+                    className: 'wf-node-group wf-node-group--decision',
+                    onClick: () => { setChosen(decision.id); setStatus(null) },
+                  },
+                    h('polygon', {
+                      className: `wf-node wf-node--decision${decision.id === chosen ? ' wf-node--selected' : ''}`,
+                      points: `${decision.x + decision.width / 2},${decision.y} ${decision.x + decision.width},${decision.y + decision.height / 2} ${decision.x + decision.width / 2},${decision.y + decision.height} ${decision.x},${decision.y + decision.height / 2}`,
+                    }),
                   )),
                   graph.boxes.map((box) => h('g', {
                     key: box.id,
