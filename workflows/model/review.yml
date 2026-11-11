@@ -1,0 +1,109 @@
+workflow: review
+title: Revue
+document: workflows/review.md
+entry: in-review
+exit:
+  - ready-for-prod
+  - in-progress
+  - to-refine
+nodes:
+  - id: relire-criteres
+    label: Relire les critères d'acceptation
+    section: Ce qu'on relit
+    writer: demandeur
+    artifact: un verdict par critère
+  - id: relire-diff
+    label: Relire le diff
+    section: Ce qu'on relit
+    writer: demandeur
+    condition: le diff fait ce qu'il annonce
+  - id: verifier-perimetre
+    label: Vérifier le périmètre
+    section: Ce qu'on relit
+    writer: demandeur
+    gate: ce qui est dans la PR était dans le cadrage
+  - id: verifier-tests
+    label: Vérifier les tests
+    section: Ce qu'on relit
+    writer: demandeur
+    gate: les tests passent et couvrent le comportement ajouté
+  - id: relire-journal
+    label: Relire le journal
+    section: Ce qu'on relit
+    writer: demandeur
+    gate: le journal dit la même chose que la PR
+  - id: relire-checklist
+    label: Relire la checklist de la session
+    section: Ce qu'on relit
+    writer: demandeur
+  - id: ecarter-motifs
+    label: Écarter ce qui n'est pas un motif de refus
+    section: Ce qui n'est pas un motif de refus
+    writer: demandeur
+    gate: style, amélioration hors périmètre et préférence non écrite ne fondent pas un refus
+  - id: decider
+    label: Trancher
+    section: Décisions possibles
+    writer: demandeur
+  - id: approuver
+    label: Approuver la PR
+    section: Sur le tracker
+    writer: demandeur
+    artifact: la revue approuvée
+  - id: reprendre
+    label: Demander des changements
+    section: Sur le tracker
+    writer: demandeur
+    artifact: une revue en request changes
+  - id: renvoyer-cadrage
+    label: Renvoyer au cadrage
+    section: Sur le tracker
+    writer: demandeur
+    artifact: le libellé to-refine
+  - id: verifier-sortie
+    label: Vérifier la condition de sortie
+    section: Condition de sortie
+    writer: demandeur
+    gate: les cinq cases sont cochées
+  - id: passer-prete-a-partir
+    label: Passer le ticket à prête à partir
+    section: Sur le tracker
+    writer: session
+    artifact: le libellé ready-for-prod
+edges:
+  - from: in-review
+    to: relire-criteres
+  - from: relire-criteres
+    to: relire-diff
+  - from: relire-diff
+    to: verifier-perimetre
+  - from: verifier-perimetre
+    to: renvoyer-cadrage
+    when: la PR sort du périmètre
+  - from: verifier-perimetre
+    to: verifier-tests
+  - from: verifier-tests
+    to: relire-journal
+  - from: relire-journal
+    to: relire-checklist
+  - from: relire-checklist
+    to: ecarter-motifs
+  - from: ecarter-motifs
+    to: decider
+  - from: decider
+    to: approuver
+    when: tout est conforme
+  - from: decider
+    to: reprendre
+    when: un critère ou une preuve manque
+  - from: approuver
+    to: verifier-sortie
+  - from: verifier-sortie
+    to: passer-prete-a-partir
+    when: les cinq cases sont cochées
+  - from: passer-prete-a-partir
+    to: ready-for-prod
+  - from: reprendre
+    to: in-progress
+  - from: renvoyer-cadrage
+    to: to-refine

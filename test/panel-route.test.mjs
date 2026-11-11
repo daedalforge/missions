@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { createServer, request } from 'node:http'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { parse } from 'yaml'
 
@@ -318,4 +319,100 @@ test('une route inconnue répond 404, un appel non local répond 403', async (t)
     origin: 'https://evil.example',
   })
   assert.equal(forgedOrigin.status, 403)
+})
+
+/** Les modèles vivent à côté de `projects.yml`, comme dans le dépôt. */
+async function copyWorkflows(dir) {
+  const root = fileURLToPath(new URL('../', import.meta.url))
+  await mkdir(join(dir, 'workflows', 'model'), { recursive: true })
+  await writeFile(join(dir, 'projects.yml'), await readFile(join(root, 'missions', 'projects.yml')))
+  for (const workflow of ['cadrage', 'execution', 'review', 'cloture']) {
+    await writeFile(join(dir, 'workflows', `${workflow}.md`), await readFile(join(root, 'workflows', `${workflow}.md`)))
+    await writeFile(
+      join(dir, 'workflows', 'model', `${workflow}.yml`),
+      await readFile(join(root, 'workflows', 'model', `${workflow}.yml`)),
+    )
+  }
+}
+
+/** Le modèle nu, tel que le panneau le renvoie au serveur. */
+function bareModel(entry) {
+  const { errors, orphanSections, headings, file, ...model } = entry
+  return model
+}
+
+test('GET /workflows rend les quatre étapes et le vocabulaire', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const response = await call(handler, { path: '/missions/api/workflows' })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body.workflows.length, 4)
+  assert.deepEqual(response.body.workflows.map((entry) => entry.workflow), ['cadrage', 'execution', 'review', 'cloture'])
+  assert.deepEqual(response.body.writers, ['demandeur', 'session', 'outil'])
+  assert.ok(response.body.states.includes('ready'))
+  for (const entry of response.body.workflows) {
+    assert.deepEqual(entry.errors, [], entry.workflow)
+    assert.ok(entry.nodes.length > 0)
+    assert.ok(entry.headings.length > 0)
+  }
+  assert.equal(response.body.workflows[0].text, undefined, 'le texte reste dans la route du modèle')
+})
+
+test('POST /workflows/model écrit un modèle valide', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const model = bareModel(list.body.workflows[0])
+  model.nodes[0].label = 'Lire le ticket, puis son contexte'
+
+  const saved = await call(handler, { method: 'POST', path: '/missions/api/workflows/model', body: { workflow: 'cadrage', model } })
+
+  assert.equal(saved.status, 200)
+  assert.equal(saved.body.model.nodes[0].label, 'Lire le ticket, puis son contexte')
+  assert.deepEqual(saved.body.errors, [])
+  const written = await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8')
+  assert.match(written, /puis son contexte/)
+})
+
+test('POST /workflows/model refuse un modèle invalide et n’écrit rien', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  const before = await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8')
+
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const model = bareModel(list.body.workflows[0])
+  model.entry = 'refined'
+
+  const refused = await call(handler, { method: 'POST', path: '/missions/api/workflows/model', body: { workflow: 'cadrage', model } })
+
+  assert.equal(refused.status, 400)
+  assert.equal(refused.body.error, 'model invalid')
+  assert.equal(refused.body.errors[0].code, 'etat-inconnu')
+  assert.equal(await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8'), before)
+})
+
+test('GET /workflows/model rend le YAML, un couple inconnu répond 400', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const response = await call(handler, { path: '/missions/api/workflows/model?workflow=review' })
+  assert.equal(response.status, 200)
+  assert.match(response.body.text, /^workflow: review/)
+  assert.equal(response.body.file, 'workflows/model/review.yml')
+
+  const missing = await call(handler, { path: '/missions/api/workflows/model' })
+  assert.equal(missing.status, 400)
+
+  const unknown = await call(handler, { path: '/missions/api/workflows/model?workflow=deploy' })
+  assert.equal(unknown.status, 400)
+
+  const refused = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows/model',
+    body: { workflow: 'deploy', model: {} },
+  })
+  assert.equal(refused.status, 400)
 })
