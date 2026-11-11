@@ -278,7 +278,7 @@ window.__ModuleLoader__.load({
 .missions-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .missions-clear { flex: none; height: 30px; padding: 0 6px; border: 0; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font: inherit; font-size: 11.5px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .missions-clear:hover { color: var(--dsw-alias-label-primary, #1f1f1f); }
-/* Le statut est le seul filtre qui prend plusieurs valeurs : un bouton ouvre son menu. */
+/* Statut et priorité prennent plusieurs valeurs : un bouton ouvre leur menu. */
 .missions-multi { position: relative; display: inline-flex; }
 .missions-status-menu { position: absolute; top: calc(100% + 5px); left: 0; z-index: 30; min-width: 216px; padding: 5px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 9px; background: var(--dsw-alias-bg-layer-1, #ffffff); box-shadow: 0 12px 28px -10px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.06); }
 .missions-status-list { margin: 0; padding: 0; list-style: none; }
@@ -292,6 +292,10 @@ window.__ModuleLoader__.load({
 .missions-status-option[data-state="in-progress"] input { accent-color: #bf8700; }
 .missions-status-option[data-state="ready"] input { accent-color: #1a7f37; }
 .missions-status-option[data-state="to-refine"] input { accent-color: #8250df; }
+.missions-status-option[data-state="urgent"] input { accent-color: #cf222e; }
+.missions-status-option[data-state="high"] input { accent-color: #bf8700; }
+.missions-status-option[data-state="normal"] input { accent-color: #0969da; }
+.missions-status-option[data-state="low"] input { accent-color: #7a7168; }
 .missions-status-actions { display: flex; gap: 14px; margin-top: 4px; padding: 6px 7px 2px; border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
 .missions-status-actions button { padding: 0; border: 0; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font: inherit; font-size: 10.5px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .missions-status-actions button:hover { color: var(--dsw-alias-label-primary, #1f1f1f); }
@@ -365,7 +369,10 @@ window.__ModuleLoader__.load({
 .missions-sect-link:hover, .missions-sect-link:focus-visible { color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-sect-arrow { transition: transform .15s ease; }
 .missions-sect-link:hover .missions-sect-arrow { transform: translateX(2px); }
-.missions-sectgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.85fr); gap: 10px; margin-top: 11px; align-items: stretch; }
+.missions-sectgrid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-top: 11px; align-items: stretch; }
+.missions-dash-card--flight { grid-column: span 2; }
+.missions-dash-card--queue { grid-column: span 4; }
+.missions-dash-card--bugs, .missions-dash-card--stories { grid-column: span 3; }
 .missions-dash-card { display: flex; flex-direction: column; min-width: 0; background: var(--dsw-alias-bg-base, #fff); border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 9px; }
 .missions-dash-card-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 13px 4px; }
 .missions-dash-card-title { margin: 0; font-size: 12px; font-weight: 600; }
@@ -388,7 +395,7 @@ window.__ModuleLoader__.load({
 .missions-rowitem { border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.07)); }
 .missions-rowitem:last-child { border-bottom: 0; }
 .missions-row { display: grid; grid-template-columns: 6px 56px minmax(0, 1fr) 42px 66px; align-items: center; gap: 9px; width: 100%; height: 33px; padding: 0 1px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.missions-dash-card--flight .missions-row { grid-template-columns: 6px 56px minmax(0, 1fr) 46px; }
+.missions-dash-card--flight .missions-row, .missions-dash-card--bugs .missions-row, .missions-dash-card--stories .missions-row { grid-template-columns: 6px 56px minmax(0, 1fr) 46px; }
 .missions-row:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 5%, transparent); }
 .missions-row:focus-visible { outline: 2px solid color-mix(in srgb, #0969da 78%, transparent); outline-offset: -2px; }
 .missions-rowdot { width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -406,7 +413,7 @@ window.__ModuleLoader__.load({
 .missions-row[data-state="ready"] .missions-rowdot { background: #1a7f37; }
 .missions-row[data-state="to-refine"] .missions-rowdot { background: #8250df; }
 @media (prefers-reduced-motion: reduce) { .missions-sect-arrow, .missions-rowarrow { transition: none; } }
-@container (max-width: 820px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 820px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } .missions-dash-card--flight, .missions-dash-card--queue, .missions-dash-card--bugs, .missions-dash-card--stories { grid-column: auto; } }
 .missions-drawer { flex: none; width: 380px; max-width: 46%; display: flex; flex-direction: column; gap: 16px; padding: 16px 22px 24px; overflow: auto; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); animation: missions-slide .14s ease; }
 @keyframes missions-slide { from { opacity: 0 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
@@ -800,12 +807,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
     /**
      * The dashboard: a section per domain, a card per widget. The only section
-     * today is Missions, with the queue and the work already running; both read
-     * the same mission list the panel already loaded.
+     * today is Missions, with the queue, the work already running, and the two
+     * cross-cutting lenses the list makes you filter by hand: your unresolved
+     * bugs, and high-priority stories. All four read the same mission list the
+     * panel already loaded.
      */
     function DashboardView({ missions = [], loading, theme, now = Date.now(), onOpen, onOpenAll, onViewAll }) {
       const queue = needsYou(missions)
       const flight = inFlight(missions)
+      const bugs = assignedBugs(missions)
+      const stories = highPriorityStories(missions)
       const scope = dashboardScope(missions)
       const points = pointsTotal(flight)
 
@@ -831,7 +842,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // and the list stays the place where everything is reachable.
       const queueShown = queue.slice(0, WIDGET_ROWS)
       const flightShown = flight.slice(0, WIDGET_ROWS)
+      const bugsShown = bugs.slice(0, WIDGET_ROWS)
+      const storiesShown = stories.slice(0, WIDGET_ROWS)
       const queueHidden = queue.length - queueShown.length
+      const bugsHidden = bugs.length - bugsShown.length
+      const storiesHidden = stories.length - storiesShown.length
 
       // The dashboard keeps what it already shows while a refresh runs: only a
       // cold mount has nothing to keep.
@@ -851,7 +866,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                 footer: widgetFoot({
                   note: flightNote,
                   total: flight.length,
-                  onViewAll: () => onViewAll(stateOptions(flight)),
+                  onViewAll: () => onViewAll({ state: stateOptions(flight) }),
                 }),
               },
                 flight.length === 0
@@ -868,13 +883,47 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                 footer: widgetFoot({
                   note: queueHidden > 0 ? `${queueHidden} more waiting` : null,
                   total: queue.length,
-                  onViewAll: () => onViewAll(stateOptions(queue)),
+                  onViewAll: () => onViewAll({ state: stateOptions(queue) }),
                 }),
               },
                 queue.length === 0
                   ? h('p', { className: 'missions-dash-card-empty' }, 'Nothing is waiting on you.')
                   : h('ul', { className: 'missions-rows' },
                       queueShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: true, onOpen })),
+                    ),
+              ),
+              h(DashboardCard, {
+                title: 'Bugs',
+                sub: 'Unresolved, assigned to you. Oldest first.',
+                meta: bugs.length,
+                className: 'missions-dash-card--bugs',
+                footer: widgetFoot({
+                  note: bugsHidden > 0 ? `${bugsHidden} more ${bugsHidden === 1 ? 'bug' : 'bugs'}` : null,
+                  total: bugs.length,
+                  onViewAll: () => onViewAll({ type: 'bug' }),
+                }),
+              },
+                bugs.length === 0
+                  ? h('p', { className: 'missions-dash-card-empty' }, 'No unresolved bug assigned to you.')
+                  : h('ul', { className: 'missions-rows' },
+                      bugsShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
+                    ),
+              ),
+              h(DashboardCard, {
+                title: 'High-priority stories',
+                sub: 'Urgent or high, oldest first.',
+                meta: stories.length,
+                className: 'missions-dash-card--stories',
+                footer: widgetFoot({
+                  note: storiesHidden > 0 ? `${storiesHidden} more ${storiesHidden === 1 ? 'story' : 'stories'}` : null,
+                  total: stories.length,
+                  onViewAll: () => onViewAll({ type: 'story', priority: ['urgent', 'high'] }),
+                }),
+              },
+                stories.length === 0
+                  ? h('p', { className: 'missions-dash-card-empty' }, 'No high-priority story.')
+                  : h('ul', { className: 'missions-rows' },
+                      storiesShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
               ),
             )
@@ -999,19 +1048,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
     }
 
     /**
-     * The status filter as a list of check boxes.
+     * A filter with several values, as a list of check boxes.
      *
      * A native select carries one value, and a dashboard widget opens the list
-     * on every state it showed — so this one dimension gets a menu of its own.
+     * on every value it showed — so these dimensions get a menu of their own.
      * The chip keeps the bar tight ("Ready", "4 selected"), the menu carries a
-     * count per state and the two shortcuts, and every choice is a real
+     * count per value and a shortcut to clear, and every choice is a real
      * checkbox: the keyboard reaches it without a custom key handler.
      */
-    function StatusFilter({ missions, value, onChange }) {
+    function ChecklistFilter({ label, value, options, labels, counts, allLabel, onChange }) {
       const [open, setOpen] = React.useState(false)
       const box = React.useRef(null)
-      const states = stateOptions(missions)
       const selected = Array.isArray(value) ? value : value === null || value === undefined ? [] : [value]
+      const entries = [...options, ...selected.filter((option) => !options.includes(option))]
 
       // A click outside closes the menu. The listener only lives while the menu
       // is open, and unmounting the panel takes it with the wrapper.
@@ -1024,17 +1073,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         return () => document.removeEventListener('pointerdown', close)
       }, [open])
 
-      const counts = {}
-      for (const mission of missions) {
-        const state = STATE_ORDER.includes(mission.state) ? mission.state : 'unknown'
-        counts[state] = (counts[state] ?? 0) + 1
-      }
-
       // The chip stands alone, unlike a sentence, so its label starts with a
       // capital: "In progress" reads as a value, "in progress" as a fragment.
-      const labelOf = (state) => {
-        const label = STATE_LABELS[state] ?? state
-        return label.charAt(0).toUpperCase() + label.slice(1)
+      const labelOf = (option) => {
+        const text = labels[option] ?? option
+        return text.charAt(0).toUpperCase() + text.slice(1)
       }
       const display = selected.length === 0
         ? 'All'
@@ -1043,13 +1086,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           : `${selected.length} selected`
 
       // The list arrives in the panel's order, never in click order: the chip,
-      // the session and the list then agree on what "these states" means.
+      // the session and the list then agree on what "these values" means.
       const choose = (next) => {
-        const ordered = states.filter((state) => next.includes(state))
+        const ordered = entries.filter((entry) => next.includes(entry))
         onChange(ordered.length > 0 ? ordered : null)
       }
-      const toggle = (state) => {
-        choose(selected.includes(state) ? selected.filter((chosen) => chosen !== state) : [...selected, state])
+      const toggle = (option) => {
+        choose(selected.includes(option) ? selected.filter((chosen) => chosen !== option) : [...selected, option])
       }
 
       const chevron = h('svg', { width: 9, height: 9, viewBox: '0 0 10 10', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, 'aria-hidden': 'true' },
@@ -1070,37 +1113,70 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           'data-open': open ? 'true' : 'false',
           'aria-haspopup': 'true',
           'aria-expanded': open ? 'true' : 'false',
-          'aria-label': `Filter by status (${display})`,
+          'aria-label': `Filter by ${label.toLowerCase()} (${display})`,
           onClick: () => setOpen((was) => !was),
         },
-          h('span', { className: 'missions-select-label' }, 'Status'),
+          h('span', { className: 'missions-select-label' }, label),
           h('span', { className: 'missions-select-value', title: display }, display),
           chevron,
         ),
         open
           ? h('div', { className: 'missions-status-menu' },
-              h('ul', { className: 'missions-status-list', role: 'group', 'aria-label': 'Status' },
-                states.map((state) => h('li', { key: state, className: 'missions-status-item' },
-                  h('label', { className: 'missions-status-option', 'data-state': state },
+              h('ul', { className: 'missions-status-list', role: 'group', 'aria-label': label },
+                entries.map((option) => h('li', { key: option, className: 'missions-status-item' },
+                  h('label', { className: 'missions-status-option', 'data-state': option },
                     h('input', {
                       type: 'checkbox',
-                      checked: selected.includes(state),
-                      onChange: () => toggle(state),
+                      checked: selected.includes(option),
+                      onChange: () => toggle(option),
                     }),
-                    h('span', { className: 'missions-status-name' }, labelOf(state)),
-                    h('span', { className: 'missions-status-count', 'aria-hidden': 'true' }, String(counts[state] ?? 0)),
+                    h('span', { className: 'missions-status-name' }, labelOf(option)),
+                    h('span', { className: 'missions-status-count', 'aria-hidden': 'true' }, String(counts[option] ?? 0)),
                   ),
                 )),
               ),
-              // « All states » is the absence of a filter, not the list of the
-              // states known today: a state that appears tomorrow must not be
-              // filtered out by a bar saved yesterday.
+              // « All » is the absence of a filter, not the list of the values
+              // known today: a value that appears tomorrow must not be filtered
+              // out by a bar saved yesterday.
               h('div', { className: 'missions-status-actions' },
-                h('button', { type: 'button', onClick: () => onChange(null) }, 'All states'),
+                h('button', { type: 'button', onClick: () => onChange(null) }, allLabel),
               ),
             )
           : null,
       )
+    }
+
+    function StatusFilter({ missions, value, onChange }) {
+      const counts = {}
+      for (const mission of missions) {
+        const state = STATE_ORDER.includes(mission.state) ? mission.state : 'unknown'
+        counts[state] = (counts[state] ?? 0) + 1
+      }
+      return h(ChecklistFilter, {
+        label: 'Status',
+        value,
+        options: stateOptions(missions),
+        labels: STATE_LABELS,
+        counts,
+        allLabel: 'All states',
+        onChange,
+      })
+    }
+
+    function PriorityFilter({ missions, value, onChange }) {
+      const counts = {}
+      for (const mission of missions) {
+        if (mission.priority) counts[mission.priority] = (counts[mission.priority] ?? 0) + 1
+      }
+      return h(ChecklistFilter, {
+        label: 'Priority',
+        value,
+        options: priorityOptions(missions),
+        labels: PRIORITY_LABELS,
+        counts,
+        allLabel: 'All priorities',
+        onChange,
+      })
     }
 
     /** Native select under a styled label, next to Refresh. */
@@ -1152,7 +1228,6 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
     function MissionsView({ missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme }) {
       const epics = epicOptions(missions)
-      const priorities = priorityOptions(missions)
       const projects = projectOptions(missions)
       const active = hasActiveFilters(filters)
 
@@ -1181,11 +1256,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           h(FilterSelect, { label: 'Type', value: filters.type, options: TYPE_OPTIONS, onChange: (value) => onFilter('type', value) }),
           h(FilterSelect, { label: 'Epic', value: filters.epic, options: epics, onChange: (value) => onFilter('epic', value) }),
           h(FilterSelect, { label: 'Project', value: filters.project, options: projects, onChange: (value) => onFilter('project', value) }),
-          h(FilterSelect, {
-            label: 'Priority',
+          h(PriorityFilter, {
+            missions,
             value: filters.priority,
-            options: priorities,
-            format: (priority) => PRIORITY_LABELS[priority] ?? priority,
             onChange: (value) => onFilter('priority', value),
           }),
           h(FilterSelect, {
@@ -1625,14 +1698,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const onClear = () => setFilters({ ...EMPTY_FILTERS })
 
       // A widget's link opens the list on exactly the rows the widget showed:
-      // same states, no search, no order, no other filter. The bar is reset
-      // rather than completed, so the count the widget announced is the count
-      // the list shows.
-      const onViewAll = (states) => {
+      // its states, its type, its priority — no search, no order, no other
+      // filter. The bar is reset rather than completed, so the count the widget
+      // announced is the count the list shows.
+      const onViewAll = (filters = {}) => {
         setSelected(null)
         setQuery('')
         setSort(null)
-        setFilters({ ...EMPTY_FILTERS, state: states.length > 0 ? states : null })
+        setFilters({ ...EMPTY_FILTERS, ...filters })
         setTab('missions')
       }
 

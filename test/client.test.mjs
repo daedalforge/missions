@@ -430,14 +430,15 @@ test('le loader ne déborde pas sur l’onglet Dashboard', () => {
  */
 const DASH_NOW = Date.parse('2026-11-11T12:00:00Z')
 const DASH_MISSIONS = [
-  { key: 'MIS-1', title: 'reload onglet mission', state: 'in-review', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T12:00:00Z' },
-  { key: 'MIS-2', title: 'thème manga', state: 'ready', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-10T12:00:00Z' },
-  { key: 'MIS-3', title: 'export CSV du planning', state: 'in-progress', project: 'socle', projectName: 'Socle', updatedAt: '2026-10-31T12:00:00Z', points: 5 },
-  { key: 'MIS-4', title: 'densité compacte', state: 'in-progress', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-07T12:00:00Z', points: 3 },
-  { key: 'MIS-5', title: 'statut non mappé', state: null, project: 'socle', projectName: 'Socle', updatedAt: '2026-11-05T12:00:00Z' },
+  { key: 'MIS-1', title: 'reload onglet mission', state: 'in-review', type: 'bug', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T12:00:00Z' },
+  { key: 'MIS-2', title: 'thème manga', state: 'ready', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-10T12:00:00Z' },
+  { key: 'MIS-3', title: 'export CSV du planning', state: 'in-progress', type: 'story', priority: 'urgent', project: 'socle', projectName: 'Socle', updatedAt: '2026-10-31T12:00:00Z', points: 5 },
+  { key: 'MIS-4', title: 'densité compacte', state: 'in-progress', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-07T12:00:00Z', points: 3 },
+  { key: 'MIS-5', title: 'statut non mappé', state: null, type: 'story', priority: 'high', project: 'socle', projectName: 'Socle', updatedAt: '2026-11-05T12:00:00Z' },
   // Une mission close ne doit ni s'afficher ni compter : le tracker ne devrait
-  // pas l'envoyer, mais la section ne dépend pas de cette promesse.
-  { key: 'MIS-6', title: 'mission close', state: 'done', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
+  // pas l'envoyer, mais la section ne dépend pas de cette promesse. Elle reste
+  // un bug de priorité haute, pour que les widgets aient à l'exclure.
+  { key: 'MIS-6', title: 'mission close', state: 'done', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
 ]
 
 function dashboardView(missions, loading = false) {
@@ -517,15 +518,25 @@ test("un onglet rangé qui n'existe plus retombe sur le dashboard", () => {
   assert.equal(findAll(tree, 'DashboardView').length, 1)
 })
 
-test('le dashboard rend les deux cartes, une ligne par mission de la file', () => {
+test('le dashboard rend les quatre cartes, dans l’ordre', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
   const cards = findAll(tree, 'article')
-  assert.equal(cards.length, 2, 'deux cartes : la file et l’en-cours')
+  assert.equal(cards.length, 4, 'quatre cartes : l’en-cours, la file, les bugs, les stories')
 
-  const [flight, queue] = cards
+  const [flight, queue, bugs, stories] = cards
   assert.match(textOf(flight), /In flight/, 'l’en-cours passe en premier')
   assert.match(textOf(queue), /Needs you/)
+  assert.match(textOf(bugs), /Bugs/)
+  assert.match(textOf(stories), /High-priority stories/)
+
+  // Les deux nouveaux widgets prennent les missions que la file et l'en-cours
+  // laissent de côté, et les trient comme eux : la plus ancienne d'abord.
+  const keysOf = (card) => findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  assert.deepEqual(keysOf(bugs), ['MIS-1', 'MIS-4'], 'les bugs non résolus, sans le bug clos')
+  assert.deepEqual(keysOf(stories), ['MIS-3', 'MIS-5', 'MIS-2'], 'urgent et high, tous états, la plus ancienne d’abord')
+  assert.equal(findAll(bugs, 'span').filter((span) => span.props.className === 'missions-rowverb').length, 0)
+  assert.equal(findAll(stories, 'span').filter((span) => span.props.className === 'missions-rowverb').length, 0)
 
   // La file : un rang par état (in-review, ready), puis la mission sans état
   // connu en dernier — celle qui demande un arbitrage.
@@ -560,12 +571,13 @@ test('le dashboard rend les deux cartes, une ligne par mission de la file', () =
 test('la bande résume le périmètre et compte les missions qu’elle montre', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
-  // 5 missions ouvertes, 3 dans la file, 2 projets : le compte annoncé doit
-  // correspondre au nombre de lignes rendues, mission sans état comprise.
+  // 5 missions ouvertes, 3 dans la file, 2 projets. Les widgets se recoupent :
+  // dix lignes rendues, mais cinq missions distinctes — le périmètre compte les
+  // missions, pas les occurrences.
   const rendered = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
   const scope = findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope')
   assert.equal(textOf(scope), '3 need you · 5 open · 2 projects')
-  assert.equal(rendered.length, 5)
+  assert.equal(rendered.length, 10)
 })
 
 test('cliquer une ligne ouvre la mission dans l’onglet Missions', () => {
@@ -591,30 +603,35 @@ test('la sortie « Open Missions » ouvre l’onglet sans sélection', () => {
 })
 
 test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
-  // 14 en file, 12 en vol : les deux cartes débordent, comme le vrai tracker.
+  // 14 bugs en file, 12 stories hautes en vol : les quatre cartes débordent.
   const missions = []
   for (let index = 0; index < 14; index += 1) {
     // Une date distincte par rang : la file trie la plus ancienne d'abord, et
     // l'ordre attendu ne doit pas dépendre du départage par clé.
-    missions.push({ key: `Q-${index}`, title: `file ${index}`, state: 'ready', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString() })
+    missions.push({ key: `Q-${index}`, title: `file ${index}`, state: 'ready', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString() })
   }
   for (let index = 0; index < 12; index += 1) {
-    missions.push({ key: `F-${index}`, title: `vol ${index}`, state: 'in-progress', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString(), points: 2 })
+    missions.push({ key: `F-${index}`, title: `vol ${index}`, state: 'in-progress', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString(), points: 2 })
   }
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
-  const [flight, queue] = findAll(tree, 'article')
+  const [flight, queue, bugs, stories] = findAll(tree, 'article')
 
   const rows = (card) => findAll(card, 'button').filter((button) => button.props['data-state'] !== undefined)
-  assert.equal(rows(queue).length, 10, 'la file s’arrête à dix lignes')
-  assert.equal(rows(flight).length, 10, 'l’en-cours s’arrête à dix lignes')
+  for (const [name, card] of [['file', queue], ['en-cours', flight], ['bugs', bugs], ['stories', stories]]) {
+    assert.equal(rows(card).length, 10, `${name} s’arrête à dix lignes`)
+  }
   const keys = (card) => findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
   assert.deepEqual(keys(queue), ['Q-0', 'Q-1', 'Q-2', 'Q-3', 'Q-4', 'Q-5', 'Q-6', 'Q-7', 'Q-8', 'Q-9'])
   assert.deepEqual(keys(flight), ['F-0', 'F-1', 'F-2', 'F-3', 'F-4', 'F-5', 'F-6', 'F-7', 'F-8', 'F-9'])
+  assert.deepEqual(keys(bugs), ['Q-0', 'Q-1', 'Q-2', 'Q-3', 'Q-4', 'Q-5', 'Q-6', 'Q-7', 'Q-8', 'Q-9'])
+  assert.deepEqual(keys(stories), ['F-0', 'F-1', 'F-2', 'F-3', 'F-4', 'F-5', 'F-6', 'F-7', 'F-8', 'F-9'])
 
   // Le compte de l'en-tête reste le total : le plafond ne réécrit pas la donnée.
   const meta = (card) => textOf(findAll(card, 'span').find((span) => span.props.className === 'missions-dash-card-meta'))
   assert.equal(meta(queue), '14')
   assert.equal(meta(flight), '12')
+  assert.equal(meta(bugs), '14')
+  assert.equal(meta(stories), '12')
 
   // Le pied dit ce qui reste, puis le lien porte le total de la liste.
   const foot = (card) => textOf(findAll(card, 'p').at(-1))
@@ -622,6 +639,10 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
   assert.match(foot(queue), /View all 14/)
   assert.match(foot(flight), /24 pts in flight/)
   assert.match(foot(flight), /View all 12/)
+  assert.match(foot(bugs), /4 more bugs/)
+  assert.match(foot(bugs), /View all 14/)
+  assert.match(foot(stories), /2 more stories/)
+  assert.match(foot(stories), /View all 12/)
 })
 
 test('une carte qui tient en dix lignes n’a ni compte ni lien', () => {
@@ -685,8 +706,40 @@ test('le lien du widget ouvre la liste sur les états de la carte', () => {
   assert.deepEqual(filters.state, ['ready', 'unknown'], 'les états viennent de la carte, dans l’ordre du panneau')
   // La barre est remise à zéro : seul le statut reste, sinon le compte mentirait.
   assert.equal(filters.type, null)
+  assert.equal(filters.priority, null)
   assert.equal(filters.epic, null)
+  assert.equal(filters.project, null)
   assert.equal(filters.missing, null)
+  assert.ok(setters.includes('missions'), 'le clic bascule sur l’onglet Missions')
+  assert.ok(setters.includes(''), 'le clic efface la recherche')
+})
+
+test('les nouveaux widgets ouvrent la liste sur leur type et leur priorité', () => {
+  const missions = []
+  for (let index = 0; index < 12; index += 1) {
+    missions.push({ key: `B-${index}`, title: `bug ${index}`, state: 'to-refine', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString() })
+  }
+  for (let index = 0; index < 12; index += 1) {
+    missions.push({ key: `S-${index}`, title: `story ${index}`, state: 'ready', type: 'story', priority: index % 2 === 0 ? 'high' : 'urgent', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString() })
+  }
+  const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const card = (title) => findAll(tree, 'article').find((article) => textOf(findAll(article, 'h3')[0]) === title)
+  const clickAll = (article) => {
+    const link = findAll(article, 'button').find((button) => textOf(button).includes('View all 12'))
+    assert.ok(link, 'la carte doit lier ses douze lignes')
+    link.props.onClick()
+  }
+  const empty = { type: null, state: null, epic: null, priority: null, project: null, missing: null }
+
+  clickAll(card('Bugs'))
+  assert.deepEqual(setters.find((next) => next && typeof next === 'object' && next.type === 'bug'), { ...empty, type: 'bug' })
+
+  clickAll(card('High-priority stories'))
+  assert.deepEqual(
+    setters.find((next) => next && typeof next === 'object' && next.type === 'story'),
+    { ...empty, type: 'story', priority: ['urgent', 'high'] },
+    'la liste garde les deux niveaux dans la barre',
+  )
   assert.ok(setters.includes('missions'), 'le clic bascule sur l’onglet Missions')
   assert.ok(setters.includes(''), 'le clic efface la recherche')
 })
@@ -719,17 +772,48 @@ test('le statut montre « 2 selected » quand le panneau en porte deux', () => {
   assert.ok(setters.length > 0)
 })
 
+test('la priorité prend plusieurs valeurs et la barre les montre', () => {
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+  api.apply(ctx)
+  const view = findAll(registered.main({}), 'MissionsView')[0]
+  assert.ok(view, 'le panneau doit rendre la liste')
+
+  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, filters }, children: [] })
+  const chip = (node) => findAll(node, 'button').find((button) => button.props.className === 'missions-select' && textOf(button).startsWith('Priority'))
+
+  // Le lien du widget transporte deux niveaux : la barre les compte et reste
+  // active, au lieu de fondre les deux dans une valeur composée.
+  const both = chip(rerender({ ...view.props.filters, priority: ['urgent', 'high'] }))
+  assert.ok(both, 'la barre doit rendre le filtre Priorité')
+  assert.equal(both.props['data-active'], 'true')
+  assert.equal(both.props['aria-label'], 'Filter by priority (2 selected)')
+  assert.match(textOf(both), /Priority2 selected/)
+
+  // Un seul niveau garde son libellé ; aucun retombe sur « All ».
+  assert.match(textOf(chip(rerender({ ...view.props.filters, priority: ['high'] }))), /PriorityHigh/)
+  const none = chip(rerender({ ...view.props.filters, priority: null }))
+  assert.equal(none.props['data-active'], 'false')
+  assert.match(textOf(none), /PriorityAll/)
+
+  // Le clic bascule l'ouverture du menu, qui porte de vraies cases à cocher.
+  both.props.onClick()
+  assert.ok(setters.length > 0)
+  assert.match(SOURCE, /allLabel: 'All priorities'/)
+  assert.match(SOURCE, /type: 'checkbox'/)
+})
 test('une mission qui dort est signalée, sa ligne le dit aussi', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
   const rows = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
   const quiet = rows.filter((button) => button.props['aria-label'].includes('not updated for a week'))
-  // L'en-cours d'abord : MIS-3 (11 j) puis MIS-4 (4 j). Puis la file : MIS-1
-  // (9 j), MIS-5 (6 j → non), MIS-2 (1 j).
-  assert.deepEqual(quiet.map((button) => button.props['aria-label'].split(' ')[0]), ['MIS-3', 'MIS-1'])
+  // L'en-cours : MIS-3 (11 j), MIS-4 (4 j). La file : MIS-1 (9 j), MIS-2 (1 j),
+  // MIS-5 (6 j). Puis les widgets reprennent les mêmes missions : MIS-1 dans
+  // Bugs, MIS-3 dans Stories.
+  assert.deepEqual(quiet.map((button) => button.props['aria-label'].split(' ')[0]), ['MIS-3', 'MIS-1', 'MIS-1', 'MIS-3'])
 
   const ages = findAll(tree, 'span').filter((span) => span.props.className === 'missions-rowage')
-  assert.deepEqual(ages.map((span) => span.props['data-quiet']), ['true', 'false', 'true', 'false', 'false'])
+  assert.deepEqual(ages.map((span) => span.props['data-quiet']), ['true', 'false', 'true', 'false', 'false', 'true', 'false', 'true', 'false', 'false'])
 })
 
 test('chaque carte dit à quoi elle sert, sous son titre', () => {
@@ -739,6 +823,8 @@ test('chaque carte dit à quoi elle sert, sous son titre', () => {
   assert.deepEqual(subs.map(textOf), [
     'Started, not shipped.',
     'Waiting on your next move, most urgent first.',
+    'Unresolved, assigned to you. Oldest first.',
+    'Urgent or high, oldest first.',
   ])
   // « sous le titre » : la ligne vient juste après l'en-tête, pas au bas de la carte.
   for (const card of findAll(tree, 'article')) {
@@ -759,6 +845,18 @@ test('sans mission, le dashboard rend son état vide', () => {
   assert.equal(findAll(tree, 'div').filter((div) => div.props.className === 'missions-dash-empty').length, 1)
 })
 
+test('les widgets sans ligne disent ce qui manque, sans lien', () => {
+  const missions = [
+    { key: 'S-1', title: 'story normale', state: 'ready', type: 'story', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-01T12:00:00Z' },
+  ]
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const [, , bugs, stories] = findAll(tree, 'article')
+
+  assert.match(textOf(bugs), /No unresolved bug assigned to you\./)
+  assert.match(textOf(stories), /No high-priority story\./)
+  assert.equal(findAll(tree, 'button').filter((button) => textOf(button).includes('View all')).length, 0)
+})
+
 test('un chargement sans donnée rend le loader, un refresh garde les lignes', () => {
   const cold = renderDashboard([EMPTY_BAR, dashboardView([], true), 'dashboard'], { now: DASH_NOW })
   assert.equal(findAll(cold.tree, 'div').filter((div) => div.props.className === 'missions-loader').length, 1)
@@ -766,7 +864,7 @@ test('un chargement sans donnée rend le loader, un refresh garde les lignes', (
   // Un refresh lancé depuis un autre onglet ne doit pas vider le dashboard.
   const warm = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS, true), 'dashboard'], { now: DASH_NOW })
   assert.equal(findAll(warm.tree, 'div').filter((div) => div.props.className === 'missions-loader').length, 0)
-  assert.equal(findAll(warm.tree, 'button').filter((button) => button.props['data-state'] !== undefined).length, 5)
+  assert.equal(findAll(warm.tree, 'button').filter((button) => button.props['data-state'] !== undefined).length, 10)
 })
 
 test('le panneau relit la barre de la session au montage', () => {

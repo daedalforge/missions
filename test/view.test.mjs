@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   actionVerb,
   ageDays,
+  assignedBugs,
   branchFieldValue,
   EMPTY_FILTERS,
   epicOptions,
@@ -16,6 +17,7 @@ import {
   filterSnapshot,
   groupByState,
   hasActiveFilters,
+  highPriorityStories,
   inFlight,
   missionAge,
   needsYou,
@@ -102,6 +104,17 @@ test('les filtres epic, priorité et projet se combinent en ET', () => {
   assert.deepEqual(filterMissions(MISSIONS, { epic: 'Workspace', priority: 'urgent' }).map((m) => m.key), ['a#1'])
   assert.deepEqual(filterMissions(MISSIONS, { query: 'cartes', project: 'missions' }).map((m) => m.key), ['a#3'])
   assert.deepEqual(filterMissions(MISSIONS, { project: 'manager', type: 'bug' }), [])
+})
+
+test('la priorité prend plusieurs valeurs, et un tableau vide ne filtre rien', () => {
+  const withHigh = [...MISSIONS, { key: 'a#4', state: 'ready', type: 'story', priority: 'high', points: 1 }]
+  assert.deepEqual(filterMissions(withHigh, { priority: ['urgent', 'high'] }).map((m) => m.key), ['a#1', 'a#4'])
+  assert.deepEqual(filterMissions(withHigh, { priority: ['normal'] }).map((m) => m.key), ['a#2'])
+  assert.deepEqual(filterMissions(withHigh, { priority: [] }).map((m) => m.key), ['a#1', 'a#2', 'a#3', 'a#4'])
+  assert.deepEqual(filterMissions(withHigh, { priority: 'high' }).map((m) => m.key), ['a#4'])
+  // La barre garde la liste telle que le widget la transporte, et la session
+  // doit la retrouver au montage.
+  assert.deepEqual(filterSnapshot({ filters: { priority: ['urgent', 'high'] } }).priority, ['urgent', 'high'])
 })
 
 test('le statut prend plusieurs valeurs, et un tableau vide ne filtre rien', () => {
@@ -302,7 +315,7 @@ test('une checklist vide ou absente ne casse pas le rendu', () => {
 test('l’instantané de la barre garde recherche, filtres et tri', () => {
   const bar = {
     query: 'panneau',
-    filters: { type: 'bug', state: ['ready'], epic: 'Workspace', priority: 'urgent', project: 'missions', missing: 'any' },
+    filters: { type: 'bug', state: ['ready'], epic: 'Workspace', priority: ['urgent'], project: 'missions', missing: 'any' },
     sort: 'points',
   }
   const snapshot = filterSnapshot(bar)
@@ -311,7 +324,7 @@ test('l’instantané de la barre garde recherche, filtres et tri', () => {
     type: 'bug',
     state: ['ready'],
     epic: 'Workspace',
-    priority: 'urgent',
+    priority: ['urgent'],
     project: 'missions',
     missing: 'any',
     sort: 'points',
@@ -322,12 +335,16 @@ test('l’instantané de la barre garde recherche, filtres et tri', () => {
   assert.equal(hasActiveFilters(filterBarState(filterSnapshot({})).filters), false)
 })
 
-test('un statut unique rangé par une barre d’avant la liste se relit en liste', () => {
-  // La session d'avant MIS-94 garde un statut seul : le relire ne doit ni le
-  // perdre ni le rendre en texte, sinon le menu ne le cocherait pas.
+test('une valeur unique rangée par une barre d’avant la liste se relit en liste', () => {
+  // La session d'avant MIS-94 garde un statut seul, et celle d'avant MIS-99 une
+  // priorité seule : les relire ne doit ni les perdre ni les rendre en texte,
+  // sinon le menu ne les cocherait pas.
   const legacy = filterSnapshot({ filters: { state: 'ready' } })
   assert.deepEqual(legacy.state, ['ready'])
   assert.deepEqual(filterBarState({ state: 'ready' }).filters.state, ['ready'])
+  const legacyPriority = filterSnapshot({ filters: { priority: 'high' } })
+  assert.deepEqual(legacyPriority.priority, ['high'])
+  assert.deepEqual(filterBarState({ priority: 'high' }).filters.priority, ['high'])
 })
 
 test('un instantané ne retient que ce que la barre peut sélectionner', () => {
@@ -460,6 +477,25 @@ test('la file du dashboard suit l’urgence, puis la plus ancienne, sans l’en-
   assert.deepEqual(needsYou(missions).map((mission) => mission.key), ['M-4', 'M-2', 'M-5', 'M-1'])
   assert.deepEqual(inFlight(missions).map((mission) => mission.key), ['M-3'])
   assert.deepEqual(needsYou([]), [])
+})
+
+test('les widgets sélectionnent les bugs non résolus et les stories hautes, les plus anciennes d’abord', () => {
+  const missions = [
+    { key: 'bug-old', type: 'bug', state: 'to-refine', updatedAt: '2026-10-01T00:00:00Z' },
+    { key: 'bug-new', type: 'bug', state: 'ready', updatedAt: '2026-11-01T00:00:00Z' },
+    // Un bug clos n'est pas « non résolu » : le tracker ne devrait pas l'envoyer,
+    // le helper ne dépend pas de cette promesse.
+    { key: 'bug-done', type: 'bug', state: 'done', updatedAt: '2026-09-01T00:00:00Z' },
+    { key: 'story-urgent', type: 'story', priority: 'urgent', state: 'in-progress', updatedAt: '2026-11-05T00:00:00Z' },
+    { key: 'story-high', type: 'story', priority: 'high', state: 'ready', updatedAt: '2026-11-03T00:00:00Z' },
+    { key: 'story-normal', type: 'story', priority: 'normal', state: 'ready', updatedAt: '2026-10-01T00:00:00Z' },
+    // Aucun état connu : la story reste dans le widget, tous états confondus.
+    { key: 'task-high', type: 'story', priority: 'high', state: null, updatedAt: '2026-11-04T00:00:00Z' },
+  ]
+  assert.deepEqual(assignedBugs(missions).map((m) => m.key), ['bug-old', 'bug-new'])
+  assert.deepEqual(highPriorityStories(missions).map((m) => m.key), ['story-high', 'task-high', 'story-urgent'])
+  assert.deepEqual(assignedBugs([]), [])
+  assert.deepEqual(highPriorityStories([]), [])
 })
 
 test('rien à décider ne fait pas une file : le prêt pour la prod n’y est pas', () => {
