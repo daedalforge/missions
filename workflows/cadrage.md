@@ -28,6 +28,9 @@ moins cher et qui évite le plus de travail perdu.
    demande verbatim, les lectures, l'état relevé, les hypothèses et les points
    ouverts (forme dans
    [`../missions/README.md`](../missions/README.md#journal-de-mission)).
+8. **Ouvrir la checklist de mission** dans `missions/<dossier>/checklist.md` :
+   un geste vérifiable par point du plan, avec la preuve attendue (forme dans
+   [`../missions/README.md`](../missions/README.md#checklist-de-mission)).
 
 ## Condition de sortie — la mission est « prête »
 
@@ -39,6 +42,7 @@ moins cher et qui évite le plus de travail perdu.
 - [ ] Le plan d'exécution est écrit et tient en quelques étapes.
 - [ ] La branche et sa base sont déclarées dans `missions/<dossier>/mission.yml`.
 - [ ] Le journal est ouvert dans le dossier (demande, lectures, hypothèses, plan).
+- [ ] La checklist est ouverte : un geste vérifiable par point, avec sa preuve attendue.
 - [ ] Le demandeur a validé — explicitement, dans le ticket.
 
 ## Signaux d'arrêt

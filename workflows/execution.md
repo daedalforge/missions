@@ -21,6 +21,10 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
    description qui dit ce que ça change et comment le vérifier.
 6. **Tenir le journal** : ajouter la section du jour à
    `missions/<dossier>/journal.md` — ce qui a changé, les preuves, les écarts.
+7. **Cocher la checklist** : à chaque point vérifié, cocher `- [x]` dans
+   `missions/<dossier>/checklist.md` et y laisser la preuve
+   (`— *test* : npm test`). Une case qui ne peut pas être cochée devient une
+   suite nommée, jamais un silence.
 
 ## Condition de sortie — la mission est « en revue »
 
@@ -31,6 +35,7 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
 - [ ] La PR est ouverte, liée au ticket.
 - [ ] Chaque critère d'acceptation porte sa preuve dans la description de la PR.
 - [ ] Le journal porte la section d'exécution (changements, preuves, écarts).
+- [ ] La checklist est à jour : chaque case cochée porte sa preuve, les cases ouvertes sont nommées.
 
 ## Renseigner la PR
 

@@ -12,6 +12,9 @@ contre les goûts du relecteur.
 3. **Le périmètre** : ce qui est dans la PR était dans le cadrage.
 4. **Les tests** : ils passent, et ils couvrent le comportement ajouté.
 5. **Le journal** : il dit la même chose que la PR — changements et preuves.
+6. **La checklist de la session** : elle n'est pas versionnée, donc pas dans la
+   PR ; chaque case cochée doit annoncer une preuve qu'on retrouve dans la PR ou
+   le ticket. Une preuve annoncée et absente est un critère non tenu.
 
 ## Décisions possibles
 
@@ -28,6 +31,7 @@ contre les goûts du relecteur.
 - [ ] La décision est écrite dans le ticket (approuvée / à reprendre / retour
       cadrage), avec la date.
 - [ ] Le journal porte la section de revue (décision, critères vérifiés).
+- [ ] Les preuves annoncées par la checklist sont dans la PR ou le ticket.
 
 ## Ce qui n'est pas un motif de refus
 
