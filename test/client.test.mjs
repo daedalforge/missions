@@ -302,6 +302,40 @@ const MISSION = {
   updated: '2026-11-11T10:00:00Z', folder: '/w/missions/MIS-42', branch: 'fix/mis-42', base: 'main',
 }
 
+test('chaque carte porte un repère de priorité qui se lit sans la couleur', () => {
+  // Cinq cartes, un niveau chacune, plus l'absence : le repère doit exister
+  // partout, et le niveau doit se lire dans la forme (barres allumées), pas
+  // seulement dans la couleur.
+  const priorities = ['urgent', 'high', 'normal', 'low', null]
+  const missions = priorities.map((priority, index) => ({
+    ...MISSION, key: `MIS-6${index}`, priority, updatedAt: MISSION.updated,
+  }))
+  const view = { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
+  api.apply(ctx)
+
+  const list = findAll(registered.main({}), 'MissionsView')[0]
+  assert.ok(list, 'le panneau doit rendre MissionsView')
+  const tree = renderTree({ ...list, props: list.props })
+  const marks = findAll(tree, 'span').filter((node) => node.props.className === 'missions-prio')
+
+  assert.equal(marks.length, 5)
+  assert.deepEqual(marks.map((mark) => mark.props['data-priority']), ['urgent', 'high', 'normal', 'low', 'none'])
+  assert.deepEqual(marks.map((mark) => mark.props['aria-label']), [
+    'Priority: Urgent', 'Priority: High', 'Priority: Normal', 'Priority: Low', 'No priority',
+  ])
+
+  // Le nombre de barres allumées porte le niveau : 3 pour high, 2 pour normal,
+  // 1 pour low ; urgent et l'absence n'ont pas de barres.
+  const lit = (mark) => findAll(mark, 'rect').filter((rect) => rect.props.className === 'prio-bar').length
+  assert.deepEqual(marks.map(lit), [0, 3, 2, 1, 0])
+  // Urgent : un carré et un point d'exclamation.
+  assert.equal(findAll(marks[0], 'rect').filter((rect) => rect.props.className === 'prio-chip').length, 1)
+  assert.equal(findAll(marks[0], 'rect').filter((rect) => rect.props.className === 'prio-mark').length, 2)
+  // Sans priorité : un carré pointillé, jamais un vide.
+  assert.equal(findAll(marks[4], 'rect').filter((rect) => rect.props.className === 'prio-none').length, 1)
+})
+
 test('le montage lit le cache ; seuls le bouton et le tick forcent', () => {
   // Le panneau est remonté à chaque changement de vue : forcer au montage
   // paierait tout le trajet tracker à chaque retour sur Missions. Le cache
