@@ -464,23 +464,40 @@ test('le montage lit le cache ; seuls le bouton et le tick forcent', () => {
   assert.equal((SOURCE.match(/\?refresh=1/g) ?? []).length, 1)
 })
 
-test('un refresh affiche le loader de la vue, même avec des missions chargées', () => {
+test('un refresh garde la vue montée : le châssis et le loader, jamais un écran vide', () => {
   // L'état de départ reproduit un clic sur Refresh : des missions déjà là et un
-  // chargement en cours. Le loader remplace alors la liste, pas seulement le
-  // premier montage.
+  // chargement en cours. La liste survit — la barre d'outils avec elle — et le
+  // corps porte le loader.
   const view = { loading: true, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  // Le refresh est lancé depuis l'onglet Missions : c'est la vue qui recharge.
   const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
   api.apply(ctx)
 
-  const flat = JSON.stringify(registered.main({}))
-  // La liste est remplacée par le loader de la vue, malgré les missions en état.
-  assert.match(flat, /"type":"PanelLoader"/)
-  assert.doesNotMatch(flat, /"type":"MissionsView"/)
-  // Le bouton reste rendu, désactivé pendant le chargement, mais sans spinner.
-  assert.match(flat, /"aria-busy":"true"/)
-  assert.match(flat, /"disabled":true/)
-  assert.doesNotMatch(flat, /missions-btn-spinner/)
+  const panel = registered.main({})
+  const list = findAll(panel, 'MissionsView')[0]
+  assert.ok(list, 'MissionsView reste rendu pendant la lecture')
+  assert.equal(list.props.loading, true)
+  assert.equal(findAll(panel, 'PanelLoader').length, 0, 'le panneau ne remplace plus la vue par un loader')
+
+  const tree = renderTree({ ...list, props: { ...list.props } })
+  // Le corps porte le loader, la barre d'outils reste au-dessus : la recherche
+  // et la commande ne disparaissent pas sous la main.
+  const loader = findAll(tree, 'div').filter((node) => node.props.className === 'missions-loader')
+  assert.equal(loader.length, 1)
+  assert.equal(loader[0].props.role, 'status')
+  const toolbar = findAll(tree, 'div').filter((node) => node.props.className === 'missions-toolbar')
+  assert.equal(toolbar.length, 1)
+  assert.equal(findAll(toolbar[0], 'input').length, 1)
+
+  // Le bouton-icône est là, désactivé et annoncé occupé, mais sans texte : le
+  // nom accessible porte tout le libellé.
+  const button = findAll(toolbar[0], 'button').find((node) => node.props.className === 'missions-icon-btn')
+  assert.ok(button, 'le bouton-icône vit dans la barre d’outils')
+  assert.equal(button.props['aria-label'], 'Refresh')
+  assert.equal(button.props.title, 'Refresh')
+  assert.equal(button.props.disabled, true)
+  assert.equal(button.props['aria-busy'], 'true')
+  assert.equal(textOf(button), '', 'l’icône est son seul contenu')
+  assert.equal(findAll(button, 'svg')[0].props['aria-hidden'], 'true')
 })
 
 test('le montage initial ouvre sur le dashboard, en chargement, et le polling reste silencieux', () => {
@@ -499,18 +516,158 @@ test('le montage initial ouvre sur le dashboard, en chargement, et le polling re
   assert.doesNotMatch(SOURCE, /missions-btn-spinner/)
 })
 
-test('le loader ne déborde pas sur l’onglet Dashboard', () => {
+test('le loader et le bouton de la liste ne débordent pas sur le Dashboard', () => {
   // Un refresh lancé depuis Missions ne doit pas remplacer le Dashboard par le
   // loader si l'on change d'onglet pendant la requête : le Dashboard est hors
-  // périmètre et reste rendu tel quel.
+  // périmètre, garde ses lignes et ne porte aucune commande de la liste.
   const view = { loading: true, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'dashboard'])
   api.apply(ctx)
 
-  const flat = JSON.stringify(registered.main({}))
-  assert.match(flat, /"type":"DashboardView"/)
-  assert.doesNotMatch(flat, /"type":"PanelLoader"/)
-  assert.doesNotMatch(flat, /missions-loader/)
+  const panel = registered.main({})
+  assert.equal(findAll(panel, 'MissionsView').length, 0)
+  const dashboard = findAll(panel, 'DashboardView')[0]
+  assert.ok(dashboard)
+  const tree = renderTree({ ...dashboard, props: { ...dashboard.props } })
+  assert.equal(findAll(tree, 'PanelLoader').length, 0)
+  assert.doesNotMatch(JSON.stringify(panel), /"title":"Refresh"/)
+})
+
+test('aucune commande ne reste dans l’en-tête : le sélecteur de thème est seul', () => {
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'])
+  api.apply(ctx)
+  const panel = registered.main({})
+
+  const actions = findAll(panel, 'div').filter((node) => node.props.className === 'missions-actions')
+  assert.equal(actions.length, 1)
+  assert.equal(findAll(actions[0], 'button').length, 0, 'plus aucun bouton dans .missions-actions')
+  assert.equal(findAll(actions[0], 'ThemeSelect').length, 1, 'le sélecteur de thème reste, seul')
+  assert.doesNotMatch(JSON.stringify(actions[0]), /"aria-label":"Refresh"/)
+})
+
+test('la liste commande son rafraîchissement, en icône accessible', () => {
+  const view = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
+  api.apply(ctx)
+
+  const list = findAll(registered.main({}), 'MissionsView')[0]
+  const tree = renderTree({ ...list, props: { ...list.props } })
+  const toolbar = findAll(tree, 'div').filter((node) => node.props.className === 'missions-toolbar')
+  const button = findAll(toolbar[0], 'button').find((node) => node.props.className === 'missions-icon-btn')
+
+  assert.ok(button)
+  assert.equal(button.props['aria-label'], 'Refresh')
+  assert.equal(button.props.title, 'Refresh')
+  assert.equal(textOf(button), '')
+  assert.equal(findAll(button, 'svg').length, 1)
+  assert.equal(findAll(button, 'svg')[0].props['aria-hidden'], 'true')
+  assert.equal(button.props.disabled, false)
+  // Le clic est câblé sur la lecture forcée, pas sur un simple re-rendu.
+  assert.match(String(button.props.onClick), /refresh: true/)
+})
+
+test('l’icône de rafraîchissement suit le thème, comme le loader', () => {
+  const view = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const icon = (theme) => {
+    const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
+    api.apply(ctx)
+    const list = findAll(registered.main({}), 'MissionsView')[0]
+    const tree = renderTree({ ...list, props: { ...list.props, theme } })
+    return findAll(tree, 'svg').filter((node) => String(node.props.className ?? '').startsWith('missions-icon-'))
+  }
+
+  const arrow = icon('default')
+  assert.equal(arrow.length, 1)
+  assert.equal(arrow[0].props.className, 'missions-icon-arrow')
+  assert.equal(arrow[0].props['aria-hidden'], 'true')
+
+  const shuriken = icon('manga')
+  assert.equal(shuriken.length, 1)
+  assert.equal(shuriken[0].props.className, 'missions-icon-shuriken')
+  assert.equal(shuriken[0].props['aria-hidden'], 'true')
+})
+
+const PANEL_ERROR = { project: 'panel', message: 'tracker unreachable' }
+
+test('le bandeau d’erreurs suit la lecture, pas l’onglet', () => {
+  // Dashboard et Missions lisent le même tracker : le bandeau les couvre tous
+  // les deux. Workflows lit ses propres fichiers : il n'en porte pas.
+  const view = { loading: false, missions: [], errors: [PANEL_ERROR], workspaceId: 'w', workspaceRoot: '/w' }
+  const mount = (tab) => {
+    const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, tab])
+    api.apply(ctx)
+    return registered.main({})
+  }
+
+  for (const tab of ['dashboard', 'missions']) {
+    const panel = mount(tab)
+    const banner = findAll(panel, 'div').filter((node) => node.props.className === 'missions-errors')
+    assert.equal(banner.length, 1, `bandeau attendu sur ${tab}`)
+    assert.equal(banner[0].props.role, 'alert')
+    assert.match(textOf(banner[0]), /tracker unreachable/)
+    // Le rétablissement vit dans le bandeau, qui porte le seul Retry.
+    const retry = findAll(banner[0], 'button')
+    assert.equal(retry.length, 1)
+    assert.equal(textOf(retry[0]), 'Retry')
+    assert.match(String(retry[0].props.onClick), /refresh: true/)
+  }
+
+  const workflows = mount('workflows')
+  assert.equal(findAll(workflows, 'div').filter((node) => node.props.className === 'missions-errors').length, 0)
+  assert.doesNotMatch(JSON.stringify(workflows), /missions-errors/)
+  assert.doesNotMatch(JSON.stringify(workflows), /"title":"Refresh"/)
+})
+
+test('une lecture en échec ne se déguise pas en file vide', () => {
+  const view = { loading: false, missions: [], errors: [PANEL_ERROR], workspaceId: 'w', workspaceRoot: '/w' }
+
+  // Dashboard : le message d'accueil serait un mensonge, le digest se tait et
+  // le bandeau du panneau dit ce qui a échoué.
+  const dash = (() => {
+    const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'dashboard'])
+    api.apply(ctx)
+    const node = findAll(registered.main({}), 'DashboardView')[0]
+    return renderTree({ ...node, props: { ...node.props } })
+  })()
+  assert.doesNotMatch(textOf(dash), /No mission is assigned to you yet\./)
+  assert.equal(findAll(dash, 'PanelLoader').length, 0)
+
+  // Missions : la barre reste, le corps se tait (le bandeau parle) et l'icône
+  // est retirée — ce serait une seconde commande pour le même geste.
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
+  api.apply(ctx)
+  const node = findAll(registered.main({}), 'MissionsView')[0]
+  const tree = renderTree({ ...node, props: { ...node.props } })
+  assert.doesNotMatch(textOf(tree), /No open missions assigned to you\./)
+  assert.equal(findAll(tree, 'button').filter((button) => button.props.className === 'missions-icon-btn').length, 0)
+})
+
+test('l’icône de rafraîchissement est servie par les deux thèmes', () => {
+  const base = regle('.missions-icon-btn')
+  assert.match(base, /width: 32px/)
+  assert.match(base, /height: 32px/)
+  assert.match(regle('.missions-icon-btn:focus-visible'), /outline:/)
+
+  // Naruto : la même commande, au trait d'encre et à l'ombre portée.
+  const manga = regle('.missions-panel[data-theme="manga"] .missions-icon-btn')
+  assert.match(manga, /1\.5px solid var\(--mm-ink\)/)
+  assert.match(manga, /var\(--mm-shadow\)/)
+  // Les deux ancrages du thème sombre sont couverts.
+  assert.match(SOURCE, /:root\[data-ds-dark-theme\] \.missions-panel\[data-theme="manga"\] \.missions-icon-btn/)
+  assert.match(SOURCE, /body\[data-ds-dark-theme\] \.missions-panel\[data-theme="manga"\] \.missions-icon-btn/)
+  // Comme le spinner, l'animation du shuriken s'éteint si l'on demande moins de mouvement.
+  assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{ \.missions-icon-shuriken \{ animation: none; \} \}/)
+})
+
+test('la source d’un onglet est déclarée dans TABS, pas recopiée', () => {
+  // L'ajout d'un onglet (MIS-116) ne doit pas obliger à réécrire les conditions.
+  assert.match(SOURCE, /\{ id: 'dashboard', label: 'Dashboard', source: 'tracker' \},/)
+  assert.match(SOURCE, /\{ id: 'missions', label: 'Missions', source: 'tracker', badge: true \},/)
+  assert.match(SOURCE, /\{ id: 'workflows', label: 'Workflows', source: 'files' \},/)
+  assert.match(SOURCE, /const tabSource = TABS\.find/)
+  assert.match(SOURCE, /const failed = errors\.length > 0/)
+  // Le bandeau et le bouton ne se décident plus sur un id d'onglet.
+  assert.doesNotMatch(SOURCE, /tab === 'missions' && errors/)
 })
 
 /**

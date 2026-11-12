@@ -201,10 +201,13 @@ window.__ModuleLoader__.load({
       { id: 'points', name: 'Story points (low → high)' },
     ]
 
+    // Each tab declares what it reads: the tracker tabs share one read, so one
+    // failure speaks for both; the workflows tab reads its own files and never
+    // wears the tracker's banner. `badge` marks the tab that carries the count.
     const TABS = [
-      { id: 'dashboard', label: 'Dashboard' },
-      { id: 'missions', label: 'Missions' },
-      { id: 'workflows', label: 'Workflows' },
+      { id: 'dashboard', label: 'Dashboard', source: 'tracker' },
+      { id: 'missions', label: 'Missions', source: 'tracker', badge: true },
+      { id: 'workflows', label: 'Workflows', source: 'files' },
     ]
 
     // A widget shows this many rows at most, then hands the rest to the list:
@@ -270,6 +273,15 @@ window.__ModuleLoader__.load({
 .missions-tab-count { min-width: 18px; padding: 0 5px; border-radius: 9px; background: color-mix(in srgb, currentColor 10%, transparent); color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; font-weight: 500; text-align: center; }
 .missions-toolbar { display: flex; flex-direction: column; gap: 10px; padding: 16px 28px 0; flex: none; }
 .missions-toolbar-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+/* The view's own command: one icon, its name carried by aria-label and title. */
+.missions-icon-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-secondary, #4a4a4a); cursor: pointer; }
+.missions-icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-icon-btn:disabled { opacity: .55; cursor: default; }
+.missions-icon-btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 45%, transparent); outline-offset: 2px; }
+.missions-icon-btn svg { display: block; }
+.missions-icon-shuriken { animation: missions-shuriken-spin 7s linear infinite; }
+@keyframes missions-shuriken-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .missions-icon-shuriken { animation: none; } }
 .missions-search { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; }
 .missions-search input::placeholder { color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -316,6 +328,9 @@ window.__ModuleLoader__.load({
 .missions-errors { display: flex; flex-direction: column; gap: 6px; padding: 14px 28px 0; flex: none; }
 .missions-error { display: flex; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 12px; background: color-mix(in srgb, #cf222e 10%, transparent); border: 1px solid color-mix(in srgb, #cf222e 35%, transparent); }
 .missions-error b { font-weight: 600; }
+/* The banner owns the retry: while it shows, the toolbar's icon is gone. */
+.missions-retry { align-self: flex-start; height: 26px; padding: 0 10px; border: 1px solid color-mix(in srgb, #cf222e 45%, transparent); border-radius: 6px; background: color-mix(in srgb, #cf222e 8%, transparent); color: #cf222e; font: inherit; font-size: 11.5px; cursor: pointer; }
+.missions-retry:hover { background: color-mix(in srgb, #cf222e 16%, transparent); }
 .missions-content { display: flex; flex: 1; min-height: 0; align-items: stretch; }
 .missions-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 6px 28px 32px; }
 .wf-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0 14px; }
@@ -601,6 +616,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-declare-n
 .missions-panel[data-theme="manga"] .missions-theme svg { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-btn { height: 29px; padding: 0 10px; border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); box-shadow: 2px 2px 0 var(--mm-shadow); color: var(--mm-ink); font-size: 11px; }
 .missions-panel[data-theme="manga"] .missions-btn:hover { background: var(--mm-page-3); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-icon-btn { border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); box-shadow: 1px 1px 0 var(--mm-shadow); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-icon-btn:hover { background: var(--mm-page-3); color: var(--mm-ink); }
+:root[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-icon-btn,
+body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-icon-btn { background: var(--mm-page-2); box-shadow: 2px 2px 0 var(--mm-shadow); }
+.missions-panel[data-theme="manga"] .missions-retry { border: 1.5px solid var(--mm-coral-deep); border-radius: 8px; background: color-mix(in srgb, var(--mm-coral) 20%, var(--mm-page-2)); box-shadow: 1px 1px 0 var(--mm-shadow); color: var(--mm-ink); font-family: var(--mm-display); }
 
 /* Hero: the photograph, the paper wash, the portrait and the speech bubble. */
 .missions-panel[data-theme="manga"] .missions-hero { position: relative; flex: none; height: 172px; overflow: hidden; border-bottom: 1.5px solid var(--mm-ink); background: var(--mm-page); }
@@ -902,7 +922,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * then the work already running and the queue. All four read the same
      * mission list the panel already loaded.
      */
-    function DashboardView({ missions = [], loading, theme, now = Date.now(), onOpen, onOpenAll, onViewAll }) {
+    function DashboardView({ missions = [], loading, theme, failed, now = Date.now(), onOpen, onOpenAll, onViewAll }) {
       const queue = needsYou(missions)
       const flight = inFlight(missions)
       const bugs = assignedBugs(missions)
@@ -938,16 +958,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const bugsHidden = bugs.length - bugsShown.length
       const storiesHidden = stories.length - storiesShown.length
 
-      // The dashboard keeps what it already shows while a refresh runs: only a
-      // cold mount has nothing to keep.
-      const body = loading && missions.length === 0
-        ? h(PanelLoader, { theme })
-        : missions.length === 0
-          ? h('div', { className: 'missions-dash-empty' },
-              h('p', null, 'No mission is assigned to you yet.'),
-              h('p', { className: 'missions-dash-empty-hint' }, 'This is where your queue will appear as soon as the tracker returns one.'),
-            )
-          : h('div', { className: 'missions-sectgrid' },
+      // A failed read is not an empty queue: the panel's banner says what broke,
+      // so the digest stays quiet instead of claiming there is no work. A warm
+      // refresh keeps what it already shows; only a cold mount has nothing.
+      const body = missions.length === 0
+        ? failed
+          ? null
+          : loading
+            ? h(PanelLoader, { theme })
+            : h('div', { className: 'missions-dash-empty' },
+                h('p', null, 'No mission is assigned to you yet.'),
+                h('p', { className: 'missions-dash-empty-hint' }, 'This is where your queue will appear as soon as the tracker returns one.'),
+              )
+        : h('div', { className: 'missions-sectgrid' },
               h(DashboardCard, {
                 title: 'Bugs',
                 sub: 'Unresolved, assigned to you. Oldest first.',
@@ -1331,7 +1354,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       )
     }
 
-    function MissionsView({ missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme }) {
+    /**
+     * The list: the chassis (search, filters, refresh) stays mounted while a
+     * read runs, so the command never vanishes under the hand. The body says
+     * what the read is doing; a failed read says nothing here because the
+     * panel's banner speaks for it — and the icon is gone, since the banner
+     * carries the retry.
+     */
+    function MissionsView({ missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme, loading, failed, onRefresh }) {
       const epics = epicOptions(missions)
       const projects = projectOptions(missions)
       const active = hasActiveFilters(filters)
@@ -1351,6 +1381,17 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               onChange: (event) => onQuery(event.target.value),
             }),
           ),
+          failed
+            ? null
+            : h('button', {
+                type: 'button',
+                className: 'missions-icon-btn',
+                'aria-label': 'Refresh',
+                title: 'Refresh',
+                onClick: onRefresh,
+                disabled: loading,
+                'aria-busy': loading ? 'true' : 'false',
+              }, h(RefreshIcon, { theme })),
         ),
         h('div', { className: 'missions-filters' },
           h(StatusFilter, {
@@ -1382,6 +1423,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         ),
       )
 
+      if (loading) {
+        return h('div', null, toolbar, h(PanelLoader, { theme }))
+      }
+      if (failed) {
+        return h('div', null, toolbar)
+      }
       if (missions.length === 0) {
         return h('div', null, toolbar, h('p', { className: 'missions-empty' }, 'No open missions assigned to you.'))
       }
@@ -1823,6 +1870,25 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       )
     }
 
+    /**
+     * The refresh command's drawing, chosen the way `PanelLoader` chooses its
+     * indicator: the theme picks the icon, the button keeps one contract. The
+     * shuriken turns; the circular arrow holds still, so the icon never reads as
+     * a second spinner.
+     */
+    function RefreshIcon({ theme }) {
+      if (theme === 'manga') {
+        return h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true', className: 'missions-icon-shuriken' },
+          h('path', { d: 'M12 1.6 14.8 9.2 22.4 12 14.8 14.8 12 22.4 9.2 14.8 1.6 12 9.2 9.2 Z', fill: 'currentColor' }),
+          h('circle', { cx: 12, cy: 12, r: 2.2, fill: 'var(--mm-page-2, #ffffff)', stroke: 'currentColor', strokeWidth: 1.2 }),
+        )
+      }
+      return h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true', className: 'missions-icon-arrow', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+        h('path', { d: 'M20.4 11.2a8.4 8.4 0 1 1-2.5-6.1' }),
+        h('path', { d: 'M20.6 3.8v7.2h-7.2' }),
+      )
+    }
+
 
     // L'onglet Workflows : le parcours se lit et s'édite comme un graphe. Le
     // fichier ne porte aucune coordonnée — la géométrie se recalcule à chaque
@@ -2156,6 +2222,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       }, [load])
 
       const { loading, missions, errors, workspaceId, workspaceRoot } = view
+      // One read feeds every tracker tab: Dashboard and Missions share this
+      // list, so they share its failure too. Workflows reads its own files and
+      // never wears the tracker's banner. The source comes from TABS, so a new
+      // tab declares what it reads instead of copying a condition.
+      const tabSource = TABS.find((entry) => entry.id === tab)?.source ?? 'tracker'
+      const trackerTab = tabSource === 'tracker'
+      const failed = errors.length > 0
       const projectCount = new Set(missions.map((mission) => mission.project).filter(Boolean)).size
       const changeTheme = (value) => {
         setTheme(value)
@@ -2216,7 +2289,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           onClick: () => setTab(entry.id),
         },
           entry.label,
-          entry.id === 'missions' ? h('span', { className: 'missions-tab-count' }, String(missions.length)) : null,
+          entry.badge ? h('span', { className: 'missions-tab-count' }, String(missions.length)) : null,
         )),
       )
 
@@ -2237,25 +2310,22 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           ),
           h('div', { className: 'missions-actions' },
             h(ThemeSelect, { value: theme, onChange: changeTheme }),
-            tab === 'missions' && errors.length === 0
-              ? h('button', {
-                  type: 'button',
-                  className: 'missions-btn',
-                  onClick: () => load({ refresh: true }),
-                  disabled: loading,
-                  'aria-busy': loading ? 'true' : 'false',
-                }, 'Refresh')
-              : null,
           ),
         ),
         tabBar,
 
-        tab === 'missions' && errors.length > 0
-          ? h('div', { className: 'missions-errors' },
+        trackerTab && failed
+          ? h('div', { className: 'missions-errors', role: 'alert' },
               errors.map((error, index) => h('div', { className: 'missions-error', key: `${error.project}-${index}` },
                 h('b', null, error.project),
                 h('span', null, error.message),
-              )))
+              )),
+              h('button', {
+                type: 'button',
+                className: 'missions-retry',
+                onClick: () => load({ refresh: true }),
+              }, 'Retry'),
+            )
           : null,
 
         h('div', { className: 'missions-content' },
@@ -2272,13 +2342,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   missions,
                   loading,
                   theme,
+                  failed,
                   onOpen: (mission) => { setSelected(mission); setTab('missions') },
                   onOpenAll: () => { setSelected(null); setTab('missions') },
                   onViewAll,
                 })
-              : loading
-                ? h(PanelLoader, { theme })
-                : h(MissionsView, { missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort, filtered, groups, onSelect: setSelected, theme }),
+              : h(MissionsView, {
+                  missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort,
+                  filtered, groups, onSelect: setSelected, theme, loading, failed,
+                  onRefresh: () => load({ refresh: true }),
+                }),
           ),
           tab === 'workflows'
             ? null
