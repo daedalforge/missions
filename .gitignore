@@ -2,3 +2,8 @@ node_modules/
 .DS_Store
 dist/
 missions/*/
+
+# Configuration Emacs propre au poste (MIS-135) : le gabarit et le script
+# sont versionnés, le fichier du système et sa liste générée ne le sont pas.
+config/tools/emacs/system.yml
+config/tools/emacs/system-plugins.el
