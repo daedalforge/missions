@@ -1820,6 +1820,24 @@ test('Show more ajoute la page suivante au lieu de la remplacer', async () => {
   assert.equal(apres.data.hasMore, false, 'la dernière page le dit')
 })
 
+test('un échec de History est un bandeau, pas un chargement sans fin', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const { inner } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'history', { loading: false, more: false, data: null, error: 'no local branch to read' }, { loading: false, data: null, error: null },
+  ])
+
+  // La première lecture a échoué : rien à montrer, mais l'échec se dit — le
+  // sélecteur n'attend plus une lecture qui n'arrivera jamais.
+  const bandeau = findAll(inner, 'div').find((div) => div.props.className === 'missions-repos-error')
+  assert.ok(bandeau, 'l’échec est visible')
+  assert.equal(bandeau.props.role, 'alert')
+  assert.match(textOf(bandeau), /no local branch to read/)
+  assert.doesNotMatch(textOf(inner), /Reading branches…/, 'le sélecteur ne lit plus indéfiniment')
+  assert.doesNotMatch(textOf(inner), /Loading…/, 'aucun chargement sans fin sous le bandeau')
+})
+
 test('les onglets du volet basculent, et un autre dépôt ramène à Details', () => {
   const repository = REPO_SCAN.repositories[1]
   const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
