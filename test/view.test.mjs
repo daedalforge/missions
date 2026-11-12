@@ -1239,9 +1239,13 @@ test('le prompt de session libre porte l’identité, le ticket, le statut et le
   // Le clone du projet et la branche déclarée : la session n'a rien à deviner.
   assert.match(prompt, /Dépôt du projet : ~\/projects\/missions\./)
   assert.match(prompt, /Branche : fix\/mis-42 ; base : main\./)
-  // Journal et checklist sont nommés, en lecture seule.
-  assert.match(prompt, /Journal de mission : missions\/MIS-42\/journal\.md — en lecture seule/)
-  assert.match(prompt, /Checklist de mission : missions\/MIS-42\/checklist\.md — en lecture seule/)
+  // Journal et checklist sont nommés pour être tenus à jour, pas en lecture seule.
+  assert.match(prompt, /Journal de mission : missions\/MIS-42\/journal\.md — tiens-le à jour\./)
+  assert.match(
+    prompt,
+    /Checklist de mission : missions\/MIS-42\/checklist\.md — coche chaque point avec sa preuve\./,
+  )
+  assert.doesNotMatch(prompt, /en lecture seule/)
 })
 
 test('un ticket Jira en session libre garde son lien, sans commande gh inventée', () => {
@@ -1267,20 +1271,26 @@ test('le prompt de session libre ne joue aucune étape du workflow', () => {
   assert.doesNotMatch(prompt, /la branche depuis la base/)
 })
 
-test('le prompt de session libre ferme les écritures puis demande de s’arrêter', () => {
+test('le prompt de session libre ouvre les écritures de la mission, ferme le workflow', () => {
   const prompt = freeSessionPrompt(TEMOIN)
 
-  // Le ticket, la branche, le journal et la checklist restent intacts.
-  assert.match(prompt, /tu ne modifies pas le ticket \(statut, labels, commentaire\)/)
-  assert.match(prompt, /ni la branche/)
-  assert.match(prompt, /ni le journal/)
-  assert.match(prompt, /ni la checklist/)
-  // Aucun geste git ni GitHub.
-  assert.match(prompt, /tu ne commites pas/)
-  assert.match(prompt, /tu ne pousses pas/)
-  assert.match(prompt, /tu n’ouvres pas de PR/)
-  assert.match(prompt, /tu ne merges pas/)
+  // L'ancien interdit tombe : la libre écrit dans la mission.
+  assert.doesNotMatch(prompt, /Tu n’écris rien/)
+  assert.match(prompt, /Tu peux écrire dans la mission/)
+  assert.match(prompt, /le journal, la checklist, le ticket \(corps et commentaires\)/)
+  assert.match(
+    prompt,
+    /le dépôt du projet \(fichiers, commits, push sur la branche, ouverture de la PR\)/,
+  )
+  // Le workflow reste fermé : statut, labels, étape, fermeture du ticket.
+  assert.match(prompt, /Ce qui t’est interdit, c’est de toucher au workflow/)
+  assert.match(prompt, /pas de changement de statut ni de label/)
+  assert.match(prompt, /pas de fermeture du ticket/)
+  assert.match(prompt, /tu ne joues aucune étape/)
+  // Le garde-fou de mission : ni merge, ni écriture sur main.
+  assert.match(prompt, /Tu ne merges jamais la PR/)
   assert.match(prompt, /tu n’écris jamais sur main/)
+  assert.match(prompt, /le merge et la fermeture du ticket sont les gestes du demandeur/)
   // La sortie de la session : répondre, puis s'arrêter.
   assert.match(prompt, /Réponds à la question écrite à la suite de ce message/)
   assert.match(prompt, /Tu réponds, puis tu t’arrêtes\./)
