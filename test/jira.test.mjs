@@ -130,6 +130,7 @@ test('Jira issues are normalized through the project map', async () => {
     type: 'story',
     priority: 'high',
     points: 5,
+    repo: null,
     epic: 'SO-1000 · Épic SO-1000',
     url: 'https://example.atlassian.net/browse/SO-1207',
     updatedAt: '2026-11-10T10:00:00.000+0000',

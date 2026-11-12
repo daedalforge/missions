@@ -99,6 +99,21 @@ test('an issue takes its state and type from the tracker vocabulary', () => {
   assert.equal(mission.projectName, 'Marketplace')
 })
 
+test('a mission carries the project’s clone, or null when none is declared', () => {
+  const inverse = invertMap(PROJECT.map)
+  const withRepo = normalizeIssue({
+    project: { ...PROJECT, repo: '~/projects/missions' },
+    key: 'MIS-6',
+    title: 'the prompt names the clone',
+    rawState: 'in-review',
+    inverse,
+  })
+  const withoutRepo = normalizeIssue({ project: PROJECT, key: 'MIS-7', title: 'no clone', inverse })
+
+  assert.equal(withRepo.repo, '~/projects/missions')
+  assert.equal(withoutRepo.repo, null)
+})
+
 test('an unknown state stays null instead of being guessed', () => {
   const inverse = invertMap(PROJECT.map)
   const mission = normalizeIssue({

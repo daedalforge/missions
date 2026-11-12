@@ -1633,18 +1633,18 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const blocker = executionBlocker(mission)
       const step = missionStep(mission)
       const sessionLabel = step ? `Start a session — ${step}` : 'Start a session'
-      const journalPath = mission.folder ? `missions/${mission.folder}/journal.md` : null
-      const checklistPath = mission.folder ? `missions/${mission.folder}/checklist.md` : null
-      const stepLine = step
-        ? `Étape en cours : ${step} (statut ${mission.state}).`
-        : `Étape en cours : à déterminer (statut ${mission.state ?? 'inconnu'}).`
-      const stepBrief = STEP_BRIEFS[step] ?? 'Lis le ticket et le workflow avant d’agir : ce statut ne dit pas quelle étape jouer.'
-      const prompt = `Travaille sur la mission ${mission.key} — ${mission.title}.\n\n${ticketReadLine(mission.url)}\n${stepLine} ${stepBrief}\n\nChaque étape se joue dans une nouvelle session : à la fin de celle-ci, arrête-toi ; l'étape suivante sera une nouvelle session.${blocker === null ? `\n\nBranche : ${mission.branch} ; base : ${mission.base}.` : ''}${journalPath ? `\n\nJournal de mission : ${journalPath} — tiens-le à jour à chaque étape.` : ''}${checklistPath ? `\n\nChecklist de mission : ${checklistPath} — coche chaque point avec sa preuve.` : ''}\n\nGarde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande.`
+      // The label says « remontées » without imitating the step session: the
+      // step button stays the primary, at the bottom.
+      const feedbackLabel = 'Check the PR feedback'
+      // Both prompts live in `lib/view.js`, inlined into this bundle: the
+      // drawer only picks which one a button sends.
+      const prompt = missionSessionPrompt(mission)
+      const feedbackPrompt = feedbackSessionPrompt(mission)
 
-      const startSession = async () => {
+      const openSession = async (sessionPrompt) => {
         setNote('Starting a session…')
         try {
-          const { prefilledBy, openedBy, uiError } = await openMissionSession(services, prompt, workspaceId, workspaceRoot)
+          const { prefilledBy, openedBy, uiError } = await openMissionSession(services, sessionPrompt, workspaceId, workspaceRoot)
           if (uiError) {
             setNote(`uiWorkspace refused: ${uiError}`)
           } else if (openedBy) {
@@ -1666,6 +1666,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           setNote(`Session failed: ${error?.message ?? error}`)
         }
       }
+
+      const startSession = () => openSession(prompt)
+      // Same gesture, same prefill path, other prompt: the session reads the
+      // PR's remarks and hands back; the merge stays the requester's.
+      const startFeedbackSession = () => openSession(feedbackPrompt)
 
       const saveDeclaration = async () => {
         setSaving(true)
@@ -1981,6 +1986,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             mission.url
               ? h('a', { className: 'missions-action', href: mission.url, target: '_blank', rel: 'noreferrer noopener' }, 'Open on the tracker')
               : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
+            // Only a mission in review has remarks to check: the client does
+            // not know whether a PR exists, so the state alone decides, and
+            // the session stops with a word when `gh` finds none.
+            mission.state === 'in-review'
+              ? h('button', {
+                  type: 'button',
+                  className: 'missions-action',
+                  onClick: startFeedbackSession,
+                  disabled: blocker !== null,
+                  title: blocker ?? undefined,
+                  'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                }, feedbackLabel)
+              : null,
             h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession, disabled: blocker !== null, title: blocker ?? undefined, 'aria-describedby': blocker ? 'missions-session-blocked' : undefined }, sessionLabel),
         ),
       )

@@ -228,6 +228,145 @@ test('le bouton de session nomme l’étape courante', () => {
   assert.match(SOURCE, /\}, sessionLabel\)/)
 })
 
+/** Le bouton des remontées du volet, ou null quand la mission n'en rend pas. */
+function boutonRemontees(tree) {
+  return findAll(tree, 'button').find((node) => textOf(node).trim() === 'Check the PR feedback') ?? null
+}
+
+test('le volet rend « Check the PR feedback » en revue, à côté de la session', () => {
+  const { tree } = monterVolet({ ...MISSION, state: 'in-review', updatedAt: MISSION.updated })
+  const bouton = boutonRemontees(tree)
+  assert.ok(bouton, 'le bouton doit être rendu en revue')
+
+  // Secondaire, non désarmé, sans infobulle : le verrou ne mord pas ici.
+  assert.equal(bouton.props.className, 'missions-action')
+  assert.equal(bouton.props.disabled, false)
+  assert.equal(bouton.props.title, undefined)
+  assert.equal(bouton.props['aria-describedby'], undefined)
+  assert.equal(typeof bouton.props.onClick, 'function')
+
+  // Il précède le bouton de session, qui reste le primaire en bas.
+  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+  assert.ok(actions, 'le volet doit rendre la barre d’actions')
+  const boutons = actions.children.filter((child) => child.type === 'button')
+  const iRemontees = boutons.findIndex((node) => textOf(node).trim() === 'Check the PR feedback')
+  const iSession = boutons.findIndex((node) => /^Start a session/.test(textOf(node).trim()))
+  assert.ok(iSession > iRemontees, 'la session reste sous les remontées')
+  assert.match(boutons[iSession].props.className, /missions-action--primary/)
+})
+
+test('hors revue, le volet ne rend pas le bouton des remontées', () => {
+  for (const state of ['to-refine', 'ready', 'in-progress', 'ready-for-prod', 'done', 'blocked', null]) {
+    const { tree } = monterVolet({ ...MISSION, state, updatedAt: MISSION.updated })
+    assert.equal(boutonRemontees(tree), null, `aucun bouton des remontées pour ${state}`)
+  }
+})
+
+test('le bouton des remontées est désarmé par le même verrou que la session', () => {
+  const cas = [
+    [{ branch: null, base: 'main' }, 'branch is not declared, set it below or in the mission folder'],
+    [{ branch: 'fix/mis-42', base: null }, 'base branch is not declared, set it below or in the mission folder'],
+    [
+      { branch: 'fix/mis-42', base: 'main', stateConflict: ['in-review', 'ready'] },
+      'state labels conflict (in-review, ready), keep one',
+    ],
+  ]
+
+  for (const [patch, message] of cas) {
+    const { tree } = monterVolet({ ...MISSION, state: 'in-review', updatedAt: MISSION.updated, ...patch })
+    const bouton = boutonRemontees(tree)
+    assert.ok(bouton, `le bouton reste rendu, désarmé : ${message}`)
+    assert.equal(bouton.props.disabled, true)
+    assert.equal(bouton.props.title, message)
+    assert.equal(bouton.props['aria-describedby'], 'missions-session-blocked')
+    // Le message est bien rendu sous le bouton, et la note le cite.
+    assert.match(textOf(tree), new RegExp(`Session blocked: ${message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
+  }
+})
+
+test('le clic sur les remontées ouvre une session avec le prompt dédié', async () => {
+  const captures = []
+  const services = {
+    getService: (name) =>
+      name === 'uiWorkspace'
+        ? { startSession: (id, options) => captures.push({ id, prompt: options?.prompt }) }
+        : null,
+  }
+  const { tree } = monterVolet(
+    {
+      ...MISSION,
+      state: 'in-review',
+      repo: '~/projects/missions',
+      url: 'https://github.com/daedalforge/missions/issues/42',
+      updatedAt: MISSION.updated,
+    },
+    { services, workspaceId: 'w' },
+  )
+
+  await boutonRemontees(tree).props.onClick()
+  assert.equal(captures.length, 1)
+  const prompt = captures[0].prompt
+
+  // La clé, le titre, le ticket avec ses commentaires, et le clone du projet.
+  assert.match(prompt, /^Travaille sur la mission MIS-42 — Reload onglet mission\./)
+  assert.match(prompt, /gh issue view 42 -R daedalforge\/missions --json [^\n]*comments/)
+  assert.match(prompt, /Dépôt du projet : ~\/projects\/missions\./)
+  assert.match(prompt, /Branche : fix\/mis-42 ; base : main\./)
+  // La PR se retrouve par la branche ; revues et fils se lisent en ligne.
+  assert.match(prompt, /gh pr list --head fix\/mis-42 --state all/)
+  assert.match(prompt, /pulls\/<n>\/comments/)
+  // Le tri, la correction et le push sur la branche.
+  assert.match(prompt, /corriger \/ répondre \/ hors périmètre/)
+  assert.match(prompt, /corrige sur la branche et pousse/)
+  assert.match(prompt, /`<CLÉ>: <impératif>`/)
+  // Journal et checklist restent les preuves ; le garde-fou est complet.
+  assert.match(prompt, /Journal de mission : /)
+  assert.match(prompt, /Checklist de mission : /)
+  assert.match(prompt, /tu ne merges jamais la PR/)
+  assert.match(prompt, /tu ne touches pas aux labels/)
+  assert.match(prompt, /tu ne fermes pas le ticket/)
+  // Ce n'est pas le brief de l'étape : les deux prompts ne se confondent pas.
+  assert.doesNotMatch(prompt, /Tu ne fais que la revue/)
+})
+
+test('le bouton de session envoie toujours le prompt d’hier', async () => {
+  const captures = []
+  const services = {
+    getService: (name) =>
+      name === 'uiWorkspace'
+        ? { startSession: (id, options) => captures.push(options?.prompt) }
+        : null,
+  }
+  const { tree } = monterVolet(
+    { ...MISSION, state: 'in-review', updatedAt: MISSION.updated },
+    { services, workspaceId: 'w' },
+  )
+
+  const bouton = findAll(tree, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+  await bouton.props.onClick()
+
+  assert.equal(captures.length, 1)
+  assert.match(captures[0], /Étape en cours : revue \(statut in-review\)\./)
+  assert.match(captures[0], /Tu ne fais que la revue/)
+  assert.doesNotMatch(captures[0], /Dépôt du projet/)
+})
+
+test('le prompt n’est plus construit en ligne dans le gabarit du volet', async () => {
+  const template = await readFile(new URL('../src/client.template.js', import.meta.url), 'utf8')
+
+  // Le volet appelle les helpers : la chaîne du prompt vit dans lib/view.js.
+  assert.match(template, /const prompt = missionSessionPrompt\(mission\)/)
+  assert.match(template, /const feedbackPrompt = feedbackSessionPrompt\(mission\)/)
+  assert.doesNotMatch(template, /Garde-fou : tu ne merges jamais la PR/)
+  assert.doesNotMatch(template, /Chaque étape se joue dans une nouvelle session/)
+  // Le bundle, lui, porte bien les deux helpers et le bouton.
+  assert.match(SOURCE, /function missionSessionPrompt\(mission = \{\}\)/)
+  assert.match(SOURCE, /function feedbackSessionPrompt\(mission = \{\}\)/)
+  assert.match(SOURCE, /const FEEDBACK_BRIEF =/)
+  assert.match(SOURCE, /Check the PR feedback/)
+  assert.match(SOURCE, /mission\.state === 'in-review'/)
+})
+
 test('le volet lit le journal de mission, sans dépendance de rendu', () => {
   assert.match(SOURCE, /const JOURNAL_URL = 'missions\/api\/journal'/)
   // L'onglet s'appelle Journal : la section ne répète pas le titre, elle garde
