@@ -17,10 +17,46 @@ constate et solde le journal et la checklist.
    du merge, ce qui a changé pour l'utilisateur. Supprimer la branche, locale et
    distante. Si c'était la dernière mission de son milestone, fermer le
    milestone — GitHub ne le fait pas tout seul.
-3. **(session) Constater et solder.** Sur le mot explicite du demandeur, relire
-   l'état sur le tracker : PR mergée, ticket fermé, branche absente. Puis clore
-   le journal (lien du merge, preuves après merge, suites), solder la checklist
-   et noter les suites. Aucun geste sur le tracker : il est déjà à jour.
+3. **(session ou panneau) Constater et solder.** Sur le mot explicite du
+   demandeur, relire l'état sur le tracker : PR mergée, ticket fermé, branche
+   absente. Puis clore le journal (lien du merge, preuves après merge, suites),
+   solder la checklist et noter les suites. Aucun geste sur le tracker : il est
+   déjà à jour. Si le ticket est encore en `ready-for-prod`, le geste « Close the
+   local checkout » du volet ferme le checkout local en un coup, sur preuve que
+   le merge est bien sur la base — voir ci-dessous.
+
+**Clôture locale — le geste du panneau.** Une fois la PR mergée et le ticket
+encore en `ready-for-prod`, le volet de la mission propose **« Close the local
+checkout »**. Le geste vérifie d'abord, sur le
+tracker, que le travail est livré ; il ne touche ensuite qu'à la machine :
+
+1. **La preuve.** La route hôte lit l'issue (état `ready-for-prod`, pas de
+   conflit de labels) puis les PR dont la tête est la branche de mission. Il faut
+   une PR mergée, dont la base est la base déclarée, et dont le merge commit (ou
+   la tête) est ancêtre de `origin/<base>`. Comme le projet squash-merge, la
+   branche locale n'est jamais ancêtre de la base : la preuve part de `head.sha`
+   de la PR, et `git rev-list --first-parent <head.sha>..<branche>` doit être
+   vide ou ne contenir que des merges de synchronisation dont les autres parents
+   sont sur `origin/<base>`. Un `git fetch origin <base>` précède la seconde
+   vérification ; sans preuve, rien n'est supprimé.
+2. **Les worktrees.** `git worktree remove` sur chaque worktree qui porte la
+   branche, jamais avec `--force` : un worktree sale refuse et le dit.
+3. **Le clone.** Il n'est pas supprimé : il passe sur la base
+   (`git checkout <base>` puis `git merge --ff-only origin/<base>`).
+4. **La branche.** `git branch -D` (les projets squash-mergent : `-d` refuserait
+   les commits déjà livrés).
+5. **Le machete.** La ligne est retirée du fichier `.git/machete` à la main ; ses
+   enfants remontent d'un niveau, annotations et indentation des autres branches
+   conservées. Aucun processus `git machete` n'est lancé.
+6. **Le journal.** Une section `## <date> — Clôture` est ajoutée à
+   `missions/<dossier>/journal.md` (PR, merge commit, gestes, clone, machete).
+
+Le bouton s'arme en deux temps (un clic pour dire ce qu'il va supprimer, un
+second pour agir). Chaque refus est un message, pas une suppression partielle :
+pas de clone, mission pas en `ready-for-prod`, pas de PR, PR non mergée, PR
+mergée vers une autre base, commit absent de la base, worktree sale, commit local
+non livré. La branche **distante** reste à supprimer par le demandeur ; le
+tracker n'est jamais écrit — le geste ne remplace ni le merge ni la fermeture.
 
 ## Garde-fous
 
@@ -46,7 +82,8 @@ session du panneau — pas dans les droits du tracker.
 - [ ] La PR est mergée dans la branche principale — par le demandeur.
 - [ ] Chaque critère d'acceptation est coché avec sa preuve.
 - [ ] Le ticket est fermé avec le lien du merge.
-- [ ] La branche est supprimée (locale et distante).
+- [ ] La branche est supprimée (locale et distante) — la locale par le geste du
+      panneau ou à la main, la distante par le demandeur.
 - [ ] Les suites éventuelles sont des tickets, pas des notes orales.
 - [ ] Le journal porte la clôture (merge, preuves, suites).
 - [ ] La checklist est soldée (cases cochées ou suites nommées).
