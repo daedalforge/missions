@@ -1529,6 +1529,93 @@ test('le volet bloque avec un champ de raison et un bouton désarmé sans raison
   assert.match(regle('.missions-panel[data-theme="manga"] .missions-blocked'), /border: 1\.5px solid var\(--mm-ink\)/)
 })
 
+test('le volet montre la raison du blocage : auteur, âge, texte et lien', () => {
+  const createdAt = new Date(Date.now() - 30 * 60000).toISOString()
+  const { tree } = monterVolet({
+    ...MISSION,
+    updatedAt: MISSION.updated,
+    blocked: true,
+    blockedReason: {
+      state: 'found',
+      author: 'slucienvauthier-so',
+      body: 'Attente du ticket de données.',
+      createdAt,
+      url: 'https://github.com/daedalforge/missions/issues/144#issuecomment-9',
+    },
+  })
+
+  // Le texte du commentaire garde ses retours à la ligne.
+  assert.match(SOURCE, /className: 'missions-blocked-reason-text'/)
+  assert.match(regle('.missions-blocked-reason-text'), /white-space: pre-wrap/)
+
+  const meta = findAll(tree, 'div').find((node) => node.props.className === 'missions-blocked-reason-meta')
+  assert.ok(meta, 'la raison nomme son auteur et son âge')
+  assert.equal(textOf(meta), 'slucienvauthier-so · 30 min')
+
+  const text = findAll(tree, 'p').find((node) => node.props.className === 'missions-blocked-reason-text')
+  assert.equal(textOf(text), 'Attente du ticket de données.')
+
+  const link = findAll(tree, 'a').find((node) => node.props.className === 'missions-blocked-reason-link')
+  assert.ok(link, 'la raison renvoie au commentaire du ticket')
+  assert.equal(link.props.href, 'https://github.com/daedalforge/missions/issues/144#issuecomment-9')
+  assert.equal(link.props.target, '_blank')
+  assert.equal(link.props.rel, 'noreferrer')
+  assert.equal(textOf(link), 'Voir le commentaire')
+
+  // La raison remplace l'indice du label seul.
+  assert.ok(!textOf(tree).includes('sa raison est en commentaire'))
+})
+
+test('une raison sans auteur affiche « Commentaire du ticket »', () => {
+  const { tree } = monterVolet({
+    ...MISSION,
+    updatedAt: MISSION.updated,
+    blocked: true,
+    blockedReason: { state: 'found', author: null, body: 'Attente.', createdAt: null, url: null },
+  })
+
+  const meta = findAll(tree, 'div').find((node) => node.props.className === 'missions-blocked-reason-meta')
+  assert.equal(textOf(meta), 'Commentaire du ticket')
+  assert.equal(findAll(tree, 'a').filter((node) => node.props.className === 'missions-blocked-reason-link').length, 0)
+})
+
+test('une raison absente ou illisible est dite, sans texte inventé', () => {
+  const empty = monterVolet({
+    ...MISSION,
+    updatedAt: MISSION.updated,
+    blocked: true,
+    blockedReason: { state: 'empty', author: null, body: '', createdAt: null, url: null },
+  }).tree
+  const note = findAll(empty, 'p').find((node) => node.props.className === 'missions-blocked-reason-note')
+  assert.equal(textOf(note), 'Aucun commentaire sur le ticket : la raison n’y est pas écrite.')
+  assert.equal(textOf(empty).includes('Voir le commentaire'), false)
+
+  const unavailable = monterVolet({
+    ...MISSION,
+    updatedAt: MISSION.updated,
+    blocked: true,
+    blockedReason: { state: 'unavailable', author: null, body: '', createdAt: null, url: null },
+  }).tree
+  const note2 = findAll(unavailable, 'p').find((node) => node.props.className === 'missions-blocked-reason-note')
+  assert.equal(textOf(note2), 'Raison illisible pour l’instant ; nouvelle tentative au prochain rafraîchissement.')
+})
+
+test('une mission non bloquée garde le formulaire et l’indice, sans raison', () => {
+  const { tree } = monterVolet()
+  assert.equal(findAll(tree, 'div').filter((node) => node.props.className === 'missions-blocked-reason').length, 0)
+  assert.match(textOf(tree), /Le label `blocked` et sa raison partent dans le tracker/)
+
+  // Une mission bloquée sans raison (ancienne réponse de l'hôte) garde l'indice
+  // du label seul plutôt qu'une carte vide.
+  const legacy = monterVolet({ ...MISSION, updatedAt: MISSION.updated, blocked: true }).tree
+  assert.match(textOf(legacy), /Le label `blocked` est posé sur le ticket ; sa raison est en commentaire\./)
+})
+
+test('une raison écrite est posée sans attendre la lecture suivante', () => {
+  assert.match(SOURCE, /setBlockedReason\(blockedReasonAfterWrite\(/)
+  assert.match(SOURCE, /setBlockedReason\(mission\.blockedReason \?\? null\)/)
+})
+
 /** Le volet monté sur une mission choisie : le panneau le crée, on le rend seul. */
 function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overrides = {}) {
   const view = { loading: false, missions: [mission], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
