@@ -2073,17 +2073,18 @@ const REPO_SCAN = {
   repositories: [
     {
       name: 'zeta', path: '/Users/moi/projects/zeta', kind: 'clone', branch: 'main',
-      upstream: 'origin/main', ahead: 0, behind: 0, dirty: 0, lastCommit: null, error: null,
+      upstream: 'origin/main', ahead: 0, behind: 0, dirty: 0, lastCommit: null, error: null, main: null,
     },
     {
       name: 'missions', path: '/Users/moi/projects/missions', kind: 'clone', branch: 'feat/mis-116',
       upstream: 'origin/feat/mis-116', ahead: 0, behind: 0, dirty: 2,
-      lastCommit: { sha: 'a1b2c3d', date: REPO_NOW - 20 * 1000, subject: 'MIS-116: ajoute l’onglet' }, error: null,
+      lastCommit: { sha: 'a1b2c3d', date: REPO_NOW - 20 * 1000, subject: 'MIS-116: ajoute l’onglet' }, error: null, main: null,
     },
     {
       name: 'missions-gh20', path: '/Users/moi/projects/missions-gh20', kind: 'worktree', branch: 'gh-20-hover',
       upstream: null, ahead: 0, behind: 0, dirty: 1,
       lastCommit: { sha: 'd4e5f6a', date: REPO_NOW - 3 * HOUR, subject: 'gh-20: le survol' }, error: null,
+      main: { name: 'missions', path: '/Users/moi/projects/missions' },
     },
   ],
 }
@@ -2425,6 +2426,78 @@ test('chaque dépôt est une ligne : nom, branche, état, dernier commit, âge',
   assert.match(textOf(vide), /clean/)
   assert.match(textOf(vide), /no commit yet/)
   assert.equal(vide.props['aria-label'], 'zeta, main, clean, no commit yet')
+})
+
+test('un worktree porte la bascule vers son principal, un clone n’en a pas', () => {
+  const { inner } = montrerRepositories(scanReady(REPO_SCAN))
+  const lignes = findAll(inner, 'li').filter((li) => li.props.className === 'missions-repo-rowitem')
+  assert.equal(lignes.length, 3)
+  const bascule = (li) => findAll(li, 'button').find((button) => button.props.className === 'missions-repo-main')
+  const [missions, worktree, zeta] = lignes
+
+  const créneau = (li) => findAll(li, 'span').find((span) => span.props.className === 'missions-repo-main-slot')
+  assert.equal(bascule(missions), undefined, 'un clone ne bascule nulle part')
+  assert.equal(bascule(zeta), undefined)
+  assert.ok(créneau(missions), 'un clone réserve la colonne de la bascule')
+  assert.equal(créneau(missions).props['aria-hidden'], 'true')
+  assert.equal(créneau(worktree), undefined, 'le worktree n’a pas de créneau vide')
+
+  const bouton = bascule(worktree)
+  assert.ok(bouton, 'le worktree porte sa bascule')
+  assert.equal(nomDuGeste(bouton), 'Open the main worktree, missions')
+  assert.equal(bouton.props.title, '/Users/moi/projects/missions', 'l’infobulle dit le chemin du principal')
+  assert.equal(bouton.props.disabled, false)
+  assert.equal(textOf(bouton), '', 'la bascule ne porte que son dessin')
+  const dessin = findAll(bouton, 'svg')
+  assert.equal(dessin.length, 1)
+  assert.equal(dessin[0].props['aria-hidden'], 'true')
+  // La bascule est un frère de la ligne, pas un bouton dans le bouton.
+  assert.equal(worktree.children.filter((child) => child && child.type === 'button').length, 2)
+
+  // L'en-tête garde la même géométrie : la cellule terminale vide aligne la
+  // colonne de la bascule sur celle des lignes.
+  const head = findAll(inner, 'div').find((div) => div.props.className === 'missions-repo-head')
+  assert.ok(head)
+  assert.equal(head.children.filter((child) => child).length, 2)
+  assert.equal(head.children.filter((child) => child)?.at(-1).props.className, 'missions-repo-headmain')
+})
+
+test('une bascule sans cible reste là, désarmée, et dit pourquoi', () => {
+  const worktree = REPO_SCAN.repositories[2]
+  const scan = {
+    ...REPO_SCAN,
+    repositories: [
+      { ...worktree, name: 'dehors', main: { name: null, path: '/Users/moi/ailleurs/missions' } },
+      { ...worktree, name: 'inconnu', main: null },
+    ],
+  }
+  const { inner } = montrerRepositories(scanReady(scan))
+  const bascules = findAll(inner, 'button').filter((button) => button.props.className === 'missions-repo-main')
+  assert.equal(bascules.length, 2)
+  for (const bouton of bascules) {
+    assert.equal(bouton.props.disabled, true)
+    assert.equal(bouton.props.onClick, undefined)
+  }
+  const [dehors, inconnu] = bascules
+  assert.equal(dehors.props.title, 'outside the workspace root : /Users/moi/ailleurs/missions')
+  assert.equal(inconnu.props.title, 'main worktree unknown')
+})
+
+test('la bascule ouvre le volet du principal et ne compte qu’une fois', async () => {
+  const spy = espionUsage()
+  try {
+    const rendu = montrerRepositories(scanReady(REPO_SCAN))
+    const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
+    assert.ok(bouton)
+    await bouton.props.onClick()
+    spy.geste('repository.main', 'missions-gh20')
+    const ouvert = rendu.setters.filter((value) => value && typeof value === 'object' && value.name === 'missions').at(-1)
+    assert.ok(ouvert, 'le volet ouvert est celui du principal, pas du worktree')
+    assert.equal(ouvert.kind, 'clone')
+    assert.equal(rendu.setters.some((value) => value === 'missions'), false, 'l’onglet Repositories ne bouge pas')
+  } finally {
+    spy.restore()
+  }
 })
 
 test('un dépôt illisible reste une ligne, et l’en-tête compte les refus', () => {
@@ -3115,7 +3188,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(41\)/)
+  assert.match(texte, /Never used \(42\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -3131,7 +3204,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(44\)/)
+  assert.match(textOf(zero.inner), /Never used \(45\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
