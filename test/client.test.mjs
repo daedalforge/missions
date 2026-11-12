@@ -3687,6 +3687,13 @@ test('un refus d’archive se dit avec sa cause, et le bouton se réarme', async
   assert.equal(note.error, true)
   assert.match(note.text, /Archive refused: missions\/archives\/MIS-42 already exists/)
 
+  // Le refus ne touche pas la liste : aucun updater reçu ne perd la mission.
+  const kept = setters.reduce(
+    (state, next) => (typeof next === 'function' ? next(state) : state),
+    { missions: [{ key: 'MIS-42' }, { key: 'MIS-43' }] },
+  )
+  assert.deepEqual(kept.missions.map((mission) => mission.key), ['MIS-42', 'MIS-43'], 'la ligne reste dans la vue')
+
   // Un refus réarme le geste : le clic suivant redemande confirmation.
   await bouton.props.onClick()
   assert.equal(calls.length, 1, 'le clic après refus réarme sans écrire')

@@ -29,6 +29,7 @@ test('une mission done passe sous archives/, son contenu est intact', async (t) 
   const dir = await fixtures(t, {
     'MIS-42/mission.yml': 'key: MIS-42\nbranch: feat/mis-42\nbase: main\n',
     'MIS-42/journal.md': '# Journal — MIS-42\n',
+    'MIS-42/checklist.md': '# Checklist — MIS-42\n',
   })
 
   const result = await archiveMission({ root: dir, key: 'MIS-42', folder: 'MIS-42', mission: DONE })
@@ -38,6 +39,10 @@ test('une mission done passe sous archives/, son contenu est intact', async (t) 
   assert.equal(
     await readFile(join(dir, ARCHIVES_FOLDER, 'MIS-42', 'journal.md'), 'utf8'),
     '# Journal — MIS-42\n',
+  )
+  assert.equal(
+    await readFile(join(dir, ARCHIVES_FOLDER, 'MIS-42', 'checklist.md'), 'utf8'),
+    '# Checklist — MIS-42\n',
   )
   assert.equal(
     await readFile(join(dir, ARCHIVES_FOLDER, 'MIS-42', 'mission.yml'), 'utf8'),

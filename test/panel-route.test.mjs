@@ -1443,7 +1443,9 @@ projects:
  * preuve de `done` est lue à chaque appel, la lecture done d'après l'archive
  * ne demande plus rien puisque le dossier n'est plus déclaré.
  */
-async function mountArchive(t, { issue = null, closedStatus = 200 } = {}) {
+async function mountArchive(t, { issue = null, issues = null, closedStatus = 200 } = {}) {
+  const closed = issues ?? (issue === null ? [] : [issue])
+  const folders = issues ?? [CLOSED_42]
   const calls = []
   const json = (body, status = 200) => trackerResponse(body, { status })
   const fetchImpl = async (url) => {
@@ -1452,22 +1454,26 @@ async function mountArchive(t, { issue = null, closedStatus = 200 } = {}) {
     if (href.endsWith('/user')) return json({ login: 'me' })
     if (href.includes('state=closed')) {
       if (closedStatus !== 200) return json({ message: 'Bad credentials' }, closedStatus)
-      return json(issue === null ? [] : [issue])
+      return json(closed)
     }
     return json([])
   }
   const mounted = await mount(t, { fetchImpl })
   await writeFile(join(mounted.dir, 'missions', 'projects.yml'), BLOCKED_PROJECTS)
-  await mkdir(join(mounted.dir, 'missions', 'MIS-42'), { recursive: true })
-  await writeFile(
-    join(mounted.dir, 'missions', 'MIS-42', MISSION_FILE),
-    'key: MIS-42\nbranch: feat/mis-42\nbase: main\n',
-  )
-  await writeFile(join(mounted.dir, 'missions', 'MIS-42', 'journal.md'), '# Journal — MIS-42\n')
+  for (const closedIssue of folders) {
+    const key = `MIS-${closedIssue.number}`
+    await mkdir(join(mounted.dir, 'missions', key), { recursive: true })
+    await writeFile(
+      join(mounted.dir, 'missions', key, MISSION_FILE),
+      `key: ${key}\nbranch: feat/mis-${closedIssue.number}\nbase: main\n`,
+    )
+    await writeFile(join(mounted.dir, 'missions', key, 'journal.md'), `# Journal — ${key}\n`)
+  }
   return { ...mounted, calls }
 }
 
 const CLOSED_42 = { number: 42, state: 'closed', title: 'Archiver une mission', labels: [] }
+const CLOSED_43 = { number: 43, state: 'closed', title: 'Autre mission close', labels: [] }
 
 test('POST /archive déplace une mission done et la retire de la lecture done', async (t) => {
   const { dir, handler } = await mountArchive(t, { issue: CLOSED_42 })
@@ -1490,6 +1496,10 @@ test('POST /archive déplace une mission done et la retire de la lecture done', 
     assert.equal(
       await readFile(join(dir, 'missions', 'archives', 'MIS-42', 'journal.md'), 'utf8'),
       '# Journal — MIS-42\n',
+    )
+    assert.equal(
+      await readFile(join(dir, 'missions', 'archives', 'MIS-42', MISSION_FILE), 'utf8'),
+      'key: MIS-42\nbranch: feat/mis-42\nbase: main\n',
     )
 
     const done = await call(handler, { path: '/missions/api/list?done=1' })
@@ -1584,6 +1594,59 @@ test('une destination déjà occupée est refusée sans écrasement', async (t) 
     assert.match(response.body.error, /missions\/archives\/MIS-42 already exists/)
     assert.equal(await readFile(join(dir, 'missions', 'MIS-42', 'journal.md'), 'utf8'), '# Journal — MIS-42\n')
     assert.equal(await readFile(join(dir, 'missions', 'archives', 'MIS-42', 'journal.md'), 'utf8'), 'ancien\n')
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('un refus d’archive ne tronque pas la lecture Done', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42, CLOSED_43] })
+  await mkdir(join(dir, 'missions', 'archives', 'MIS-42'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'archives', 'MIS-42', 'journal.md'), 'ancien\n')
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const initial = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.deepEqual(initial.body.missions.map((mission) => mission.key).sort(), ['MIS-42', 'MIS-43'])
+
+    const refused = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive',
+      body: { key: 'MIS-42' },
+    })
+    assert.equal(refused.status, 409)
+    assert.match(refused.body.error, /missions\/archives\/MIS-42 already exists/)
+
+    // Sans refresh : la lecture doit servir tout Done, pas la seule clé lue
+    // pour la preuve. Le défaut laissait ici MIS-42 seul, ou une liste vide.
+    const after = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.deepEqual(after.body.missions.map((mission) => mission.key).sort(), ['MIS-42', 'MIS-43'])
+    assert.equal(await readFile(join(dir, 'missions', 'MIS-42', 'journal.md'), 'utf8'), '# Journal — MIS-42\n')
+    assert.equal(await readFile(join(dir, 'missions', 'archives', 'MIS-42', 'journal.md'), 'utf8'), 'ancien\n')
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('un échec interne du déplacement répond 500 et ne déplace rien', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issue: CLOSED_42 })
+  // `missions/archives` est un fichier : mkdir échoue, hors ArchiveError. Un
+  // défaut de la machine se dit 500, pas 502 (qui est une panne du tracker).
+  await writeFile(join(dir, 'missions', 'archives'), 'pas un dossier\n')
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive',
+      body: { key: 'MIS-42' },
+    })
+    assert.equal(response.status, 500)
+    assert.match(response.body.error, /EEXIST|file already exists/)
+    assert.equal(await readFile(join(dir, 'missions', 'MIS-42', 'journal.md'), 'utf8'), '# Journal — MIS-42\n')
+    assert.equal(await readFile(join(dir, 'missions', 'archives'), 'utf8'), 'pas un dossier\n')
   } finally {
     if (before === undefined) delete process.env.GH_TOKEN
     else process.env.GH_TOKEN = before
