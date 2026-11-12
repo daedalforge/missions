@@ -88,6 +88,7 @@ test('issues are normalized and pull requests dropped', async () => {
     type: 'story',
     priority: 'high',
     points: 3,
+    repo: null,
     epic: 'MIS-1 · Workspace',
     url: 'https://github.com/daedalforge/missions/issues/2',
     updatedAt: '2026-11-10T10:00:00Z',

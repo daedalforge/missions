@@ -21,6 +21,9 @@ import {
   dashboardScope,
   executionBlocker,
   missionStep,
+  missionSessionPrompt,
+  feedbackSessionPrompt,
+  FEEDBACK_BRIEF,
   ticketReadLine,
   treeIndent,
   STEP_BRIEFS,
@@ -1033,6 +1036,71 @@ test('un ticket non-GitHub ou absent garde son lien, avec la consigne du CLI', (
   assert.match(jira, /^Ouvre d'abord le ticket : https:/)
   assert.match(jira, /depuis le CLI du tracker, jamais la page HTML/)
   assert.match(ticketReadLine(undefined), /\(lien indisponible\)/)
+})
+
+/** La mission témoin des deux prompts : branche, base, dossier et dépôt déclarés. */
+const TEMOIN = {
+  key: 'MIS-42',
+  title: 'Reload onglet mission',
+  url: 'https://github.com/daedalforge/missions/issues/42',
+  state: 'in-progress',
+  branch: 'fix/mis-42',
+  base: 'main',
+  folder: 'MIS-42',
+  repo: '~/projects/missions',
+}
+
+test('le prompt de session est la chaîne d’hier, au caractère près', () => {
+  // Cette chaîne est celle que le volet construisait en ligne : l'extraction en
+  // helper ne doit pas la réécrire, les tests du bundle la pincent déjà.
+  const attendu =
+    'Travaille sur la mission MIS-42 — Reload onglet mission.\n\n' +
+    "Lis d'abord le ticket avec le CLI, jamais sa page HTML (tronquée) :\n" +
+    'gh issue view 42 -R daedalforge/missions --json number,title,state,body,labels,milestone,assignees,comments\n' +
+    'Étape en cours : exécution (statut in-progress). Tu ne fais que l’exécution : la branche depuis la base, les commits, la PR vers la base avec `Closes #N`, le journal et la checklist à jour ; à la fin, le ticket passe en in-review et tu t’arrêtes.\n\n' +
+    "Chaque étape se joue dans une nouvelle session : à la fin de celle-ci, arrête-toi ; l'étape suivante sera une nouvelle session.\n\n" +
+    'Branche : fix/mis-42 ; base : main.\n\n' +
+    'Journal de mission : missions/MIS-42/journal.md — tiens-le à jour à chaque étape.\n\n' +
+    'Checklist de mission : missions/MIS-42/checklist.md — coche chaque point avec sa preuve.\n\n' +
+    "Garde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande."
+
+  assert.equal(missionSessionPrompt(TEMOIN), attendu)
+  // Le prompt de session ne porte pas le clone : c'est le prompt des remontées
+  // qui a besoin de savoir où lire la PR.
+  assert.doesNotMatch(missionSessionPrompt(TEMOIN), /Dépôt du projet/)
+})
+
+test('le prompt des remontées demande la PR, le tri, le push et le garde-fou', () => {
+  assert.match(FEEDBACK_BRIEF, /<branche>/, 'le brief porte le gabarit de branche')
+  const prompt = feedbackSessionPrompt(TEMOIN)
+
+  assert.match(prompt, /^Travaille sur la mission MIS-42 — Reload onglet mission\./)
+  // Le ticket se lit avec le CLI, commentaires compris, comme pour la session.
+  assert.match(prompt, /gh issue view 42 -R daedalforge\/missions --json [^\n]*comments/)
+  // Le clone du projet est nommé : la session n'a pas à le deviner.
+  assert.match(prompt, /Dépôt du projet : ~\/projects\/missions\./)
+  assert.match(prompt, /Branche : fix\/mis-42 ; base : main\./)
+  // La PR se retrouve par la branche, et ses fils se lisent en ligne.
+  assert.match(prompt, /gh pr list --head fix\/mis-42 --state all/)
+  assert.match(prompt, /pulls\/<n>\/comments/)
+  // Chaque remontée est triée, sans élargir le périmètre.
+  assert.match(prompt, /corriger \/ répondre \/ hors périmètre/)
+  assert.match(prompt, /corrige sur la branche et pousse/)
+  assert.match(prompt, /`<CLÉ>: <impératif>`/)
+  // Journal et checklist restent les preuves de l'étape.
+  assert.match(prompt, /Journal de mission : missions\/MIS-42\/journal\.md/)
+  assert.match(prompt, /Checklist de mission : missions\/MIS-42\/checklist\.md/)
+  // Le garde-fou est complet : merge, main, labels, fermeture.
+  assert.match(prompt, /tu ne merges jamais la PR/)
+  assert.match(prompt, /tu n'écris jamais sur main/)
+  assert.match(prompt, /tu ne touches pas aux labels/)
+  assert.match(prompt, /tu ne fermes pas le ticket/)
+})
+
+test('sans dépôt déclaré, le prompt des remontées n’invente pas de clone', () => {
+  const prompt = feedbackSessionPrompt({ ...TEMOIN, repo: null })
+  assert.doesNotMatch(prompt, /Dépôt du projet/)
+  assert.match(prompt, /gh pr list --head fix\/mis-42 --state all/)
 })
 
 test('historyLabel chiffre le total par milliers, et nomme sa branche', () => {
