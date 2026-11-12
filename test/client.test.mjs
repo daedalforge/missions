@@ -1678,6 +1678,51 @@ test('le volet lit le détail du dépôt choisi et le montre', () => {
   assert.match(SOURCE, /return \(\) => document\.removeEventListener\('keydown', onKey\)/)
 })
 
+test('un clic de ligne ouvre le volet, la croix et Échap le ferment', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const { tree, inner, effects, setters } = montrerRepositories(scanReady(REPO_SCAN), repository)
+
+  // La ligne est un bouton, pas un dessin de bouton : son gestionnaire remet le
+  // dépôt au sélecteur du panneau, et le changement d'onglet le remet à `null`.
+  const lignes = findAll(inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.equal(lignes.length, 3)
+  lignes[0].props.onClick()
+  assert.deepEqual(setters.slice(-1), [repository], 'le clic d’une ligne ouvre ce dépôt')
+
+  const volet = findAll(tree, 'RepositoryDrawer')[0]
+  assert.ok(volet, 'le volet du dépôt choisi est monté')
+  const fermer = findAll(renderTree(volet), 'button')
+    .find((button) => button.props.className === 'missions-drawer-close')
+  assert.ok(fermer, 'le volet a sa croix')
+  fermer.props.onClick()
+  assert.deepEqual(setters.slice(-1), [null], 'la croix ferme le volet')
+
+  // Échap est une vraie touche : le volet l'arme à son montage, la retire en
+  // partant, et seul `Escape` déclenche la fermeture.
+  const ecoutes = new Map()
+  const fauxDocument = {
+    addEventListener: (type, callback) => { ecoutes.set(type, callback) },
+    removeEventListener: (type) => { ecoutes.delete(type) },
+  }
+  const vraiDocument = globalThis.document
+  globalThis.document = fauxDocument
+  try {
+    const touche = effects.find((effect) => /addEventListener\('keydown'/.test(String(effect.fn)))
+    assert.ok(touche, 'le volet arme Échap à son montage')
+    const avant = setters.length
+    const retirer = touche.fn()
+    assert.equal(typeof retirer, 'function', 'le volet rend son désabonnement')
+    ecoutes.get('keydown')({ key: 'Escape' })
+    assert.equal(setters.length, avant + 1, 'Échap passe par le sélecteur')
+    assert.deepEqual(setters.slice(-1), [null], 'Échap ferme le volet')
+    retirer()
+    assert.equal(ecoutes.has('keydown'), false, 'la touche ne survit pas au volet')
+  } finally {
+    if (vraiDocument === undefined) delete globalThis.document
+    else globalThis.document = vraiDocument
+  }
+})
+
 test('l’onglet Repositories a sa grille et ses deux thèmes', () => {
   assert.match(regle('.missions-repo-grid'), /grid-template-columns/)
   assert.match(regle('.missions-repo-grid'), /minmax\(0, 1\.55fr\)/)
