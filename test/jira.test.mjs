@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { forgetToken, list, setBlocked, setPriority } from '../lib/trackers/jira.js'
+import { forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/jira.js'
 
 const PROJECT = {
   id: 'manager',
@@ -288,7 +288,9 @@ test('blocking updates the labels and posts the reason as ADF', async () => {
 
   assert.equal(result.key, 'SO-1')
   assert.equal(result.blocked, true)
-  assert.match(result.comment, /comment\/10001$/)
+  // Le panneau affiche ce lien dans la carte : c'est la permalink de navigation,
+  // pas l'URL REST du commentaire.
+  assert.equal(result.comment, 'https://example.atlassian.net/browse/SO-1?focusedCommentId=10001')
   assert.equal(calls.length, 2)
   // `update.labels` ajoute ou retire un label sans renvoyer les autres.
   assert.equal(calls[0].method, 'PUT')
@@ -316,6 +318,17 @@ test('unblocking removes the label without a comment', async () => {
   assert.deepEqual(result, { key: 'SO-1', blocked: false, comment: null })
   assert.equal(calls.length, 1)
   assert.match(calls[0], /^PUT /)
+})
+
+test('a block whose answer has no comment id still links to the ticket', async () => {
+  const fetchImpl = async (url) =>
+    String(url).endsWith('/comment')
+      ? response({ self: 'https://example.atlassian.net/rest/api/3/issue/SO-1/comment/10001' })
+      : response(undefined, { status: 204 })
+
+  const result = await setBlocked(PROJECT, 'SO-1', { blocked: true, message: 'Attente.', fetchImpl })
+
+  assert.equal(result.comment, 'https://example.atlassian.net/browse/SO-1')
 })
 
 test('the blocked label comes back as a flag, without touching the state', async () => {
@@ -364,5 +377,90 @@ test('a priority write needs jira.email and a value', async () => {
   await assert.rejects(
     () => setPriority(PROJECT, 'SO-1', { value: ' ', fetchImpl: async () => response({}) }),
     /priority value is missing/,
+  )
+})
+
+test('the latest comment is read on the gateway and its ADF flattened to text', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), auth: init.headers?.authorization, accept: init.headers?.accept })
+    return response({
+      comments: [{
+        id: '10101',
+        author: { displayName: 'Stéphane' },
+        created: '2026-11-11T09:00:00.000+0000',
+        body: {
+          type: 'doc',
+          version: 1,
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'Attente du contrat.' },
+                { type: 'hardBreak' },
+                { type: 'mention', attrs: { id: 'acc-1', text: '@Stéphane' } },
+              ],
+            },
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'Dépend de ' },
+                { type: 'inlineCard', attrs: { url: 'https://example.test/ticket' } },
+              ],
+            },
+          ],
+        },
+      }],
+    })
+  }
+
+  const comment = await latestComment(PROJECT, 'SO-1207', { fetchImpl })
+
+  assert.equal(calls.length, 1)
+  const url = new URL(calls[0].url)
+  assert.equal(url.pathname, '/ex/jira/cloud-1/rest/api/3/issue/SO-1207/comment')
+  assert.equal(url.searchParams.get('maxResults'), '1')
+  assert.equal(url.searchParams.get('orderBy'), '-created')
+  assert.match(calls[0].auth, /^Basic /)
+  assert.equal(calls[0].accept, 'application/json')
+  assert.deepEqual(comment, {
+    author: 'Stéphane',
+    body: 'Attente du contrat.\n@Stéphane\nDépend de https://example.test/ticket',
+    createdAt: '2026-11-11T09:00:00.000+0000',
+    url: 'https://example.atlassian.net/browse/SO-1207?focusedCommentId=10101',
+  })
+})
+
+test('an issue with no comment, or an empty ADF body, has no reason to show', async () => {
+  const none = await latestComment(PROJECT, 'SO-1', { fetchImpl: async () => response({ comments: [], total: 0 }) })
+  assert.equal(none, null)
+
+  const blank = await latestComment(PROJECT, 'SO-1', {
+    fetchImpl: async () => response({
+      comments: [{ id: '1', body: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [] }] } }],
+    }),
+  })
+  assert.equal(blank, null)
+})
+
+test('a comment read needs jira.email', async () => {
+  const saved = process.env.JIRA_EMAIL
+  delete process.env.JIRA_EMAIL
+  try {
+    await assert.rejects(
+      () => latestComment({ ...PROJECT, jira: { site: 'https://x', cloud_id: 'cloud-1' } }, 'SO-1', { fetchImpl: async () => response({}) }),
+      /jira\.email is required/,
+    )
+  } finally {
+    process.env.JIRA_EMAIL = saved
+  }
+})
+
+test('a comment read keeps the 401 message', async () => {
+  await assert.rejects(
+    () => latestComment(PROJECT, 'SO-1207', {
+      fetchImpl: async () => response({ message: 'Unauthorized' }, { status: 401 }),
+    }),
+    /Jira token missing or invalid/,
   )
 })

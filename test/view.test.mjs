@@ -14,6 +14,7 @@ import {
   withoutNode,
   ageDays,
   assignedBugs,
+  blockedReasonAfterWrite,
   branchFieldValue,
   EMPTY_FILTERS,
   epicOptions,
@@ -320,6 +321,29 @@ test('l’âge relatif reste court et lisible', () => {
   assert.equal(relativeAge('2026-11-10T08:00:00Z', now), '4 h')
   assert.equal(relativeAge('2026-11-08T12:00:00Z', now), '2 d')
   assert.equal(relativeAge(null, now), '')
+})
+
+test('la raison d’un blocage écrit s’affiche tout de suite, sans nouvelle lecture', () => {
+  const now = Date.parse('2026-11-12T21:25:58Z')
+  assert.deepEqual(
+    blockedReasonAfterWrite({
+      next: true,
+      message: '  Attente du ticket de données.  ',
+      comment: 'https://github.com/daedalforge/missions/issues/144#issuecomment-9',
+      now,
+    }),
+    {
+      state: 'found',
+      author: null,
+      body: 'Attente du ticket de données.',
+      createdAt: '2026-11-12T21:25:58.000Z',
+      url: 'https://github.com/daedalforge/missions/issues/144#issuecomment-9',
+    },
+  )
+  // A reason the tracker did not answer with a URL keeps the text alone.
+  assert.equal(blockedReasonAfterWrite({ next: true, message: 'Attente.', now }).url, null)
+  // Unblocking clears the field: the next read will bring the tracker's answer.
+  assert.equal(blockedReasonAfterWrite({ next: false, message: 'Attente.' }), null)
 })
 
 test('une session exige un état unique, une branche et une base déclarées', () => {

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { forgetToken, list, setBlocked, setPriority } from '../lib/trackers/github.js'
+import { lastLink } from '../lib/http.js'
+import { forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/github.js'
 
 const PROJECT = {
   id: 'missions',
@@ -323,5 +324,97 @@ test('a priority write needs an issue key and a value', async () => {
   await assert.rejects(
     () => setPriority(PROJECT, 'MIS-110', { value: '  ', fetchImpl: async () => response({}) }),
     /priority value is missing/,
+  )
+})
+
+const COMMENTS = 'https://api.github.com/repos/daedalforge/missions/issues/144/comments?per_page=100'
+
+test('the latest comment is the newest one of the issue, trimmed', async () => {
+  const calls = []
+  const fetchImpl = async (url) => {
+    calls.push(String(url))
+    return response([
+      { user: { login: 'someone' }, body: 'Ancienne raison', created_at: '2026-11-01T09:00:00Z', html_url: 'https://github.com/daedalforge/missions/issues/144#issuecomment-1' },
+      {
+        user: { login: 'slucienvauthier-so' },
+        body: '  Attente du ticket de données.\n',
+        created_at: '2026-11-11T09:00:00Z',
+        html_url: 'https://github.com/daedalforge/missions/issues/144#issuecomment-2',
+      },
+    ])
+  }
+
+  const comment = await latestComment(PROJECT, 'MIS-144', { fetchImpl })
+
+  assert.deepEqual(comment, {
+    author: 'slucienvauthier-so',
+    body: 'Attente du ticket de données.',
+    createdAt: '2026-11-11T09:00:00Z',
+    url: 'https://github.com/daedalforge/missions/issues/144#issuecomment-2',
+  })
+  assert.deepEqual(calls, [COMMENTS])
+})
+
+test('an issue whose comments span several pages reads the last page only', async () => {
+  const calls = []
+  const last = 'https://api.github.com/repos/daedalforge/missions/issues/144/comments?page=4'
+  const link = [
+    '<https://api.github.com/repos/daedalforge/missions/issues/144/comments?page=2>; rel="next"',
+    `<${last}>; rel="last"`,
+  ].join(', ')
+  const fetchImpl = async (url) => {
+    calls.push(String(url))
+    if (String(url) === last) {
+      return response([{ user: { login: 'slucienvauthier-so' }, body: 'Raison la plus récente', created_at: '2026-11-12T10:00:00Z', html_url: 'https://github.com/daedalforge/missions/issues/144#issuecomment-400' }])
+    }
+    return response([{ user: { login: 'someone' }, body: 'Raison ancienne', created_at: '2026-10-01T09:00:00Z' }], { link })
+  }
+
+  const comment = await latestComment(PROJECT, 'MIS-144', { fetchImpl })
+
+  assert.deepEqual(calls, [COMMENTS, last])
+  assert.equal(comment.body, 'Raison la plus récente')
+  assert.equal(comment.url, 'https://github.com/daedalforge/missions/issues/144#issuecomment-400')
+})
+
+test('an issue with no comment, or an empty one, has no reason to show', async () => {
+  const none = await latestComment(PROJECT, 'MIS-144', { fetchImpl: async () => response([]) })
+  assert.equal(none, null)
+
+  const blank = await latestComment(PROJECT, 'MIS-144', {
+    fetchImpl: async () => response([{ user: { login: 'slucienvauthier-so' }, body: '   \n', created_at: '2026-11-11T09:00:00Z' }]),
+  })
+  assert.equal(blank, null)
+})
+
+test('a comment read needs an issue key', async () => {
+  await assert.rejects(
+    () => latestComment(PROJECT, 'MIS-blocked', { fetchImpl: async () => response([]) }),
+    /not an issue key/,
+  )
+})
+
+test('lastLink extracts the last page and ignores the other relations', () => {
+  const link = '<https://api.github.com/x?page=2>; rel="next", <https://api.github.com/x?page=9>; rel="last", <https://api.github.com/x?page=1>; rel="first"'
+  assert.equal(lastLink(link), 'https://api.github.com/x?page=9')
+  assert.equal(lastLink('<https://api.github.com/x?page=2>; rel="next"'), null)
+  assert.equal(lastLink(null), null)
+})
+
+test('a comment read keeps the tracker refusal message', async () => {
+  await assert.rejects(
+    () => latestComment(PROJECT, 'MIS-144', {
+      fetchImpl: async () => response({ message: 'Server Error' }, { status: 500 }),
+    }),
+    /GitHub: HTTP 500/,
+  )
+})
+
+test('a comment read needs a project with owner and repo', async () => {
+  await assert.rejects(
+    () => latestComment({ id: 'broken', tracker: 'github', github: {} }, 'MIS-144', {
+      fetchImpl: async () => response([]),
+    }),
+    /owner and repo/,
   )
 })

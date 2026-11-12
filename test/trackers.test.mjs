@@ -328,3 +328,104 @@ test('a tracker without a priority writer refuses instead of pretending', async 
     /unknown tracker: notion/,
   )
 })
+
+/** Le compte courant, puis les issues : les commentaires sont routés par l'appelant. */
+function routeWithComments(issues, comment) {
+  return async (url) => {
+    const target = String(url)
+    if (target.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    if (target.includes('/comments')) return comment(target)
+    return response(issues)
+  }
+}
+
+const BLOCKED_ISSUE = { number: 7, title: 'bloquée', labels: [{ name: 'ready' }, { name: 'blocked' }], type: { name: 'Feature' } }
+const FREE_ISSUE = { number: 8, title: 'libre', labels: [{ name: 'ready' }], type: { name: 'Feature' } }
+
+test('une mission bloquée porte la raison de son dernier commentaire', async () => {
+  const calls = []
+  const fetchImpl = routeWithComments([BLOCKED_ISSUE, FREE_ISSUE], (url) => {
+    calls.push(url)
+    return response([{
+      user: { login: 'slucienvauthier-so' },
+      body: 'Attente du ticket de données.',
+      created_at: '2026-11-11T09:00:00Z',
+      html_url: 'https://github.com/daedalforge/missions/issues/7#issuecomment-1',
+    }])
+  })
+
+  const { missions, errors } = await listAll([PROJECT_OK], { fetchImpl })
+
+  assert.deepEqual(errors, [])
+  assert.deepEqual(missions.find((mission) => mission.key === 'MIS-7').blockedReason, {
+    state: 'found',
+    author: 'slucienvauthier-so',
+    body: 'Attente du ticket de données.',
+    createdAt: '2026-11-11T09:00:00Z',
+    url: 'https://github.com/daedalforge/missions/issues/7#issuecomment-1',
+  })
+  assert.equal(missions.find((mission) => mission.key === 'MIS-8').blockedReason, undefined)
+  assert.equal(calls.length, 1)
+})
+
+test('un commentaire refusé ne rend indisponible que cette raison', async () => {
+  const fetchImpl = routeWithComments([BLOCKED_ISSUE], () => ({
+    ok: false,
+    status: 403,
+    headers: { get: () => null },
+    text: async () => JSON.stringify({ message: 'Forbidden' }),
+  }))
+
+  const { missions, errors } = await listAll([PROJECT_OK], { fetchImpl })
+
+  assert.deepEqual(errors, [])
+  assert.deepEqual(missions[0].blockedReason, {
+    state: 'unavailable',
+    author: null,
+    body: '',
+    createdAt: null,
+    url: null,
+  })
+})
+
+test('une mission bloquée sans commentaire dit que la raison n’est pas écrite', async () => {
+  const fetchImpl = routeWithComments([BLOCKED_ISSUE], () => response([]))
+
+  const { missions } = await listAll([PROJECT_OK], { fetchImpl })
+
+  assert.deepEqual(missions[0].blockedReason, {
+    state: 'empty',
+    author: null,
+    body: '',
+    createdAt: null,
+    url: null,
+  })
+})
+
+test('la liste cachée garde la raison : un seul commentaire lu', async () => {
+  let comments = 0
+  const fetchImpl = routeWithComments([BLOCKED_ISSUE], () => {
+    comments += 1
+    return response([{ user: { login: 'slucienvauthier-so' }, body: 'Attente.', created_at: '2026-11-11T09:00:00Z' }])
+  })
+
+  await listAll([PROJECT_OK], { fetchImpl })
+  await listAll([PROJECT_OK], { fetchImpl })
+
+  assert.equal(comments, 1)
+})
+
+test('l’historique done ne demande pas de raison', async () => {
+  const calls = []
+  const fetchImpl = async (url) => {
+    calls.push(String(url))
+    if (String(url).endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    return response([{ number: 7, title: 'terminée', state: 'closed', labels: [{ name: 'blocked' }], type: { name: 'Feature' } }])
+  }
+
+  const { missions } = await listAll([PROJECT_OK], { fetchImpl, scope: 'done', declaredKeys: new Set(['MIS-7']) })
+
+  assert.equal(missions.length, 1)
+  assert.equal(missions[0].blockedReason, undefined)
+  assert.equal(calls.filter((url) => url.includes('/comments')).length, 0)
+})
