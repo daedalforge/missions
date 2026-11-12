@@ -175,3 +175,15 @@ test('la commande refuse un argument inconnu', async () => {
   assert.equal(unknown.code, 2)
   assert.match(unknown.stderr, /argument inconnu/)
 })
+
+test('une option sans valeur est refusée, --help sort en 0', async () => {
+  const orphan = await command('--home', '--force')
+  assert.equal(orphan.code, 2)
+  assert.match(orphan.stderr, /--home attend une valeur/)
+
+  assert.equal((await command('--platform')).code, 2)
+
+  const help = await command('--help')
+  assert.equal(help.code, 0)
+  assert.match(help.stdout, /Usage/)
+})

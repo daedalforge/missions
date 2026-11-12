@@ -63,16 +63,18 @@ for (let index = 0; index < args.length; index += 1) {
   if (arg === '--check') mode = 'check'
   else if (arg === '--apply') mode = 'apply'
   else if (arg === '--force') force = true
-  else if (arg === '--platform') platform = args[(index += 1)]
-  else if (arg === '--home') home = args[(index += 1)]
-  else if (arg === '-h' || arg === '--help') {
+  else if (arg === '--platform' || arg === '--home') {
+    const value = args[index + 1]
+    // An option is not a value: `--home --force` must fail instead of
+    // silently adopting "--force" as the home directory.
+    if (value === undefined || value.startsWith('-')) die(`${arg} attend une valeur`)
+    if (arg === '--platform') platform = value
+    else home = value
+    index += 1
+  } else if (arg === '-h' || arg === '--help') {
     console.log(USAGE)
     process.exit(0)
   } else die(`argument inconnu : ${arg}`)
-
-  if ((arg === '--platform' || arg === '--home') && !args[index]) {
-    die(`${arg} attend une valeur`)
-  }
 }
 
 if (!home) die('aucun dossier personnel : passer --home')

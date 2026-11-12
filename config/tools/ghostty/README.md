@@ -33,6 +33,39 @@ bien, pas seulement que `+validate-config` passe.
 `~/projects/missions` ; sinon, corriger cette ligne dans `config-linux` et
 `config-darwin`, puis rejouer la pose.
 
+## Le lien traverse l'arbre de travail
+
+Le lien de `$HOME` vise un fichier du dépôt, et Ghostty lit ce fichier **réel** :
+le socle inclus vient donc de l'arbre de travail courant. Toute extraction —
+changement de branche, worktree — qui ne porte pas `config/tools/ghostty/` coupe
+la configuration : le lien reste en place, sa cible disparaît, et Ghostty
+retombe sur ses défauts **sans erreur**. Ni le lien pendant ni l'inclusion
+introuvable ne font échouer `+validate-config` ; seul le rendu (ou
+`+show-config`) le dit.
+
+Constaté le 2026-11-12 : le clone partagé était sur `feat/mis-135` (issue de
+`fedb8f6`, antérieure à cette mission). `readlink` rendait bien
+`…/missions/config/tools/ghostty/config-darwin`, mais la cible n'existait pas et
+`+show-config` ne rendait plus ni `config-file`, ni `font-family`, ni
+`background` : le poste tournait sur les valeurs par défaut de Ghostty.
+
+```sh
+# la vérification qui compte : le socle est bien chargé
+~/Applications/Ghostty.app/Contents/MacOS/ghostty +show-config | grep '^font-family ='
+# une ligne = chargé ; aucune ligne = l'arbre courant ne porte pas la config
+
+# remise en état : se placer sur une extraction qui porte les fichiers
+git checkout main                     # après le merge de la mission
+node tools/link-config.mjs --check    # 0 : le lien est bon
+```
+
+`--check` compare le lien à sa source ; il ne lit pas la cible. C'est
+`+show-config` qui prouve que Ghostty charge le socle.
+
+Si ce mode de panne gêne, la parade est un **checkout stable dédié** — un
+worktree qui ne change jamais de branche, sur lequel le lien peut s'appuyer :
+l'arbre partagé peut alors changer de branche sans couper le terminal.
+
 ## Chargement
 
 Ghostty lit les fichiers dans cet ordre, les suivants écrasant les précédents :
@@ -85,7 +118,7 @@ Le binaire n'est pas dans le `PATH` sur le poste : l'appeler par son chemin.
 G=~/Applications/Ghostty.app/Contents/MacOS/ghostty
 $G +validate-config              # sort en 0 ; suit les inclusions
 $G +show-config | grep -E '^(config-file|font-family|background|background-opacity) ='
-$G +list-keybinds | grep -c 'super+shift+arrow'   # 0 sous Linux
+$G +list-keybinds | grep -c 'super+shift+arrow'   # 4 sous macOS, 0 sous Linux
 ```
 
 `config-file` doit afficher le socle de ce dépôt
