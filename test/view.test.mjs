@@ -179,10 +179,19 @@ test('les statuts proposés suivent l’ordre du workflow, unknown en dernier', 
   assert.deepEqual(stateOptions([]), [])
 })
 
-test('done n’est plus un état du panneau : ni groupe, ni option de filtre', () => {
-  const done = [{ key: 'a#5', state: 'done' }]
-  assert.deepEqual(groupByState(done).map((g) => g.state), ['unknown'])
-  assert.deepEqual(stateOptions(done), ['unknown'])
+test('done garde son groupe et son option, en dernier, mais reste hors de la liste par défaut', () => {
+  const done = [{ key: 'a#5', state: 'done', type: 'story', priority: 'high', project: 'missions' }]
+  // Hors du panneau par défaut : ni la recherche, ni un filtre qui ne le nomme
+  // pas ne le font sortir. Le filtre Statut est la seule porte.
+  assert.deepEqual(filterMissions(done, {}), [])
+  assert.deepEqual(filterMissions(done, { state: ['ready'] }), [])
+  assert.deepEqual(filterMissions(done, { query: 'a#5' }), [])
+  assert.deepEqual(filterMissions(done, { state: ['done'] }).map((m) => m.key), ['a#5'])
+  // Le groupe et l'option sont en dernier : la liste garde la file ouverte en tête.
+  assert.deepEqual(groupByState([...MISSIONS, ...done]).map((g) => g.state), ['in-review', 'ready', 'to-refine', 'done'])
+  assert.deepEqual(stateOptions([...MISSIONS, ...done]), ['to-refine', 'ready', 'in-review', 'done'])
+  // Une barre enregistrée garde done : la session doit le retrouver au montage.
+  assert.deepEqual(filterSnapshot({ filters: { state: ['done'] } }).state, ['done'])
 })
 
 test('le tri priorité va du plus haut au plus bas, les sans-priorité en fin', () => {
@@ -282,6 +291,10 @@ test('une session exige un état unique, une branche et une base déclarées', (
   )
   assert.equal(executionBlocker({ branch: 'gh-41' }), 'base branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker({ base: 'main' }), 'branch is not declared, set it below or in the mission folder')
+  assert.equal(
+    executionBlocker({ branch: 'gh-41', base: 'main', state: 'done' }),
+    'mission is done: a closed mission plays no session',
+  )
   assert.equal(executionBlocker({}), 'branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker({ branch: null, base: null }), 'branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker(), 'branch is not declared, set it below or in the mission folder')
@@ -390,7 +403,7 @@ test('une valeur unique rangée par une barre d’avant la liste se relit en lis
 test('un instantané ne retient que ce que la barre peut sélectionner', () => {
   const snapshot = filterSnapshot({
     query: 42,
-    filters: { type: 'feat', state: 'done', epic: '  Workspace  ', priority: '', project: 7, missing: 'yes' },
+    filters: { type: 'feat', state: 'cancelled', epic: '  Workspace  ', priority: '', project: 7, missing: 'yes' },
     sort: 'title',
   })
   // Type et état hors vocabulaire, priorité vide, projet non textuel : la barre
@@ -523,14 +536,16 @@ test('les widgets sélectionnent les bugs non résolus et les stories hautes, le
   const missions = [
     { key: 'bug-old', type: 'bug', state: 'to-refine', updatedAt: '2026-10-01T00:00:00Z' },
     { key: 'bug-new', type: 'bug', state: 'ready', updatedAt: '2026-11-01T00:00:00Z' },
-    // Un bug clos n'est pas « non résolu » : le tracker ne devrait pas l'envoyer,
-    // le helper ne dépend pas de cette promesse.
+    // Un bug clos n'est pas « non résolu » : le tracker peut l'envoyer (une
+    // mission done déclarée sur le poste), le helper ne dépend pas de cette promesse.
     { key: 'bug-done', type: 'bug', state: 'done', updatedAt: '2026-09-01T00:00:00Z' },
     { key: 'story-urgent', type: 'story', priority: 'urgent', state: 'in-progress', updatedAt: '2026-11-05T00:00:00Z' },
     { key: 'story-high', type: 'story', priority: 'high', state: 'ready', updatedAt: '2026-11-03T00:00:00Z' },
     { key: 'story-normal', type: 'story', priority: 'normal', state: 'ready', updatedAt: '2026-10-01T00:00:00Z' },
     // Aucun état connu : la story reste dans le widget, tous états confondus.
     { key: 'task-high', type: 'story', priority: 'high', state: null, updatedAt: '2026-11-04T00:00:00Z' },
+    // Une story close reste close : les widgets ne comptent que l'ouvert.
+    { key: 'story-done', type: 'story', priority: 'urgent', state: 'done', updatedAt: '2026-08-01T00:00:00Z' },
   ]
   assert.deepEqual(assignedBugs(missions).map((m) => m.key), ['bug-old', 'bug-new'])
   assert.deepEqual(highPriorityStories(missions).map((m) => m.key), ['story-high', 'task-high', 'story-urgent'])
