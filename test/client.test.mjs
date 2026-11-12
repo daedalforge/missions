@@ -351,6 +351,59 @@ test('le bouton de session envoie toujours le prompt d’hier', async () => {
   assert.doesNotMatch(captures[0], /Dépôt du projet/)
 })
 
+test('un clic sur Start a session n’écrit aucune note et ne crée qu’une session', async () => {
+  const opened = []
+  const connected = []
+  const services = {
+    getService: (name) =>
+      name === 'uiWorkspace'
+        ? {
+            connectWorkspace: (id) => connected.push(id),
+            startSession: (id, options) => opened.push({ id, options }),
+          }
+        : null,
+  }
+  const { tree, setters } = monterVolet(
+    { ...MISSION, state: 'in-review', updatedAt: MISSION.updated },
+    { services, workspaceId: 'w' },
+  )
+
+  const bouton = findAll(tree, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+  await bouton.props.onClick()
+
+  // Un seul geste : startSession. connectWorkspace créerait une session blanche
+  // que startSession reprendrait aussitôt, pour un aller-retour de plus.
+  assert.equal(connected.length, 0)
+  assert.equal(opened.length, 1)
+  assert.equal(opened[0].id, 'w')
+  // Aucune note : DSH démonte le volet dès la session ouverte, la note vivait
+  // moins de 50 ms et se lisait comme une erreur.
+  const notes = setters.filter((value) => typeof value === 'string' && /session/i.test(value))
+  assert.deepEqual(notes, [])
+})
+
+test('une session que le shell refuse laisse une note courte et lisible', async () => {
+  const services = {
+    getService: (name) =>
+      name === 'uiWorkspace'
+        ? {
+            startSession: () => {
+              throw new Error('workspace/not-found')
+            },
+          }
+        : null,
+  }
+  const { tree, setters } = monterVolet(
+    { ...MISSION, state: 'in-review', updatedAt: MISSION.updated },
+    { services, workspaceId: 'w' },
+  )
+
+  const bouton = findAll(tree, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+  await bouton.props.onClick()
+
+  assert.ok(setters.includes('Session not opened: workspace/not-found'))
+})
+
 test('le prompt n’est plus construit en ligne dans le gabarit du volet', async () => {
   const template = await readFile(new URL('../src/client.template.js', import.meta.url), 'utf8')
 
