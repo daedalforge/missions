@@ -21,6 +21,7 @@ import {
   dashboardScope,
   executionBlocker,
   missionStep,
+  ticketReadLine,
   STEP_BRIEFS,
   STEP_BY_STATE,
   FILTERS_KEY,
@@ -1015,4 +1016,18 @@ test('l’en-tête dit ce que le scan a lu, et ce qu’il n’a pas pu lire', ()
   assert.equal(scanDuration(-1), '')
   assert.equal(scanDuration(Number.NaN), '')
   assert.equal(scanDuration(undefined), '')
+})
+
+test('le prompt de session nomme la commande gh, jamais l’URL de la page', () => {
+  const ligne = ticketReadLine('https://github.com/daedalforge/missions/issues/119')
+  assert.match(ligne, /^Lis d'abord le ticket avec le CLI/)
+  assert.match(ligne, /gh issue view 119 -R daedalforge\/missions --json /)
+  assert.ok(!ligne.includes('https://github.com'), 'l’URL de la page ne doit pas être proposée : elle est tronquée')
+})
+
+test('un ticket non-GitHub ou absent garde son lien, avec la consigne du CLI', () => {
+  const jira = ticketReadLine('https://saasoffice.atlassian.net/browse/SOC-1541')
+  assert.match(jira, /^Ouvre d'abord le ticket : https:/)
+  assert.match(jira, /depuis le CLI du tracker, jamais la page HTML/)
+  assert.match(ticketReadLine(undefined), /\(lien indisponible\)/)
 })
