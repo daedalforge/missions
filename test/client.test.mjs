@@ -228,12 +228,29 @@ test('le prompt de session nomme l’étape en cours, pas la chaîne entière', 
 
 test('le bouton de session nomme l’étape courante', () => {
   assert.match(SOURCE, /const sessionLabel = step \? `Start a session — \$\{step\}` : 'Start a session'/)
-  assert.match(SOURCE, /\}, sessionLabel\)/)
+  // Le nom voyage dans l'infobulle et le libellé accessible : l'icône n'a pas de texte.
+  assert.match(SOURCE, /title: blocker \?\? sessionLabel,/)
+  assert.match(SOURCE, /'aria-label': sessionLabel,/)
 })
+
+/** Le nom accessible d'un geste du volet : les icônes n'ont plus de texte. */
+function nomDuGeste(node) {
+  return (node.props['aria-label'] ?? '').trim()
+}
+
+/** Le bouton d'action dont le nom accessible est exactement ce libellé. */
+function boutonGeste(tree, label) {
+  return findAll(tree, 'button').find((node) => nomDuGeste(node) === label) ?? null
+}
+
+/** Le bouton de session, dont le libellé finit par l'étape courante. */
+function boutonSession(tree) {
+  return findAll(tree, 'button').find((node) => /^Start a session/.test(nomDuGeste(node))) ?? null
+}
 
 /** Le bouton des remontées du volet, ou null quand la mission n'en rend pas. */
 function boutonRemontees(tree) {
-  return findAll(tree, 'button').find((node) => textOf(node).trim() === 'Check the PR feedback') ?? null
+  return boutonGeste(tree, 'Check the PR feedback')
 }
 
 test('le volet rend « Check the PR feedback » en revue, à côté de la session', () => {
@@ -241,20 +258,24 @@ test('le volet rend « Check the PR feedback » en revue, à côté de la sessio
   const bouton = boutonRemontees(tree)
   assert.ok(bouton, 'le bouton doit être rendu en revue')
 
-  // Secondaire, non désarmé, sans infobulle : le verrou ne mord pas ici.
-  assert.equal(bouton.props.className, 'missions-action')
+  // Icône seule : le nom vit dans l'infobulle et le libellé accessible, et le
+  // verrou ne mord pas ici.
+  assert.equal(bouton.props.className, 'missions-action missions-action--icon')
   assert.equal(bouton.props.disabled, false)
-  assert.equal(bouton.props.title, undefined)
+  assert.equal(bouton.props.title, 'Check the PR feedback')
+  assert.equal(bouton.props['aria-label'], 'Check the PR feedback')
+  assert.equal(textOf(bouton), '', 'le bouton ne porte plus de texte')
+  assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte une icône')
   assert.equal(bouton.props['aria-describedby'], undefined)
   assert.equal(typeof bouton.props.onClick, 'function')
 
-  // Il précède le bouton de session, qui reste le primaire en bas.
+  // Il précède le bouton de session, qui reste le primaire et le dernier.
   const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
   assert.ok(actions, 'le volet doit rendre la barre d’actions')
   const boutons = actions.children.filter((child) => child.type === 'button')
-  const iRemontees = boutons.findIndex((node) => textOf(node).trim() === 'Check the PR feedback')
-  const iSession = boutons.findIndex((node) => /^Start a session/.test(textOf(node).trim()))
-  assert.ok(iSession > iRemontees, 'la session reste sous les remontées')
+  const iRemontees = boutons.findIndex((node) => nomDuGeste(node) === 'Check the PR feedback')
+  const iSession = boutons.findIndex((node) => /^Start a session/.test(nomDuGeste(node)))
+  assert.ok(iSession > iRemontees, 'la session reste après les remontées')
   assert.match(boutons[iSession].props.className, /missions-action--primary/)
 })
 
@@ -280,7 +301,9 @@ test('le bouton des remontées est désarmé par le même verrou que la session'
     const bouton = boutonRemontees(tree)
     assert.ok(bouton, `le bouton reste rendu, désarmé : ${message}`)
     assert.equal(bouton.props.disabled, true)
+    // L'infobulle dit pourquoi le geste est fermé ; le nom, lui, reste le geste.
     assert.equal(bouton.props.title, message)
+    assert.equal(bouton.props['aria-label'], 'Check the PR feedback')
     assert.equal(bouton.props['aria-describedby'], 'missions-session-blocked')
     // Le message est bien rendu sous le bouton, et la note le cite.
     assert.match(textOf(tree), new RegExp(`Session blocked: ${message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
@@ -345,7 +368,7 @@ test('le bouton de session envoie toujours le prompt d’hier', async () => {
     { services, workspaceId: 'w' },
   )
 
-  const bouton = findAll(tree, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+  const bouton = boutonSession(tree)
   await bouton.props.onClick()
 
   assert.equal(captures.length, 1)
@@ -371,7 +394,7 @@ test('un clic sur Start a session n’écrit aucune note et ne crée qu’une se
     { services, workspaceId: 'w' },
   )
 
-  const bouton = findAll(tree, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+  const bouton = boutonSession(tree)
   await bouton.props.onClick()
 
   // Un seul geste : startSession. connectWorkspace créerait une session blanche
@@ -401,7 +424,7 @@ test('une session que le shell refuse laisse une note courte et lisible', async 
     { services, workspaceId: 'w' },
   )
 
-  const bouton = findAll(tree, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+  const bouton = boutonSession(tree)
   await bouton.props.onClick()
 
   assert.ok(setters.includes('Session not opened: workspace/not-found'))
@@ -429,7 +452,7 @@ test('le prompt n’est plus construit en ligne dans le gabarit du volet', async
 
 /** Le bouton de session libre du volet, ou null quand la mission n'en rend pas. */
 function boutonLibre(tree) {
-  return findAll(tree, 'button').find((node) => textOf(node).trim() === 'Start a free session') ?? null
+  return boutonGeste(tree, 'Start a free session')
 }
 
 test('le volet rend « Start a free session » à toutes les étapes sauf done', () => {
@@ -447,35 +470,105 @@ test('le bouton libre est secondaire, titré et reste au-dessus de la session', 
   const bouton = boutonLibre(tree)
   assert.ok(bouton, 'le bouton libre doit être rendu')
 
-  // Secondaire, actif, avec le titre qui le distingue de la note du verrou.
-  assert.equal(bouton.props.className, 'missions-action')
+  // Icône seule, active : son nom voyage dans l'infobulle et le libellé
+  // accessible, comme les autres gestes de la rangée.
+  assert.equal(bouton.props.className, 'missions-action missions-action--icon')
   assert.doesNotMatch(bouton.props.className, /--primary/)
   assert.equal(bouton.props.disabled, false)
-  assert.equal(bouton.props.title, 'Ask a question without playing the workflow step')
+  assert.equal(bouton.props.title, 'Start a free session')
+  assert.equal(bouton.props['aria-label'], 'Start a free session')
+  assert.equal(textOf(bouton), '', 'le bouton ne porte plus de texte')
+  assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte une icône')
   assert.equal(bouton.props['aria-describedby'], undefined)
   assert.equal(typeof bouton.props.onClick, 'function')
 
-  // Il précède le bouton de session, qui reste le primaire en bas.
+  // Il précède le bouton de session, qui reste le primaire et le dernier.
   const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
   assert.ok(actions, 'le volet doit rendre la barre d’actions')
   const boutons = actions.children.filter((child) => child.type === 'button')
-  const iLibre = boutons.findIndex((node) => textOf(node).trim() === 'Start a free session')
-  const iSession = boutons.findIndex((node) => /^Start a session/.test(textOf(node).trim()))
+  const iLibre = boutons.findIndex((node) => nomDuGeste(node) === 'Start a free session')
+  const iSession = boutons.findIndex((node) => /^Start a session/.test(nomDuGeste(node)))
   assert.ok(iLibre >= 0, 'le bouton libre est dans la barre d’actions')
-  assert.ok(iSession > iLibre, 'la session d’étape reste sous la session libre')
+  assert.ok(iSession > iLibre, 'la session d’étape reste après la session libre')
   assert.match(boutons[iSession].props.className, /missions-action--primary/)
 })
 
 test('le thème Naruto rend le bouton libre sans règle nouvelle', () => {
   const { tree } = monterVolet({ ...MISSION, state: 'in-progress', updatedAt: MISSION.updated })
   const bouton = boutonLibre(tree)
-  assert.equal(bouton.props.className, 'missions-action')
+  assert.equal(bouton.props.className, 'missions-action missions-action--icon')
 
   // La classe suffit : le manga ne réécrit que `.missions-action` et le primaire.
   const manga = regle('.missions-panel[data-theme="manga"] .missions-action')
   assert.match(manga, /border: 1\.5px solid var\(--mm-ink\)/)
   assert.match(manga, /box-shadow: 2px 2px 0 var\(--mm-shadow\)/)
   assert.match(regle('.missions-panel[data-theme="manga"] .missions-action--primary'), /background: var\(--mm-ink\)/)
+})
+
+test('la rangée du pied aligne les icônes sur une seule ligne', () => {
+  const actions = regle('.missions-drawer-actions')
+  assert.match(actions, /display: flex/)
+  assert.match(actions, /flex-direction: row/)
+  assert.match(actions, /flex-wrap: wrap/)
+  assert.match(actions, /align-items: center/)
+  assert.match(actions, /gap: 6px/)
+
+  // L'icône est un carré de 34 px : la hauteur de la famille, sans texte.
+  const icone = regle('.missions-action--icon')
+  assert.match(icone, /width: 34px/)
+  assert.match(icone, /height: 34px/)
+  assert.match(icone, /padding: 0/)
+
+  // Le focus reste visible au clavier, et le manga garde son encre.
+  assert.match(regle('.missions-action:focus-visible'), /outline: 2px solid/)
+  assert.match(
+    regle('.missions-panel[data-theme="manga"] .missions-action:focus-visible'),
+    /outline-color: var\(--mm-ink\)/,
+  )
+
+  // Le pied empile deux choses seulement : la clôture textuelle et la rangée.
+  assert.match(regle('.missions-drawer-foot'), /flex-direction: column/)
+})
+
+test('chaque geste de la rangée ne porte que son icône, nommée', () => {
+  const { tree } = monterVolet({
+    ...MISSION,
+    state: 'in-review',
+    url: 'https://github.com/daedalforge/missions/issues/42',
+    updatedAt: MISSION.updated,
+  })
+  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+  const gestes = actions.children.filter((child) => child !== null && child !== false)
+  assert.deepEqual(gestes.map(nomDuGeste), [
+    'Open on the tracker',
+    'Check the PR feedback',
+    'Start a free session',
+    'Start a session — revue',
+  ])
+
+  for (const geste of gestes) {
+    assert.equal(textOf(geste), '', `${nomDuGeste(geste)} ne porte pas de texte visible`)
+    const icones = findAll(geste, 'svg')
+    assert.equal(icones.length, 1, `${nomDuGeste(geste)} porte une seule icône`)
+    assert.equal(icones[0].props['aria-hidden'], 'true', 'l’icône reste décorative')
+    assert.equal(geste.props.title, nomDuGeste(geste), `${nomDuGeste(geste)} garde le même nom en infobulle`)
+    assert.match(geste.props.className, /missions-action--icon/)
+  }
+  // La step session reste l'action primaire, et la dernière.
+  assert.match(gestes.at(-1).props.className, /missions-action--primary/)
+})
+
+test('la session bloquée dit pourquoi dans son infobulle, son nom ne change pas', () => {
+  const bloque = boutonSession(monterVolet({ ...MISSION, branch: null, base: null, updatedAt: MISSION.updated }).tree)
+  assert.equal(bloque.props.disabled, true)
+  assert.equal(bloque.props.title, 'branch is not declared, set it below or in the mission folder')
+  assert.equal(bloque.props['aria-label'], 'Start a session — exécution')
+  assert.equal(bloque.props['aria-describedby'], 'missions-session-blocked')
+
+  // Débloquée, l'infobulle reprend le libellé du geste.
+  const libre = boutonSession(monterVolet({ ...MISSION, updatedAt: MISSION.updated }).tree)
+  assert.equal(libre.props.title, 'Start a session — exécution')
+  assert.equal(libre.props['aria-describedby'], undefined)
 })
 
 test('le clic sur la session libre ouvre une session avec le prompt libre, sans envoi', async () => {
@@ -531,11 +624,11 @@ test('sans branche, la session libre reste active quand la session d’étape es
   const libre = boutonLibre(tree)
   assert.ok(libre, 'le bouton libre doit être rendu en cadrage sans branche')
   assert.equal(libre.props.disabled, false)
-  assert.equal(libre.props.title, 'Ask a question without playing the workflow step')
+  assert.equal(libre.props.title, 'Start a free session')
   assert.equal(libre.props['aria-describedby'], undefined)
 
   // L'étape, elle, reste fermée : la note du pied la concerne.
-  const session = findAll(tree, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+  const session = boutonSession(tree)
   assert.equal(session.props.disabled, true)
   assert.match(textOf(tree), /Session blocked: branch is not declared/)
 })
@@ -2758,13 +2851,20 @@ test('le volet ne propose la clôture locale qu’en ready-for-prod', () => {
   assert.equal(bouton.props.className, 'missions-action missions-action--danger')
   assert.equal(bouton.props.disabled, false)
   assert.equal(typeof bouton.props.onClick, 'function')
+  // Un geste destructeur garde son texte : c'est la confirmation au second clic,
+  // et une infobulle ne confirme pas.
+  assert.match(textOf(bouton), /close the local checkout/i)
+  assert.equal(findAll(bouton, 'svg').length, 0, 'la clôture ne devient pas une icône')
 
-  // Il est au-dessus de la session, qui reste le geste primaire en dernier.
-  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
-  const boutons = actions.children.filter((child) => child.type === 'button')
-  const iCloture = boutons.findIndex((node) => /close the local checkout/i.test(textOf(node).trim()))
-  const iSession = boutons.findIndex((node) => /^Start a session/.test(textOf(node).trim()))
-  assert.ok(iCloture >= 0 && iSession > iCloture)
+  // Il reste au-dessus de la rangée, dont la session est le dernier geste.
+  const foot = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-foot')
+  assert.ok(foot, 'le pied du volet est rendu')
+  const enfants = foot.children.filter((child) => child !== null && child !== false)
+  assert.equal(enfants[0].props.className, 'missions-action missions-action--danger')
+  assert.equal(enfants[1].props.className, 'missions-drawer-actions')
+  const boutons = enfants[1].children.filter((child) => child.type === 'button')
+  const iSession = boutons.findIndex((node) => /^Start a session/.test(nomDuGeste(node)))
+  assert.equal(iSession, boutons.length - 1, 'la session reste le dernier geste de la rangée')
 
   // Le câblage du bundle, en plus du rendu.
   assert.match(SOURCE, /const LOCAL_CLOSE_URL = 'missions\/api\/local-close'/)
@@ -3396,7 +3496,7 @@ test('chaque onglet du volet, la priorité et le tracker comptent un seul POST',
     priorite.props.onChange({ target: { value: 'urgent' } })
     spy.geste('mission.priority', 'urgent')
 
-    const tracker = findAll(inner, 'a').find((node) => textOf(node).trim() === 'Open on the tracker')
+    const tracker = findAll(inner, 'a').find((node) => node.props['aria-label'] === 'Open on the tracker')
     assert.ok(tracker, 'le lien du tracker est rendu')
     tracker.props.onClick()
     spy.geste('mission.open-tracker')
@@ -3428,8 +3528,8 @@ test('blocage, déclaration, session et remontées comptent un seul POST', async
 
     // En revue, les deux sessions : le pas courant et les remontées de la PR.
     const revue = monterVoletAvec({ ...MISSION, state: 'in-review' })
-    const session = findAll(revue.inner, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
-    const remontees = findAll(revue.inner, 'button').find((node) => textOf(node).trim() === 'Check the PR feedback')
+    const session = boutonSession(revue.inner)
+    const remontees = boutonGeste(revue.inner, 'Check the PR feedback')
     assert.ok(session, 'la session du pas est rendue')
     assert.ok(remontees, 'la session des remontées est rendue')
     await session.props.onClick().catch(() => {})
