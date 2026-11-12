@@ -37,11 +37,14 @@ client. `lib/client.js` est **généré** — éditer `src/client.template.js` e
 `lib/view.js`, puis `node tools/build.mjs`. Les helpers de `lib/view.js`
 (filtre, groupes, âge relatif) sont purs et testés sans DOM.
 
-Le panneau ne liste que les missions **ouvertes** par défaut. Une mission
-`done` — issue fermée sur GitHub, statut terminé sur Jira — n'apparaît que si
-elle a son dossier sur le poste (`missions/<clé>/mission.yml`) **et** que le
-filtre Statut la demande : c'est la seule porte vers une mission close. Sans
-dossier déclaré, elle n'est même pas lue.
+Le panneau a deux périmètres de lecture. **Missions** et le **Dashboard** ne
+lisent que les missions **ouvertes** : une mission `done` — issue fermée sur
+GitHub, statut terminé sur Jira — n'y entre jamais, même si un ancien filtre
+Statut la nommait. L'onglet **Done**, entre Missions et Repositories, est la
+seule porte vers les missions closes : il lit les `done` dont le dossier est
+déclaré sur le poste (`missions/<clé>/mission.yml`), avec sa propre barre de
+filtres et son propre cache. Sans dossier déclaré, aucune mission close n'est
+même lue ; l'onglet affiche « No done mission declared on this machine. ».
 
 ## Conventions
 

@@ -442,12 +442,65 @@ test('le journal et la checklist prennent la hauteur restante du volet', () => {
   assert.match(SOURCE, /\.missions-drawer--fill \.missions-journal-text, \.missions-drawer--fill \.missions-checklist-body \{ max-height: none; flex: 1; min-height: 0; \}/)
 })
 
-test('le bundle rend l’état done, en fin de liste et sur demande du filtre', () => {
+test('le bundle cantonne done à l’onglet Done, jamais à la liste ouverte', () => {
   assert.match(SOURCE, /const STATE_ORDER = \['in-progress', 'in-review', 'ready', 'to-refine', 'ready-for-prod', 'done'\]/)
   assert.match(SOURCE, /STATE_FILTER_ORDER = \['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'\]/)
   assert.match(SOURCE, /done: 'done'/)
-  // La liste par défaut n'en montre aucune : le filtre est la seule porte.
-  assert.match(SOURCE, /mission.state === 'done' && !states.includes\('done'\)/)
+  // Done est un onglet déclaré entre Missions et Repositories, pas un filtre.
+  assert.match(SOURCE, /\{ id: 'done', label: 'Done', source: 'tracker' \},/)
+  // La liste ouverte ne relit plus done, même si un filtre le nomme : seul le
+  // périmètre Done passe `allowDone`.
+  assert.match(SOURCE, /if \(!allowDone && mission\.state === 'done'\) return false/)
+  assert.match(SOURCE, /allowDone: doneTab/)
+  assert.match(SOURCE, /filterMissions\(activeMissions, \{ query: activeQuery, \.\.\.activeFilters, allowDone: doneTab \}\)/)
+  // Done lit les closes par son propre appel et dit son vide propre.
+  assert.match(SOURCE, /\?done=1/)
+  assert.match(SOURCE, /No done mission declared on this machine\./)
+})
+
+test('l’onglet Done rend sa liste, son vide et son statut figé', () => {
+  const doneMission = {
+    key: 'MIS-6', title: 'mission close', state: 'done', type: 'bug', priority: 'high',
+    project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z',
+  }
+  const states = (missions) => [
+    EMPTY_BAR,
+    dashboardView(DASH_MISSIONS.filter((mission) => mission.state !== 'done')),
+    'done',
+    '',
+    { ...EMPTY_BAR.filters },
+    null,
+    null,
+    'default',
+    null,
+    EMPTY_BAR,
+    { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' },
+    '',
+    { ...EMPTY_BAR.filters, state: ['done'] },
+    null,
+  ]
+
+  // Une liste mêlant ouverte et close : l’onglet Done ne garde que la close,
+  // même si le serveur lui servait un périmètre trop large.
+  const openMission = {
+    key: 'MIS-7', title: 'mission ouverte', state: 'in-review', type: 'story', priority: 'normal',
+    project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z',
+  }
+  const panel = monter(states([openMission, doneMission]))
+  const view = findAll(panel, 'MissionsView')[0]
+  assert.ok(view, 'l’onglet Done porte la même vue, nourrie par sa lecture')
+  assert.deepEqual(view.props.statusOptions, ['done'])
+  assert.equal(view.props.statusFixed, true)
+  assert.equal(view.props.emptyText, 'No done mission declared on this machine.')
+
+  const text = textOf(renderTree(panel))
+  assert.match(text, /mission close/)
+  assert.doesNotMatch(text, /mission ouverte/)
+  // Le statut est figé : pas de « All open states » dans une vue close.
+  assert.doesNotMatch(text, /All open states/)
+
+  const empty = textOf(renderTree(monter(states([]))))
+  assert.match(empty, /No done mission declared on this machine\./)
 })
 
 test('les erreurs du bandeau ont une clé unique par ligne', () => {
@@ -592,16 +645,19 @@ test('chaque carte porte un repère de priorité qui se lit sans la couleur', ()
   assert.ok(SOURCE.includes('.missions-prio .prio-bar, .missions-prio .prio-mark { fill: currentColor; }'))
 })
 
-test('le montage lit le cache ; seuls le bouton et le tick forcent', () => {
+test('le montage ne lit que l’ouvert ; Done paie sa lecture, le bouton et le tick forcent', () => {
   // Le panneau est remonté à chaque changement de vue : forcer au montage
   // paierait tout le trajet tracker à chaque retour sur Missions. Le cache
   // serveur de 60 s est lu ; le bouton Refresh et le tick de 60 s forcent.
   assert.match(SOURCE, /const load = React\.useCallback\(\(\{ silent = false, refresh = false \} = \{\}\) => \{/)
+  assert.match(SOURCE, /const loadDone = React\.useCallback\(\(\{ silent = false, refresh = false \} = \{\}\) => \{/)
   assert.match(SOURCE, /const url = refresh \? `\$\{LIST_URL\}\?refresh=1` : LIST_URL/)
-  // Le montage appelle load() sans option ; le tick et le bouton forcent.
-  assert.match(SOURCE, /React\.useEffect\(\(\) => \{\n\s+load\(\)\n\s+const timer = setInterval/)
-  assert.match(SOURCE, /load\(\{ silent: true, refresh: true \}\)/)
-  assert.match(SOURCE, /onClick: \(\) => load\(\{ refresh: true \}\)/)
+  assert.match(SOURCE, /const url = `\$\{LIST_URL\}\?done=1\$\{refresh \? '&refresh=1' : ''\}`/)
+  // Le montage n'appelle que load ; Done lit à l'ouverture de son onglet.
+  assert.match(SOURCE, /React\.useEffect\(\(\) => \{\n\s+load\(\)\n\s+\}, \[load\]\)/)
+  assert.match(SOURCE, /if \(tab !== 'done'\) return undefined\n\s+loadDone\(\)/)
+  assert.match(SOURCE, /if \(tab === 'done'\) loadDone\(\{ silent: true, refresh: true \}\)\n\s+else load\(\{ silent: true, refresh: true \}\)/)
+  assert.match(SOURCE, /doneTab \? loadDone\(\{ refresh: true \}\) : load\(\{ refresh: true \}\)/)
   // Aucun autre appel ne force : le seul refresh=1 est derrière `refresh`.
   assert.equal((SOURCE.match(/\?refresh=1/g) ?? []).length, 1)
 })
@@ -805,9 +861,11 @@ test('la source d’un onglet est déclarée dans TABS, pas recopiée', () => {
   // L'ajout d'un onglet (MIS-116) ne doit pas obliger à réécrire les conditions.
   assert.match(SOURCE, /\{ id: 'dashboard', label: 'Dashboard', source: 'tracker' \},/)
   assert.match(SOURCE, /\{ id: 'missions', label: 'Missions', source: 'tracker', badge: true \},/)
+  assert.match(SOURCE, /\{ id: 'done', label: 'Done', source: 'tracker' \},/)
   assert.match(SOURCE, /\{ id: 'workflows', label: 'Workflows', source: 'files' \},/)
   assert.match(SOURCE, /const tabSource = TABS\.find/)
-  assert.match(SOURCE, /const failed = errors\.length > 0/)
+  assert.match(SOURCE, /const activeErrors = doneTab \? doneView\.errors : errors/)
+  assert.match(SOURCE, /const failed = activeErrors\.length > 0/)
   // Le bandeau et le bouton ne se décident plus sur un id d'onglet.
   assert.doesNotMatch(SOURCE, /tab === 'missions' && errors/)
 })
@@ -1290,9 +1348,10 @@ test('le panneau relit la barre de la session au montage', () => {
   api.apply(ctx)
 
   assert.doesNotThrow(() => registered.main({}))
-  // Deux lectures au montage, dans cet ordre : la barre, puis l'onglet. Le
-  // montage reprend la session telle qu'elle a été laissée.
-  assert.deepEqual(reads, ['missions.filters', 'missions.tab'])
+  // Trois lectures au montage, dans cet ordre : la barre ouverte, l'onglet,
+  // puis la barre de Done. Le montage reprend la session telle qu'elle a été
+  // laissée, sans jamais mélanger les deux périmètres.
+  assert.deepEqual(reads, ['missions.filters', 'missions.tab', 'missions.filters.done'])
 })
 
 test('une barre corrompue ou un stockage en panne ne casse pas le montage', () => {
@@ -1313,15 +1372,22 @@ test('la barre est restaurée au montage et réécrite à chaque changement', ()
   // La barre vit dans la session : une seule clé, lue au montage, réécrite par
   // l'effet dès que la recherche, un filtre ou le tri change.
   assert.match(SOURCE, /FILTERS_KEY = 'missions\.filters'/)
+  assert.match(SOURCE, /DONE_FILTERS_KEY = 'missions\.filters\.done'/)
   assert.match(SOURCE, /function filterStorage\(\) \{\s+try \{\s+return typeof sessionStorage === 'undefined' \? null : sessionStorage/)
   assert.match(SOURCE, /const \[restored\] = React\.useState\(\(\) => filterBarState\(readFilterSnapshot\(filterStorage\(\)\)\)\)/)
   assert.match(SOURCE, /const \[query, setQuery\] = React\.useState\(restored\.query\)/)
   assert.match(SOURCE, /const \[filters, setFilters\] = React\.useState\(restored\.filters\)/)
   assert.match(SOURCE, /const \[sort, setSort\] = React\.useState\(restored\.sort\)/)
+  // Done a sa propre clé, relue avec son périmètre.
+  assert.match(SOURCE, /const \[doneRestored\] = React\.useState\(\(\) => filterBarState\(readFilterSnapshot\(filterStorage\(\), DONE_FILTERS_KEY, \{ allowDone: true \}\), \{ allowDone: true \}\)\)/)
+  assert.match(SOURCE, /const \[doneFilters, setDoneFilters\] = React\.useState\(\{ \.\.\.doneRestored\.filters, state: \['done'\] \}\)/)
   assert.match(SOURCE, /writeFilterSnapshot\(filterStorage\(\), \{ query, filters, sort \}\)/)
+  assert.match(SOURCE, /writeFilterSnapshot\(filterStorage\(\), \{ query: doneQuery, filters: doneFilters, sort: doneSort \}, DONE_FILTERS_KEY, \{ allowDone: true \}\)/)
   assert.match(SOURCE, /\}, \[query, filters, sort\]\)/)
-  // `Clear` rend un objet neuf : il vide les filtres sans partager l'état vide.
-  assert.match(SOURCE, /const onClear = \(\) => setFilters\(\{ \.\.\.EMPTY_FILTERS \}\)/)
+  // `Clear` rend un objet neuf : il vide les filtres sans partager l'état vide,
+  // et garde le statut fixé de Done dans son propre périmètre.
+  assert.match(SOURCE, /if \(doneTab\) setDoneFilters\(\{ \.\.\.EMPTY_FILTERS, state: \['done'\] \}\)/)
+  assert.match(SOURCE, /else setFilters\(\{ \.\.\.EMPTY_FILTERS \}\)/)
   // Aucune clé de barre dans localStorage : elle ne survit pas à l'app.
   assert.doesNotMatch(SOURCE, /localStorage\.(?:get|set)Item\(FILTERS_KEY/)
 })
@@ -1621,8 +1687,9 @@ const REPO_SCAN = {
 }
 
 /**
- * Les neuf états du panneau, dans l'ordre de ses hooks, puis celui que la vue
- * de l'onglet consomme au montage : `useState` les prend dans cet ordre.
+ * Les états du panneau, dans l'ordre de ses hooks — dont ceux, propres, de
+ * l'onglet Done — puis celui que la vue de l'onglet consomme au montage :
+ * `useState` les prend dans cet ordre.
  */
 function repositoriesStates(view, repository = null) {
   return [
@@ -1635,6 +1702,11 @@ function repositoriesStates(view, repository = null) {
     null,
     'default',
     repository,
+    EMPTY_BAR,
+    { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null },
+    '',
+    { ...EMPTY_BAR.filters, state: ['done'] },
+    null,
     view,
   ]
 }
@@ -1654,15 +1726,16 @@ function montrerRepositories(view, repository = null) {
   return { tree, node, inner: renderTree(node), effects, setters }
 }
 
-test('la barre d’onglets place Repositories entre Missions et Workflows', () => {
+test('la barre d’onglets place Done et Repositories entre Missions et Workflows', () => {
   assert.match(SOURCE, /const REPOSITORIES_URL = 'missions\/api\/repositories'/)
   assert.match(SOURCE, /const REPOSITORY_URL = 'missions\/api\/repositories\/detail'/)
 
-  // L'onglet est une entrée de la même barre, pas une vue à part : il passe
-  // par le même câblage, et la même session le mémorise.
+  // Les onglets sont des entrées de la même barre, pas des vues à part : ils
+  // passent par le même câblage, et la même session les mémorise.
   const start = SOURCE.indexOf('const TABS = [')
   const tabs = SOURCE.slice(start, SOURCE.indexOf(']', start))
-  assert.ok(tabs.indexOf("'missions'") < tabs.indexOf("'repositories'"))
+  assert.ok(tabs.indexOf("'missions'") < tabs.indexOf("'done'"))
+  assert.ok(tabs.indexOf("'done'") < tabs.indexOf("'repositories'"))
   assert.ok(tabs.indexOf("'repositories'") < tabs.indexOf("'workflows'"))
 
   const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'repositories' }))
@@ -1673,13 +1746,50 @@ test('la barre d’onglets place Repositories entre Missions et Workflows', () =
   assert.match(textOf(tree), /Select a repository to see its remote/)
 })
 
+test('ouvrir Done lit les closes une fois, sans toucher à la liste ouverte', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(url)
+    return { json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  try {
+    // Onglet Missions : le montage lit l'ouvert, l'effet de Done ne lit rien.
+    const ouvert = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'missions' }))
+    ouvert.api.apply(ouvert.ctx)
+    ouvert.registered.main({})
+    const montageOuvert = ouvert.effects.find((effect) => effect.deps?.length === 1 && typeof effect.deps[0] === 'function')
+    const doneOuvert = ouvert.effects.find((effect) => effect.deps?.length === 2 && typeof effect.deps[1] === 'function')
+    montageOuvert.fn()
+    doneOuvert.fn()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.deepEqual(appels, ['missions/api/list'])
+    assert.equal(doneOuvert.deps[0], 'missions')
+
+    // Onglet Done : les mêmes effets ne lisent que les closes.
+    appels.length = 0
+    const done = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'done' }))
+    done.api.apply(done.ctx)
+    done.registered.main({})
+    const montageDone = done.effects.find((effect) => effect.deps?.length === 1 && typeof effect.deps[0] === 'function')
+    const doneEffect = done.effects.find((effect) => effect.deps?.length === 2 && typeof effect.deps[1] === 'function')
+    montageDone.fn()
+    doneEffect.fn()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.deepEqual(appels, ['missions/api/list', 'missions/api/list?done=1'])
+    assert.equal(doneEffect.deps[0], 'done')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
 test('un clic sur l’onglet Repositories bascule le panneau et ferme le volet', () => {
   const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
   api.apply(ctx)
   const tree = registered.main({})
 
   const boutons = findAll(tree, 'button').filter((button) => button.props.role === 'tab')
-  assert.equal(boutons.length, 4, 'Dashboard, Missions, Repositories, Workflows')
+  assert.equal(boutons.length, 5, 'Dashboard, Missions, Done, Repositories, Workflows')
   const bouton = boutons.find((button) => button.props.id === 'missions-tab-repositories')
   assert.ok(bouton, 'l’onglet a un identifiant stable')
   assert.equal(bouton.props['aria-selected'], 'false')

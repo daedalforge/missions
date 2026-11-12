@@ -120,7 +120,42 @@ test('une mission done sans dossier déclaré n’est pas listée', async () => 
   assert.deepEqual(missions.map((m) => m.key), ['SO-2'])
 })
 
-test('une mission done déclarée sur le poste est relue, les autres restent closes', async () => {
+test('le périmètre ouvert et le périmètre done ont chacun leur cache', async () => {
+  let ouvertes = 0
+  let closes = 0
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    if (href.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    if (href.includes('state=closed')) {
+      closes += 1
+      return response([{ number: 9, state: 'closed', title: 'Close', labels: [] }])
+    }
+    ouvertes += 1
+    return response([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
+  }
+
+  const ouvert = await listAll([PROJECT_OK], { fetchImpl })
+  assert.deepEqual(ouvert.missions.map((m) => m.key), ['MIS-2'])
+
+  // Entrer dans Done ne relit pas l'ouvert et ne le sert pas non plus.
+  const done = await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']), scope: 'done' })
+  assert.deepEqual(done.missions.map((m) => m.key), ['MIS-9'])
+  assert.deepEqual([ouvertes, closes], [1, 1])
+
+  // Rejouer chaque périmètre lit son propre cache : aucun troisième appel.
+  await listAll([PROJECT_OK], { fetchImpl })
+  await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']), scope: 'done' })
+  assert.deepEqual([ouvertes, closes], [1, 1])
+})
+
+test('un périmètre inconnu est refusé, pas deviné', async () => {
+  await assert.rejects(
+    () => listAll([PROJECT_OK], { fetchImpl: routeIssues([]), scope: 'closed' }),
+    /unknown scope: closed/,
+  )
+})
+
+test('une mission done déclarée se lit sur le périmètre done, les autres restent closes', async () => {
   const requested = []
   const fetchImpl = async (url) => {
     const href = String(url)
@@ -137,12 +172,17 @@ test('une mission done déclarée sur le poste est relue, les autres restent clo
     return response([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
   }
 
-  const { missions, errors } = await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']) })
+  // Le périmètre ouvert ne lit jamais done, même avec des clés déclarées.
+  const ouvert = await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']) })
+  assert.deepEqual(ouvert.errors, [])
+  assert.deepEqual(ouvert.missions.map((m) => m.key), ['MIS-2'])
+  assert.equal(requested.filter((href) => href.includes('state=closed')).length, 0)
 
-  assert.deepEqual(errors, [])
-  // Le tri range par état : done vient avant ready.
-  assert.deepEqual(missions.map((m) => m.key), ['MIS-9', 'MIS-2'])
-  const closed = missions.find((m) => m.key === 'MIS-9')
+  // Le périmètre done rend la close déclarée, et elle seule.
+  const done = await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']), scope: 'done' })
+  assert.deepEqual(done.errors, [])
+  assert.deepEqual(done.missions.map((m) => m.key), ['MIS-9'])
+  const closed = done.missions.find((m) => m.key === 'MIS-9')
   assert.equal(closed.state, 'done')
   assert.deepEqual(closed.stateConflict, [])
   assert.equal(requested.filter((href) => href.includes('state=closed')).length, 1)
@@ -157,13 +197,16 @@ test('sans dossier déclaré, les missions closes ne sont jamais lues', async ()
     return response([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
   }
 
-  const { missions } = await listAll([PROJECT_OK], { fetchImpl })
+  const ouvert = await listAll([PROJECT_OK], { fetchImpl })
+  assert.deepEqual(ouvert.missions.map((m) => m.key), ['MIS-2'])
 
-  assert.deepEqual(missions.map((m) => m.key), ['MIS-2'])
+  const done = await listAll([PROJECT_OK], { fetchImpl, scope: 'done' })
+  assert.deepEqual(done.missions, [])
+  assert.deepEqual(done.errors, [])
   assert.equal(requested.filter((href) => href.includes('state=closed')).length, 0)
 })
 
-test('un échec de la lecture des done n’efface pas les missions ouvertes', async () => {
+test('un échec de la lecture des done reste sur son périmètre, la liste ouverte survit', async () => {
   const fetchImpl = async (url) => {
     const href = String(url)
     if (href.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
@@ -173,14 +216,21 @@ test('un échec de la lecture des done n’efface pas les missions ouvertes', as
     return response([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
   }
 
-  const { missions, errors } = await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']) })
+  const ouvert = await listAll([PROJECT_OK], { fetchImpl })
+  assert.deepEqual(ouvert.missions.map((m) => m.key), ['MIS-2'])
+  assert.deepEqual(ouvert.errors, [])
 
-  assert.deepEqual(missions.map((m) => m.key), ['MIS-2'])
-  assert.equal(errors.length, 1)
-  assert.match(errors[0].message, /done missions/)
+  const done = await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']), scope: 'done' })
+  assert.deepEqual(done.missions, [])
+  assert.equal(done.errors.length, 1)
+  assert.match(done.errors[0].message, /done missions/)
+
+  // L'échec n'empoisonne pas le cache ouvert : on le relit intact.
+  const encore = await listAll([PROJECT_OK], { fetchImpl })
+  assert.deepEqual(encore.missions.map((m) => m.key), ['MIS-2'])
 })
 
-test('une mission Jira done déclarée est relue par sa clé', async () => {
+test('une mission Jira done déclarée est relue par sa clé, sur le périmètre done', async () => {
   const fetchImpl = async (url) => {
     if (String(url).endsWith('/myself')) return response({ accountId: 'me' })
     return response({
@@ -191,11 +241,13 @@ test('une mission Jira done déclarée est relue par sa clé', async () => {
     })
   }
 
-  const { missions, errors } = await listAll([PROJECT_JIRA], { fetchImpl, declaredKeys: new Set(['SO-1', 'SO-77']) })
+  const ouvert = await listAll([PROJECT_JIRA], { fetchImpl })
+  assert.deepEqual(ouvert.missions.map((m) => m.key), ['SO-3'])
 
-  assert.deepEqual(errors, [])
-  assert.deepEqual(missions.map((m) => m.key).sort(), ['SO-1', 'SO-3'])
-  assert.equal(missions.find((m) => m.key === 'SO-1').state, 'done')
+  const done = await listAll([PROJECT_JIRA], { fetchImpl, declaredKeys: new Set(['SO-1', 'SO-77']), scope: 'done' })
+  assert.deepEqual(done.errors, [])
+  assert.deepEqual(done.missions.map((m) => m.key), ['SO-1'])
+  assert.equal(done.missions.find((m) => m.key === 'SO-1').state, 'done')
 })
 
 test('two state labels leave the state unknown and raise a project error', async () => {

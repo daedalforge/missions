@@ -213,9 +213,12 @@ window.__ModuleLoader__.load({
     // Each tab declares what it reads: the tracker tabs share one read, so one
     // failure speaks for both; the workflows tab reads its own files and never
     // wears the tracker's banner. `badge` marks the tab that carries the count.
+    // Done reads the tracker too, but in its own perimeter: closed missions the
+    // machine declares, with a bar and a read of their own.
     const TABS = [
       { id: 'dashboard', label: 'Dashboard', source: 'tracker' },
       { id: 'missions', label: 'Missions', source: 'tracker', badge: true },
+      { id: 'done', label: 'Done', source: 'tracker' },
       // The repositories tab reads the host, not the tracker: it declares its
       // own source, so it never wears the tracker's banner.
       { id: 'repositories', label: 'Repositories', source: 'host' },
@@ -1401,16 +1404,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               ),
               // « All » is the absence of a filter, not the list of the values
               // known today: a value that appears tomorrow must not be filtered
-              // out by a bar saved yesterday.
-              h('div', { className: 'missions-status-actions' },
-                h('button', { type: 'button', onClick: () => onChange(null) }, allLabel),
-              ),
+              // out by a bar saved yesterday. A fixed filter (Done's status)
+              // passes no label: there is nothing to clear.
+              allLabel
+                ? h('div', { className: 'missions-status-actions' },
+                    h('button', { type: 'button', onClick: () => onChange(null) }, allLabel),
+                  )
+                : null,
             )
           : null,
       )
     }
 
-    function StatusFilter({ missions, value, onChange }) {
+    function StatusFilter({ missions, value, options, allLabel = 'All open states', onChange }) {
       const counts = {}
       for (const mission of missions) {
         const state = STATE_ORDER.includes(mission.state) ? mission.state : 'unknown'
@@ -1419,10 +1425,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       return h(ChecklistFilter, {
         label: 'Status',
         value,
-        options: stateOptions(missions),
+        options: options ?? stateOptions(missions),
         labels: STATE_LABELS,
         counts,
-        allLabel: 'All open states',
+        allLabel,
         onChange,
       })
     }
@@ -1498,7 +1504,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * panel's banner speaks for it — and the icon is gone, since the banner
      * carries the retry.
      */
-    function MissionsView({ missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme, loading, failed, onRefresh }) {
+    function MissionsView({ missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme, loading, failed, onRefresh, statusOptions, statusFixed = false, emptyText = 'No open missions assigned to you.' }) {
       const epics = epicOptions(missions)
       const projects = projectOptions(missions)
       const active = hasActiveFilters(filters)
@@ -1534,7 +1540,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           h(StatusFilter, {
             missions,
             value: filters.state,
-            onChange: (value) => onFilter('state', value),
+            options: statusOptions,
+            allLabel: statusFixed ? null : 'All open states',
+            onChange: statusFixed ? () => {} : (value) => onFilter('state', value),
           }),
           h(FilterSelect, { label: 'Type', value: filters.type, options: TYPE_OPTIONS, onChange: (value) => onFilter('type', value) }),
           h(FilterSelect, { label: 'Epic', value: filters.epic, options: epics, onChange: (value) => onFilter('epic', value) }),
@@ -1567,15 +1575,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         return h('div', null, toolbar)
       }
       if (missions.length === 0) {
-        return h('div', null, toolbar, h('p', { className: 'missions-empty' }, 'No open missions assigned to you.'))
+        return h('div', null, toolbar, h('p', { className: 'missions-empty' }, emptyText))
       }
       if (filtered.length === 0) {
-        // The list rests on open work: with no filter set, an empty list means
-        // there is nothing open — not that a filter excluded everything.
+        // The list rests on its own read: with no filter set, an empty list
+        // means there is nothing to show — not that a filter excluded
+        // everything.
         const resting = !hasActiveFilters(filters) && String(query ?? '').trim() === ''
         return h('div', null, toolbar, theme === 'manga' && !resting
           ? h(MangaEmpty, { onClear })
-          : h('p', { className: 'missions-empty' }, resting ? 'No open missions assigned to you.' : 'No mission matches these filters.'))
+          : h('p', { className: 'missions-empty' }, resting ? emptyText : 'No mission matches these filters.'))
       }
 
       return h('div', null,
@@ -2885,11 +2894,26 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // The repository whose drawer is open, and only while the repositories
       // tab is the open one: the tab switch below clears it.
       const [repository, setRepository] = React.useState(null)
+      // Done is a view of its own: its own bar, its own rows, its own failures.
+      // These states come after the open list's so the order above — and the
+      // session each state restores — does not move.
+      const [doneRestored] = React.useState(() => filterBarState(readFilterSnapshot(filterStorage(), DONE_FILTERS_KEY, { allowDone: true }), { allowDone: true }))
+      const [doneView, setDoneView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
+      const [doneQuery, setDoneQuery] = React.useState(doneRestored.query)
+      // The status of Done is not a choice: the view is closed work, and its bar
+      // fixes the value instead of offering the other states.
+      const [doneFilters, setDoneFilters] = React.useState({ ...doneRestored.filters, state: ['done'] })
+      const [doneSort, setDoneSort] = React.useState(doneRestored.sort)
 
       // One write per change, the clear included: an empty bar drops its key.
       React.useEffect(() => {
         writeFilterSnapshot(filterStorage(), { query, filters, sort })
       }, [query, filters, sort])
+
+      // Done keeps its own key, and its snapshot accepts the fixed status.
+      React.useEffect(() => {
+        writeFilterSnapshot(filterStorage(), { query: doneQuery, filters: doneFilters, sort: doneSort }, DONE_FILTERS_KEY, { allowDone: true })
+      }, [doneQuery, doneFilters, doneSort])
 
       // The resting tab drops its key, so an untouched session stores nothing.
       React.useEffect(() => {
@@ -2921,24 +2945,70 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           })
       }, [])
 
+      // The closed read has its own perimeter and its own cache: `?done=1` asks
+      // the server for the declared closed missions, and refresh keeps that
+      // perimeter too instead of mixing it with the open list.
+      const loadDone = React.useCallback(({ silent = false, refresh = false } = {}) => {
+        if (!silent) setDoneView((previous) => ({ ...previous, loading: true }))
+        const url = `${LIST_URL}?done=1${refresh ? '&refresh=1' : ''}`
+        return fetch(url, { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.error) throw new Error(data.error)
+            setDoneView({ loading: false, missions: data?.missions ?? [], errors: data?.errors ?? [], workspaceId: data?.workspaceId ?? null, workspaceRoot: data?.workspaceRoot ?? null })
+          })
+          .catch((error) => {
+            setDoneView((previous) => ({
+              loading: false,
+              workspaceId: previous.workspaceId,
+              workspaceRoot: previous.workspaceRoot,
+              missions: silent ? previous.missions : [],
+              errors: [{ project: 'panel', message: error?.message ?? 'read failed' }],
+            }))
+          })
+      }, [])
+
       React.useEffect(() => {
         load()
-        const timer = setInterval(() => {
-          if (!document.hidden) load({ silent: true, refresh: true })
-        }, REFRESH_MS)
-        return () => clearInterval(timer)
       }, [load])
 
+      // Opening Done pays the closed read once; the server caches it for 60 s.
+      // The panel never reads closed work at mount, whichever tab it lands on.
+      React.useEffect(() => {
+        if (tab !== 'done') return undefined
+        loadDone()
+        return undefined
+      }, [tab, loadDone])
+
+      // The tick keeps the perimeter of the open tab: Done refreshes the closed
+      // read, the other tracker tabs refresh the open one.
+      React.useEffect(() => {
+        const timer = setInterval(() => {
+          if (document.hidden) return
+          if (tab === 'done') loadDone({ silent: true, refresh: true })
+          else load({ silent: true, refresh: true })
+        }, REFRESH_MS)
+        return () => clearInterval(timer)
+      }, [load, loadDone, tab])
+
       const { loading, missions, errors, workspaceId, workspaceRoot } = view
-      // One read feeds every tracker tab: Dashboard and Missions share this
+      // Done is a perimeter, not a tab looking at the open list: its rows, its
+      // failures and its loading come from its own read. The client keeps the
+      // promise too — a stale or mixed payload never shows an open mission here.
+      const doneTab = tab === 'done'
+      const doneMissions = doneView.missions.filter((mission) => mission.state === 'done')
+      const activeMissions = doneTab ? doneMissions : missions
+      const activeErrors = doneTab ? doneView.errors : errors
+      const activeLoading = doneTab ? doneView.loading : loading
+      // One read feeds every open tracker tab: Dashboard and Missions share this
       // list, so they share its failure too. Workflows reads its own files and
       // never wears the tracker's banner. The source comes from TABS, so a new
       // tab declares what it reads instead of copying a condition.
       const tabSource = TABS.find((entry) => entry.id === tab)?.source ?? 'tracker'
       const trackerTab = tabSource === 'tracker'
-      const failed = errors.length > 0
-      // The header and the tab badge count open work: a done mission the
-      // state filter can show is history, not a mission waiting on anyone.
+      const failed = activeErrors.length > 0
+      // The header and the tab badge count open work: a done mission the Done
+      // view shows is history, not a mission waiting on anyone.
       const openMissions = missions.filter((mission) => mission.state !== 'done')
       const projectCount = new Set(openMissions.map((mission) => mission.project).filter(Boolean)).size
       const changeTheme = (value) => {
@@ -2950,6 +3020,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // full reload so the drawer and the session gate see the new values.
       const applyDeclaration = (saved) => {
         setView((previous) => ({
+          ...previous,
+          missions: previous.missions.map((mission) => (
+            mission.key === saved.key
+              ? { ...mission, folder: saved.folder, branch: saved.branch, base: saved.base }
+              : mission
+          )),
+        }))
+        // The Done view is a second copy of the same rows: a save made from
+        // its drawer must not leave its own list stale.
+        setDoneView((previous) => ({
           ...previous,
           missions: previous.missions.map((mission) => (
             mission.key === saved.key
@@ -2972,6 +3052,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             mission.key === saved.key ? { ...mission, priority: saved.priority } : mission
           )),
         }))
+        setDoneView((previous) => ({
+          ...previous,
+          missions: previous.missions.map((mission) => (
+            mission.key === saved.key ? { ...mission, priority: saved.priority } : mission
+          )),
+        }))
         setSelected((previous) => (
           previous && previous.key === saved.key ? { ...previous, priority: saved.priority } : previous
         ))
@@ -2984,10 +3070,21 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         ),
         h('div', { className: 'missions-hero-avatar' }, h('img', { src: ART.avatar, alt: '' })),
       ) : null
-      const filtered = filterMissions(missions, { query, ...filters })
-      const groups = groupByState(sortMissions(filtered, sort))
-      const onFilter = (key, value) => setFilters((previous) => ({ ...previous, [key]: value }))
-      const onClear = () => setFilters({ ...EMPTY_FILTERS })
+      const activeQuery = doneTab ? doneQuery : query
+      const activeFilters = doneTab ? doneFilters : filters
+      const activeSort = doneTab ? doneSort : sort
+      // Done keeps closed rows, so it is the only view that passes `allowDone`.
+      const filtered = filterMissions(activeMissions, { query: activeQuery, ...activeFilters, allowDone: doneTab })
+      const groups = groupByState(sortMissions(filtered, activeSort))
+      const onFilter = (key, value) => {
+        if (doneTab) setDoneFilters((previous) => ({ ...previous, [key]: value, state: ['done'] }))
+        else setFilters((previous) => ({ ...previous, [key]: value }))
+      }
+      const onClear = () => {
+        // Done's status is fixed: clearing keeps the view's perimeter.
+        if (doneTab) setDoneFilters({ ...EMPTY_FILTERS, state: ['done'] })
+        else setFilters({ ...EMPTY_FILTERS })
+      }
 
       // A widget's link opens the list on exactly the rows the widget showed:
       // its states, its type, its priority — no search, no order, no other
@@ -3049,14 +3146,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
         trackerTab && failed
           ? h('div', { className: 'missions-errors', role: 'alert' },
-              errors.map((error, index) => h('div', { className: 'missions-error', key: `${error.project}-${index}` },
+              activeErrors.map((error, index) => h('div', { className: 'missions-error', key: `${error.project}-${index}` },
                 h('b', null, error.project),
                 h('span', null, error.message),
               )),
               h('button', {
                 type: 'button',
                 className: 'missions-retry',
-                onClick: () => load({ refresh: true }),
+                onClick: () => (doneTab ? loadDone({ refresh: true }) : load({ refresh: true })),
               }, 'Retry'),
             )
           : null,
@@ -3072,6 +3169,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               ? h(WorkflowsView, null)
               : tab === 'repositories'
               ? h(RepositoriesView, { theme, onOpen: setRepository })
+              : tab === 'done'
+              ? h(MissionsView, {
+                  missions: doneMissions, query: doneQuery, onQuery: setDoneQuery, filters: doneFilters, onFilter, onClear, sort: doneSort, onSort: setDoneSort,
+                  filtered, groups, onSelect: setSelected, theme, loading: doneView.loading, failed,
+                  onRefresh: () => loadDone({ refresh: true }),
+                  statusOptions: ['done'], statusFixed: true,
+                  emptyText: 'No done mission declared on this machine.',
+                })
               : tab === 'dashboard'
               ? h(DashboardView, {
                   missions,
