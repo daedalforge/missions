@@ -1,0 +1,30 @@
+# system.example.yml — gabarit du fichier propre à chaque système.
+#
+# Copier ce fichier en `system.yml` sur le poste : setup.mjs le fait lui-même
+# au premier lancement. `system.yml` n'est jamais versionné ; seul ce gabarit
+# l'est.
+#
+# Un plugin est un module `init-<nom>.el` :
+#   load: true      le module est chargé au démarrage ;
+#   load: false     le module n'est pas chargé ;
+#   install: true   le paquet Emacs du module est installé s'il manque ;
+#   install: false  le paquet n'est pas installé par setup.mjs (défaut).
+#
+# `install` n'a de sens que pour les quatre plugins qui portent un paquet :
+# markdown (markdown-mode), latex (auctex), projectile (projectile) et magit
+# (magit). Les cinq autres sont natifs et refusent `install`.
+#
+# Le fichier est validé avant toute génération : un plugin inconnu, un plugin
+# retiré ou une valeur non booléenne fait échouer setup.mjs. Après modification,
+# relancer `node setup.mjs` : le YAML n'est pas lu au démarrage d'Emacs.
+
+plugins:
+  ui:         { load: true }
+  editing:    { load: true }
+  crypto:     { load: true }
+  markdown:   { load: true,  install: true }
+  latex:      { load: true,  install: true }
+  completion: { load: true }
+  projectile: { load: true,  install: true }
+  magit:      { load: true,  install: true }
+  machete:    { load: true }
