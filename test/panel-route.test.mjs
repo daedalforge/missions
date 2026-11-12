@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createServer, request } from 'node:http'
 import { join } from 'node:path'
@@ -1259,4 +1259,133 @@ test('POST local-close valide la clé, le projet et la méthode', async (t) => {
   const wrongMethod = await call(handler, { path: '/missions/api/local-close' })
   assert.equal(wrongMethod.status, 405)
   assert.equal(wrongMethod.headers.allow, 'POST')
+})
+
+// ---------------------------------------------------------------------------
+// Le relevé d'usage : deux routes, un fichier local, jamais un tracker.
+
+test('GET du relevé ne crée pas le fichier et répond un relevé vide', async (t) => {
+  const usageFile = join(await mkdtemp(join(tmpdir(), 'missions-usage-route-')), 'usage.json')
+  const { handler } = await mount(t, { usageFile })
+
+  const response = await call(handler, { path: '/missions/api/usage' })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body.broken, false)
+  assert.equal(response.body.startedAt, null)
+  assert.deepEqual(response.body.elements, {})
+  assert.equal(response.headers['cache-control'], 'no-store')
+  await assert.rejects(access(usageFile), { code: 'ENOENT' })
+})
+
+test('POST compte un geste, le relit, et n’appelle ni git ni le tracker', async (t) => {
+  const calls = []
+  const usageDir = await mkdtemp(join(tmpdir(), 'missions-usage-route-'))
+  const usageFile = join(usageDir, 'nested', 'usage.json')
+  const { handler } = await mount(t, {
+    usageFile,
+    fetchImpl: async (url) => { calls.push(String(url)); throw new Error('aucun appel réseau attendu') },
+    runGit: () => { throw new Error('aucun git attendu') },
+  })
+
+  const written = await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'tab.missions' } })
+  assert.equal(written.status, 200)
+  assert.deepEqual(written.body, { element: 'tab.missions', count: 1 })
+
+  const read = await call(handler, { path: '/missions/api/usage' })
+  const entry = read.body.elements['tab.missions']
+  assert.equal(entry.count, 1)
+  assert.match(entry.lastUsed, /^\d{4}-\d{2}-\d{2}T/)
+  assert.equal(entry.lastUsed, entry.firstUsed)
+  assert.deepEqual(entry.values, {})
+  assert.deepEqual(calls, [])
+
+  // Le dossier manquant est créé : un premier geste peut être la première
+  // écriture sous `storages/`.
+  await access(join(usageDir, 'nested'))
+})
+
+test('POST retient le détail d’un geste, et deux gestes font deux', async (t) => {
+  const usageFile = join(await mkdtemp(join(tmpdir(), 'missions-usage-route-')), 'usage.json')
+  const { handler } = await mount(t, { usageFile })
+
+  await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'filter.state', detail: 'ready' } })
+  await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'filter.state', detail: 'ready' } })
+
+  const read = await call(handler, { path: '/missions/api/usage' })
+  assert.equal(read.body.elements['filter.state'].count, 2)
+  assert.deepEqual(read.body.elements['filter.state'].values, { ready: 2 })
+})
+
+test('POST d’un identifiant inconnu répond 400 et n’écrit rien', async (t) => {
+  const usageFile = join(await mkdtemp(join(tmpdir(), 'missions-usage-route-')), 'usage.json')
+  const { handler } = await mount(t, { usageFile })
+
+  const response = await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'tab.nope' } })
+
+  assert.equal(response.status, 400)
+  assert.match(response.body.error, /unknown element: tab\.nope/)
+  await assert.rejects(access(usageFile), { code: 'ENOENT' })
+})
+
+test('POST sans élément ou avec un détail invalide répond 400 sans rien écrire', async (t) => {
+  const usageFile = join(await mkdtemp(join(tmpdir(), 'missions-usage-route-')), 'usage.json')
+  const { handler } = await mount(t, { usageFile })
+
+  const missing = await call(handler, { method: 'POST', path: '/missions/api/usage', body: {} })
+  assert.equal(missing.status, 400)
+  assert.match(missing.body.error, /element is missing/)
+
+  const notAString = await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'tab.done', detail: 42 } })
+  assert.equal(notAString.status, 400)
+  assert.match(notAString.body.error, /detail must be a string/)
+
+  const tooLong = await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'tab.done', detail: 'x'.repeat(65) } })
+  assert.equal(tooLong.status, 400)
+  assert.match(tooLong.body.error, /longer than 64/)
+
+  const control = await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'tab.done', detail: 'bad\u0007detail' } })
+  assert.equal(control.status, 400)
+  assert.match(control.body.error, /control characters/)
+
+  const empty = await call(handler, { method: 'POST', path: '/missions/api/usage', raw: '' })
+  assert.equal(empty.status, 400)
+  assert.match(empty.body.error, /empty request body/)
+
+  const invalid = await call(handler, { method: 'POST', path: '/missions/api/usage', raw: '{ not json' })
+  assert.equal(invalid.status, 400)
+  assert.match(invalid.body.error, /invalid JSON body/)
+
+  await assert.rejects(access(usageFile), { code: 'ENOENT' })
+})
+
+test('la route du relevé refuse les autres méthodes et les origines distantes', async (t) => {
+  const usageFile = join(await mkdtemp(join(tmpdir(), 'missions-usage-route-')), 'usage.json')
+  const { handler } = await mount(t, { usageFile })
+
+  const refused = await call(handler, { method: 'PUT', path: '/missions/api/usage', body: {} })
+  assert.equal(refused.status, 405)
+  assert.equal(refused.headers.allow, 'GET, POST')
+
+  const distant = await call(handler, { path: '/missions/api/usage', remoteAddress: '10.0.0.7' })
+  assert.equal(distant.status, 403)
+})
+
+test('un fichier cassé se dit broken à la lecture, puis repart au geste suivant', async (t) => {
+  const usageFile = join(await mkdtemp(join(tmpdir(), 'missions-usage-route-')), 'usage.json')
+  await writeFile(usageFile, 'half a file', 'utf8')
+  const { handler } = await mount(t, { usageFile })
+
+  const read = await call(handler, { path: '/missions/api/usage' })
+  assert.equal(read.status, 200)
+  assert.equal(read.body.broken, true)
+  assert.deepEqual(read.body.elements, {})
+
+  const written = await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'workflow.step', detail: 'execution' } })
+  assert.equal(written.status, 200)
+  assert.equal(written.body.count, 1)
+  const restarted = await call(handler, { path: '/missions/api/usage' })
+  assert.equal(restarted.body.broken, false)
+  assert.equal(restarted.body.elements['workflow.step'].count, 1)
+  assert.deepEqual(restarted.body.elements['workflow.step'].values, { execution: 1 })
 })
