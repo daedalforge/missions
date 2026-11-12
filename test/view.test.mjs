@@ -22,12 +22,14 @@ import {
   executionBlocker,
   missionStep,
   ticketReadLine,
+  treeIndent,
   STEP_BRIEFS,
   STEP_BY_STATE,
   FILTERS_KEY,
   filterBarState,
   filterMissions,
   filterSnapshot,
+  historyLabel,
   groupByState,
   hasActiveFilters,
   highPriorityStories,
@@ -53,6 +55,7 @@ import {
   suggestBranch,
   TAB_KEY,
   writeFilterSnapshot,
+  worktreeLabel,
   writeTab,
 } from '../lib/view.js'
 import { loadWorkflows, MODELS_DIR, readWorkflow } from '../lib/workflows.js'
@@ -1030,4 +1033,26 @@ test('un ticket non-GitHub ou absent garde son lien, avec la consigne du CLI', (
   assert.match(jira, /^Ouvre d'abord le ticket : https:/)
   assert.match(jira, /depuis le CLI du tracker, jamais la page HTML/)
   assert.match(ticketReadLine(undefined), /\(lien indisponible\)/)
+})
+
+test('historyLabel chiffre le total par milliers, et nomme sa branche', () => {
+  assert.equal(historyLabel({ total: 3094, branch: 'main' }), '3 094 commits on main')
+  assert.equal(historyLabel({ total: 1, branch: 'feat/a' }), '1 commit on feat/a')
+  assert.equal(historyLabel({ total: 0, branch: 'main' }), '0 commits on main')
+  assert.equal(historyLabel({ total: 1234567, branch: 'main' }), '1 234 567 commits on main')
+  assert.equal(historyLabel({}), '', 'un total inconnu ne s’invente pas')
+  assert.equal(historyLabel({ total: 12 }), '', 'sans branche, pas de phrase')
+})
+
+test('treeIndent un cran par profondeur, worktreeLabel la fin du chemin', () => {
+  assert.equal(treeIndent(0), 10)
+  assert.equal(treeIndent(null), 10)
+  assert.equal(treeIndent(-2), 10)
+  assert.equal(treeIndent(1), 24)
+  assert.equal(treeIndent(3), 52)
+
+  assert.equal(worktreeLabel('/Users/moi/projects/myapp'), 'myapp')
+  assert.equal(worktreeLabel('/Users/moi/projects/myapp/'), 'myapp')
+  assert.equal(worktreeLabel('C:\\projects\\myapp'), 'myapp')
+  assert.equal(worktreeLabel(null), '')
 })
