@@ -557,9 +557,18 @@ window.__ModuleLoader__.load({
 .missions-props { display: grid; grid-template-columns: 96px 1fr; gap: 9px 12px; margin: 0; font-size: 12px; }
 .missions-props dt { color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-props dd { margin: 0; color: var(--dsw-alias-label-primary, #1f1f1f); overflow-wrap: anywhere; }
-.missions-drawer-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+/* The foot stacks only the names that must stay readable — a destructive
+   gesture confirms with its own text — then one row of icon gestures: each
+   icon carries its name in title and aria-label. */
+.missions-drawer-foot { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.missions-drawer-actions { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
 .missions-action { height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; text-decoration: none; cursor: pointer; }
 .missions-action:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
+/* The session gestures sit in one row: a square icon button keeps the family's
+   colour, primary state and disabled state instead of borrowing another one. */
+.missions-action--icon { width: 34px; height: 34px; flex: none; padding: 0; gap: 0; }
+.missions-action--icon svg { display: block; }
+.missions-action:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 45%, transparent); outline-offset: 2px; }
 .missions-action--primary { border-color: transparent; background: var(--dsw-alias-button-primary-fill, #1f1f1f); color: var(--dsw-alias-label-primary-foreground, #ffffff); font-weight: 600; }
 .missions-action--primary:hover { filter: brightness(1.06); background: var(--dsw-alias-button-primary-fill, #1f1f1f); }
 .missions-action:disabled { opacity: .55; cursor: default; }
@@ -567,6 +576,12 @@ window.__ModuleLoader__.load({
    second click is the confirmation. */
 .missions-action--danger { border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 38%, transparent); color: var(--dsw-alias-label-danger, #b42318); }
 .missions-action--danger:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 7%, transparent); }
+/* The first click of a destructive gesture arms it: the drawing turns into a
+   check and the button fills with the danger colour, so the armed state is
+   visible without reading a tooltip. */
+.missions-action--danger-armed { border-color: transparent; background: var(--dsw-alias-label-danger, #b42318); color: #fff; }
+.missions-action--danger-armed:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 86%, #000); }
+.missions-action--armed { border-color: transparent; background: var(--dsw-alias-label-primary, #1f1f1f); color: #fff; }
 .missions-drawer-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-drawer-note--blocked { color: var(--dsw-alias-label-secondary, #5c534b); }
@@ -924,6 +939,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 .missions-panel[data-theme="manga"] .missions-props dd { color: var(--mm-ink); font-size: 11.5px; }
 .missions-panel[data-theme="manga"] .missions-action { border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); color: var(--mm-ink); box-shadow: 2px 2px 0 var(--mm-shadow); font-size: 11.5px; }
 .missions-panel[data-theme="manga"] .missions-action--primary { background: var(--mm-ink); color: var(--mm-page); }
+.missions-panel[data-theme="manga"] .missions-action:focus-visible { outline-color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-action--danger-armed { background: var(--mm-orange-deep); color: var(--mm-page); }
+.missions-panel[data-theme="manga"] .missions-action--armed { background: var(--mm-ink); color: var(--mm-page); }
 .missions-panel[data-theme="manga"] .missions-drawer-note { padding: 6px 9px; border-left: 3px solid var(--mm-orange); background: color-mix(in srgb, var(--mm-orange) 12%, var(--mm-page)); color: var(--mm-ink-2); font-size: 10.5px; }
 .missions-panel[data-theme="manga"] .missions-declare { gap: 7px; border-top: 1.5px solid var(--mm-ink); }
 .missions-panel[data-theme="manga"] .missions-blocked { border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); box-shadow: 2px 2px 0 var(--mm-shadow); }
@@ -1877,12 +1895,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const step = missionStep(mission)
       const sessionLabel = step ? `Start a session — ${step}` : 'Start a session'
       // The label says « remontées » without imitating the step session: the
-      // step button stays the primary, at the bottom.
+      // step button stays the primary, and the last of the row.
       const feedbackLabel = 'Check the PR feedback'
-      // A free session answers a question without moving the ticket; its title
-      // says so, since the foot's "Session blocked" note is about the step.
+      // A free session answers a question without moving the ticket: its label
+      // names the gesture, and the row's tooltip shows the same words.
       const freeLabel = 'Start a free session'
-      const freeTitle = 'Ask a question without playing the workflow step'
       // Every prompt lives in `lib/view.js`, inlined into this bundle: the
       // drawer only picks which one a button sends.
       const prompt = missionSessionPrompt(mission)
@@ -2308,67 +2325,93 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           archiveNote ? h('p', { className: archiveNote.error ? 'missions-drawer-note missions-drawer-note--error' : 'missions-drawer-note' }, archiveNote.text) : null,
           blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}.`) : null,
 
-          h('div', { className: 'missions-drawer-actions' },
-            mission.url
-              ? h('a', {
-                  className: 'missions-action',
-                  href: mission.url,
-                  target: '_blank',
-                  rel: 'noreferrer noopener',
-                  onClick: () => track('mission.open-tracker'),
-                }, 'Open on the tracker')
-              : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
-            mission.state === 'done'
-              ? h('button', {
-                  type: 'button',
-                  className: 'missions-action',
-                  onClick: archiveMission,
-                  disabled: archiving,
-                  title: 'Move this mission folder to missions/archives/',
-                }, archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive')
-              : null,
-            // Only the step that follows the merge may delete the branch: the
-            // panel shows the gesture there and nowhere else. The host still
-            // re-reads the state before touching anything.
-            mission.state === 'ready-for-prod'
-              ? h('button', {
-                  type: 'button',
-                  className: 'missions-action missions-action--danger',
-                  onClick: closeLocalCheckout,
-                  disabled: closing || blocker !== null,
-                  title: blocker ?? undefined,
-                  'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
-                }, closing ? 'Closing…' : armedClose ? 'Confirm — close the local checkout' : 'Close the local checkout')
-              : null,
-            // Only a mission in review has remarks to check: the client does
-            // not know whether a PR exists, so the state alone decides, and
-            // the session stops with a word when `gh` finds none.
-            mission.state === 'in-review'
-              ? h('button', {
-                  type: 'button',
-                  className: 'missions-action',
-                  onClick: startFeedbackSession,
-                  disabled: blocker !== null,
-                  title: blocker ?? undefined,
-                  'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
-                }, feedbackLabel)
-              : null,
-            // The free session sits above the step session, which stays the
-            // primary at the bottom: a question is never the default gesture.
-            // A closed mission plays no session at all, so `done` hides it.
-            mission.state === 'done'
-              ? null
-              : h('button', {
-                  type: 'button',
-                  className: 'missions-action',
-                  onClick: startFreeSession,
-                  disabled: freeBlocker !== null,
-                  title: freeBlocker ?? freeTitle,
-                  'aria-describedby': freeBlocker ? 'missions-session-blocked' : undefined,
-                }, freeLabel),
-            h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession, disabled: blocker !== null, title: blocker ?? undefined, 'aria-describedby': blocker ? 'missions-session-blocked' : undefined }, sessionLabel),
-        ),
-      )
+          h('div', { className: 'missions-drawer-foot' },
+            // Every action of the foot shares one row: icon only, its name in
+            // `title` for the pointer and in `aria-label` for the screen reader.
+            h('div', { className: 'missions-drawer-actions' },
+              // Only the step that follows the merge may delete the branch: the
+              // panel shows the gesture there and nowhere else, and the host
+              // re-reads the state before touching anything. It opens the row so
+              // it never sits next to the primary; its first click arms it, its
+              // second confirms, and the button itself says which state it is in.
+              mission.state === 'ready-for-prod'
+                ? h('button', {
+                    type: 'button',
+                    className: closing || !armedClose
+                      ? 'missions-action missions-action--icon missions-action--danger'
+                      : 'missions-action missions-action--icon missions-action--danger missions-action--danger-armed',
+                    onClick: closeLocalCheckout,
+                    disabled: closing || blocker !== null,
+                    title: blocker ?? (closing ? 'Closing…' : armedClose ? 'Confirm — close the local checkout' : 'Close the local checkout'),
+                    'aria-label': closing ? 'Closing…' : armedClose ? 'Confirm — close the local checkout' : 'Close the local checkout',
+                    'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                  }, h(ActionIcon, { name: closing || !armedClose ? 'close' : 'confirm' }))
+                : null,
+              // A done mission can be archived: its folder moves to
+              // missions/archives/. Two clicks, like the close: the first arms
+              // it, the second posts, and the button itself shows its state.
+              mission.state === 'done'
+                ? h('button', {
+                    type: 'button',
+                    className: armedArchive && !archiving
+                      ? 'missions-action missions-action--icon missions-action--armed'
+                      : 'missions-action missions-action--icon',
+                    onClick: archiveMission,
+                    disabled: archiving,
+                    title: archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive',
+                    'aria-label': archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive',
+                  }, h(ActionIcon, { name: armedArchive && !archiving ? 'confirm' : 'archive' }))
+                : null,
+              mission.url
+                ? h('a', {
+                    className: 'missions-action missions-action--icon',
+                    href: mission.url,
+                    target: '_blank',
+                    rel: 'noreferrer noopener',
+                    title: 'Open on the tracker',
+                    'aria-label': 'Open on the tracker',
+                    onClick: () => track('mission.open-tracker'),
+                  }, h(ActionIcon, { name: 'tracker' }))
+                : h('button', { type: 'button', className: 'missions-action missions-action--icon', disabled: true, title: 'No tracker link', 'aria-label': 'No tracker link' }, h(ActionIcon, { name: 'tracker' })),
+              // Only a mission in review has remarks to check: the client does
+              // not know whether a PR exists, so the state alone decides, and
+              // the session stops with a word when `gh` finds none.
+              mission.state === 'in-review'
+                ? h('button', {
+                    type: 'button',
+                    className: 'missions-action missions-action--icon',
+                    onClick: startFeedbackSession,
+                    disabled: blocker !== null,
+                    title: blocker ?? feedbackLabel,
+                    'aria-label': feedbackLabel,
+                    'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                  }, h(ActionIcon, { name: 'feedback' }))
+                : null,
+              // The free session sits above the step session, which stays the
+              // primary and the last: a question is never the default gesture.
+              // A closed mission plays no session at all, so `done` hides it.
+              mission.state === 'done'
+                ? null
+                : h('button', {
+                    type: 'button',
+                    className: 'missions-action missions-action--icon',
+                    onClick: startFreeSession,
+                    disabled: freeBlocker !== null,
+                    title: freeBlocker ?? freeLabel,
+                    'aria-label': freeLabel,
+                    'aria-describedby': freeBlocker ? 'missions-session-blocked' : undefined,
+                  }, h(ActionIcon, { name: 'free' })),
+              h('button', {
+                type: 'button',
+                className: 'missions-action missions-action--icon missions-action--primary',
+                onClick: startSession,
+                disabled: blocker !== null,
+                title: blocker ?? sessionLabel,
+                'aria-label': sessionLabel,
+                'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+              }, h(ActionIcon, { name: 'session' })),
+            ),
+          ),      )
     }
 
     /** Theme-specific loading indicator, shared by every view. */
@@ -2411,6 +2454,61 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         h('path', { d: 'M20.4 11.2a8.4 8.4 0 1 1-2.5-6.1' }),
         h('path', { d: 'M20.6 3.8v7.2h-7.2' }),
       )
+    }
+
+
+    /**
+     * The foot's gesture drawings. No icon library ships here: each one is
+     * drawn in place at 15 px, in the action's own colour, and the button's
+     * `title` and `aria-label` carry the name — the drawing stays decorative.
+     */
+    function ActionIcon({ name }) {
+      const common = {
+        viewBox: '0 0 16 16', width: 15, height: 15, fill: 'none', stroke: 'currentColor',
+        strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true',
+      }
+      if (name === 'tracker') {
+        // An external link: a frame the arrow leaves.
+        return h('svg', common,
+          h('path', { d: 'M6.5 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V9.5' }),
+          h('path', { d: 'M9.5 2.5h4v4M13.5 2.5 7.5 8.5' }),
+        )
+      }
+      if (name === 'feedback') {
+        // A speech bubble: the PR's remarks.
+        return h('svg', common,
+          h('path', { d: 'M13.4 9.4A1.6 1.6 0 0 1 11.8 11H5.2L2.6 13.3V3.6A1.6 1.6 0 0 1 4.2 2h7.6a1.6 1.6 0 0 1 1.6 1.6Z' }),
+        )
+      }
+      if (name === 'close') {
+        // A circled cross: the gesture deletes the local checkout.
+        return h('svg', common,
+          h('circle', { cx: 8, cy: 8, r: 6 }),
+          h('path', { d: 'M6.1 6.1l3.8 3.8M9.9 6.1l-3.8 3.8' }),
+        )
+      }
+      if (name === 'confirm') {
+        // A check: the second click confirms the gesture.
+        return h('svg', common, h('path', { d: 'M3.4 8.7 6.3 11.6 12.6 5' }))
+      }
+      if (name === 'archive') {
+        // A box with its lid: the mission folder moves to missions/archives/.
+        return h('svg', common,
+          h('path', { d: 'M2.2 5.6h11.6v7.2a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1Z' }),
+          h('path', { d: 'M1.8 3.4h12.4v2.2H1.8z' }),
+          h('path', { d: 'M6.4 8.6h3.2' }),
+        )
+      }
+      if (name === 'free') {
+        // A question mark: a free session asks and moves nothing.
+        return h('svg', common,
+          h('circle', { cx: 8, cy: 8, r: 6 }),
+          h('path', { d: 'M6.1 6.1a1.9 1.9 0 1 1 2.8 1.7c-.6.4-1 .9-1 1.5' }),
+          h('circle', { cx: 8, cy: 11.5, r: 0.8, fill: 'currentColor', stroke: 'none' }),
+        )
+      }
+      // A play triangle: the step that moves the ticket.
+      return h('svg', common, h('path', { d: 'M5.2 3.3 12.6 8l-7.4 4.7Z' }))
     }
 
 
