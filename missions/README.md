@@ -90,8 +90,15 @@ base: main
 
 **Depuis le panneau** : le volet de détail se lit en trois onglets —
 **Details** (propriétés et champs ci-dessous), **Journal** et **Checklist** —
-et les actions (ouvrir le ticket, fermer le checkout local, démarrer une
-session) restent en pied de volet, sous les onglets. Journal et Checklist prennent la hauteur restante,
+et les actions restent en pied de volet, sous les onglets. Elles tiennent en une
+seule rangée d'icônes — ouvrir le ticket, vérifier les remontées d'une PR,
+démarrer une session libre, démarrer la session de l'étape — et chaque bouton
+porte son nom dans une infobulle (`title`) comme dans son libellé accessible
+(`aria-label`) : l'icône se reconnaît au survol et au lecteur d'écran, et la
+rangée tient sur une ligne. Un geste destructeur fait exception : **« Close the
+local checkout »** garde son texte, au-dessus de la rangée, parce que son
+libellé est la confirmation au second clic — une infobulle ne confirme pas.
+Journal et Checklist prennent la hauteur restante,
 du trait des onglets à la note de session ou à l'avertissement de blocage
 quand ils sont là, aux actions sinon : c'est leur contenu qui défile, pas le
 volet. Details garde le défilement du volet. L'onglet Details porte deux
