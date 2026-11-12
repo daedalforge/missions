@@ -41,7 +41,13 @@ import {
   readFilterSnapshot,
   readTab,
   relativeAge,
+  repositoryBranch,
+  repositoryCommit,
+  repositoryState,
+  scanDuration,
+  scanLabel,
   sortMissions,
+  sortRepositories,
   stateOptions,
   suggestBranch,
   TAB_KEY,
@@ -957,4 +963,56 @@ test('endPoints énumère entrée, gestes et sorties, et tolère un modèle abse
     { id: 'ready', kind: 'etat' },
   ], 'l’entrée d’abord, les gestes dans l’ordre du fichier, les sorties ensuite')
   assert.deepEqual(endPoints({ entry: 'a', nodes: [] }), [{ id: 'a', kind: 'etat' }], 'une étape sans sortie déclarée')
+})
+
+test('les dépôts se lisent du plus récent au plus ancien, et à nom égal par nom', () => {
+  const rows = [
+    { name: 'delta', lastCommit: null },
+    { name: 'charlie', lastCommit: { date: 1000 } },
+    { name: 'bravo', lastCommit: { date: 2000 } },
+    { name: 'alpha', lastCommit: { date: 2000 } },
+  ]
+  const ordered = sortRepositories(rows)
+
+  // Le tri du panneau est le contrat du widget : même réponse à chaque scan,
+  // sans commit en fin de liste, et deux commits de la même seconde par nom.
+  assert.deepEqual(ordered.map((row) => row.name), ['alpha', 'bravo', 'charlie', 'delta'])
+  assert.deepEqual(rows.map((row) => row.name), ['delta', 'charlie', 'bravo', 'alpha'], 'la liste reçue n’est pas modifiée')
+  assert.deepEqual(sortRepositories([]), [])
+  assert.deepEqual(sortRepositories(undefined), [])
+})
+
+test('une ligne dit sa branche, son état et son dernier commit', () => {
+  assert.equal(repositoryBranch({ branch: 'feat/mis-116' }), 'feat/mis-116')
+  assert.equal(repositoryBranch({ detached: true, head: 'abc1234' }), 'detached @ abc1234')
+  assert.equal(repositoryBranch({ detached: true }), 'detached')
+  assert.equal(repositoryBranch({ error: 'not a git repository' }), 'unreadable')
+  assert.equal(repositoryBranch({}), 'unknown')
+
+  // L'état compte les fichiers, au singulier quand il n'y en a qu'un.
+  assert.deepEqual(repositoryState({ dirty: 0 }), { dirty: false, error: false, label: 'clean' })
+  assert.deepEqual(repositoryState({ dirty: 1 }), { dirty: true, error: false, label: '1 file' })
+  assert.deepEqual(repositoryState({ dirty: 12 }), { dirty: true, error: false, label: '12 files' })
+  assert.deepEqual(repositoryState({}), { dirty: false, error: false, label: 'clean' })
+  assert.deepEqual(repositoryState({ dirty: null }), { dirty: false, error: false, label: 'clean' })
+  assert.deepEqual(repositoryState({ error: 'boom', dirty: 3 }), { dirty: false, error: true, label: 'unreadable' })
+
+  assert.equal(repositoryCommit({ lastCommit: { subject: 'MIS-116: ajoute l’onglet' } }), 'MIS-116: ajoute l’onglet')
+  assert.equal(repositoryCommit({ lastCommit: { sha: 'abc1234', subject: '' } }), 'abc1234')
+  assert.equal(repositoryCommit({ lastCommit: null }), 'no commit yet')
+  assert.equal(repositoryCommit({ error: 'boom' }), '')
+})
+
+test('l’en-tête dit ce que le scan a lu, et ce qu’il n’a pas pu lire', () => {
+  assert.equal(scanLabel({ count: 3, durationMs: 1904, errors: [] }), '3 repositories · scanned in 1.9 s')
+  assert.equal(scanLabel({ count: 1, durationMs: 250, errors: [] }), '1 repository · scanned in 0.3 s')
+  assert.equal(scanLabel({ count: 2, durationMs: 1600, errors: [{ name: 'a', message: 'x' }] }), '2 repositories · scanned in 1.6 s · 1 unreadable')
+  assert.equal(scanLabel({ count: 0 }), '0 repositories')
+  assert.equal(scanLabel({}), '0 repositories')
+
+  assert.equal(scanDuration(1904), '1.9 s')
+  assert.equal(scanDuration(0), '0.0 s')
+  assert.equal(scanDuration(-1), '')
+  assert.equal(scanDuration(Number.NaN), '')
+  assert.equal(scanDuration(undefined), '')
 })
