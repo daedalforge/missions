@@ -1919,10 +1919,25 @@ test('un clic sur l’onglet Repositories bascule le panneau et ferme le volet',
   assert.equal(bouton.props['aria-selected'], 'false')
   assert.equal(bouton.props['aria-controls'], 'missions-view-repositories')
 
-  bouton.props.onClick()
-  // Le changement d'onglet écrit l'onglet puis vide la sélection du volet :
-  // un dépôt choisi dans l'onglet ne survit pas à un autre onglet.
-  assert.deepEqual(setters.slice(-2), ['repositories', null])
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => ({}) }
+  }
+  try {
+    bouton.props.onClick()
+    // Le changement d'onglet écrit l'onglet puis vide la sélection du volet :
+    // un dépôt choisi dans l'onglet ne survit pas à un autre onglet.
+    assert.deepEqual(setters.slice(-2), ['repositories', null])
+    // Le clic ne relit pas le compte : la pastille a déjà sa valeur, et ce sont
+    // le montage et le tick qui la rafraîchissent. Le scan, lui, appartient au
+    // montage de la vue de l'onglet, joué séparément plus bas.
+    assert.equal(appels.includes('missions/api/repositories/count'), false, 'le clic ne relit pas le compte')
+    assert.deepEqual(appels, [], 'le clic ne paie aucune lecture')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
 })
 
 test('l’onglet Repositories porte son compte, et pas de pastille avant de le connaître', () => {
@@ -1935,9 +1950,10 @@ test('l’onglet Repositories porte son compte, et pas de pastille avant de le c
   const pastille = (button) => findAll(button, 'span').find((span) => span.props.className === 'missions-tab-count')
 
   // Compte lu : la pastille est celle de Missions — même classe, même style —
-  // et elle porte les dépôts de la racine, pas le total du scan.
-  const avec = panneau(repositoriesStates(scanReady(REPO_SCAN), null, 39))
-  assert.equal(textOf(pastille(onglet(avec, 'repositories'))), '39')
+  // et elle porte les dépôts de la racine, pas le total du scan (30 clones,
+  // 39 entrées sur ce poste).
+  const avec = panneau(repositoriesStates(scanReady(REPO_SCAN), null, 30))
+  assert.equal(textOf(pastille(onglet(avec, 'repositories'))), '30')
   assert.equal(SOURCE.includes("const REPOSITORIES_COUNT_URL = 'missions/api/repositories/count'"), true)
   // Missions garde la sienne, sur la liste ouverte : deux comptes, deux sources.
   const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
@@ -1960,40 +1976,102 @@ function lecteurDeCompte(effects) {
   return null
 }
 
-test('le compte est lu au montage, même sans ouvrir l’onglet, et un échec garde la valeur', async () => {
+test('le compte est lu au montage, sur Dashboard comme sur Missions, et jamais le scan', async () => {
   const appels = []
   const vraiFetch = globalThis.fetch
   globalThis.fetch = async (url) => {
     const cible = String(url)
     appels.push(cible)
-    if (cible === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 39 }) }
-    return { ok: true, json: async () => ({ missions: [], errors: [] }) }
+    if (cible === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 30 }) }
+    return { ok: true, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
   }
   try {
-    // Le panneau ouvre sur le Dashboard : la lecture du compte n'attend pas
-    // l'onglet Repositories, c'est tout l'objet de la pastille.
-    const { api, ctx, registered, effects, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
-    api.apply(ctx)
-    registered.main({})
-    const lecture = lecteurDeCompte(effects)
-    assert.ok(lecture, 'le compte est une dépendance de l’effet de montage')
-    await lecture()
-    assert.ok(appels.includes('missions/api/repositories/count'))
-    assert.ok(setters.includes(39), 'le compte lu alimente la pastille')
-
-    // Une lecture en échec ne pousse aucun compte : la pastille garde le sien,
-    // et le tick de 60 s retentera.
-    globalThis.fetch = async () => { throw new Error('offline') }
-    const second = charger(undefined, repositoriesStates(scanReady(REPO_SCAN), null, 39), memorySession())
-    second.api.apply(second.ctx)
-    const arbre = second.registered.main({})
-    const onglet = findAll(arbre, 'button').find((button) => button.props.id === 'missions-tab-repositories')
-    assert.equal(textOf(findAll(onglet, 'span').find((span) => span.props.className === 'missions-tab-count')), '39')
-    await lecteurDeCompte(second.effects)()
-    assert.equal(second.setters.filter((value) => typeof value === 'number').length, 0)
+    // La lecture n'attend pas l'onglet Repositories : c'est tout l'objet de la
+    // pastille. Sur les deux onglets du tracker, le compte part une fois, et le
+    // scan — qui coûte deux appels git par dépôt — pas du tout.
+    for (const onglet of ['dashboard', 'missions']) {
+      appels.length = 0
+      const { api, ctx, registered, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': onglet }))
+      api.apply(ctx)
+      registered.main({})
+      const montage = effects.find((effect) => String(effect.fn).includes('loadRepositoryCount()') && !String(effect.fn).includes('loadDone'))
+      assert.ok(montage, `le montage lit le compte (onglet ${onglet})`)
+      montage.fn()
+      await new Promise((done) => setTimeout(done, 0))
+      assert.deepEqual(
+        appels,
+        ['missions/api/list', 'missions/api/repositories/count'],
+        `onglet ${onglet} : le compte une fois, le scan jamais`,
+      )
+      assert.equal(appels.filter((url) => url === 'missions/api/repositories').length, 0)
+    }
   } finally {
     globalThis.fetch = vraiFetch
   }
+})
+
+test('un échec du compte garde la pastille, sans bandeau, et le tick retente', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  const vraiInterval = globalThis.setInterval
+  const vraiClear = globalThis.clearInterval
+  const ongletRepositories = (tree) => findAll(tree, 'button').find((button) => button.props.id === 'missions-tab-repositories')
+  const pastille = (tree) => {
+    const span = findAll(ongletRepositories(tree), 'span').find((node) => node.props.className === 'missions-tab-count')
+    return span === undefined ? undefined : textOf(span)
+  }
+  const bandeaux = (tree) => findAll(tree, 'div').filter((node) => node.props.className === 'missions-errors')
+
+  const { api, ctx, registered, effects, setters } = charger(undefined, repositoriesStates(scanReady(REPO_SCAN), null, 30), memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+  assert.equal(pastille(tree), '30', 'une pastille déjà affichée part du compte connu')
+
+  const lecture = lecteurDeCompte(effects)
+  assert.ok(lecture, 'le compte est une dépendance de l’effet de montage')
+
+  try {
+    // Un échec ne pousse aucun compte : la pastille garde le sien, aucun 0
+    // n'est affiché, et une pastille n'allume pas de bandeau.
+    globalThis.fetch = async (url) => { appels.push(String(url)); throw new Error('offline') }
+    const avant = setters.length
+    await lecture()
+    assert.equal(setters.length, avant, 'un échec ne pousse aucun compte')
+    assert.deepEqual(appels, ['missions/api/repositories/count'], 'le compte est relu, une fois')
+    assert.equal(pastille(tree), '30', 'la pastille garde sa valeur')
+    assert.equal(bandeaux(tree).length, 0, 'une pastille n’allume pas de bandeau')
+
+    // Le tick de 60 s retente, quel que soit l'onglet : on arme l'intervalle et
+    // on joue son tour à la main, comme le demande la preuve.
+    let tour = null
+    globalThis.setInterval = (callback) => { tour = callback; return 1 }
+    globalThis.clearInterval = () => {}
+    const tick = effects.find((effect) => String(effect.fn).includes('setInterval'))
+    assert.ok(tick, 'le panneau arme son tick de 60 s')
+    const arreter = tick.fn()
+    assert.equal(typeof arreter, 'function', 'le tick se démonte avec le panneau')
+
+    // La relecture réussit : le compte est republié, toujours sans bandeau.
+    globalThis.fetch = async (url) => {
+      appels.push(String(url))
+      if (String(url) === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 31 }) }
+      return { ok: true, json: async () => ({ missions: [], errors: [] }) }
+    }
+    tour()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.ok(setters.includes(31), 'le tick republie le compte lu')
+    assert.equal(bandeaux(tree).length, 0, 'aucun bandeau après un échec puis un succès')
+  } finally {
+    globalThis.fetch = vraiFetch
+    globalThis.setInterval = vraiInterval
+    globalThis.clearInterval = vraiClear
+  }
+
+  // La valeur republiée est celle que la pastille affiche.
+  const apres = charger(undefined, repositoriesStates(scanReady(REPO_SCAN), null, 31), memorySession())
+  apres.api.apply(apres.ctx)
+  const arbre = apres.registered.main({})
+  assert.equal(pastille(arbre), '31')
 })
 
 test('la rangée d’onglets défile plutôt que de couper un libellé', () => {
