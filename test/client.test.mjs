@@ -3637,6 +3637,7 @@ test('le volet ne propose l’archive qu’en done', () => {
 
 test('le premier clic arme l’archive, le second envoie la clé et ferme le volet', async () => {
   const calls = []
+  const vraiFetch = globalThis.fetch
   globalThis.fetch = async (url, init = {}) => {
     calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) })
     return {
@@ -3645,64 +3646,72 @@ test('le premier clic arme l’archive, le second envoie la clé et ferme le vol
       json: async () => ({ archived: 'missions/archives/MIS-42', folder: 'MIS-42', project: 'missions' }),
     }
   }
+  try {
+    const archived = []
+    const { tree: overridden, setters } = monterVolet({ ...MISSION, state: 'done', updatedAt: MISSION.updated }, {
+      onArchived: (entry) => { archived.push(entry) },
+    })
+    const bouton = boutonArchive(overridden)
+    assert.ok(bouton)
 
-  const archived = []
-  const { tree: overridden, setters } = monterVolet({ ...MISSION, state: 'done', updatedAt: MISSION.updated }, {
-    onArchived: (entry) => { archived.push(entry) },
-  })
-  const bouton = boutonArchive(overridden)
-  assert.ok(bouton)
+    await bouton.props.onClick()
+    assert.deepEqual(calls, [], 'le premier clic n’écrit rien')
+    const armeNote = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+    assert.equal(armeNote.error, false)
+    assert.match(armeNote.text, /missions\/archives\/. Click again to confirm/)
 
-  await bouton.props.onClick()
-  assert.deepEqual(calls, [], 'le premier clic n’écrit rien')
-  const armeNote = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
-  assert.equal(armeNote.error, false)
-  assert.match(armeNote.text, /missions\/archives\/. Click again to confirm/)
-
-  await bouton.props.onClick()
-  assert.deepEqual(calls, [
-    { url: 'missions/api/archive', method: 'POST', body: { key: 'MIS-42' } },
-  ])
-  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
-  assert.equal(note.error, false)
-  assert.match(note.text, /Archived to missions\/archives\/MIS-42/)
-  assert.deepEqual(archived, [{ key: 'MIS-42', folder: 'MIS-42' }])
+    await bouton.props.onClick()
+    assert.deepEqual(calls, [
+      { url: 'missions/api/archive', method: 'POST', body: { key: 'MIS-42' } },
+    ])
+    const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+    assert.equal(note.error, false)
+    assert.match(note.text, /Archived to missions\/archives\/MIS-42/)
+    assert.deepEqual(archived, [{ key: 'MIS-42', folder: 'MIS-42' }])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
 })
 
 test('un refus d’archive se dit avec sa cause, et le bouton se réarme', async () => {
   const calls = []
+  const vraiFetch = globalThis.fetch
   globalThis.fetch = async (url) => {
     calls.push(String(url))
     return { ok: false, status: 409, json: async () => ({ error: 'missions/archives/MIS-42 already exists' }) }
   }
+  try {
+    const { tree, setters } = monterVoletArchive()
+    const bouton = boutonArchive(tree)
 
-  const { tree, setters } = monterVoletArchive()
-  const bouton = boutonArchive(tree)
+    await bouton.props.onClick()
+    await bouton.props.onClick()
 
-  await bouton.props.onClick()
-  await bouton.props.onClick()
+    assert.equal(calls.length, 1)
+    const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+    assert.equal(note.error, true)
+    assert.match(note.text, /Archive refused: missions\/archives\/MIS-42 already exists/)
 
-  assert.equal(calls.length, 1)
-  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
-  assert.equal(note.error, true)
-  assert.match(note.text, /Archive refused: missions\/archives\/MIS-42 already exists/)
+    // Le refus ne touche pas la liste : aucun updater reçu ne perd la mission.
+    const kept = setters.reduce(
+      (state, next) => (typeof next === 'function' ? next(state) : state),
+      { missions: [{ key: 'MIS-42' }, { key: 'MIS-43' }] },
+    )
+    assert.deepEqual(kept.missions.map((mission) => mission.key), ['MIS-42', 'MIS-43'], 'la ligne reste dans la vue')
 
-  // Le refus ne touche pas la liste : aucun updater reçu ne perd la mission.
-  const kept = setters.reduce(
-    (state, next) => (typeof next === 'function' ? next(state) : state),
-    { missions: [{ key: 'MIS-42' }, { key: 'MIS-43' }] },
-  )
-  assert.deepEqual(kept.missions.map((mission) => mission.key), ['MIS-42', 'MIS-43'], 'la ligne reste dans la vue')
-
-  // Un refus réarme le geste : le clic suivant redemande confirmation.
-  await bouton.props.onClick()
-  assert.equal(calls.length, 1, 'le clic après refus réarme sans écrire')
-  const rearme = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
-  assert.match(rearme.text, /Click again to confirm/)
+    // Un refus réarme le geste : le clic suivant redemande confirmation.
+    await bouton.props.onClick()
+    assert.equal(calls.length, 1, 'le clic après refus réarme sans écrire')
+    const rearme = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+    assert.match(rearme.text, /Click again to confirm/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
 })
 
 test('archiver retire la ligne de Done et referme le volet', async () => {
   const calls = []
+  const vraiFetch = globalThis.fetch
   globalThis.fetch = async (url) => {
     calls.push(String(url))
     return {
@@ -3711,19 +3720,22 @@ test('archiver retire la ligne de Done et referme le volet', async () => {
       json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }),
     }
   }
+  try {
+    const mission = { ...MISSION, state: 'done', updatedAt: MISSION.updated }
+    const { drawer, setters } = monterVolet(mission)
+    assert.equal(typeof drawer.props.onArchived, 'function')
 
-  const mission = { ...MISSION, state: 'done', updatedAt: MISSION.updated }
-  const { drawer, setters } = monterVolet(mission)
-  assert.equal(typeof drawer.props.onArchived, 'function')
+    drawer.props.onArchived({ key: 'MIS-42', folder: 'MIS-42' })
 
-  drawer.props.onArchived({ key: 'MIS-42', folder: 'MIS-42' })
-
-  // Le volet est refermé.
-  assert.ok(setters.includes(null), 'le volet doit se refermer')
-  // La ligne quittée les deux copies de la liste, sans attendre le serveur.
-  const filtered = setters
-    .filter((value) => typeof value === 'function')
-    .map((update) => update({ missions: [{ key: 'MIS-42' }, { key: 'MIS-1' }] }))
-  assert.ok(filtered.every((next) => next.missions.length === 1 && next.missions[0].key === 'MIS-1'))
-  assert.deepEqual(calls, ['missions/api/list?done=1&refresh=1'])
+    // Le volet est refermé.
+    assert.ok(setters.includes(null), 'le volet doit se refermer')
+    // La ligne quittée les deux copies de la liste, sans attendre le serveur.
+    const filtered = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [{ key: 'MIS-42' }, { key: 'MIS-1' }] }))
+    assert.ok(filtered.every((next) => next.missions.length === 1 && next.missions[0].key === 'MIS-1'))
+    assert.deepEqual(calls, ['missions/api/list?done=1&refresh=1'])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
 })
