@@ -46,6 +46,10 @@ déclaré sur le poste (`missions/<clé>/mission.yml`), avec sa propre barre de
 filtres et son propre cache. Sans dossier déclaré, aucune mission close n'est
 même lue ; l'onglet affiche « No done mission declared on this machine. ».
 
+Depuis cet onglet, une mission close peut être **archivée** : son dossier passe
+sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
+modifié — la mission quitte Done et reste sur le disque.
+
 ## Le relevé d'usage
 
 Le panneau tient sa propre comptabilité : chaque geste — un onglet, un filtre,

@@ -40,6 +40,7 @@ workflow ; le filtre de statut, lui, garde l'ordre du workflow.
 | Branche et base (déclarées) | `missions/<dossier>/mission.yml` | Non — local, ignoré par git |
 | Journal de mission (récit de la session) | `missions/<dossier>/journal.md` | Non — local, ignoré par git |
 | Checklist de mission (gestes à vérifier) | `missions/<dossier>/checklist.md` | Non — local, ignoré par git |
+| Dossier archivé | `missions/archives/<dossier>/` | Non — local, ignoré par git |
 | Branche et commits | Dépôt du projet | Selon le projet |
 | Preuves de clôture | Commentaire du ticket | Non |
 | Méthode (ce document, workflows) | Ce dépôt | Oui |
@@ -145,6 +146,21 @@ qui restent ceux du demandeur.
   `main` touché. Chaque refus (pas de clone, état, PR, base, commit, worktree
   sale, commit local non livré) est un 409 et un message, sans suppression
   partielle.
+
+### Archiver une mission
+
+Une mission `done` peut être rangée depuis le volet, onglet **Done** : le bouton
+**« Archive »** déplace son dossier sous `missions/archives/<dossier>/`.
+
+- **Ce qu'il déplace.** Le dossier entier, avec son nom, son `mission.yml`, son
+  journal et sa checklist. Rien n'est supprimé, rien n'est réécrit.
+- **Ce qu'il vérifie.** L'hôte relit l'issue fermée dans le tracker et refuse
+  (409) tout dossier absent, déjà archivé ou dont la mission n'est plus `done`.
+  Le panneau n'envoie que `{ key }` ; le second clic confirme.
+- **Ce qu'il ne fait pas.** Aucun écrit tracker, aucune branche, aucun commit,
+  aucun `main` touché. Le geste ne remplace ni le merge ni la fermeture.
+- **Après.** Le dossier n'étant plus sous `missions/`, la mission quitte
+  l'onglet Done. Pour la ressortir, `mv missions/archives/<dossier> missions/`.
 
 ## Journal de mission
 

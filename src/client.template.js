@@ -172,6 +172,9 @@ window.__ModuleLoader__.load({
     // The one gesture that deletes a branch: it sends a key and the host owns
     // the proof, the refusals, and every writing command.
     const LOCAL_CLOSE_URL = 'missions/api/local-close'
+    // Archiving moves a done mission's folder out of Done: the host checks the
+    // tracker, the panel only sends the key.
+    const ARCHIVE_URL = 'missions/api/archive'
     const JOURNAL_URL = 'missions/api/journal'
     const CHECKLIST_URL = 'missions/api/checklist'
     const WORKFLOWS_URL = 'missions/api/workflows'
@@ -1768,7 +1771,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       )
     }
 
-    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, onPrioritySaved, theme }) {
+    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, onPrioritySaved, onArchived, theme }) {
       const [note, setNote] = React.useState(null)
       // A declared branch always wins; otherwise show the convention's name.
       // It stays a suggestion: only Save writes it to mission.yml.
@@ -1807,6 +1810,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const armedCloseRef = React.useRef(false)
       const [closing, setClosing] = React.useState(false)
       const [closeNote, setCloseNote] = React.useState(null)
+      // Archiving moves the folder, nothing is deleted: the first click still
+      // only arms it, so a stray click never moves a mission.
+      const [armedArchive, setArmedArchive] = React.useState(false)
+      const armedArchiveRef = React.useRef(false)
+      const [archiving, setArchiving] = React.useState(false)
+      const [archiveNote, setArchiveNote] = React.useState(null)
 
       React.useEffect(() => {
         let alive = true
@@ -1844,6 +1853,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setPriorityNow(mission.priority ?? null)
         setPriorityNote(null)
       }, [mission.key, mission.priority])
+
+      // The archive guard follows the mission shown: a refreshed row must not
+      // carry the previous mission's armed click.
+      React.useEffect(() => {
+        armedArchiveRef.current = false
+        setArmedArchive(false)
+        setArchiveNote(null)
+      }, [mission.key, mission.state])
 
       React.useEffect(() => {
         const onKey = (event) => {
@@ -2017,6 +2034,37 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           setCloseNote({ error: true, text: `Local close refused: ${error?.message ?? error}` })
         } finally {
           setClosing(false)
+        }
+      }
+
+      // Two clicks, no dialog: the folder leaves Done, nothing is deleted. The
+      // first click says where it goes; the host re-reads the tracker before
+      // moving anything, and the row leaves the list once it agrees.
+      const archiveMission = async () => {
+        if (!armedArchiveRef.current) {
+          armedArchiveRef.current = true
+          setArmedArchive(true)
+          setArchiveNote({ error: false, text: 'This moves the mission folder to missions/archives/. Click again to confirm.' })
+          return
+        }
+        armedArchiveRef.current = false
+        setArmedArchive(false)
+        setArchiving(true)
+        setArchiveNote(null)
+        try {
+          const response = await fetch(ARCHIVE_URL, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ key: mission.key }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `archive failed (${response.status})`)
+          setArchiving(false)
+          setArchiveNote({ error: false, text: `Archived to ${data.archived}.` })
+          onArchived?.({ key: mission.key, folder: data.folder ?? mission.folder })
+        } catch (error) {
+          setArchiving(false)
+          setArchiveNote({ error: true, text: `Archive refused: ${error?.message ?? error}` })
         }
       }
 
@@ -2257,6 +2305,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
           closeNote ? h('p', { className: closeNote.error ? 'missions-drawer-note missions-drawer-note--error' : 'missions-drawer-note' }, closeNote.text) : null,
+          archiveNote ? h('p', { className: archiveNote.error ? 'missions-drawer-note missions-drawer-note--error' : 'missions-drawer-note' }, archiveNote.text) : null,
           blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}.`) : null,
 
           h('div', { className: 'missions-drawer-actions' },
@@ -2269,6 +2318,15 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   onClick: () => track('mission.open-tracker'),
                 }, 'Open on the tracker')
               : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
+            mission.state === 'done'
+              ? h('button', {
+                  type: 'button',
+                  className: 'missions-action',
+                  onClick: archiveMission,
+                  disabled: archiving,
+                  title: 'Move this mission folder to missions/archives/',
+                }, archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive')
+              : null,
             // Only the step that follows the merge may delete the branch: the
             // panel shows the gesture there and nowhere else. The host still
             // re-reads the state before touching anything.
@@ -3401,6 +3459,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           previous && previous.key === saved.key ? { ...previous, priority: saved.priority } : previous
         ))
       }
+      // Archiving takes the folder out of Done: the row leaves both copies at
+      // once, the drawer closes, and the closed read refreshes without asking
+      // the tracker for a key the machine no longer declares.
+      const applyArchive = (archived) => {
+        const drop = (previous) => ({
+          ...previous,
+          missions: previous.missions.filter((mission) => mission.key !== archived.key),
+        })
+        setView(drop)
+        setDoneView(drop)
+        setSelected(null)
+        loadDone({ silent: true, refresh: true })
+      }
       const hero = theme === 'manga' ? h('div', { className: 'missions-hero', 'aria-hidden': 'true' },
         h('img', { className: 'missions-hero-photo', src: ART.village, alt: '' }),
         h('div', { className: 'missions-hero-bubble' },
@@ -3594,7 +3665,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   h('p', { className: 'missions-drawer-hint' }, 'Select a repository to see its remote, its upstream and its last commits.'),
                 )
             : selected
-            ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, theme })
+            ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onArchived: applyArchive, theme })
             : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },
                 h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),
               ),
