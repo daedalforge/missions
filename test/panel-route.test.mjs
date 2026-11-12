@@ -113,6 +113,70 @@ test('POST vide un champ retiré, GET est refusé', async (t) => {
   assert.equal(notPost.headers.allow, 'GET')
 })
 
+test('la lecture ouverte ignore les closes, la lecture done les demande', async (t) => {
+  const appels = []
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    appels.push(href)
+    const json = (body) => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) })
+    if (href.endsWith('/user')) return json({ login: 'me' })
+    if (href.includes('state=closed')) {
+      return json([{ number: 9, state: 'closed', title: 'Close', labels: [] }])
+    }
+    return json([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
+  }
+  const { dir, handler } = await mount(t, { fetchImpl })
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`)
+  // Une mission close n'est lisible que si son dossier la déclare.
+  await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-9', MISSION_FILE), 'key: MIS-9\nbranch: feat/mis-9\nbase: main\n')
+
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const ouvert = await call(handler, { path: '/missions/api/list' })
+    assert.equal(ouvert.status, 200)
+    assert.deepEqual(ouvert.body.missions.map((m) => m.key), ['MIS-2'])
+    assert.equal(appels.filter((href) => href.includes('state=closed')).length, 0)
+
+    const done = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.equal(done.status, 200)
+    assert.deepEqual(done.body.missions.map((m) => m.key), ['MIS-9'])
+    assert.equal(done.body.missions[0].state, 'done')
+    assert.equal(appels.filter((href) => href.includes('state=closed')).length, 1)
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
 test('un corps invalide ou une déclaration invalide répond 400', async (t) => {
   const { dir, handler } = await mount(t)
 

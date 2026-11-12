@@ -29,6 +29,7 @@ import {
   STEP_BRIEFS,
   STEP_BY_STATE,
   FILTERS_KEY,
+  DONE_FILTERS_KEY,
   filterBarState,
   filterMissions,
   filterSnapshot,
@@ -182,19 +183,52 @@ test('les statuts proposés suivent l’ordre du workflow, unknown en dernier', 
   assert.deepEqual(stateOptions([]), [])
 })
 
-test('done garde son groupe et son option, en dernier, mais reste hors de la liste par défaut', () => {
+test('done garde son groupe en dernier, mais la liste ouverte ne le relit jamais', () => {
   const done = [{ key: 'a#5', state: 'done', type: 'story', priority: 'high', project: 'missions' }]
-  // Hors du panneau par défaut : ni la recherche, ni un filtre qui ne le nomme
-  // pas ne le font sortir. Le filtre Statut est la seule porte.
+  // L'onglet Missions est le périmètre ouvert : ni la recherche, ni un filtre
+  // Statut nommant done ne font entrer une mission close.
   assert.deepEqual(filterMissions(done, {}), [])
   assert.deepEqual(filterMissions(done, { state: ['ready'] }), [])
   assert.deepEqual(filterMissions(done, { query: 'a#5' }), [])
-  assert.deepEqual(filterMissions(done, { state: ['done'] }).map((m) => m.key), ['a#5'])
-  // Le groupe et l'option sont en dernier : la liste garde la file ouverte en tête.
+  assert.deepEqual(filterMissions(done, { state: ['done'] }), [])
+  // Le périmètre Done est le seul à demander explicitement les closes.
+  assert.deepEqual(filterMissions(done, { allowDone: true }).map((m) => m.key), ['a#5'])
+  assert.deepEqual(
+    filterMissions([...MISSIONS, ...done], { allowDone: true }).map((m) => m.key),
+    ['a#1', 'a#2', 'a#3', 'a#5'],
+  )
+  // Le groupe reste en dernier : la liste ouverte garde la file en tête.
   assert.deepEqual(groupByState([...MISSIONS, ...done]).map((g) => g.state), ['in-review', 'ready', 'to-refine', 'done'])
-  assert.deepEqual(stateOptions([...MISSIONS, ...done]), ['to-refine', 'ready', 'in-review', 'done'])
-  // Une barre enregistrée garde done : la session doit le retrouver au montage.
-  assert.deepEqual(filterSnapshot({ filters: { state: ['done'] } }).state, ['done'])
+  // Missions ne propose pas done ; Done le propose, et lui seul.
+  assert.deepEqual(stateOptions([...MISSIONS, ...done]), ['to-refine', 'ready', 'in-review'])
+  assert.deepEqual(
+    stateOptions([...MISSIONS, ...done], { allowDone: true }),
+    ['to-refine', 'ready', 'in-review', 'done'],
+  )
+  // Une barre ouverte relue ne rouvre pas done ; celle de Done le garde.
+  assert.equal(filterSnapshot({ filters: { state: ['done'] } }).state, null)
+  assert.deepEqual(filterSnapshot({ filters: { state: ['done'] } }, { allowDone: true }).state, ['done'])
+})
+
+test('les deux barres de session sont séparées, y compris pour done', () => {
+  const storage = memoryStorage()
+  const doneBar = { query: 'close', filters: { ...EMPTY_FILTERS, state: ['done'], project: 'missions' }, sort: 'priority' }
+  writeFilterSnapshot(storage, doneBar, DONE_FILTERS_KEY, { allowDone: true })
+  writeFilterSnapshot(storage, { query: 'open' })
+  assert.deepEqual([...storage.entries.keys()].sort(), [DONE_FILTERS_KEY, FILTERS_KEY].sort())
+  assert.deepEqual(readFilterSnapshot(storage), filterSnapshot({ query: 'open' }))
+  assert.deepEqual(
+    readFilterSnapshot(storage, DONE_FILTERS_KEY, { allowDone: true }),
+    filterSnapshot(doneBar, { allowDone: true }),
+  )
+  // Vider la barre ouverte ne touche pas celle de Done, et réciproquement.
+  writeFilterSnapshot(storage, {})
+  assert.deepEqual(
+    readFilterSnapshot(storage, DONE_FILTERS_KEY, { allowDone: true }),
+    filterSnapshot(doneBar, { allowDone: true }),
+  )
+  writeFilterSnapshot(storage, {}, DONE_FILTERS_KEY, { allowDone: true })
+  assert.equal(storage.entries.has(DONE_FILTERS_KEY), false)
 })
 
 test('le tri priorité va du plus haut au plus bas, les sans-priorité en fin', () => {
