@@ -1372,14 +1372,61 @@ test('la route du relevé refuse les autres méthodes et les origines distantes'
 })
 
 test('un fichier cassé se dit broken à la lecture, puis repart au geste suivant', async (t) => {
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    const json = (body) => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) })
+    if (href.endsWith('/user')) return json({ login: 'me' })
+    return json([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
+  }
   const usageFile = join(await mkdtemp(join(tmpdir(), 'missions-usage-route-')), 'usage.json')
   await writeFile(usageFile, 'half a file', 'utf8')
-  const { handler } = await mount(t, { usageFile })
+  const { dir, handler } = await mount(t, { usageFile, fetchImpl })
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`)
 
   const read = await call(handler, { path: '/missions/api/usage' })
   assert.equal(read.status, 200)
   assert.equal(read.body.broken, true)
   assert.deepEqual(read.body.elements, {})
+
+  // Le relevé n'est qu'un fichier local : même cassé, il ne prend pas la
+  // liste des missions en otage. La route liste répond, avec ses lignes.
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const list = await call(handler, { path: '/missions/api/list' })
+    assert.equal(list.status, 200)
+    assert.deepEqual(list.body.missions.map((mission) => mission.key), ['MIS-2'])
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
 
   const written = await call(handler, { method: 'POST', path: '/missions/api/usage', body: { element: 'workflow.step', detail: 'execution' } })
   assert.equal(written.status, 200)

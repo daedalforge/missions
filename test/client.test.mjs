@@ -2119,9 +2119,10 @@ test('un clic sur l’onglet Repositories bascule le panneau et ferme le volet',
     assert.deepEqual(setters.slice(-2), ['repositories', null])
     // Le clic ne relit pas le compte : la pastille a déjà sa valeur, et ce sont
     // le montage et le tick qui la rafraîchissent. Le scan, lui, appartient au
-    // montage de la vue de l'onglet, joué séparément plus bas.
+    // montage de la vue de l'onglet, joué séparément plus bas. Le seul appel du
+    // clic est le geste qu'il compte, jamais une lecture.
     assert.equal(appels.includes('missions/api/repositories/count'), false, 'le clic ne relit pas le compte')
-    assert.deepEqual(appels, [], 'le clic ne paie aucune lecture')
+    assert.deepEqual(appels, ['missions/api/usage'], 'le clic ne paie que le geste qu’il compte')
   } finally {
     globalThis.fetch = vraiFetch
   }
@@ -2889,7 +2890,9 @@ function monterUsage(releve = USAGE_LOADED) {
       '',
       { ...EMPTY_BAR.filters, state: ['done'] },
       null,
-      // Le quinzième état est celui de `UsageTab`, consommé quand on la rend.
+      // Le compte des dépôts de la pastille, lu au montage et gardé dans le panneau.
+      null,
+      // Le seizième état est celui de `UsageTab`, consommé quand on la rend.
       { loading: false, usage: releve, error: null },
     ],
     memorySession({ 'missions.tab': 'usage' }),
@@ -3085,13 +3088,15 @@ test('le montage et le tick de rafraîchissement ne comptent rien', async () => 
     // Les effets du panneau joués comme React les jouerait au montage.
     for (const effect of effects) effect.fn()
     await new Promise((done) => setTimeout(done, 0))
-    assert.deepEqual(calls.map((call) => call.method), ['GET'], 'le montage lit la liste, sans compter')
+    // Le montage lit la liste et le compte de la pastille, et ne compte rien.
+    assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET'], 'le montage lit la liste et le compte, sans compter')
+    assert.deepEqual(calls.map((call) => call.url), ['missions/api/list', 'missions/api/repositories/count'])
 
     assert.ok(tick, 'le tick de 60 s est armé')
     calls.length = 0
     tick()
     await new Promise((done) => setTimeout(done, 0))
-    assert.deepEqual(calls.map((call) => call.method), ['GET'], 'le tick rafraîchit, sans compter')
+    assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET'], 'le tick rafraîchit, sans compter')
   } finally {
     globalThis.fetch = vraiFetch
     globalThis.setInterval = vraiSetInterval
@@ -3109,4 +3114,487 @@ test('Usage se place entre Repositories et Workflows, et ses verdicts ont leurs 
     assert.ok(regle(`.missions-usage-verdict--${verdict}`).length > 0, `règle absente : ${verdict}`)
   }
   assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-usage-verdict--grow/)
+})
+
+// ---------------------------------------------------------------------------
+// Chaque geste se paie un POST, et un seul : le relevé compte des clics, pas
+// des intentions. Les tests ci-dessous cliquent chaque gestionnaire rendu et
+// lisent la requête qui part vraiment — la lecture statique des `track('…')`
+// ne prouve pas qu'un bouton est câblé.
+// ---------------------------------------------------------------------------
+
+/** Un `fetch` espion : les GET répondent `{}`, les POST sont relevés. */
+function espionUsage() {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    appels.push({
+      url: String(url),
+      method: init.method ?? 'GET',
+      body: init.body === undefined ? undefined : JSON.parse(init.body),
+    })
+    return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' }
+  }
+  return {
+    appels,
+    postes: () => appels.filter((appel) => appel.url === 'missions/api/usage' && appel.method === 'POST'),
+    /** Un clic, un POST — avec le corps exact que le registre attend. */
+    geste(element, detail) {
+      const postes = this.postes()
+      assert.equal(postes.length, 1, `un seul POST pour ${element}, pas ${postes.length}`)
+      assert.deepEqual(
+        postes[0].body,
+        detail === undefined ? { element } : { element, detail },
+        `le corps de ${element} nomme le geste et son détail`,
+      )
+      appels.length = 0
+    },
+    /** Un clic que le relevé ne compte pas. */
+    aucunGeste(raison) {
+      assert.deepEqual(this.postes(), [], raison)
+      appels.length = 0
+    },
+    restore() {
+      globalThis.fetch = vraiFetch
+    },
+  }
+}
+
+/** Clique une case du menu d'un `ChecklistFilter`, menu ouvert comme React le ferait. */
+function cliquerCaseFiltre(brut, queue, label, index = 0) {
+  // `StatusFilter` et `PriorityFilter` ne sont pas encore résolus : on rend le
+  // composant une fois pour obtenir son `ChecklistFilter`, que l'on rend ensuite
+  // menu ouvert, comme le clic du chip l'aurait posé.
+  const conteneur = findAll(brut, label === 'Status' ? 'StatusFilter' : 'PriorityFilter')[0]
+  assert.ok(conteneur, `le filtre ${label} est monté`)
+  const filtre = conteneur.fn({ ...conteneur.props, children: conteneur.children })
+  assert.equal(filtre.type, 'ChecklistFilter', `le filtre ${label} passe par le menu à cases`)
+  // Le chip pose `open === true` ; le faux React ne relance pas le rendu, le
+  // test rejoue donc ce rendu avec l'état que le clic aurait posé.
+  queue.push(true)
+  const ouvert = renderTree(filtre)
+  const cases = findAll(ouvert, 'input').filter((node) => node.props.type === 'checkbox')
+  assert.ok(cases.length > index, `le menu ${label} a ses cases`)
+  return { ouvert, caisse: cases[index] }
+}
+
+test('chaque onglet de la barre compte son geste, sauf celui déjà ouvert', () => {
+  const spy = espionUsage()
+  try {
+    const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+    api.apply(ctx)
+    const tree = registered.main({})
+    const onglets = findAll(tree, 'button').filter((node) => node.props.className === 'missions-tab')
+    assert.equal(onglets.length, 6, 'six onglets : dashboard, missions, done, repositories, usage, workflows')
+
+    // L'onglet où l'on est déjà ne compte rien : un geste, pas un état.
+    const courant = onglets.find((node) => node.props.id === 'missions-tab-dashboard')
+    courant.props.onClick()
+    spy.aucunGeste('cliquer l’onglet déjà ouvert ne compte rien')
+
+    for (const onglet of onglets) {
+      const id = onglet.props.id.replace('missions-tab-', '')
+      if (id === 'dashboard') continue
+      onglet.props.onClick()
+      spy.geste(`tab.${id}`)
+    }
+
+    // Depuis un autre onglet, le dashboard se compte aussi.
+    const { api: api2, ctx: ctx2, registered: registered2 } = charger(
+      undefined,
+      [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'],
+      memorySession(),
+    )
+    api2.apply(ctx2)
+    findAll(registered2.main({}), 'button')
+      .find((node) => node.props.id === 'missions-tab-dashboard')
+      .props.onClick()
+    spy.geste('tab.dashboard')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
+  const spy = espionUsage()
+  try {
+    const { api, ctx, registered, queue } = charger(
+      undefined,
+      [
+        EMPTY_BAR,
+        dashboardView(DASH_MISSIONS),
+        'missions',
+        '',
+        { ...EMPTY_BAR.filters, type: 'bug' },
+        null,
+      ],
+      memorySession(),
+    )
+    api.apply(ctx)
+    const tree = registered.main({})
+    const vueNode = findAll(tree, 'MissionsView')[0]
+    const view = renderTree(vueNode)
+    // Le même rendu, non résolu : les filtres à cases y sont encore des composants.
+    const brut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
+
+    const select = (label) => {
+      const noeud = findAll(view, 'select').find((node) => node.props['aria-label'] === label)
+      assert.ok(noeud, `le sélecteur ${label} est rendu`)
+      return noeud
+    }
+
+    select('Filter by type').props.onChange({ target: { value: 'story' } })
+    spy.geste('filter.type', 'story')
+
+    select('Filter by epic').props.onChange({ target: { value: 'socle' } })
+    spy.geste('filter.epic', 'socle')
+
+    select('Filter by project').props.onChange({ target: { value: 'missions' } })
+    spy.geste('filter.project', 'missions')
+
+    select('Filter by sort').props.onChange({ target: { value: 'oldest' } })
+    spy.geste('filter.sort', 'oldest')
+
+    // Les deux filtres à cases passent par leur menu, ouvert explicitement.
+    const etat = cliquerCaseFiltre(brut, queue, 'Status')
+    const optionEtat = findAll(etat.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
+    etat.caisse.props.onChange()
+    spy.geste('filter.state', optionEtat.props['data-state'])
+
+    const priorite = cliquerCaseFiltre(brut, queue, 'Priority')
+    const optionPriorite = findAll(priorite.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
+    priorite.caisse.props.onChange()
+    spy.geste('filter.priority', optionPriorite.props['data-state'])
+
+    const interrupteur = findAll(view, 'button').find((node) => node.props.role === 'switch')
+    assert.ok(interrupteur, 'l’interrupteur « Missing » est rendu')
+    interrupteur.props.onClick()
+    spy.geste('filter.missing', 'any')
+
+    // La barre a des filtres actifs : le bouton de nettoyage est là, et son
+    // détail dit l'onglet.
+    const nettoyer = findAll(view, 'button').find((node) => node.props.className === 'missions-clear')
+    assert.ok(nettoyer, 'le bouton de nettoyage est rendu avec un filtre actif')
+    nettoyer.props.onClick()
+    spy.geste('filter.clear', 'open')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('thème, recherche, rafraîchissement, reprise et ouverture de mission comptent leur geste', async () => {
+  const spy = espionUsage()
+  try {
+    const { api, ctx, registered } = charger(
+      undefined,
+      [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'],
+      memorySession(),
+    )
+    api.apply(ctx)
+    const tree = registered.main({})
+    const view = renderTree(findAll(tree, 'MissionsView')[0])
+
+    const themeSelect = findAll(tree, 'ThemeSelect')[0]
+    assert.ok(themeSelect, 'le sélecteur de thème est monté')
+    const theme = findAll(renderTree(themeSelect), 'select').find((node) => node.props['aria-label'] === 'Theme')
+    assert.ok(theme, 'le sélecteur de thème est rendu')
+    theme.props.onChange({ target: { value: 'manga' } })
+    spy.geste('action.theme', 'manga')
+
+    const recherche = findAll(view, 'input').find((node) => node.props.type === 'search')
+    recherche.props.onChange({ target: { value: 'mi' } })
+    spy.aucunGeste('aucun POST par frappe')
+    recherche.props.onBlur({ target: { value: 'mis' } })
+    spy.geste('filter.search', 'mis')
+
+    const rafraichir = findAll(view, 'button').find((node) => node.props['aria-label'] === 'Refresh')
+    assert.ok(rafraichir, 'le bouton de rafraîchissement est rendu')
+    await rafraichir.props.onClick()
+    spy.geste('list.refresh', 'open')
+
+    const carte = findAll(view, 'article').find((node) => node.props.className === 'missions-card')
+    assert.ok(carte, 'les cartes de mission sont rendues')
+    carte.props.onClick()
+    spy.geste('mission.open')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('une liste en échec offre une reprise qui compte le geste, dans les deux onglets', async () => {
+  const spy = espionUsage()
+  const echec = (missions = []) => ({ loading: false, missions, errors: [{ project: 'missions', message: 'boom' }], workspaceId: 'w', workspaceRoot: '/w' })
+  try {
+    for (const onglet of ['missions', 'done']) {
+      const etats = onglet === 'missions'
+        ? [EMPTY_BAR, echec(DASH_MISSIONS), 'missions']
+        : [
+            EMPTY_BAR, dashboardView(DASH_MISSIONS), 'done', '', { ...EMPTY_BAR.filters }, null, null, 'default', null,
+            EMPTY_BAR, echec([]), '',
+          ]
+      const { api, ctx, registered } = charger(undefined, etats, memorySession())
+      api.apply(ctx)
+      const tree = registered.main({})
+      // Le bandeau vit dans le panneau, au-dessus de la vue : il porte la
+      // reprise des deux lectures, la liste comme le journal.
+      const reprise = findAll(tree, 'button').find((node) => node.props.className === 'missions-retry')
+      assert.ok(reprise, `le bandeau de reprise est rendu pour ${onglet}`)
+      await reprise.props.onClick()
+      spy.geste('list.retry', onglet === 'done' ? 'done' : 'open')
+    }
+  } finally {
+    spy.restore()
+  }
+})
+
+test('sans `fetch`, le panneau ne compte rien et le geste passe quand même', () => {
+  const vraiFetch = globalThis.fetch
+  // Le vrai navigateur peut ne pas exposer `fetch` : le compteur doit se taire,
+  // pas casser le panneau.
+  delete globalThis.fetch
+  try {
+    const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+    api.apply(ctx)
+    const tree = registered.main({})
+    const onglet = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-usage')
+    assert.ok(onglet, 'la barre porte l’onglet Usage')
+    assert.doesNotThrow(() => onglet.props.onClick(), 'un clic sans `fetch` ne lève pas')
+    assert.deepEqual(setters.slice(-2), ['usage', null], 'le clic ouvre quand même son onglet')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+/** Le volet avec ses vingt états, préremplis si le test en a besoin. */
+function monterVoletAvec(mission, etatsVolet = []) {
+  const view = { loading: false, missions: [mission], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null }
+  const panneau = [
+    EMPTY_BAR, view, 'missions', '', { ...EMPTY_BAR.filters }, null, mission,
+    'default', null, EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, null,
+  ]
+  const { api, ctx, registered, setters, queue } = charger(undefined, [...panneau, ...etatsVolet], memorySession())
+  api.apply(ctx)
+  const noeud = findAll(registered.main({}), 'MissionDrawer')[0]
+  assert.ok(noeud, 'le volet est monté')
+  return { inner: renderTree(noeud), setters, queue }
+}
+
+test('chaque onglet du volet, la priorité et le tracker comptent un seul POST', () => {
+  const spy = espionUsage()
+  try {
+    const { inner } = monterVoletAvec({ ...MISSION, url: 'https://github.com/daedalforge/missions/issues/42' })
+
+    for (const onglet of findAll(inner, 'button').filter((node) => node.props.className === 'missions-drawer-tab')) {
+      const libelle = textOf(onglet).trim()
+      onglet.props.onClick()
+      spy.geste(`mission.tab.${libelle.toLowerCase()}`)
+    }
+
+    const priorite = findAll(inner, 'select').find((node) => node.props.className === 'missions-priority-select')
+    assert.ok(priorite, 'le sélecteur de priorité est rendu')
+    priorite.props.onChange({ target: { value: 'urgent' } })
+    spy.geste('mission.priority', 'urgent')
+
+    const tracker = findAll(inner, 'a').find((node) => textOf(node).trim() === 'Open on the tracker')
+    assert.ok(tracker, 'le lien du tracker est rendu')
+    tracker.props.onClick()
+    spy.geste('mission.open-tracker')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('blocage, déclaration, session et remontées comptent un seul POST', async () => {
+  const spy = espionUsage()
+  try {
+    // Le blocage demande la raison : on la donne, le formulaire armé comme le
+    // second clic du menu l'aurait laissé.
+    const arme = monterVoletAvec(MISSION, [
+      null, MISSION.branch, MISSION.base, false, null, null, null, 'details', false, true, 'Le serveur de test est tombé',
+    ])
+    const bloquer = findAll(arme.inner, 'button').find((node) => node.props.className === 'missions-blocked-apply')
+    assert.ok(bloquer, 'le bouton « Bloquer » est rendu dès que le formulaire est armé')
+    await bloquer.props.onClick()
+    spy.geste('mission.block', 'block')
+
+    // Déclarer une branche : la mission n'en a pas encore, le formulaire est donc sale.
+    const neuve = monterVoletAvec({ ...MISSION, branch: null, base: null })
+    const enregistrer = findAll(neuve.inner, 'button').find((node) => node.props.className === 'missions-declare-save')
+    assert.ok(enregistrer, 'le bouton de déclaration est rendu')
+    assert.equal(enregistrer.props.disabled, false, 'une mission sans branche rend le formulaire sale')
+    await enregistrer.props.onClick()
+    spy.geste('mission.declare')
+
+    // En revue, les deux sessions : le pas courant et les remontées de la PR.
+    const revue = monterVoletAvec({ ...MISSION, state: 'in-review' })
+    const session = findAll(revue.inner, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+    const remontees = findAll(revue.inner, 'button').find((node) => textOf(node).trim() === 'Check the PR feedback')
+    assert.ok(session, 'la session du pas est rendue')
+    assert.ok(remontees, 'la session des remontées est rendue')
+    await session.props.onClick().catch(() => {})
+    spy.geste('mission.session')
+    await remontees.props.onClick().catch(() => {})
+    spy.geste('mission.feedback-session')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('la clôture locale ne compte qu’au second clic', async () => {
+  const spy = espionUsage()
+  try {
+    const { inner } = monterVoletAvec({ ...MISSION, state: 'ready-for-prod' })
+    const fermer = findAll(inner, 'button').find((node) => node.props.className === 'missions-action missions-action--danger')
+    assert.ok(fermer, 'le bouton de clôture est rendu en ready-for-prod')
+    await fermer.props.onClick()
+    spy.aucunGeste('le premier clic arme seulement, il ne compte pas')
+    await fermer.props.onClick()
+    spy.geste('mission.close-checkout')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('ouvrir un dépôt et ses onglets, sa branche, sa page suivante comptent un seul POST', async () => {
+  const spy = espionUsage()
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  try {
+    // La ligne de dépôt est un bouton : le clic ouvre le volet et compte le dépôt.
+    const lignes = montrerRepositories(scanReady(REPO_SCAN)).inner
+    const ligne = findAll(lignes, 'button').find((node) => node.props['data-repository'] !== undefined)
+    assert.ok(ligne, 'la ligne de dépôt est cliquable')
+    ligne.props.onClick()
+    spy.geste('repository.open', ligne.props['data-repository'])
+
+    // Les trois onglets du volet du dépôt.
+    const onglets = volet([
+      ...repositoriesStates(scanReady(detail), repository),
+      'details', { loading: false, more: false, data: null, error: null }, { loading: false, data: null, error: null },
+    ]).inner
+    for (const onglet of findAll(onglets, 'button').filter((node) => node.props.className === 'missions-repo-tab')) {
+      onglet.props.onClick()
+      spy.geste(`repository.tab.${textOf(onglet).trim().toLowerCase()}`)
+    }
+
+    // La page de commits : changer de branche compte, et « Show more » aussi.
+    const history = {
+      loading: false,
+      // `more` est l'état « page en cours » : au repos il est faux, et c'est
+      // `data.hasMore` qui dit qu'il reste des commits.
+      more: false,
+      data: { branch: 'main', branches: ['main', 'feat/x'], commits: [{ sha: 'abc1234', date: REPO_NOW, subject: 'main' }], hasMore: true },
+      error: null,
+    }
+    const lecture = volet([
+      ...repositoriesStates(scanReady(detail), repository),
+      'history', history, { loading: false, data: null, error: null },
+    ]).inner
+    const branche = findAll(lecture, 'select').find((node) => node.props['aria-label'] === 'Branch')
+    assert.ok(branche, 'le sélecteur de branche est rendu')
+    branche.props.onChange({ target: { value: 'main' } })
+    spy.geste('repository.branch', 'main')
+
+    const plus = findAll(lecture, 'button').find((node) => textOf(node).trim() === 'Show more')
+    assert.ok(plus, 'le bouton de page suivante est rendu')
+    plus.props.onClick()
+    spy.geste('repository.more')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('chaque geste du graphe de workflows compte un seul POST', async () => {
+  const spy = espionUsage()
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  try {
+    const monterGraphe = (chosen = null, arc = null) => {
+      const { api, ctx, registered, queue } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'workflows' }))
+      api.apply(ctx)
+      const vue = findAll(registered.main({}), 'WorkflowsView')[0]
+      assert.ok(vue, 'l’onglet Workflows est monté')
+      const etats = workflowStates(review, chosen)
+      if (arc) etats[6] = arc
+      queue.push(...etats)
+      return renderTree(vue)
+    }
+    const bouton = (graph, texte, classe) => {
+      const noeud = findAll(graph, 'button').find((node) => (classe ? node.props.className === classe : textOf(node).trim() === texte))
+      assert.ok(noeud, `le bouton ${texte ?? classe} est rendu`)
+      return noeud
+    }
+
+    const graph = monterGraphe()
+    bouton(graph, null, 'wf-step').props.onClick()
+    spy.geste('workflow.step', 'review')
+
+    bouton(graph, 'Recharger').props.onClick()
+    spy.geste('workflow.reload')
+
+    bouton(graph, 'Enregistrer').props.onClick()
+    spy.geste('workflow.save')
+
+    // Sans geste choisi, la carte propose l'ajout ; avec, elle propose le retrait.
+    bouton(graph, 'Ajouter un geste').props.onClick()
+    spy.geste('workflow.gesture.add')
+
+    const choisi = monterGraphe('decider')
+    bouton(choisi, 'Supprimer le geste').props.onClick()
+    spy.geste('workflow.gesture.remove')
+
+    // Un couple libre : l'arc s'ajoute. Le même couple : il se met à jour.
+    const pris = new Set((review.edges ?? []).map((edge) => `${edge.from}→${edge.to}`))
+    let libre = null
+    for (const depart of review.nodes) {
+      for (const arrivee of review.nodes) {
+        if (depart.id !== arrivee.id && !pris.has(`${depart.id}→${arrivee.id}`)) { libre = { from: depart.id, to: arrivee.id }; break }
+      }
+      if (libre) break
+    }
+    assert.ok(libre, 'le modèle de revue a un couple libre pour un nouvel arc')
+    bouton(monterGraphe(null, { ...libre, when: '' }), 'Ajouter l’arc').props.onClick()
+    spy.geste('workflow.arc.add')
+
+    const existant = review.edges[0]
+    const miseAJour = monterGraphe(null, { from: existant.from, to: existant.to, when: 'encore' })
+    bouton(miseAJour, 'Mettre à jour l’arc').props.onClick()
+    spy.geste('workflow.arc.update')
+
+    bouton(miseAJour, null, 'wf-arc-del').props.onClick({ stopPropagation() {} })
+    spy.geste('workflow.arc.remove')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('le dashboard compte l’ouverture d’une ligne et le « View all » de ses cartes', () => {
+  const spy = espionUsage()
+  try {
+    // Onze bugs : de quoi dépasser les dix lignes de la carte et faire
+    // apparaître son lien « View all ».
+    const bugs = Array.from({ length: 11 }, (_, index) => ({
+      ...MISSION,
+      key: `MIS-9${index}`,
+      type: 'bug',
+      state: 'in-review',
+      priority: 'urgent',
+      updatedAt: MISSION.updated,
+    }))
+    const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(bugs)], memorySession())
+    api.apply(ctx)
+    const dash = renderTree(findAll(registered.main({}), 'DashboardView')[0])
+
+    const toutVoir = findAll(dash, 'button').find((node) => node.props.className === 'missions-dash-link')
+    assert.ok(toutVoir, 'le lien « View all » est rendu au-delà de dix lignes')
+    toutVoir.props.onClick()
+    spy.geste('dashboard.view-all', 'type')
+
+    const ligne = findAll(dash, 'button').find((node) => node.props.className === 'missions-row')
+    assert.ok(ligne, 'une ligne de mission est rendue')
+    ligne.props.onClick()
+    spy.geste('mission.open')
+  } finally {
+    spy.restore()
+  }
 })
