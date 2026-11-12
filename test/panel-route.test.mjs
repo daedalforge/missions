@@ -830,6 +830,7 @@ test('GET repositories rend une entrée par enfant direct, worktree compris', as
     'beta log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
     'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n# branch.ab +0 -0\n',
     'gamma log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+    'gamma worktree list --porcelain': `worktree ${join(root, 'alpha')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
   })
   const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
 
@@ -846,7 +847,10 @@ test('GET repositories rend une entrée par enfant direct, worktree compris', as
   assert.equal(response.body.repositories.find((row) => row.name === 'gamma').branch, 'gh-20-hover')
   assert.ok(!response.body.repositories.some((row) => row.name === 'plain'))
   assert.deepEqual(response.body.errors, [])
-  assert.equal(calls.length, 6, 'deux commandes par dépôt, aucune pour le dossier nu')
+  const gamma = response.body.repositories.find((row) => row.name === 'gamma')
+  assert.deepEqual(gamma.main, { name: 'alpha', path: join(root, 'alpha') }, 'le worktree nomme son principal')
+  assert.equal(response.body.repositories.find((row) => row.name === 'alpha').main, null)
+  assert.equal(calls.length, 7, 'deux commandes par dépôt, une de plus pour le worktree, aucune pour le dossier nu')
 })
 
 test('GET repositories ignore la racine demandée par le client', async (t) => {

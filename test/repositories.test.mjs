@@ -123,6 +123,16 @@ test('le scan ne retient que les enfants directs qui portent un .git', async (t)
     'alpha log -1 --no-decorate --format=%h%x1f%ct%x1f%s': commit('a1b2c3d', 1794468058, 'MIS-114: la liste'),
     'beta status --porcelain=v2 --branch': STATUS_BUSY,
     'beta log -1 --no-decorate --format=%h%x1f%ct%x1f%s': commit('d4e5f6a', 1794000000, 'gh-20: le survol'),
+    'beta worktree list --porcelain': [
+      `worktree ${join(dir, 'alpha')}`,
+      'HEAD 1a2b3c4d',
+      'branch refs/heads/main',
+      '',
+      `worktree ${join(dir, 'beta')}`,
+      'HEAD d4e5f6a',
+      'branch refs/heads/gh-20-hover',
+      '',
+    ].join('\n'),
   })
   const scan = await listRepositories(dir, { run })
 
@@ -130,8 +140,9 @@ test('le scan ne retient que les enfants directs qui portent un .git', async (t)
   assert.equal(scan.root, dir)
   assert.equal(scan.errors.length, 0)
   assert.ok(Number.isFinite(scan.durationMs) && scan.durationMs >= 0)
-  // Deux appels par dépôt : le statut, puis le dernier commit.
-  assert.equal(calls.length, 4)
+  // Deux appels par dépôt — le statut, puis le dernier commit — et un de plus
+  // pour un worktree, qui lit le principal d'où il vient.
+  assert.equal(calls.length, 5)
   assert.ok(calls.every((call) => call.options?.timeout === GIT_TIMEOUT_MS))
 
   const beta = scan.repositories.find((row) => row.name === 'beta')
@@ -142,9 +153,42 @@ test('le scan ne retient que les enfants directs qui portent un .git', async (t)
   assert.equal(beta.behind, 1)
   assert.equal(beta.dirty, 2)
   assert.equal(beta.error, null)
+  assert.deepEqual(beta.main, { name: 'alpha', path: join(dir, 'alpha') }, 'le principal est un voisin de la racine')
 
   // Le plus récent d'abord : c'est l'ordre que le widget annonce.
   assert.deepEqual(scan.repositories.map((row) => row.name), ['alpha', 'beta'])
+})
+
+test('un worktree nomme le principal, ou dit qu’il ne peut pas', async (t) => {
+  const dir = await root(t, [
+    { name: 'alpha', git: 'dir' },
+    { name: 'beta', git: 'file' },
+    { name: 'gamma', git: 'file' },
+    { name: 'delta', git: 'file' },
+  ])
+  const { run } = fauxGit({
+    'alpha status --porcelain=v2 --branch': STATUS_CLEAN,
+    'alpha log -1 --no-decorate --format=%h%x1f%ct%x1f%s': commit('a1b2c3d', 1000, 'alpha'),
+    'beta status --porcelain=v2 --branch': STATUS_CLEAN,
+    'beta log -1 --no-decorate --format=%h%x1f%ct%x1f%s': commit('b1b2c3d', 900, 'beta'),
+    'gamma status --porcelain=v2 --branch': STATUS_CLEAN,
+    'gamma log -1 --no-decorate --format=%h%x1f%ct%x1f%s': commit('c1b2c3d', 800, 'gamma'),
+    'delta status --porcelain=v2 --branch': STATUS_CLEAN,
+    'delta log -1 --no-decorate --format=%h%x1f%ct%x1f%s': commit('d1b2c3d', 700, 'delta'),
+    // Le principal est un autre enfant de la racine.
+    'beta worktree list --porcelain': `worktree ${join(dir, 'alpha')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
+    // Le principal vit hors de la racine scannée : un chemin, pas de ligne.
+    'gamma worktree list --porcelain': 'worktree /Users/moi/elsewhere/missions\nHEAD 2a2b3c4d\nbranch refs/heads/main\n',
+    // git refuse de lister : le principal est inconnu, pas deviné.
+    'delta worktree list --porcelain': Object.assign(new Error('refus'), { stderr: 'fatal: not a git repository\n' }),
+  })
+  const scan = await listRepositories(dir, { run })
+  const par = (name) => scan.repositories.find((row) => row.name === name)
+
+  assert.equal(par('alpha').main, null, 'un clone est son propre principal')
+  assert.deepEqual(par('beta').main, { name: 'alpha', path: join(dir, 'alpha') })
+  assert.deepEqual(par('gamma').main, { name: null, path: '/Users/moi/elsewhere/missions' }, 'hors racine : pas de nom à ouvrir')
+  assert.deepEqual(par('delta').main, { name: null, path: null }, 'un refus laisse le chemin nul, pas la ligne')
 })
 
 test('le compte de la pastille retient les clones, pas les worktrees', async (t) => {
@@ -180,8 +224,9 @@ test('la ligne porte exactement les champs nommés par la fiche', async (t) => {
   const [row] = (await listRepositories(dir, { run })).repositories
 
   assert.deepEqual(Object.keys(row).sort(), [
-    'ahead', 'behind', 'branch', 'detached', 'dirty', 'error', 'head', 'kind', 'lastCommit', 'name', 'path', 'upstream',
+    'ahead', 'behind', 'branch', 'detached', 'dirty', 'error', 'head', 'kind', 'lastCommit', 'main', 'name', 'path', 'upstream',
   ])
+  assert.equal(row.main, null, 'un clone est son propre principal')
   assert.deepEqual(Object.keys(row.lastCommit).sort(), ['date', 'sha', 'subject'])
   assert.equal(row.lastCommit.sha, 'a1b2c3d')
   assert.equal(row.lastCommit.date, 1794468058 * 1000, 'la date est l’instant du commit, en millisecondes')
