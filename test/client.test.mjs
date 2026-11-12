@@ -3726,3 +3726,156 @@ test('le dashboard compte l’ouverture d’une ligne et le « View all » de se
     spy.restore()
   }
 })
+
+function monterVoletArchive(mission = { ...MISSION, state: 'done', updatedAt: MISSION.updated }) {
+  return monterVolet(mission)
+}
+
+function boutonArchive(tree) {
+  return findAll(tree, 'button').find((node) => nomDuGeste(node) === 'Archive') ?? null
+}
+
+test('le volet ne propose l’archive qu’en done', () => {
+  for (const state of ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'blocked', null]) {
+    const { tree } = monterVoletArchive({ ...MISSION, state, updatedAt: MISSION.updated })
+    assert.equal(boutonArchive(tree), null, `aucun bouton d’archive pour ${state}`)
+  }
+
+  const { tree } = monterVoletArchive()
+  const bouton = boutonArchive(tree)
+  assert.ok(bouton, 'le bouton doit être rendu en done')
+  assert.equal(bouton.props.className, 'missions-action missions-action--icon')
+  assert.equal(bouton.props.disabled, false)
+  // Le nom porte le geste ; la conséquence (le dossier part dans les archives)
+  // se dit dans la note au premier clic, pas dans une infobulle.
+  assert.equal(bouton.props.title, 'Archive')
+  assert.equal(bouton.props['aria-label'], 'Archive')
+  assert.equal(textOf(bouton), '')
+  const dessins = findAll(bouton, 'svg')
+  assert.equal(dessins.length, 1, 'une seule icône')
+  assert.equal(dessins[0].props['aria-hidden'], 'true')
+
+  // Il précède la session, qui reste le geste primaire en dernier.
+  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+  const boutons = actions.children.filter((child) => child.type === 'button')
+  const iArchive = boutons.findIndex((node) => nomDuGeste(node) === 'Archive')
+  const iSession = boutons.findIndex((node) => /^Start a session/.test(nomDuGeste(node)))
+  assert.ok(iArchive >= 0 && iSession > iArchive)
+
+  // Le câblage du bundle, en plus du rendu.
+  assert.match(SOURCE, /const ARCHIVE_URL = 'missions\/api\/archive'/)
+  // Armé, le bouton se remplit et sa coche remplace la boîte : l'état se lit
+  // dans le dessin, comme pour la clôture locale.
+  assert.match(SOURCE, /missions-action missions-action--icon missions-action--armed/)
+  assert.match(SOURCE, /'aria-label': archiving \? 'Archiving…' : armedArchive \? 'Confirm — archive the mission' : 'Archive',/)
+  assert.match(SOURCE, /h\(ActionIcon, \{ name: armedArchive && !archiving \? 'confirm' : 'archive' \}\)/)
+  assert.match(SOURCE, /mission\.state === 'done'/)
+  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key \}\)/)
+  assert.match(SOURCE, /onArchived: applyArchive/)
+  assert.match(SOURCE, /const applyArchive = \(archived\) => \{/)
+})
+
+test('le premier clic arme l’archive, le second envoie la clé et ferme le volet', async () => {
+  const calls = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) })
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ archived: 'missions/archives/MIS-42', folder: 'MIS-42', project: 'missions' }),
+    }
+  }
+  try {
+    const archived = []
+    const { tree: overridden, setters } = monterVolet({ ...MISSION, state: 'done', updatedAt: MISSION.updated }, {
+      onArchived: (entry) => { archived.push(entry) },
+    })
+    const bouton = boutonArchive(overridden)
+    assert.ok(bouton)
+
+    await bouton.props.onClick()
+    assert.deepEqual(calls, [], 'le premier clic n’écrit rien')
+    const armeNote = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+    assert.equal(armeNote.error, false)
+    assert.match(armeNote.text, /missions\/archives\/. Click again to confirm/)
+
+    await bouton.props.onClick()
+    assert.deepEqual(calls, [
+      { url: 'missions/api/archive', method: 'POST', body: { key: 'MIS-42' } },
+    ])
+    const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+    assert.equal(note.error, false)
+    assert.match(note.text, /Archived to missions\/archives\/MIS-42/)
+    assert.deepEqual(archived, [{ key: 'MIS-42', folder: 'MIS-42' }])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un refus d’archive se dit avec sa cause, et le bouton se réarme', async () => {
+  const calls = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    calls.push(String(url))
+    return { ok: false, status: 409, json: async () => ({ error: 'missions/archives/MIS-42 already exists' }) }
+  }
+  try {
+    const { tree, setters } = monterVoletArchive()
+    const bouton = boutonArchive(tree)
+
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    assert.equal(calls.length, 1)
+    const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+    assert.equal(note.error, true)
+    assert.match(note.text, /Archive refused: missions\/archives\/MIS-42 already exists/)
+
+    // Le refus ne touche pas la liste : aucun updater reçu ne perd la mission.
+    const kept = setters.reduce(
+      (state, next) => (typeof next === 'function' ? next(state) : state),
+      { missions: [{ key: 'MIS-42' }, { key: 'MIS-43' }] },
+    )
+    assert.deepEqual(kept.missions.map((mission) => mission.key), ['MIS-42', 'MIS-43'], 'la ligne reste dans la vue')
+
+    // Un refus réarme le geste : le clic suivant redemande confirmation.
+    await bouton.props.onClick()
+    assert.equal(calls.length, 1, 'le clic après refus réarme sans écrire')
+    const rearme = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+    assert.match(rearme.text, /Click again to confirm/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('archiver retire la ligne de Done et referme le volet', async () => {
+  const calls = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    calls.push(String(url))
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }),
+    }
+  }
+  try {
+    const mission = { ...MISSION, state: 'done', updatedAt: MISSION.updated }
+    const { drawer, setters } = monterVolet(mission)
+    assert.equal(typeof drawer.props.onArchived, 'function')
+
+    drawer.props.onArchived({ key: 'MIS-42', folder: 'MIS-42' })
+
+    // Le volet est refermé.
+    assert.ok(setters.includes(null), 'le volet doit se refermer')
+    // La ligne quittée les deux copies de la liste, sans attendre le serveur.
+    const filtered = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [{ key: 'MIS-42' }, { key: 'MIS-1' }] }))
+    assert.ok(filtered.every((next) => next.missions.length === 1 && next.missions[0].key === 'MIS-1'))
+    assert.deepEqual(calls, ['missions/api/list?done=1&refresh=1'])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
