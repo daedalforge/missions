@@ -186,6 +186,7 @@ window.__ModuleLoader__.load({
       'in-progress': 'in progress',
       'in-review': 'in review',
       'ready-for-prod': 'ready for prod',
+      done: 'done',
       unknown: 'unknown state',
     }
     const TYPE_LABELS = { bug: 'bug', story: 'story' }
@@ -1413,7 +1414,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         options: stateOptions(missions),
         labels: STATE_LABELS,
         counts,
-        allLabel: 'All states',
+        allLabel: 'All open states',
         onChange,
       })
     }
@@ -1561,9 +1562,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         return h('div', null, toolbar, h('p', { className: 'missions-empty' }, 'No open missions assigned to you.'))
       }
       if (filtered.length === 0) {
-        return h('div', null, toolbar, theme === 'manga'
+        // The list rests on open work: with no filter set, an empty list means
+        // there is nothing open — not that a filter excluded everything.
+        const resting = !hasActiveFilters(filters) && String(query ?? '').trim() === ''
+        return h('div', null, toolbar, theme === 'manga' && !resting
           ? h(MangaEmpty, { onClear })
-          : h('p', { className: 'missions-empty' }, 'No mission matches these filters.'))
+          : h('p', { className: 'missions-empty' }, resting ? 'No open missions assigned to you.' : 'No mission matches these filters.'))
       }
 
       return h('div', null,
@@ -2865,7 +2869,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const tabSource = TABS.find((entry) => entry.id === tab)?.source ?? 'tracker'
       const trackerTab = tabSource === 'tracker'
       const failed = errors.length > 0
-      const projectCount = new Set(missions.map((mission) => mission.project).filter(Boolean)).size
+      // The header and the tab badge count open work: a done mission the
+      // state filter can show is history, not a mission waiting on anyone.
+      const openMissions = missions.filter((mission) => mission.state !== 'done')
+      const projectCount = new Set(openMissions.map((mission) => mission.project).filter(Boolean)).size
       const changeTheme = (value) => {
         setTheme(value)
         try { localStorage.setItem(THEME_KEY, value) } catch { /* storage is optional */ }
@@ -2904,7 +2911,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const hero = theme === 'manga' ? h('div', { className: 'missions-hero', 'aria-hidden': 'true' },
         h('img', { className: 'missions-hero-photo', src: ART.village, alt: '' }),
         h('div', { className: 'missions-hero-bubble' },
-          h('b', null, `${missions.length} mission${missions.length === 1 ? '' : 's'}!`),
+          h('b', null, `${openMissions.length} mission${openMissions.length === 1 ? '' : 's'}!`),
           h('span', null, `${projectCount} project${projectCount === 1 ? '' : 's'}`),
         ),
         h('div', { className: 'missions-hero-avatar' }, h('img', { src: ART.avatar, alt: '' })),
@@ -2947,7 +2954,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           onClick: () => changeTab(entry.id),
         },
           entry.label,
-          entry.badge ? h('span', { className: 'missions-tab-count' }, String(missions.length)) : null,
+          entry.badge ? h('span', { className: 'missions-tab-count' }, String(openMissions.length)) : null,
         )),
       )
 
@@ -2964,7 +2971,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             theme === 'manga' ? h('span', { className: 'missions-title-mark', 'aria-hidden': 'true' }, '忍') : null,
           ),
           h('span', { className: 'missions-scope' },
-            `assigned to me · ${missions.length} open · ${projectCount} project${projectCount === 1 ? '' : 's'}`,
+            `assigned to me · ${openMissions.length} open · ${projectCount} project${projectCount === 1 ? '' : 's'}`,
           ),
           h('div', { className: 'missions-actions' },
             h(ThemeSelect, { value: theme, onChange: changeTheme }),

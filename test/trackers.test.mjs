@@ -104,7 +104,7 @@ test('missions are sorted by state then key', async () => {
   assert.deepEqual(missions.map((m) => m.number), [1, 3, 5])
 })
 
-test('a mission in the done state is not listed', async () => {
+test('une mission done sans dossier déclaré n’est pas listée', async () => {
   const fetchImpl = async (url) => {
     if (String(url).endsWith('/myself')) return response({ accountId: 'me' })
     return response({
@@ -118,6 +118,84 @@ test('a mission in the done state is not listed', async () => {
   const { missions } = await listAll([PROJECT_JIRA], { fetchImpl })
 
   assert.deepEqual(missions.map((m) => m.key), ['SO-2'])
+})
+
+test('une mission done déclarée sur le poste est relue, les autres restent closes', async () => {
+  const requested = []
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    if (href.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    requested.push(href)
+    if (href.includes('state=closed')) {
+      return response([
+        // Une issue fermée garde ses labels : c'est la fermeture qui la rend
+        // done, et ses deux états connus ne sont plus un conflit.
+        { number: 9, state: 'closed', title: 'Close déclarée', labels: [{ name: 'in-review' }, { name: 'ready-for-prod' }] },
+        { number: 8, state: 'closed', title: 'Close non déclarée', labels: [] },
+      ])
+    }
+    return response([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
+  }
+
+  const { missions, errors } = await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']) })
+
+  assert.deepEqual(errors, [])
+  // Le tri range par état : done vient avant ready.
+  assert.deepEqual(missions.map((m) => m.key), ['MIS-9', 'MIS-2'])
+  const closed = missions.find((m) => m.key === 'MIS-9')
+  assert.equal(closed.state, 'done')
+  assert.deepEqual(closed.stateConflict, [])
+  assert.equal(requested.filter((href) => href.includes('state=closed')).length, 1)
+})
+
+test('sans dossier déclaré, les missions closes ne sont jamais lues', async () => {
+  const requested = []
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    if (href.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    requested.push(href)
+    return response([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
+  }
+
+  const { missions } = await listAll([PROJECT_OK], { fetchImpl })
+
+  assert.deepEqual(missions.map((m) => m.key), ['MIS-2'])
+  assert.equal(requested.filter((href) => href.includes('state=closed')).length, 0)
+})
+
+test('un échec de la lecture des done n’efface pas les missions ouvertes', async () => {
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    if (href.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    if (href.includes('state=closed')) {
+      return { ok: false, status: 500, headers: { get: () => null }, text: async () => 'boom' }
+    }
+    return response([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
+  }
+
+  const { missions, errors } = await listAll([PROJECT_OK], { fetchImpl, declaredKeys: new Set(['MIS-9']) })
+
+  assert.deepEqual(missions.map((m) => m.key), ['MIS-2'])
+  assert.equal(errors.length, 1)
+  assert.match(errors[0].message, /done missions/)
+})
+
+test('une mission Jira done déclarée est relue par sa clé', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/myself')) return response({ accountId: 'me' })
+    return response({
+      issues: [
+        { key: 'SO-1', fields: { summary: 'Terminée', status: { name: 'Done' }, issuetype: { name: 'Story' } } },
+        { key: 'SO-3', fields: { summary: 'En cours', status: { name: 'In Progress' }, issuetype: { name: 'Story' } } },
+      ],
+    })
+  }
+
+  const { missions, errors } = await listAll([PROJECT_JIRA], { fetchImpl, declaredKeys: new Set(['SO-1', 'SO-77']) })
+
+  assert.deepEqual(errors, [])
+  assert.deepEqual(missions.map((m) => m.key).sort(), ['SO-1', 'SO-3'])
+  assert.equal(missions.find((m) => m.key === 'SO-1').state, 'done')
 })
 
 test('two state labels leave the state unknown and raise a project error', async () => {

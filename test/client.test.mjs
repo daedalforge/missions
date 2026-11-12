@@ -442,9 +442,12 @@ test('le journal et la checklist prennent la hauteur restante du volet', () => {
   assert.match(SOURCE, /\.missions-drawer--fill \.missions-journal-text, \.missions-drawer--fill \.missions-checklist-body \{ max-height: none; flex: 1; min-height: 0; \}/)
 })
 
-test('le bundle ne propose plus l’état done', () => {
-  assert.match(SOURCE, /STATE_FILTER_ORDER = \['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod'\]/)
-  assert.doesNotMatch(SOURCE, /done: 'done'/)
+test('le bundle rend l’état done, en fin de liste et sur demande du filtre', () => {
+  assert.match(SOURCE, /const STATE_ORDER = \['in-progress', 'in-review', 'ready', 'to-refine', 'ready-for-prod', 'done'\]/)
+  assert.match(SOURCE, /STATE_FILTER_ORDER = \['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'\]/)
+  assert.match(SOURCE, /done: 'done'/)
+  // La liste par défaut n'en montre aucune : le filtre est la seule porte.
+  assert.match(SOURCE, /mission.state === 'done' && !states.includes\('done'\)/)
 })
 
 test('les erreurs du bandeau ont une clé unique par ligne', () => {
