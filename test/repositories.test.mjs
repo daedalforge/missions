@@ -7,6 +7,7 @@ import test from 'node:test'
 import {
   GIT_TIMEOUT_MS,
   SCAN_CONCURRENCY,
+  countRepositories,
   flattenLayout,
   isValidBranchName,
   isValidRepositoryName,
@@ -144,6 +145,27 @@ test('le scan ne retient que les enfants directs qui portent un .git', async (t)
 
   // Le plus récent d'abord : c'est l'ordre que le widget annonce.
   assert.deepEqual(scan.repositories.map((row) => row.name), ['alpha', 'beta'])
+})
+
+test('le compte de la pastille retient les clones, pas les worktrees', async (t) => {
+  // Le badge annonce des dépôts : un worktree est le checkout d'un dépôt
+  // déclaré ailleurs, et un dossier sans `.git` n'est rien. La fonction ne
+  // reçoit même pas de lanceur — elle ne peut pas lancer git.
+  const dir = await root(t, [
+    { name: 'alpha', git: 'dir' },
+    { name: 'zeta', git: 'dir' },
+    { name: 'beta', git: 'file' },
+    { name: 'plain' },
+    { name: '.cache', git: 'dir' },
+    { name: 'notes.txt', kind: 'file' },
+  ])
+  assert.equal(await countRepositories(dir), 2)
+
+  const vide = await root(t, [])
+  assert.equal(await countRepositories(vide), 0)
+
+  // Une racine illisible rejette : c'est la route qui la traduit en 500 nommé.
+  await assert.rejects(countRepositories(join(dir, 'absent')), /ENOENT/)
 })
 
 test('la ligne porte exactement les champs nommés par la fiche', async (t) => {
