@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
+import { USAGE_ELEMENTS } from '../lib/view.js'
 import { MODELS_DIR, readWorkflow } from '../lib/workflows.js'
 import { blockedReasonAfterWrite } from '../lib/view.js'
 import { forgetToken, setBlocked } from '../lib/trackers/jira.js'
@@ -559,7 +560,8 @@ test('le volet découpe le détail en trois onglets', () => {
   assert.match(SOURCE, /className: 'missions-drawer-tabs', role: 'tablist'/)
   assert.match(SOURCE, /'aria-selected': section === entry\.id \? 'true' : 'false'/)
   assert.match(SOURCE, /'aria-controls': section === entry\.id \? 'missions-drawer-panel' : undefined/)
-  assert.match(SOURCE, /onClick: \(\) => setSection\(entry\.id\)/)
+  // Chaque onglet du volet compte le geste qui l'ouvre, puis l'ouvre.
+  assert.match(SOURCE, /onClick: \(\) => \{ track\(`mission\.tab\.\$\{entry\.id\}`\); setSection\(entry\.id\) \}/)
   assert.match(SOURCE, /role: 'tabpanel'/)
   assert.match(SOURCE, /'aria-labelledby': `missions-drawer-tab-\$\{section\}`/)
   // Un seul panneau, un id stable : aucun aria-controls ne pointe dans le vide.
@@ -1904,7 +1906,7 @@ test('choisir une priorité écrit le mot canonique et ne patche que ce champ', 
 
   await select.props.onChange({ target: { value: 'urgent' } })
 
-  assert.deepEqual(calls, [
+  assert.deepEqual(writes(calls), [
     { url: 'missions/api/priority', method: 'POST', body: { key: 'MIS-42', priority: 'urgent' } },
   ])
   assert.deepEqual(saved, [{ key: 'MIS-42', priority: 'urgent' }])
@@ -1916,7 +1918,7 @@ test('choisir une priorité écrit le mot canonique et ne patche que ce champ', 
 
   // Choisir la valeur déjà affichée n'écrit rien.
   await select.props.onChange({ target: { value: 'high' } })
-  assert.equal(calls.length, 1)
+  assert.equal(writes(calls).length, 1)
 
   // La mise à jour du panneau ne touche que `priority` : la déclaration
   // (folder, branch, base) reste intacte — le bug latent de `onSaved`.
@@ -1958,6 +1960,13 @@ test('un refus du tracker laisse l’ancienne priorité et le dit', async () => 
 })
 
 /* Repositories: l'onglet, ses lignes, son volet. */
+
+/**
+ * Le relevé d'usage part à chaque geste, et n'est pas une écriture métier :
+ * les tests qui comptent les écritures le laissent de côté.
+ */
+const USAGE_ROUTE = 'missions/api/usage'
+const writes = (calls) => calls.filter((call) => call.url !== USAGE_ROUTE)
 
 const HOUR = 3600 * 1000
 const REPO_NOW = Date.now()
@@ -2091,7 +2100,7 @@ test('un clic sur l’onglet Repositories bascule le panneau et ferme le volet',
   const tree = registered.main({})
 
   const boutons = findAll(tree, 'button').filter((button) => button.props.role === 'tab')
-  assert.equal(boutons.length, 5, 'Dashboard, Missions, Done, Repositories, Workflows')
+  assert.equal(boutons.length, 6, 'Dashboard, Missions, Done, Repositories, Usage, Workflows')
   const bouton = boutons.find((button) => button.props.id === 'missions-tab-repositories')
   assert.ok(bouton, 'l’onglet a un identifiant stable')
   assert.equal(bouton.props['aria-selected'], 'false')
@@ -2456,14 +2465,15 @@ test('History montre une page, le total de la branche, et charge la suivante', a
   try {
     // Changer de branche repart de la première page, et le dit au serveur.
     await select.props.onChange({ target: { value: 'main' } })
-    assert.match(appels[0], /repositories\/commits\?name=missions&skip=0&branch=main/)
+    const commits = () => appels.filter((url) => String(url).includes('repositories/commits'))
+    assert.match(commits()[0], /repositories\/commits\?name=missions&skip=0&branch=main/)
 
     // « Show more » demande la page suivante de la branche affichée.
     const plus = findAll(inner, 'button').find((button) => textOf(button) === 'Show more')
     assert.ok(plus, 'la page a une suite')
     await plus.props.onClick()
-    assert.match(appels[1], /skip=2/, 'la page suivante commence après les deux lignes lues')
-    assert.match(appels[1], /branch=feat%2Fmis-116/, 'la branche choisie est conservée')
+    assert.match(commits()[1], /skip=2/, 'la page suivante commence après les deux lignes lues')
+    assert.match(commits()[1], /branch=feat%2Fmis-116/, 'la branche choisie est conservée')
   } finally {
     globalThis.fetch = vraiFetch
   }
@@ -2780,14 +2790,14 @@ test('le premier clic arme la clôture, le second envoie la clé', async () => {
   const bouton = boutonCloture(tree)
 
   await bouton.props.onClick()
-  assert.deepEqual(calls, [], 'le premier clic n’écrit rien')
+  assert.deepEqual(writes(calls), [], 'le premier clic n’écrit rien')
   assert.ok(setters.includes(true), 'le premier clic arme le bouton')
   const armeNote = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
   assert.equal(armeNote.error, false)
   assert.match(armeNote.text, /Click again to confirm/)
 
   await bouton.props.onClick()
-  assert.deepEqual(calls, [
+  assert.deepEqual(writes(calls), [
     { url: 'missions/api/local-close', method: 'POST', body: { key: 'MIS-42' } },
   ])
   const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
@@ -2808,7 +2818,7 @@ test('un refus de clôture se dit, et le bouton se réarme pour un nouvel essai'
   await bouton.props.onClick()
   await bouton.props.onClick()
 
-  assert.equal(calls.length, 1)
+  assert.equal(writes(calls).length, 1)
   const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
   assert.equal(note.error, true)
   assert.match(note.text, /Local close refused: pull request #7 is not merged/)
@@ -2816,7 +2826,7 @@ test('un refus de clôture se dit, et le bouton se réarme pour un nouvel essai'
   // Le refus rend le geste inoffensif mais réarmable : un clic de plus
   // redevient une demande, pas une écriture immédiate.
   await bouton.props.onClick()
-  assert.equal(calls.length, 1, 'le clic après refus réarme sans écrire')
+  assert.equal(writes(calls).length, 1, 'le clic après refus réarme sans écrire')
   const rearme = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
   assert.match(rearme.text, /Click again to confirm/)
 })
@@ -2828,4 +2838,275 @@ test('une mission sans branche garde le bouton de clôture, mais désarmé', () 
   assert.equal(bouton.props.disabled, true)
   assert.match(bouton.props.title, /branch is not declared/)
   assert.equal(bouton.props['aria-describedby'], 'missions-session-blocked')
+})
+
+/* Usage: le relevé se lit dans un onglet, et chaque geste s'y compte. */
+
+const DAY = 86_400_000
+const USAGE_NOW = Date.now()
+// Le relevé garde des dates ISO : c'est ce que la route renvoie, tel quel.
+const USAGE_AGO = (days) => new Date(USAGE_NOW - days * DAY).toISOString()
+
+/**
+ * Un relevé tel que la route le renvoie : quatre gestes déclarés, un retiré.
+ *
+ * Le retiré pèse le total, donc la part des autres : c'est ce qui fait tenir
+ * les quatre verdicts dans le même relevé.
+ */
+const USAGE_LOADED = {
+  version: 1,
+  startedAt: USAGE_AGO(40),
+  updatedAt: USAGE_AGO(0.1),
+  broken: false,
+  elements: {
+    'tab.usage': { count: 25, firstUsed: USAGE_AGO(40), lastUsed: USAGE_AGO(0.1), values: {} },
+    'filter.state': { count: 6, firstUsed: USAGE_AGO(20), lastUsed: USAGE_AGO(2), values: { 'in-review': 4, ready: 2 } },
+    'mission.declare': { count: 1, firstUsed: USAGE_AGO(90), lastUsed: USAGE_AGO(90), values: {} },
+    'tab.done': { count: 0, firstUsed: null, lastUsed: null, values: {} },
+    'old.gesture': { count: 68, firstUsed: USAGE_AGO(200), lastUsed: USAGE_AGO(120), values: {} },
+  },
+}
+
+/**
+ * Le panneau monté sur l'onglet Usage, avec le relevé déjà lu : les états de la
+ * barre, l'onglet, puis celui que `UsageTab` consomme en se montant.
+ */
+function monterUsage(releve = USAGE_LOADED) {
+  const { api, ctx, registered, setters, effects } = charger(
+    undefined,
+    [
+      EMPTY_BAR,
+      dashboardView(DASH_MISSIONS),
+      'usage',
+      '',
+      { ...EMPTY_BAR.filters },
+      null,
+      null,
+      'default',
+      null,
+      EMPTY_BAR,
+      { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null },
+      '',
+      { ...EMPTY_BAR.filters, state: ['done'] },
+      null,
+      // Le quinzième état est celui de `UsageTab`, consommé quand on la rend.
+      { loading: false, usage: releve, error: null },
+    ],
+    memorySession({ 'missions.tab': 'usage' }),
+  )
+  api.apply(ctx)
+  const tree = registered.main({})
+  const tab = findAll(tree, 'UsageTab')[0]
+  assert.ok(tab, 'l’onglet Usage porte sa vue')
+  return { tree, tab, inner: renderTree(tab), setters, effects }
+}
+
+test('chaque geste du registre est émis par un endroit du panneau, et rien d’autre', () => {
+  const known = new Set(USAGE_ELEMENTS.map((element) => element.id))
+  // Les identifiants écrits en clair : s'ils sortent du registre, c'est une
+  // faute de frappe que la route refusera en 400 au premier clic.
+  const staticIds = [...SOURCE.matchAll(/track\('([a-z][a-z.\-]*)'/g)].map((match) => match[1])
+  assert.ok(staticIds.length > 20, 'le panneau compte ses gestes')
+  for (const id of staticIds) assert.ok(known.has(id), `geste inconnu du registre : ${id}`)
+
+  // Les familles dynamiques : une seule écriture pour toutes leurs valeurs.
+  const families = {
+    tab: /track\(`tab\.\$\{next\}`\)/,
+    filter: /track\(`filter\.\$\{key\}`/,
+    'mission.tab': /track\(`mission\.tab\.\$\{entry\.id\}`\)/,
+    'repository.tab': /track\(`repository\.tab\.\$\{entry\.id\}`\)/,
+    'workflow.arc': /track\(exists \? 'workflow\.arc\.update' : 'workflow\.arc\.add'\)/,
+  }
+  for (const [family, pattern] of Object.entries(families)) {
+    assert.match(SOURCE, pattern, `la famille ${family} est comptée depuis un seul point`)
+  }
+
+  // Chaque identifiant du registre est donc émis, soit en clair, soit par sa
+  // famille : aucun geste déclaré ne reste sans compteur.
+  const covered = (id) => staticIds.includes(id) || Object.keys(families).some((family) => id.startsWith(`${family}.`))
+  const orphans = USAGE_ELEMENTS.map((element) => element.id).filter((id) => !covered(id))
+  assert.deepEqual(orphans, [])
+})
+
+test('chaque adresse client passe par le préfixe des routes du panneau', () => {
+  const urls = [...SOURCE.matchAll(/[A-Z_]+_URL = '([^']+)'/g)].map((match) => match[1])
+  assert.ok(urls.length >= 14)
+  for (const url of urls) assert.ok(url.startsWith('missions/api/'), `adresse hors du préfixe : ${url}`)
+  // Et aucune adresse complète ne s'écrit ailleurs que dans ces constantes.
+  assert.doesNotMatch(SOURCE, /fetch\('/)
+  assert.doesNotMatch(SOURCE, /readRoute\('/)
+})
+
+test('l’onglet Usage lit le relevé une fois, et ne monte pas la liste', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => USAGE_LOADED }
+  }
+  try {
+    const { tree, effects } = monterUsage()
+    assert.equal(findAll(tree, 'MissionsView').length, 0, 'la liste ne se monte pas sous Usage')
+    assert.equal(findAll(tree, 'DashboardView').length, 0)
+
+    // L'onglet arme un seul effet : la lecture du relevé, et rien d'autre.
+    const avant = effects.length
+    const node = findAll(tree, 'UsageTab')[0]
+    renderTree(node)
+    assert.equal(effects.length - avant, 1)
+    effects.at(-1).fn()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.deepEqual(appels, ['missions/api/usage'])
+
+    // La colonne du volet dit d'où vient le chiffre, et qu'il n'ordonne rien.
+    assert.match(textOf(tree), /A recommendation is a reading of the counts, not an order/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais utilisés', () => {
+  const { inner } = monterUsage()
+  const texte = textOf(inner)
+
+  // Le total compte les retirés, et la fenêtre part de `startedAt`.
+  assert.match(texte, /100 gestures counted/)
+  assert.match(texte, /40 days · since/)
+  assert.match(texte, /Most used/)
+  const top = findAll(inner, 'li').filter((li) => li.props.className === 'missions-usage-top-item')
+  assert.deepEqual(top.map((li) => textOf(li.children[1])), ['Usage tab', 'Filter by state', 'Declare branch and base'])
+
+  // Les quatre verdicts se lisent avec le compte qui les a produits.
+  assert.match(texte, /Grow/)
+  assert.match(texte, /Keep/)
+  assert.match(texte, /Improve/)
+  assert.match(texte, /Remove/)
+  // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
+  // retiré garde son compte dans une section à part.
+  assert.match(texte, /in-review ×4/)
+  assert.match(texte, /Never used \(41\)/)
+  assert.match(texte, /Retired/)
+  assert.match(texte, /old.gesture/)
+  assert.match(texte, /Dashboard tab/)
+})
+
+test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
+  // Aucun fichier : le panneau n'a jamais rien compté ici, donc aucun verdict.
+  const vide = monterUsage(null)
+  assert.match(textOf(vide.inner), /No tally on this machine yet/)
+  assert.match(textOf(vide.inner), /gestures it counts will show up here/)
+
+  // Un fichier lisible mais vide : tout est déclaré, rien n'est utilisé, et la
+  // porte n'est pas franchie — donc une recommandation serait un mensonge.
+  const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
+  assert.match(textOf(zero.inner), /0 gestures counted/)
+  assert.match(textOf(zero.inner), /Never used \(44\)/)
+  assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
+
+  // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
+  const casse = monterUsage({ version: 1, startedAt: null, updatedAt: null, broken: true, elements: {} })
+  assert.match(textOf(casse.inner), /could not be read/)
+})
+
+test('chaque geste compte une fois, et un relevé qui échoue ne casse aucun clic', async () => {
+  const calls = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body), keepalive: init.keepalive })
+    return { ok: true, json: async () => USAGE_LOADED }
+  }
+  try {
+    const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+    api.apply(ctx)
+    const tree = registered.main({})
+    const bouton = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-usage')
+    assert.ok(bouton, 'la barre porte l’onglet Usage')
+
+    bouton.props.onClick()
+    assert.deepEqual(setters.slice(-2), ['usage', null], 'le clic ouvre l’onglet')
+    assert.deepEqual(calls, [{ url: 'missions/api/usage', method: 'POST', body: { element: 'tab.usage' }, keepalive: true }])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+
+  // Le relevé tombe : le geste qu'il comptait se fait quand même.
+  globalThis.fetch = () => { throw new Error('offline') }
+  try {
+    const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+    api.apply(ctx)
+    const tree = registered.main({})
+    const bouton = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-usage')
+    assert.doesNotThrow(() => bouton.props.onClick())
+    assert.deepEqual(setters.slice(-2), ['usage', null])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('la recherche se compte quand on la quitte, pas à chaque frappe', () => {
+  const calls = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), body: JSON.parse(init.body) })
+    return { ok: true, json: async () => ({}) }
+  }
+  try {
+    const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'missions' }))
+    api.apply(ctx)
+    const tree = registered.main({})
+    const view = renderTree(findAll(tree, 'MissionsView')[0])
+    const input = findAll(view, 'input').find((node) => node.props.type === 'search')
+
+    input.props.onChange({ target: { value: 'm' } })
+    input.props.onChange({ target: { value: 'mis' } })
+    assert.deepEqual(calls, [], 'aucun POST par frappe')
+
+    input.props.onBlur({ target: { value: 'mis' } })
+    assert.deepEqual(calls, [{ url: 'missions/api/usage', body: { element: 'filter.search', detail: 'mis' } }])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('le montage et le tick de rafraîchissement ne comptent rien', async () => {
+  const calls = []
+  const vraiFetch = globalThis.fetch
+  const vraiSetInterval = globalThis.setInterval
+  let tick = null
+  globalThis.setInterval = (fn) => { tick = fn; return 0 }
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET' })
+    return { ok: true, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  try {
+    const { api, ctx, registered, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'missions' }))
+    api.apply(ctx)
+    registered.main({})
+    // Les effets du panneau joués comme React les jouerait au montage.
+    for (const effect of effects) effect.fn()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.deepEqual(calls.map((call) => call.method), ['GET'], 'le montage lit la liste, sans compter')
+
+    assert.ok(tick, 'le tick de 60 s est armé')
+    calls.length = 0
+    tick()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.deepEqual(calls.map((call) => call.method), ['GET'], 'le tick rafraîchit, sans compter')
+  } finally {
+    globalThis.fetch = vraiFetch
+    globalThis.setInterval = vraiSetInterval
+  }
+})
+
+test('Usage se place entre Repositories et Workflows, et ses verdicts ont leurs deux thèmes', () => {
+  const start = SOURCE.indexOf('const TABS = [')
+  const tabs = SOURCE.slice(start, SOURCE.indexOf(']', start))
+  assert.ok(tabs.indexOf("'repositories'") < tabs.indexOf("'usage'"))
+  assert.ok(tabs.indexOf("'usage'") < tabs.indexOf("'workflows'"))
+
+  // Chaque verdict a sa règle, dans le thème par défaut comme dans le manga.
+  for (const verdict of ['grow', 'keep', 'improve', 'remove', 'none']) {
+    assert.ok(regle(`.missions-usage-verdict--${verdict}`).length > 0, `règle absente : ${verdict}`)
+  }
+  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-usage-verdict--grow/)
 })
