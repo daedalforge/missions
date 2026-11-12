@@ -712,3 +712,141 @@ test('un refus du tracker sur la priorité devient une erreur d’amont', async 
   assert.equal(response.status, 502)
   assert.match(response.body.error, /GitHub token missing or invalid/)
 })
+
+/**
+ * Un dossier de travail jetable, avec les dépôts que le scan doit y trouver.
+ * Un clone porte un dossier `.git`, un worktree un fichier `.git`, et un
+ * dossier nu n'en porte aucun. Le lanceur git est un faux : la route est jugée
+ * sur ce qu'elle envoie et sur ce qu'elle renvoie, pas sur l'état de la machine.
+ */
+async function workspace(t, entries = [{ name: 'alpha' }, { name: 'beta' }]) {
+  const dir = await mkdtemp(join(tmpdir(), 'missions-workspace-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  for (const entry of entries) {
+    const spec = typeof entry === 'string' ? { name: entry } : entry
+    await mkdir(join(dir, spec.name), { recursive: true })
+    if (spec.kind === 'worktree') {
+      await writeFile(join(dir, spec.name, '.git'), `gitdir: ${join(dir, '.git', 'worktrees', spec.name)}\n`)
+    } else if (spec.kind !== 'plain') {
+      await mkdir(join(dir, spec.name, '.git'))
+    }
+  }
+  return dir
+}
+
+function fauxGitRun(answers = {}) {
+  const calls = []
+  const run = async (file, args) => {
+    const at = args.indexOf('-C')
+    const name = args[at + 1].split('/').pop()
+    const command = args.slice(at + 2).join(' ')
+    calls.push(`${name} ${command}`)
+    const answer = answers[`${name} ${command}`]
+    if (answer === undefined) throw Object.assign(new Error('commande imprévue'), { stderr: '' })
+    return { stdout: answer, stderr: '' }
+  }
+  return { run, calls }
+}
+
+const ROUTE_STATUS = '# branch.head main\n# branch.ab +0 -0\n'
+const ROUTE_COMMIT = 'a1b2c3d\x1f1794468058\x1fMIS-116: ajoute l’onglet repositories'
+
+test('GET repositories rend une entrée par enfant direct, worktree compris', async (t) => {
+  // Le fixture du cadrage : 4 dossiers, 2 clones, 1 worktree, 1 non-git.
+  const root = await workspace(t, [
+    { name: 'alpha' },
+    { name: 'beta' },
+    { name: 'gamma', kind: 'worktree' },
+    { name: 'plain', kind: 'plain' },
+  ])
+  const { run, calls } = fauxGitRun({
+    'alpha status --porcelain=v2 --branch': ROUTE_STATUS,
+    'alpha log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+    'beta status --porcelain=v2 --branch': ROUTE_STATUS,
+    'beta log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n# branch.ab +0 -0\n',
+    'gamma log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const response = await call(handler, { path: '/missions/api/repositories' })
+
+  assert.equal(response.status, 200)
+  assert.match(String(response.headers['content-type']), /application\/json/)
+  assert.equal(response.headers['cache-control'], 'no-store', 'un scan ne se sert jamais du cache')
+  assert.equal(response.body.root, root)
+  assert.equal(response.body.count, 3, '4 dossiers, 3 dépôts : le dossier nu ne devient pas une ligne')
+  assert.ok(Number.isFinite(response.body.durationMs))
+  assert.deepEqual(response.body.repositories.map((row) => row.name), ['alpha', 'beta', 'gamma'])
+  assert.deepEqual(response.body.repositories.map((row) => row.kind), ['clone', 'clone', 'worktree'])
+  assert.equal(response.body.repositories.find((row) => row.name === 'gamma').branch, 'gh-20-hover')
+  assert.ok(!response.body.repositories.some((row) => row.name === 'plain'))
+  assert.deepEqual(response.body.errors, [])
+  assert.equal(calls.length, 6, 'deux commandes par dépôt, aucune pour le dossier nu')
+})
+
+test('GET repositories ignore la racine demandée par le client', async (t) => {
+  const root = await workspace(t, ['alpha'])
+  const { run } = fauxGitRun({
+    'alpha status --porcelain=v2 --branch': ROUTE_STATUS,
+    'alpha log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  // Le panneau ne choisit pas ce qui est lu : une racine passée en paramètre
+  // est ignorée, la racine du serveur reste la seule.
+  const response = await call(handler, { path: '/missions/api/repositories?root=/etc' })
+  assert.equal(response.status, 200)
+  assert.equal(response.body.root, root)
+})
+
+test('GET repositories/detail lit un dépôt, refuse un nom, un inconnu et un POST', async (t) => {
+  const root = await workspace(t, ['alpha'])
+  // Un dossier sans `.git` n'est pas un dépôt : c'est le 404 de la route.
+  await mkdir(join(root, 'plain'))
+  const { run } = fauxGitRun({
+    'alpha status --porcelain=v2 --branch': ROUTE_STATUS,
+    'alpha remote get-url origin': 'https://github.com/daedalforge/missions.git\n',
+    'alpha log -n 10 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const ok = await call(handler, { path: '/missions/api/repositories/detail?name=alpha' })
+  assert.equal(ok.status, 200)
+  assert.equal(ok.body.name, 'alpha')
+  assert.equal(ok.body.remote, 'https://github.com/daedalforge/missions.git')
+  assert.equal(ok.body.commits.length, 1)
+
+  const missing = await call(handler, { path: '/missions/api/repositories/detail' })
+  assert.equal(missing.status, 400)
+  assert.match(missing.body.error, /invalid repository name/)
+
+  const traversal = await call(handler, { path: '/missions/api/repositories/detail?name=..%2F..%2Fetc' })
+  assert.equal(traversal.status, 400, 'un nom qui sort de la racine ne passe pas')
+
+  const unknown = await call(handler, { path: '/missions/api/repositories/detail?name=plain' })
+  assert.equal(unknown.status, 404)
+
+  const post = await call(handler, { method: 'POST', path: '/missions/api/repositories', body: {} })
+  assert.equal(post.status, 405)
+  assert.equal(post.headers.allow, 'GET')
+})
+
+test('une racine illisible est une erreur du serveur, pas un 404', async (t) => {
+  const { handler } = await mount(t, { workspaceRoot: join(tmpdir(), 'missions-absente-116') })
+
+  const response = await call(handler, { path: '/missions/api/repositories' })
+  assert.equal(response.status, 500)
+  assert.match(response.body.error, /missions-absente-116/)
+})
+
+test('les routes des dépôts refusent une requête non locale', async (t) => {
+  const root = await workspace(t, ['alpha'])
+  const { run } = fauxGitRun({})
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  for (const path of ['/missions/api/repositories', '/missions/api/repositories/detail?name=alpha']) {
+    const response = await call(handler, { path, remoteAddress: '10.0.0.7' })
+    assert.equal(response.status, 403, path)
+  }
+})
