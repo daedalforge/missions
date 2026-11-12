@@ -191,6 +191,25 @@ test('un worktree nomme le principal, ou dit qu’il ne peut pas', async (t) => 
   assert.deepEqual(par('delta').main, { name: null, path: null }, 'un refus laisse le chemin nul, pas la ligne')
 })
 
+test('un principal dans la racine mais hors du scan ne reçoit pas de nom', async (t) => {
+  // Un dépôt bare (`principal.git`, pas de sous-dossier `.git`) peut être le
+  // principal d'un worktree sans être une ligne du scan : le chemin reste, le
+  // nom non — sinon le client proposerait une bascule vers une ligne absente.
+  const dir = await root(t, [
+    { name: 'principal.git' },
+    { name: 'linked', git: 'file' },
+  ])
+  const { run } = fauxGit({
+    'linked status --porcelain=v2 --branch': STATUS_CLEAN,
+    'linked log -1 --no-decorate --format=%h%x1f%ct%x1f%s': commit('a1b2c3d', 1000, 'linked'),
+    'linked worktree list --porcelain': `worktree ${join(dir, 'principal.git')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
+  })
+  const scan = await listRepositories(dir, { run })
+
+  assert.deepEqual(scan.repositories.map((row) => row.name), ['linked'], 'le principal bare n’est pas une ligne')
+  assert.deepEqual(scan.repositories[0].main, { name: null, path: join(dir, 'principal.git') }, 'le chemin reste, le nom non')
+})
+
 test('le compte de la pastille retient les clones, pas les worktrees', async (t) => {
   // Le badge annonce des dépôts : un worktree est le checkout d'un dépôt
   // déclaré ailleurs, et un dossier sans `.git` n'est rien. La fonction ne
