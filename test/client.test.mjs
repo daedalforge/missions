@@ -2836,7 +2836,7 @@ function monterVoletCloture(mission = { ...MISSION, state: 'ready-for-prod', upd
 }
 
 function boutonCloture(tree) {
-  return findAll(tree, 'button').find((node) => /close the local checkout/i.test(textOf(node).trim())) ?? null
+  return findAll(tree, 'button').find((node) => /close the local checkout/i.test(nomDuGeste(node))) ?? null
 }
 
 test('le volet ne propose la clôture locale qu’en ready-for-prod', () => {
@@ -2848,29 +2848,56 @@ test('le volet ne propose la clôture locale qu’en ready-for-prod', () => {
   const { tree } = monterVoletCloture()
   const bouton = boutonCloture(tree)
   assert.ok(bouton, 'le bouton doit être rendu en ready-for-prod')
-  assert.equal(bouton.props.className, 'missions-action missions-action--danger')
+  assert.equal(bouton.props.className, 'missions-action missions-action--icon missions-action--danger')
   assert.equal(bouton.props.disabled, false)
   assert.equal(typeof bouton.props.onClick, 'function')
-  // Un geste destructeur garde son texte : c'est la confirmation au second clic,
-  // et une infobulle ne confirme pas.
-  assert.match(textOf(bouton), /close the local checkout/i)
-  assert.equal(findAll(bouton, 'svg').length, 0, 'la clôture ne devient pas une icône')
+  // Le geste destructif suit la règle du pied : une icône, son nom en infobulle
+  // et en nom accessible. L'état armé, lui, se voit dans le bouton.
+  assert.equal(nomDuGeste(bouton), 'Close the local checkout')
+  assert.equal(bouton.props.title, 'Close the local checkout')
+  assert.equal(textOf(bouton), '')
+  const dessins = findAll(bouton, 'svg')
+  assert.equal(dessins.length, 1)
+  assert.equal(dessins[0].props['aria-hidden'], 'true')
 
-  // Il reste au-dessus de la rangée, dont la session est le dernier geste.
+  // Il ouvre la rangée, dont la session reste le dernier geste : le geste
+  // destructif ne colle pas au bouton primaire.
   const foot = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-foot')
   assert.ok(foot, 'le pied du volet est rendu')
   const enfants = foot.children.filter((child) => child !== null && child !== false)
-  assert.equal(enfants[0].props.className, 'missions-action missions-action--danger')
-  assert.equal(enfants[1].props.className, 'missions-drawer-actions')
-  const boutons = enfants[1].children.filter((child) => child.type === 'button')
+  assert.deepEqual(enfants.map((child) => child.props.className), ['missions-drawer-actions'])
+  const boutons = enfants[0].children.filter((child) => child.type === 'button')
+  assert.equal(nomDuGeste(boutons[0]), 'Close the local checkout', 'la clôture ouvre la rangée')
   const iSession = boutons.findIndex((node) => /^Start a session/.test(nomDuGeste(node)))
   assert.equal(iSession, boutons.length - 1, 'la session reste le dernier geste de la rangée')
+
+  // L'état armé est porté par le bouton : classe, nom et dessin changent.
+  assert.match(SOURCE, /armedClose \? 'Confirm — close the local checkout' : 'Close the local checkout'/)
+  assert.match(SOURCE, /missions-action--danger-armed/)
+  assert.match(SOURCE, /h\(ActionIcon, \{ name: closing \|\| !armedClose \? 'close' : 'confirm' \}\)/)
+  assert.match(SOURCE, /\.missions-action--danger-armed \{[^}]*background: var\(--dsw-alias-label-danger/)
+  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-action--danger-armed \{[^}]*--mm-orange-deep/)
 
   // Le câblage du bundle, en plus du rendu.
   assert.match(SOURCE, /const LOCAL_CLOSE_URL = 'missions\/api\/local-close'/)
   assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key \}\)/)
   assert.match(SOURCE, /mission\.state === 'ready-for-prod'/)
   assert.match(SOURCE, /\.missions-action--danger \{/)
+})
+
+test('la clôture ouvre la rangée, et la primaire la ferme', () => {
+  const { tree } = monterVoletCloture()
+  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+  assert.ok(actions, 'la rangée du pied est rendue')
+  const gestes = actions.children.filter((child) => child && (child.type === 'button' || child.type === 'a'))
+  const noms = gestes.map(nomDuGeste)
+  assert.equal(noms[0], 'Close the local checkout', 'le geste destructif ouvre la rangée')
+  assert.match(noms.at(-1), /^Start a session/, 'la session de l’étape la ferme')
+  assert.equal(noms.length, 4, 'clôture, ticket, session libre, session de l’étape')
+  for (const geste of gestes) {
+    assert.equal(textOf(geste), '', 'aucun geste de la rangée ne porte de texte')
+    assert.equal(findAll(geste, 'svg').length, 1)
+  }
 })
 
 test('le premier clic arme la clôture, le second envoie la clé', async () => {
@@ -2938,6 +2965,7 @@ test('une mission sans branche garde le bouton de clôture, mais désarmé', () 
   assert.ok(bouton)
   assert.equal(bouton.props.disabled, true)
   assert.match(bouton.props.title, /branch is not declared/)
+  assert.equal(nomDuGeste(bouton), 'Close the local checkout', 'le nom ne change pas quand le geste est refusé')
   assert.equal(bouton.props['aria-describedby'], 'missions-session-blocked')
 })
 
@@ -3545,7 +3573,7 @@ test('la clôture locale ne compte qu’au second clic', async () => {
   const spy = espionUsage()
   try {
     const { inner } = monterVoletAvec({ ...MISSION, state: 'ready-for-prod' })
-    const fermer = findAll(inner, 'button').find((node) => node.props.className === 'missions-action missions-action--danger')
+    const fermer = findAll(inner, 'button').find((node) => /close the local checkout/i.test(nomDuGeste(node)))
     assert.ok(fermer, 'le bouton de clôture est rendu en ready-for-prod')
     await fermer.props.onClick()
     spy.aucunGeste('le premier clic arme seulement, il ne compte pas')
