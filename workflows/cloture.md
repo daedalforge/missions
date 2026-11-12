@@ -33,8 +33,12 @@ tracker, que le travail est livré ; il ne touche ensuite qu'à la machine :
 1. **La preuve.** La route hôte lit l'issue (état `ready-for-prod`, pas de
    conflit de labels) puis les PR dont la tête est la branche de mission. Il faut
    une PR mergée, dont la base est la base déclarée, et dont le merge commit (ou
-   la tête) est ancêtre de `origin/<base>`. Un `git fetch origin <base>` précède
-   la seconde vérification ; sans preuve, rien n'est supprimé.
+   la tête) est ancêtre de `origin/<base>`. Comme le projet squash-merge, la
+   branche locale n'est jamais ancêtre de la base : la preuve part de `head.sha`
+   de la PR, et `git rev-list --first-parent <head.sha>..<branche>` doit être
+   vide ou ne contenir que des merges de synchronisation dont les autres parents
+   sont sur `origin/<base>`. Un `git fetch origin <base>` précède la seconde
+   vérification ; sans preuve, rien n'est supprimé.
 2. **Les worktrees.** `git worktree remove` sur chaque worktree qui porte la
    branche, jamais avec `--force` : un worktree sale refuse et le dit.
 3. **Le clone.** Il n'est pas supprimé : il passe sur la base

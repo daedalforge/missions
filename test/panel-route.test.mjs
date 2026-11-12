@@ -1008,7 +1008,9 @@ function closeTracker({ labels = ['ready-for-prod'] } = {}) {
           html_url: 'https://github.com/daedalforge/missions/pull/7',
           merged_at: '2026-11-12T10:00:00Z',
           merge_commit_sha: LOCAL_CLOSE.merge,
-          head: { ref: 'feat/mis-136', sha: 'e'.repeat(40) },
+          // The squash shape: the PR's head is the local tip, and neither is on
+          // `main` — only the merge commit is.
+          head: { ref: 'feat/mis-136', sha: LOCAL_CLOSE.tip },
           base: { ref: 'main' },
         },
       ])
@@ -1037,7 +1039,8 @@ test('POST local-close ferme le checkout après la preuve tracker', async (t) =>
     ].join('\n'),
     'repo status --porcelain': '',
     'wt status --porcelain': '',
-    [`repo merge-base --is-ancestor ${LOCAL_CLOSE.tip} origin/main`]: '',
+    [`repo merge-base --is-ancestor ${LOCAL_CLOSE.tip} ${LOCAL_CLOSE.tip}`]: '',
+    [`repo rev-list --first-parent ${LOCAL_CLOSE.tip}..${LOCAL_CLOSE.tip}`]: '',
     [`repo merge-base --is-ancestor ${LOCAL_CLOSE.merge} origin/main`]: '',
     'repo fetch origin main': '',
     [`repo worktree remove ${worktree}`]: '',
@@ -1072,6 +1075,52 @@ test('POST local-close ferme le checkout après la preuve tracker', async (t) =>
   const commands = calls.join('\n')
   assert.ok(commands.indexOf('repo fetch origin main') < commands.indexOf('repo worktree remove'))
   assert.ok(commands.indexOf('repo worktree remove') < commands.indexOf('repo branch -D feat/mis-136'))
+})
+
+test('POST local-close refuse un commit de travail caché derrière un merge de sync', async (t) => {
+  // W n'est jamais arrivé sur la base, M merge `main` par-dessus : regarder le
+  // seul tip accepterait, la marche first-parent depuis la tête de PR voit W.
+  const tracker = closeTracker()
+  const { handler, repo, worktree, useRun } = await mountClose(t, { fetchImpl: tracker.fetchImpl })
+  const work = 'f'.repeat(40)
+  const sync = 'd'.repeat(40)
+  const { run, calls } = fauxGitRun({
+    'repo rev-parse --git-common-dir': '.git',
+    'repo rev-parse --verify --quiet refs/heads/feat/mis-136': LOCAL_CLOSE.tip,
+    'repo rev-parse --verify --quiet origin/main': LOCAL_CLOSE.base,
+    'repo worktree list --porcelain': [
+      `worktree ${repo}`,
+      `HEAD ${LOCAL_CLOSE.tip}`,
+      'branch refs/heads/feat/mis-136',
+      '',
+      `worktree ${worktree}`,
+      `HEAD ${LOCAL_CLOSE.tip}`,
+      'branch refs/heads/feat/mis-136',
+      '',
+    ].join('\n'),
+    'repo status --porcelain': '',
+    'wt status --porcelain': '',
+    [`repo merge-base --is-ancestor ${LOCAL_CLOSE.tip} ${LOCAL_CLOSE.tip}`]: '',
+    [`repo rev-list --first-parent ${LOCAL_CLOSE.tip}..${LOCAL_CLOSE.tip}`]: `${LOCAL_CLOSE.tip}\n${work}`,
+    [`repo rev-list --parents -n 1 ${LOCAL_CLOSE.tip}`]: `${LOCAL_CLOSE.tip} ${work} ${sync}`,
+    [`repo merge-base --is-ancestor ${sync} origin/main`]: '',
+    [`repo rev-list --parents -n 1 ${work}`]: `${work} ${LOCAL_CLOSE.tip}`,
+  })
+  useRun(run)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/local-close',
+    body: { key: 'MIS-136' },
+  })
+
+  assert.equal(response.status, 409)
+  assert.match(response.body.error, /local commit fffffff is not on origin\/main/)
+  const writing = calls.filter((command) =>
+    /(branch -D |worktree remove |checkout |merge --ff-only|fetch )/.test(command),
+  )
+  assert.deepEqual(writing, [], 'un refus ne supprime rien')
+  assert.equal(tracker.calls.length, 2)
 })
 
 test('POST local-close refuse une mission pas ready-for-prod sans écrire', async (t) => {

@@ -126,7 +126,11 @@ qui restent ceux du demandeur.
 - **Il vérifie avant d'agir.** L'hôte relit l'issue (encore en
   `ready-for-prod`, sans conflit de labels) et les PR de la branche : il faut
   une PR mergée vers la base déclarée, et un merge commit (ou la tête) ancêtre
-  de `origin/<base>`. Un `git fetch` précède la seconde vérification. Sans
+  de `origin/<base>`. Le projet squash-merchant, la branche locale n'est jamais
+  ancêtre de la base : la preuve part de `head.sha` de la PR, et
+  `git rev-list --first-parent <head.sha>..<branche>` doit être vide ou ne
+  contenir que des merges de synchronisation (autres parents sur
+  `origin/<base>`). Un `git fetch` précède la seconde vérification. Sans
   preuve, rien n'est supprimé.
 - **Deux temps.** Un premier clic annonce ce qui va disparaître, un second
   envoie la clé. Le panneau n'envoie que `{ key }` : chemins, noms et gestes

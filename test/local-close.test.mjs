@@ -22,6 +22,7 @@ const SHA = {
   merge: 'c'.repeat(40),
   sync: 'd'.repeat(40),
   head: 'e'.repeat(40),
+  work: 'f'.repeat(40),
 }
 
 const PROJECT = {
@@ -132,7 +133,10 @@ function planTable(overrides = {}) {
     ].join('\n'),
     '/repo :: status --porcelain': '',
     '/wt/mis-42 :: status --porcelain': '',
-    [`merge-base --is-ancestor ${SHA.tip} origin/main`]: '',
+    // The proof starts at the PR's head: the squash leaves the local tip
+    // ahead of it, and only synchronisation merges may sit in between.
+    [`merge-base --is-ancestor ${SHA.head} ${SHA.tip}`]: '',
+    [`rev-list --first-parent ${SHA.head}..${SHA.tip}`]: '',
     [`merge-base --is-ancestor ${SHA.merge} origin/main`]: '',
     ...overrides,
   }
@@ -263,27 +267,58 @@ test('planClose refuses a dirty worktree, and the base checked out elsewhere', a
   )
 })
 
-test('planClose accepts a local sync merge, refuses a work commit', async () => {
-  const syncTable = planTable({
-    [`merge-base --is-ancestor ${SHA.tip} origin/main`]: notAncestor(),
-    [`rev-list --parents -n 1 ${SHA.tip}`]: `${SHA.tip} ${SHA.base} ${SHA.sync}`,
-    [`merge-base --is-ancestor ${SHA.sync} origin/main`]: '',
+test('planClose accepts the squash shape: the tip is not on the base', async () => {
+  // The project squash-merges: the local tip is the PR's head, and neither is
+  // an ancestor of `origin/main` — only the merge commit is. The proof must
+  // start from `head.sha`, not from the tip.
+  const table = planTable({
+    'rev-parse --verify --quiet refs/heads/feat/mis-42': SHA.head,
+    [`merge-base --is-ancestor ${SHA.head} ${SHA.head}`]: '',
+    [`rev-list --first-parent ${SHA.head}..${SHA.head}`]: '',
+    [`merge-base --is-ancestor ${SHA.head} origin/main`]: notAncestor(),
   })
-  const sync = await planClose({
+  const { run, calls } = createRun(table)
+  const plan = await planClose({
     key: 'MIS-42',
     repo: '/repo',
     branch: 'feat/mis-42',
     base: 'main',
     proof: PROOF,
-    run: createRun(syncTable).run,
+    run,
   })
-  assert.equal(sync.tip, SHA.tip)
+  assert.equal(plan.tip, SHA.head)
+  assert.deepEqual(calls.filter((call) => /^(fetch |worktree remove |checkout |merge |branch -D)/.test(call.command)), [])
+})
 
-  const workTable = planTable({
-    [`merge-base --is-ancestor ${SHA.tip} origin/main`]: notAncestor(),
-    [`rev-list --parents -n 1 ${SHA.tip}`]: `${SHA.tip} ${SHA.sync}`,
-    [`merge-base --is-ancestor ${SHA.sync} origin/main`]: notAncestor(),
+test('planClose accepts a synchronisation merge past the PR head', async () => {
+  // `feat/mis-127` merges `main` after its PR: the tip is a merge whose second
+  // parent is on the base.
+  const table = planTable({
+    [`rev-list --first-parent ${SHA.head}..${SHA.tip}`]: SHA.tip,
+    [`rev-list --parents -n 1 ${SHA.tip}`]: `${SHA.tip} ${SHA.head} ${SHA.sync}`,
+    [`merge-base --is-ancestor ${SHA.sync} origin/main`]: '',
   })
+  const plan = await planClose({
+    key: 'MIS-42',
+    repo: '/repo',
+    branch: 'feat/mis-42',
+    base: 'main',
+    proof: PROOF,
+    run: createRun(table).run,
+  })
+  assert.equal(plan.tip, SHA.tip)
+})
+
+test('planClose refuses a work commit, even hidden behind a sync merge', async () => {
+  // W is work that never reached the base; M merges the base on top of it. A
+  // check of the tip alone would accept: the first-parent walk must see W.
+  const table = planTable({
+    [`rev-list --first-parent ${SHA.head}..${SHA.tip}`]: `${SHA.tip}\n${SHA.work}`,
+    [`rev-list --parents -n 1 ${SHA.tip}`]: `${SHA.tip} ${SHA.work} ${SHA.sync}`,
+    [`merge-base --is-ancestor ${SHA.sync} origin/main`]: '',
+    [`rev-list --parents -n 1 ${SHA.work}`]: `${SHA.work} ${SHA.head}`,
+  })
+  const { run, calls } = createRun(table)
   await assert.rejects(
     planClose({
       key: 'MIS-42',
@@ -291,7 +326,39 @@ test('planClose accepts a local sync merge, refuses a work commit', async () => 
       branch: 'feat/mis-42',
       base: 'main',
       proof: PROOF,
-      run: createRun(workTable).run,
+      run,
+    }),
+    { status: 409, message: /local commit fffffff is not on origin\/main/ },
+  )
+  assert.deepEqual(calls.filter((call) => /^(branch -D|worktree remove|checkout|merge |fetch)/.test(call.command)), [])
+})
+
+test('planClose refuses a branch that does not contain the PR head', async () => {
+  const table = planTable({ [`merge-base --is-ancestor ${SHA.head} ${SHA.tip}`]: notAncestor() })
+  await assert.rejects(
+    planClose({
+      key: 'MIS-42',
+      repo: '/repo',
+      branch: 'feat/mis-42',
+      base: 'main',
+      proof: PROOF,
+      run: createRun(table).run,
+    }),
+    { status: 409, message: /local branch feat\/mis-42 does not contain pull request head eeeeeee/ },
+  )
+})
+
+test('planClose falls back to the tip when the PR carries no head', async () => {
+  const proof = { ...PROOF, pull: { ...PROOF.pull, headSha: null } }
+  const ahead = planTable({ [`merge-base --is-ancestor ${SHA.tip} origin/main`]: notAncestor() })
+  await assert.rejects(
+    planClose({
+      key: 'MIS-42',
+      repo: '/repo',
+      branch: 'feat/mis-42',
+      base: 'main',
+      proof,
+      run: createRun(ahead).run,
     }),
     { status: 409, message: /local commit aaaaaaa is not on origin\/main/ },
   )
