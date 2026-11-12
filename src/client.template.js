@@ -183,6 +183,37 @@ window.__ModuleLoader__.load({
     const REPOSITORY_URL = 'missions/api/repositories/detail'
     const REPOSITORY_HISTORY_URL = 'missions/api/repositories/commits'
     const REPOSITORY_TREE_URL = 'missions/api/repositories/tree'
+    // The tally of the panel's own gestures. One POST per gesture, never an
+    // await: counting is a side note, never a step of what the user asked for.
+    const USAGE_URL = 'missions/api/usage'
+
+    /**
+     * One gesture, counted — and nothing else.
+     *
+     * The POST is fired and forgotten: a tally that could refuse a click, or
+     * hold it, would be a toll on the panel. No await, no error path, no state;
+     * and if `fetch` is missing, the gesture still happens.
+     */
+    function track(element, detail) {
+      try {
+        if (typeof fetch !== 'function') return
+        const name = detail === undefined || detail === null || detail === ''
+          ? null
+          : String(detail).slice(0, USAGE_MAX_DETAIL)
+        const body = name === null ? { element } : { element, detail: name }
+        const posted = fetch(USAGE_URL, {
+          method: 'POST',
+          headers: { accept: 'application/json', 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          // A gesture that leaves the panel — opening a session, a ticket —
+          // must still be counted after the page it was made on is gone.
+          keepalive: true,
+        })
+        if (posted && typeof posted.catch === 'function') posted.catch(() => {})
+      } catch {
+        // Counting never breaks the gesture it counts.
+      }
+    }
   // L'ordre de la méthode, connu avant que le serveur ait répondu : il valide
   // l'étape que la session a laissée ouverte.
   const WORKFLOW_STEPS = ['cadrage', 'execution', 'review', 'cloture']
@@ -228,6 +259,7 @@ window.__ModuleLoader__.load({
       // The repositories tab reads the host, not the tracker: it declares its
       // own source, so it never wears the tracker's banner.
       { id: 'repositories', label: 'Repositories', source: 'host', badge: 'repositories' },
+      { id: 'usage', label: 'Usage', source: 'host' },
       { id: 'workflows', label: 'Workflows', source: 'files' },
     ]
 
@@ -666,6 +698,32 @@ window.__ModuleLoader__.load({
 .missions-tree-worktree-branch { min-width: 0; overflow: hidden; color: var(--dsw-alias-label-secondary, #4a4a4a); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
 .missions-tree-worktree-current { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; }
 .missions-tree-worktrees { display: grid; gap: 8px; }
+.missions-usage { display: flex; flex-direction: column; gap: 16px; }
+.missions-usage-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.missions-usage-total { color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.missions-usage-window { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; font-variant-numeric: tabular-nums; }
+.missions-usage-head .missions-btn { margin-left: auto; width: auto; }
+.missions-usage-note { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; line-height: 1.5; }
+.missions-usage-section { display: flex; flex-direction: column; gap: 8px; }
+.missions-usage-title { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.missions-usage-rows, .missions-usage-top { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.missions-usage-row, .missions-usage-top-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, currentColor 7%, transparent); }
+.missions-usage-row:last-child, .missions-usage-top-item:last-child { border-bottom: none; }
+.missions-usage-rank { flex: none; width: 14px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10px; font-variant-numeric: tabular-nums; }
+.missions-usage-label { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.missions-usage-count { flex: none; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.missions-usage-when { flex: none; min-width: 42px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
+.missions-usage-verdict { flex: none; padding: 1px 7px; border-radius: 999px; font-size: 9.5px; font-weight: 600; white-space: nowrap; }
+.missions-usage-verdict--grow { background: color-mix(in srgb, #1f883d 15%, transparent); color: #116329; }
+.missions-usage-verdict--keep { background: color-mix(in srgb, #0969da 12%, transparent); color: #0a4e9e; }
+.missions-usage-verdict--improve { background: color-mix(in srgb, #bf8700 18%, transparent); color: #7d4e00; }
+.missions-usage-verdict--remove { background: color-mix(in srgb, #cf222e 13%, transparent); color: #a40e26; }
+.missions-usage-verdict--none { background: color-mix(in srgb, currentColor 7%, transparent); color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-usage-values { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 4px; }
+.missions-usage-value { padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); color: var(--dsw-alias-label-secondary, #4a4a4a); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; }
+.missions-usage-empty { display: grid; gap: 6px; padding: 26px 0; }
+.missions-usage-empty p { margin: 0; }
+.missions-usage-empty-hint { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; }
 @media (max-width: 860px) {
   .missions-repo-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) 78px 52px; }
   .missions-col-commit { display: none; }
@@ -916,6 +974,17 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 .missions-panel[data-theme="manga"] .missions-repo-age { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-repos-note { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-repos-error { border: 1.5px solid var(--mm-coral-deep); background: color-mix(in srgb, var(--mm-coral) 22%, var(--mm-page-2)); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-usage-title { color: var(--mm-ink-3); font-family: var(--mm-display); letter-spacing: .12em; }
+.missions-panel[data-theme="manga"] .missions-usage-row, .missions-panel[data-theme="manga"] .missions-usage-top-item { border-bottom-color: var(--mm-line); }
+.missions-panel[data-theme="manga"] .missions-usage-label, .missions-panel[data-theme="manga"] .missions-usage-count { color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-usage-verdict { border: 1px solid var(--mm-line-strong); }
+.missions-panel[data-theme="manga"] .missions-usage-verdict--grow { background: var(--mm-sage); border-color: var(--mm-sage-deep); color: var(--mm-sage-deep); }
+.missions-panel[data-theme="manga"] .missions-usage-verdict--keep { background: var(--mm-sky); border-color: var(--mm-sky-deep); color: var(--mm-sky-deep); }
+.missions-panel[data-theme="manga"] .missions-usage-verdict--improve { background: var(--mm-butter); border-color: #a8711e; color: #7a4f12; }
+.missions-panel[data-theme="manga"] .missions-usage-verdict--remove { background: var(--mm-coral); border-color: var(--mm-coral-deep); color: var(--mm-coral-deep); }
+.missions-panel[data-theme="manga"] .missions-usage-verdict--none { background: var(--mm-page-3); border-color: var(--mm-line); color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-usage-value { background: var(--mm-page-3); color: var(--mm-ink-2); font-family: var(--mm-mono); }
+.missions-panel[data-theme="manga"] .missions-usage-note { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-drawer-section-title { color: var(--mm-ink-3); font-family: var(--mm-display); font-size: 9px; letter-spacing: .08em; }
 .missions-panel[data-theme="manga"] .missions-repo-tabs { gap: 20px; border-bottom: 1.5px solid var(--mm-ink); }
 .missions-panel[data-theme="manga"] .missions-repo-tab { height: 32px; color: var(--mm-ink-3); font-family: var(--mm-display); font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
@@ -1556,7 +1625,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * panel's banner speaks for it — and the icon is gone, since the banner
      * carries the retry.
      */
-    function MissionsView({ missions, query, onQuery, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme, loading, failed, onRefresh, statusOptions, statusFixed = false, emptyText = 'No open missions assigned to you.' }) {
+    function MissionsView({ missions, query, onQuery, onSearchEnd = () => {}, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme, loading, failed, onRefresh, statusOptions, statusFixed = false, emptyText = 'No open missions assigned to you.' }) {
       const epics = epicOptions(missions)
       const projects = projectOptions(missions)
       const active = hasActiveFilters(filters)
@@ -1574,6 +1643,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               placeholder: 'Filter by title, key, project…',
               'aria-label': 'Filter missions',
               onChange: (event) => onQuery(event.target.value),
+              // The gesture is the search, not the typing: the box is counted
+              // when it is left, or when Enter says the term is the one meant.
+              onBlur: (event) => onSearchEnd(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key === 'Enter') onSearchEnd(event.target.value)
+              },
             }),
           ),
           failed
@@ -1817,15 +1892,22 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         }
       }
 
-      const startSession = () => openSession(prompt)
+      const startSession = () => {
+        track('mission.session')
+        return openSession(prompt)
+      }
       // Same gesture, same prefill path, other prompt: the session reads the
       // PR's remarks and hands back; the merge stays the requester's.
-      const startFeedbackSession = () => openSession(feedbackPrompt)
+      const startFeedbackSession = () => {
+        track('mission.feedback-session')
+        return openSession(feedbackPrompt)
+      }
       // Same gesture again, with the prompt that plays no step and writes
       // nothing: a question, not work on the ticket.
       const startFreeSession = () => openSession(freePrompt)
 
       const saveDeclaration = async () => {
+        track('mission.declare')
         setSaving(true)
         setDeclareNote(null)
         try {
@@ -1848,6 +1930,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const writeBlocked = async (next) => {
         const message = reason.trim()
         if (next && !message) return
+        track('mission.block', next ? 'block' : 'unblock')
         setWritingBlock(true)
         setBlockNote(null)
         try {
@@ -1912,6 +1995,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           setArmedClose(true)
           return
         }
+        track('mission.close-checkout')
         armedCloseRef.current = false
         setArmedClose(false)
         setClosing(true)
@@ -1971,7 +2055,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               'aria-label': 'Priority',
               value: priorityNow ?? '',
               disabled: writingPriority,
-              onChange: (event) => writePriority(event.target.value),
+              onChange: (event) => {
+                track('mission.priority', event.target.value)
+                return writePriority(event.target.value)
+              },
             },
               priorityNow === null
                 ? h('option', { value: '', disabled: true, selected: true }, 'No priority')
@@ -2137,7 +2224,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           id: `missions-drawer-tab-${entry.id}`,
           'aria-selected': section === entry.id ? 'true' : 'false',
           'aria-controls': section === entry.id ? 'missions-drawer-panel' : undefined,
-          onClick: () => setSection(entry.id),
+          onClick: () => { track(`mission.tab.${entry.id}`); setSection(entry.id) },
         }, entry.label)),
       )
 
@@ -2174,7 +2261,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
           h('div', { className: 'missions-drawer-actions' },
             mission.url
-              ? h('a', { className: 'missions-action', href: mission.url, target: '_blank', rel: 'noreferrer noopener' }, 'Open on the tracker')
+              ? h('a', {
+                  className: 'missions-action',
+                  href: mission.url,
+                  target: '_blank',
+                  rel: 'noreferrer noopener',
+                  onClick: () => track('mission.open-tracker'),
+                }, 'Open on the tracker')
               : h('button', { type: 'button', className: 'missions-action', disabled: true }, 'No tracker link'),
             // Only the step that follows the merge may delete the branch: the
             // panel shows the gesture there and nowhere else. The host still
@@ -2319,6 +2412,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
       const addGesture = () => {
         if (!draft) return
+        track('workflow.gesture.add')
         const id = nextGestureId(draft)
         const heading = entry?.headings?.[0]?.text ?? ''
         setDraft({ ...draft, nodes: [...draft.nodes, { id, label: 'Nouveau geste', section: heading, writer: view.writers[0] ?? 'session' }] })
@@ -2328,6 +2422,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
       const removeGesture = () => {
         if (!draft || !chosen) return
+        track('workflow.gesture.remove')
         setDraft(withoutNode(draft, chosen))
         setChosen(null)
         setStatus(null)
@@ -2338,6 +2433,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const addArc = () => {
         if (!draft || !arc.from || !arc.to) { setStatus({ kind: 'error', message: 'Choisis un départ et une arrivée.' }); return }
         if (arc.from === arc.to) { setStatus({ kind: 'error', message: 'Un geste ne se suit pas lui-même : passe par un autre geste.' }); return }
+        // Re-applying a couple updates the arc it already has: the gesture is
+        // an update, not a second add.
+        const exists = (draft.edges ?? []).some((edge) => edge.from === arc.from && edge.to === arc.to)
+        track(exists ? 'workflow.arc.update' : 'workflow.arc.add')
         setDraft(upsertEdge(draft, arc.from, arc.to, arc.when.trim()))
         setArc({ from: '', to: '', when: '' })
         setStatus(null)
@@ -2352,6 +2451,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
       const removeArc = (from, to) => {
         if (!draft) return
+        track('workflow.arc.remove')
         setDraft(withoutEdge(draft, from, to))
         setStatus(null)
       }
@@ -2360,6 +2460,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // qu'envoyer, jamais juger.
       const save = () => {
         if (!draft || saving) return
+        track('workflow.save')
         setSaving(true)
         setStatus(null)
         fetch(WORKFLOW_MODEL_URL, {
@@ -2395,7 +2496,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               view.loading ? 'Chargement du parcours…'
                 : !entry ? view.error ?? 'Aucun modèle de workflow.'
                   : 'Chargement du modèle du parcours…'),
-            h('button', { type: 'button', className: 'missions-btn', onClick: load }, 'Recharger'),
+            h('button', { type: 'button', className: 'missions-btn', onClick: () => { track('workflow.reload'); return load() } }, 'Recharger'),
           ),
         )
       }
@@ -2418,12 +2519,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               type: 'button',
               className: 'wf-step',
               'aria-pressed': item.workflow === step,
-              onClick: () => setStep(item.workflow),
+              onClick: () => { track('workflow.step', item.workflow); setStep(item.workflow) },
             }, item.title || item.workflow)),
           ),
           h('span', { className: 'wf-note' }, `${entry.document} — ${entry.entry ?? '?'} → ${(entry.exit ?? []).join(', ') || '?'}`),
           h('button', { type: 'button', className: 'missions-btn', onClick: save, disabled: saving }, saving ? 'Enregistrement…' : 'Enregistrer'),
-          h('button', { type: 'button', className: 'missions-btn', onClick: load }, 'Recharger'),
+          h('button', { type: 'button', className: 'missions-btn', onClick: () => { track('workflow.reload'); return load() } }, 'Recharger'),
         ),
 
         entry.errors && entry.errors.length > 0
@@ -2759,7 +2860,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const state = repositoryState(shown)
       const ahead = Number(shown.ahead ?? 0)
       const behind = Number(shown.behind ?? 0)
-      const track = shown.upstream ? `${ahead} ahead · ${behind} behind` : 'no upstream'
+      const upstreamLine = shown.upstream ? `${ahead} ahead · ${behind} behind` : 'no upstream'
 
       return h('aside', {
         className: 'missions-drawer',
@@ -2786,7 +2887,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             className: 'missions-repo-tab',
             'aria-selected': section === entry.id ? 'true' : 'false',
             'aria-controls': `missions-repo-panel-${entry.id}`,
-            onClick: () => setSection(entry.id),
+            onClick: () => { track(`repository.tab.${entry.id}`); setSection(entry.id) },
           }, entry.label)),
         ),
         h('div', {
@@ -2800,7 +2901,15 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             : !detail.data
               ? h(PanelLoader, { theme })
               : section === 'history'
-                ? h(RepositoryHistory, { history, theme, onBranch: (branch) => loadHistory(branch, 0), onMore: () => loadHistory(history.data?.branch ?? null, history.data?.commits?.length ?? 0, true) })
+                ? h(RepositoryHistory, {
+                    history,
+                    theme,
+                    onBranch: (branch) => { track('repository.branch', branch); return loadHistory(branch, 0) },
+                    onMore: () => {
+                      track('repository.more')
+                      return loadHistory(history.data?.branch ?? null, history.data?.commits?.length ?? 0, true)
+                    },
+                  })
                 : section === 'worktrees'
                   ? h(RepositoryTree, { tree, theme })
                   : h(React.Fragment, null,
@@ -2810,7 +2919,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                         h(DrawerRow, { label: 'State', value: state.label }),
                         h(DrawerRow, { label: 'Remote', value: shown.remote ?? 'no remote' }),
                         h(DrawerRow, { label: 'Upstream', value: shown.upstream ?? 'none' }),
-                        h(DrawerRow, { label: 'Against upstream', value: track }),
+                        h(DrawerRow, { label: 'Against upstream', value: upstreamLine }),
                       ),
                     ),
         ),
@@ -2952,6 +3061,136 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         h('span', { className: 'missions-tree-worktree-branch' }, worktree.branch ?? 'detached'),
         worktree.current ? h('span', { className: 'missions-tree-worktree-current' }, 'current') : null,
       )
+    }
+
+    /**
+     * The tally, read as a report.
+     *
+     * Every number here comes from the local file: the view never writes it —
+     * the gestures already did. Each verdict is printed with the count it was
+     * read from, because a recommendation without its number is an order.
+     */
+    function UsageView({ usage = null, loading = false, error = null, onRefresh = () => {}, theme = 'default' }) {
+      const report = usageReport(usage, Date.now())
+      const since = report.startedAt ? relativeAge(report.startedAt) : null
+      const windowLabel = since
+        ? `${report.days} day${report.days === 1 ? '' : 's'} · since ${since}`
+        : 'nothing counted yet'
+      // The gate is said in numbers, not in warnings: a reader can see how far
+      // the tally is from being allowed to judge anything.
+      const gateLine = report.gate.open
+        ? null
+        : `No verdict yet: the tally needs ${USAGE_GATE_DAYS} days and ${USAGE_GATE_EVENTS} gestures, it has ${report.gate.days} and ${report.gate.events}.`
+      // A verdict is a pill plus its sentence: the tooltip carries the reasoning,
+      // so 'Remove' never reads as a delete button.
+      const verdictOf = (entry) => h('span', {
+        className: `missions-usage-verdict missions-usage-verdict--${entry.verdict}`,
+        title: `${entry.reason ?? ''} ${USAGE_VERDICTS[entry.verdict]?.note ?? ''}`.trim(),
+      }, USAGE_VERDICTS[entry.verdict]?.label ?? entry.verdict)
+      const detailsOf = (entry) => (entry.details ?? []).length === 0
+        ? null
+        : h('span', { className: 'missions-usage-values' },
+            entry.details.slice(0, 5).map((detail) => h('span', { className: 'missions-usage-value', key: detail.detail },
+              detail.count > 1 ? `${detail.detail} ×${detail.count}` : detail.detail)),
+          )
+      const rowOf = (entry) => h('li', { className: 'missions-usage-row', key: entry.id },
+        h('span', { className: 'missions-usage-label' }, entry.label),
+        h('span', { className: 'missions-usage-count' }, String(entry.count)),
+        h('span', { className: 'missions-usage-when' }, entry.lastUsed ? relativeAge(entry.lastUsed) : '—'),
+        verdictOf(entry),
+        detailsOf(entry),
+      )
+
+      const failed = error
+        ? h('div', { className: 'missions-errors', role: 'alert' },
+            h('div', { className: 'missions-error' }, h('b', null, 'usage'), h('span', null, error)),
+          )
+        : null
+      // A broken file is not an empty one: the tab says so rather than pretend
+      // the panel has never been used.
+      const broken = usage && usage.broken === true
+        ? h('div', { className: 'missions-errors', role: 'alert' },
+            h('div', { className: 'missions-error' },
+              h('b', null, 'usage.json'),
+              h('span', null, 'could not be read — the tally starts over from the next gesture.'),
+            ),
+          )
+        : null
+
+      let body
+      if (!usage && loading) body = h(PanelLoader, { theme })
+      else if (!usage) body = failed ?? h('div', { className: 'missions-usage-empty' },
+        h('p', null, 'No tally on this machine yet.'),
+        h('p', { className: 'missions-usage-empty-hint' },
+          'Use the panel — a tab, a drawer, a filter — and the gestures it counts will show up here.'),
+      )
+      else body = h(React.Fragment, null,
+        report.top.length === 0 ? null : h('section', { className: 'missions-usage-section' },
+          h('h3', { className: 'missions-usage-title' }, 'Most used'),
+          h('ol', { className: 'missions-usage-top' },
+            report.top.map((entry, index) => h('li', { className: 'missions-usage-top-item', key: entry.id },
+              h('span', { className: 'missions-usage-rank' }, String(index + 1)),
+              h('span', { className: 'missions-usage-label' }, entry.label),
+              h('span', { className: 'missions-usage-count' }, String(entry.count)),
+              verdictOf(entry),
+            )),
+          ),
+        ),
+        report.sections.map((section) => h('section', { className: 'missions-usage-section', key: section.title },
+          h('h3', { className: 'missions-usage-title' }, section.title),
+          h('ul', { className: 'missions-usage-rows' }, section.rows.map(rowOf)),
+        )),
+        report.idle.length === 0 ? null : h('section', { className: 'missions-usage-section missions-usage-section--idle' },
+          h('h3', { className: 'missions-usage-title' }, `Never used (${report.idle.length})`),
+          h('p', { className: 'missions-usage-note' }, report.idle.map((entry) => entry.label).join(' · ')),
+        ),
+        report.retired.length === 0 ? null : h('section', { className: 'missions-usage-section missions-usage-section--retired' },
+          h('h3', { className: 'missions-usage-title' }, 'Retired'),
+          h('p', { className: 'missions-usage-note' },
+            'Counted by a previous build and no longer declared: their number is kept, and still counts in the total.'),
+          h('ul', { className: 'missions-usage-rows' }, report.retired.map(rowOf)),
+        ),
+      )
+
+      return h('div', { className: 'missions-usage' },
+        h('div', { className: 'missions-usage-head' },
+          h('span', { className: 'missions-usage-total' }, `${report.total} gesture${report.total === 1 ? '' : 's'} counted`),
+          h('span', { className: 'missions-usage-window' }, windowLabel),
+          h('button', { type: 'button', className: 'missions-btn', onClick: onRefresh, disabled: loading },
+            loading ? 'Reading…' : 'Refresh'),
+        ),
+        h('p', { className: 'missions-usage-note' },
+          'Local tally: this machine’s file, nothing leaves the panel.'),
+        gateLine === null ? null : h('p', { className: 'missions-usage-note missions-usage-gate' }, gateLine),
+        broken,
+        failed && usage ? failed : null,
+        body,
+      )
+    }
+
+    /**
+     * The Usage tab's one read.
+     *
+     * The file is small and local, so the tab asks for it when it opens and
+     * when Refresh is clicked — no timer, no cache: a panel that counted a
+     * gesture a second ago should show that gesture when it is looked at.
+     */
+    function UsageTab({ theme }) {
+      const [state, setState] = React.useState({ loading: true, usage: null, error: null })
+      const load = React.useCallback(() => {
+        setState((previous) => ({ ...previous, loading: true }))
+        return readRoute(USAGE_URL)
+          .then((data) => setState({ loading: false, usage: data, error: null }))
+          .catch((cause) => setState({ loading: false, usage: null, error: cause?.message ?? 'read failed' }))
+      }, [])
+      React.useEffect(() => { load() }, [load])
+      return h(UsageView, {
+        usage: state.usage,
+        loading: state.loading,
+        error: state.error,
+        onRefresh: load,
+        theme,
+      })
     }
 
     function MissionsPanel({ services }) {
@@ -3111,6 +3350,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const openMissions = missions.filter((mission) => mission.state !== 'done')
       const projectCount = new Set(openMissions.map((mission) => mission.project).filter(Boolean)).size
       const changeTheme = (value) => {
+        track('action.theme', value)
         setTheme(value)
         try { localStorage.setItem(THEME_KEY, value) } catch { /* storage is optional */ }
       }
@@ -3175,14 +3415,34 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // Done keeps closed rows, so it is the only view that passes `allowDone`.
       const filtered = filterMissions(activeMissions, { query: activeQuery, ...activeFilters, allowDone: doneTab })
       const groups = groupByState(sortMissions(filtered, activeSort))
+      // One gesture per change of the bar, whatever the dimension: the tally
+      // reads which filters people actually reach for, not how many clicks the
+      // menu needed.
       const onFilter = (key, value) => {
+        track(`filter.${key}`, Array.isArray(value) ? value.join(',') : value)
         if (doneTab) setDoneFilters((previous) => ({ ...previous, [key]: value, state: ['done'] }))
         else setFilters((previous) => ({ ...previous, [key]: value }))
       }
       const onClear = () => {
+        track('filter.clear', doneTab ? 'done' : 'open')
         // Done's status is fixed: clearing keeps the view's perimeter.
         if (doneTab) setDoneFilters({ ...EMPTY_FILTERS, state: ['done'] })
         else setFilters({ ...EMPTY_FILTERS })
+      }
+      const onSort = (next) => {
+        track('filter.sort', next ?? 'default')
+        if (doneTab) setDoneSort(next)
+        else setSort(next)
+      }
+      const onQuery = (next) => {
+        if (doneTab) setDoneQuery(next)
+        else setQuery(next)
+      }
+      // The search box is counted when it is left, not on every keystroke: one
+      // intention, one gesture — and the term itself is the useful detail.
+      const onSearchEnd = (value) => {
+        const term = String(value ?? '').trim()
+        if (term) track('filter.search', term)
       }
 
       // A widget's link opens the list on exactly the rows the widget showed:
@@ -3190,6 +3450,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // filter. The bar is reset rather than completed, so the count the widget
       // announced is the count the list shows.
       const onViewAll = (filters = {}) => {
+        track('dashboard.view-all', Object.keys(filters).join(','))
         setSelected(null)
         setQuery('')
         setSort(null)
@@ -3198,10 +3459,20 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setRepository(null)
       }
 
+      // Opening a mission is one gesture wherever the row lives: the list, the
+      // Done list and a dashboard widget all come through here.
+      const openMission = (mission) => {
+        track('mission.open')
+        setSelected(mission)
+      }
+
       // A tab switch closes the repository drawer: the drawer belongs to the
       // tab that opened it, and a repository selected there has no meaning on
       // the mission tabs.
       const changeTab = (next) => {
+        // Clicking the tab already open is not using it: a gesture counts when
+        // the view really changes.
+        if (next !== tab) track(`tab.${next}`)
         setTab(next)
         setRepository(null)
       }
@@ -3264,7 +3535,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               h('button', {
                 type: 'button',
                 className: 'missions-retry',
-                onClick: () => (doneTab ? loadDone({ refresh: true }) : load({ refresh: true })),
+                onClick: () => {
+                  track('list.retry', doneTab ? 'done' : 'open')
+                  return doneTab ? loadDone({ refresh: true }) : load({ refresh: true })
+                },
               }, 'Retry'),
             )
           : null,
@@ -3276,15 +3550,17 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             id: `missions-view-${tab}`,
             'aria-labelledby': `missions-tab-${tab}`,
           },
-            tab === 'workflows'
+            tab === 'usage'
+              ? h(UsageTab, { theme })
+              : tab === 'workflows'
               ? h(WorkflowsView, null)
               : tab === 'repositories'
-              ? h(RepositoriesView, { theme, onOpen: setRepository })
+              ? h(RepositoriesView, { theme, onOpen: (repository) => { track('repository.open', repository.name); setRepository(repository) } })
               : tab === 'done'
               ? h(MissionsView, {
-                  missions: doneMissions, query: doneQuery, onQuery: setDoneQuery, filters: doneFilters, onFilter, onClear, sort: doneSort, onSort: setDoneSort,
-                  filtered, groups, onSelect: setSelected, theme, loading: doneView.loading, failed,
-                  onRefresh: () => loadDone({ refresh: true }),
+                  missions: doneMissions, query: doneQuery, onQuery, onSearchEnd, filters: doneFilters, onFilter, onClear, sort: doneSort, onSort,
+                  filtered, groups, onSelect: openMission, theme, loading: doneView.loading, failed,
+                  onRefresh: () => { track('list.refresh', 'done'); return loadDone({ refresh: true }) },
                   statusOptions: ['done'], statusFixed: true,
                   emptyText: 'No done mission declared on this machine.',
                 })
@@ -3294,17 +3570,22 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   loading,
                   theme,
                   failed,
-                  onOpen: (mission) => { setSelected(mission); setTab('missions') },
-                  onOpenAll: () => { setSelected(null); setTab('missions') },
+                  onOpen: (mission) => { openMission(mission); setTab('missions') },
+                  onOpenAll: () => { setSelected(null); changeTab('missions') },
                   onViewAll,
                 })
               : h(MissionsView, {
-                  missions, query, onQuery: setQuery, filters, onFilter, onClear, sort, onSort: setSort,
-                  filtered, groups, onSelect: setSelected, theme, loading, failed,
-                  onRefresh: () => load({ refresh: true }),
+                  missions, query, onQuery, onSearchEnd, filters, onFilter, onClear, sort, onSort,
+                  filtered, groups, onSelect: openMission, theme, loading, failed,
+                  onRefresh: () => { track('list.refresh', 'open'); return load({ refresh: true }) },
                 }),
           ),
-          tab === 'workflows'
+          tab === 'usage'
+            ? h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Usage details' },
+                h('p', { className: 'missions-drawer-hint' },
+                  'Every gesture the panel counted, in a file this machine keeps. A recommendation is a reading of the counts, not an order: the panel never deletes anything.'),
+              )
+            : tab === 'workflows'
             ? null
             : tab === 'repositories'
             ? repository

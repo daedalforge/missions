@@ -46,6 +46,34 @@ déclaré sur le poste (`missions/<clé>/mission.yml`), avec sa propre barre de
 filtres et son propre cache. Sans dossier déclaré, aucune mission close n'est
 même lue ; l'onglet affiche « No done mission declared on this machine. ».
 
+## Le relevé d'usage
+
+Le panneau tient sa propre comptabilité : chaque geste — un onglet, un filtre,
+un tiroir, une session — incrémente un compteur local. Un geste = un `POST
+missions/api/usage`, jamais attendu et jamais bloquant : si le relevé échoue, le
+clic qu'il comptait se fait quand même. Rien ne sort de la machine : le fichier
+est `$DSH_HOME/storages/dsh-missions/usage.json`, écrit en une fois (dossier,
+fichier temporaire, `rename`), avec au plus 32 détails distincts de 64 caractères
+par geste.
+
+L'onglet **Usage**, entre Repositories et Workflows, lit ce fichier par
+`GET missions/api/usage` et le lit comme un rapport : les gestes utilisés rangés
+par section et par nombre, le total et la fenêtre couverte, les gestes jamais
+utilisés, et les identifiants retirés du registre — qui gardent leur compte au
+lieu d'être effacés. Le registre `USAGE_ELEMENTS` ([`lib/view.js`](lib/view.js))
+est la seule source des identifiants, libellés et sections ; ajouter un geste,
+c'est l'y déclarer et l'appeler par `track()`.
+
+Chaque ligne porte un verdict, imprimé avec le compte qui l'a produit. Aucun
+verdict avant que la **porte** soit franchie — 7 jours et 20 gestes depuis
+`startedAt` : un relevé jeune ne sait rien, et le dire vaut mieux que d'inventer.
+Passé la porte, le verdict se lit dans cet ordre : **Remove** (0 usage),
+**Improve** (dernier usage il y a plus de 30 jours, quel que soit son passé, ou
+1 à 2 usages), **Grow** (≥ 15 usages, ou ≥ 10 % des gestes), **Keep** (le reste,
+c'est-à-dire 3 à 14 usages récents et discrets). Ces seuils sont des hypothèses
+de départ, pas des ordres : un verdict lit des nombres, le panneau ne supprime
+jamais un geste.
+
 ## Conventions
 
 - **Le code est en anglais** : identifiants, chaînes, commentaires, messages

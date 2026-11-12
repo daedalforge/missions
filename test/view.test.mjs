@@ -62,6 +62,20 @@ import {
   stateOptions,
   suggestBranch,
   TAB_KEY,
+  USAGE_ELEMENTS,
+  USAGE_GATE_DAYS,
+  USAGE_GATE_EVENTS,
+  USAGE_GROW_COUNT,
+  USAGE_GROW_SHARE,
+  USAGE_IMPROVE_COUNT,
+  USAGE_MAX_DETAIL,
+  USAGE_MAX_VALUES,
+  USAGE_STALE_DAYS,
+  USAGE_VERDICTS,
+  usageElement,
+  usageGate,
+  usageReport,
+  usageVerdict,
   writeFilterSnapshot,
   worktreeLabel,
   writeTab,
@@ -1308,4 +1322,180 @@ test('treeIndent un cran par profondeur, worktreeLabel la fin du chemin', () => 
   assert.equal(worktreeLabel('/Users/moi/projects/myapp/'), 'myapp')
   assert.equal(worktreeLabel('C:\\projects\\myapp'), 'myapp')
   assert.equal(worktreeLabel(null), '')
+})
+
+// ---------------------------------------------------------------------------
+// Le relevé d'usage : le registre, les verdicts, le rapport.
+
+const DAY = 86_400_000
+const NOW = Date.parse('2026-11-12T12:00:00.000Z')
+const ago = (days) => new Date(NOW - days * DAY).toISOString()
+
+function counted(count = 1, { firstUsed = ago(10), lastUsed = ago(1), values = {} } = {}) {
+  return { count, firstUsed, lastUsed, values }
+}
+
+// Une porte ouverte : le relevé a trente jours et cent gestes derrière lui.
+function opened(events = 100) {
+  return { startedAt: ago(30), updatedAt: ago(0), elements: { 'tab.dashboard': counted(events, { lastUsed: ago(0) }) } }
+}
+
+test('le registre déclare chaque geste du ticket, une fois, avec son libellé et sa section', () => {
+  const ids = USAGE_ELEMENTS.map((element) => element.id)
+  assert.equal(new Set(ids).size, ids.length, 'un identifiant est déclaré deux fois')
+
+  for (const element of USAGE_ELEMENTS) {
+    assert.match(element.id, /^[a-z][a-z-]*(\.[a-z][a-z-]*)+$/, `forme de l’identifiant : ${element.id}`)
+    assert.ok(element.label.trim().length > 0, `libellé manquant : ${element.id}`)
+    assert.ok(element.section.trim().length > 0, `section manquante : ${element.id}`)
+    assert.ok(element.id.length <= USAGE_MAX_DETAIL, `identifiant trop long : ${element.id}`)
+    assert.equal(usageElement(element.id)?.label, element.label)
+  }
+
+  // Les ids sont ceux des Notes techniques du ticket, dans l'ordre du ticket :
+  // le registre ne prend pas de liberté avec le contrat.
+  assert.deepEqual(ids, [
+    'tab.dashboard', 'tab.missions', 'tab.done', 'tab.repositories', 'tab.workflows', 'tab.usage',
+    'filter.search', 'filter.state', 'filter.type', 'filter.epic', 'filter.project', 'filter.priority',
+    'filter.sort', 'filter.missing', 'filter.clear', 'list.refresh', 'list.retry', 'mission.open',
+    'dashboard.view-all',
+    'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
+    'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout',
+    'mission.session', 'mission.feedback-session',
+    'repository.open', 'repository.tab.details', 'repository.tab.history', 'repository.tab.worktrees',
+    'repository.branch', 'repository.more',
+    'workflow.step', 'workflow.save', 'workflow.reload', 'workflow.gesture.add', 'workflow.gesture.remove',
+    'workflow.arc.add', 'workflow.arc.update', 'workflow.arc.remove',
+    'action.theme',
+  ])
+
+  // Les sections sont contiguës et dans l'ordre du registre : le rapport les
+  // suit sans tri, donc l'ordre du fichier ne décide jamais de la lecture.
+  const sections = USAGE_ELEMENTS.map((element) => element.section)
+    .filter((section, index, all) => index === 0 || all[index - 1] !== section)
+  assert.deepEqual(sections, ['Tabs', 'Mission list', 'Mission drawer', 'Repositories', 'Workflows', 'Panel'])
+  assert.equal(usageElement('made.up'), null)
+})
+
+test('la porte passe avant tout verdict, puis le silence, puis les bornes du compte', () => {
+  // Sous la porte, rien n'est jugé — même un geste utilisé cinquante fois.
+  assert.equal(usageVerdict({ count: 50, lastUsed: ago(0) }, { now: NOW, total: 100, usage: { startedAt: ago(3), elements: { 'tab.dashboard': counted(100) } } }), 'none')
+  // Vingt gestes en trois jours ne font pas une semaine, et sept jours à deux
+  // gestes ne font pas vingt gestes : les deux moitiés de la porte comptent.
+  assert.equal(usageVerdict({ count: 50, lastUsed: ago(0) }, { now: NOW, total: 100, usage: { startedAt: ago(3), elements: { 'tab.dashboard': counted(100) } } }), 'none')
+  assert.equal(usageVerdict({ count: 50, lastUsed: ago(0) }, { now: NOW, total: 9, usage: { startedAt: ago(30), elements: { 'tab.dashboard': counted(9) } } }), 'none')
+  assert.equal(usageGate({ startedAt: ago(30), elements: { 'tab.dashboard': counted(20) } }, NOW).open, true)
+  assert.equal(usageGate({ startedAt: ago(6), elements: { 'tab.dashboard': counted(200) } }, NOW).open, false)
+  assert.equal(usageGate(null, NOW).open, false)
+
+  const open = { now: NOW, total: 1000, usage: opened(1000) }
+  // Zéro usage après la porte : à supprimer, sans détour.
+  assert.equal(usageVerdict({ count: 0, lastUsed: null }, open), 'remove')
+  // 1–2 usages : à améliorer.
+  assert.equal(usageVerdict({ count: 1, lastUsed: ago(1) }, open), 'improve')
+  assert.equal(usageVerdict({ count: USAGE_IMPROVE_COUNT, lastUsed: ago(1) }, open), 'improve')
+  // 3–14 usages : on garde.
+  assert.equal(usageVerdict({ count: USAGE_IMPROVE_COUNT + 1, lastUsed: ago(1) }, open), 'keep')
+  assert.equal(usageVerdict({ count: USAGE_GROW_COUNT - 1, lastUsed: ago(1) }, open), 'keep')
+  // ≥ 15 usages, ou ≥ 10 % des gestes : le compte ou la part suffit.
+  assert.equal(usageVerdict({ count: USAGE_GROW_COUNT, lastUsed: ago(1) }, open), 'grow')
+  assert.equal(usageVerdict({ count: 10, lastUsed: ago(1) }, { now: NOW, total: 100, usage: opened(100) }), 'grow')
+  assert.equal(usageVerdict({ count: 9, lastUsed: ago(1) }, { now: NOW, total: 100, usage: opened(100) }), 'keep')
+  // Un usage puis l'abandon au-delà de trente jours : à améliorer, pas « remove »
+  // ni « grow » — le passé ne rachète pas le silence.
+  assert.equal(usageVerdict({ count: 40, lastUsed: ago(USAGE_STALE_DAYS + 1) }, open), 'improve')
+  assert.equal(usageVerdict({ count: 40, lastUsed: ago(USAGE_STALE_DAYS) }, open), 'grow')
+  // Une date illisible est un silence, pas une exception.
+  assert.equal(usageVerdict({ count: 40, lastUsed: 'hier' }, open), 'improve')
+  for (const verdict of ['grow', 'keep', 'improve', 'remove', 'none']) {
+    assert.ok(USAGE_VERDICTS[verdict].label.length > 0, `libellé du verdict ${verdict}`)
+  }
+})
+
+test('le rapport range les gestes par section et par compte, et garde les retirés dans le total', () => {
+  const usage = {
+    version: 1,
+    startedAt: ago(40),
+    updatedAt: ago(0),
+    elements: {
+      'tab.missions': counted(25, { lastUsed: ago(0) }),
+      'tab.dashboard': counted(3, { lastUsed: ago(2) }),
+      'tab.done': counted(3, { lastUsed: ago(5) }),
+      'filter.state': counted(7, { values: { 'in-review': 4, ready: 3 } }),
+      'old.gesture': counted(4, { lastUsed: ago(40) }),
+    },
+  }
+
+  const report = usageReport(usage, NOW)
+
+  // Les retirés comptent dans le total : un geste disparu du registre n'est
+  // pas un geste qui n'a jamais eu lieu.
+  assert.equal(report.total, 42)
+  assert.equal(report.startedAt, ago(40))
+  assert.equal(report.days, 40)
+  assert.equal(report.gate.open, true)
+  assert.equal(report.gate.events, 42)
+
+  // Deux sections seulement — celles qui ont servi — et dans l'ordre du
+  // registre, pas dans l'ordre du fichier.
+  assert.deepEqual(report.sections.map((section) => section.title), ['Tabs', 'Mission list'])
+  assert.deepEqual(report.sections[0].rows.map((row) => row.id), ['tab.missions', 'tab.dashboard', 'tab.done'])
+  assert.deepEqual(report.sections[1].rows.map((row) => row.id), ['filter.state'])
+  assert.deepEqual(report.top.map((row) => row.id), ['tab.missions', 'filter.state', 'tab.dashboard', 'tab.done'])
+
+  const missions = report.rows.find((row) => row.id === 'tab.missions')
+  assert.equal(missions.verdict, 'grow')
+  assert.equal(missions.verdictLabel, 'Grow')
+  assert.match(missions.reason, /25 gestures — the most used\./)
+  assert.equal(report.rows.find((row) => row.id === 'tab.dashboard').count, 3)
+  assert.equal(report.rows.find((row) => row.id === 'tab.dashboard').verdict, 'keep')
+
+  // Les détails sont un compte par valeur, du plus utilisé au moins utilisé.
+  assert.deepEqual(report.rows.find((row) => row.id === 'filter.state').details, [
+    { detail: 'in-review', count: 4 },
+    { detail: 'ready', count: 3 },
+  ])
+
+  assert.deepEqual(report.retired.map((row) => row.id), ['old.gesture'])
+  assert.equal(report.retired[0].count, 4)
+  // Le jamais-utilisé reste « sans verdict » quand la porte est ouverte : il a
+  // eu sa chance, et le rapport le dit.
+  assert.equal(report.idle.length, USAGE_ELEMENTS.length - 4)
+  assert.ok(report.idle.every((row) => row.count === 0))
+  assert.ok(report.idle.every((row) => row.verdict === 'remove'))
+
+  // L'ordre du fichier ne change pas la lecture.
+  const reordered = { ...usage, elements: Object.fromEntries(Object.entries(usage.elements).reverse()) }
+  assert.deepEqual(usageReport(reordered, NOW).sections, report.sections)
+})
+
+test('le rapport est total : un relevé absent, sale ou cassé parle quand même', () => {
+  const empty = usageReport(null, NOW)
+  assert.equal(empty.total, 0)
+  assert.equal(empty.broken, false)
+  assert.deepEqual(empty.sections, [])
+  assert.deepEqual(empty.top, [])
+  assert.deepEqual(empty.retired, [])
+  assert.equal(empty.days, 0)
+  assert.equal(empty.gate.open, false)
+  assert.equal(empty.idle.length, USAGE_ELEMENTS.length)
+  assert.ok(empty.idle.every((row) => row.verdict === 'none'))
+
+  const broken = usageReport({ broken: true, elements: {} }, NOW)
+  assert.equal(broken.broken, true)
+  assert.equal(broken.total, 0)
+
+  const values = { ok: '3.7', '': 4, 'x\u0000y': 2 }
+  values['z'.repeat(90)] = 1
+  const dirty = usageReport({ startedAt: 'hier', elements: { 'tab.missions': { count: '2.9', firstUsed: 'hier', lastUsed: null, values } } }, NOW)
+  const row = dirty.rows.find((entry) => entry.id === 'tab.missions')
+  assert.equal(row.count, 2)
+  assert.equal(row.firstUsed, null)
+  assert.equal(row.lastUsed, null)
+  assert.equal(dirty.total, 2)
+  assert.equal(dirty.startedAt, null)
+  // Un détail vide, à caractères de contrôle ou trop long est écarté à la
+  // lecture : la ligne reste lisible même si le fichier a été édité à la main.
+  assert.deepEqual(row.details, [{ detail: 'ok', count: 3 }])
+  assert.equal(USAGE_MAX_VALUES >= 5, true)
 })
