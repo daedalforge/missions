@@ -7,12 +7,19 @@ import test from 'node:test'
 import {
   GIT_TIMEOUT_MS,
   SCAN_CONCURRENCY,
+  flattenLayout,
+  isValidBranchName,
   isValidRepositoryName,
   listRepositories,
+  parseBranches,
   parseLog,
+  parseMacheteLayout,
   parseStatus,
+  parseWorktreeList,
+  readHistory,
   readRepository,
   readRepositoryNames,
+  readTree,
 } from '../lib/repositories.js'
 
 /**
@@ -252,13 +259,11 @@ test('un nom de dépôt reçu du client est vérifié avant tout', async () => {
   }
 })
 
-test('le détail d’un dépôt : remote, upstream, avance/retard et dix commits', async (t) => {
+test('le détail d’un dépôt : remote, upstream, avance/retard, sans clé commits', async (t) => {
   const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
-  const commits = Array.from({ length: 12 }, (_, index) => commit(`h${index}`, 1794000000 + index, `commit ${index}`))
   const { run, calls } = fauxGit({
     'alpha status --porcelain=v2 --branch': STATUS_BUSY,
     'alpha remote get-url origin': 'https://github.com/daedalforge/missions.git\n',
-    'alpha log -n 10 --no-decorate --format=%h%x1f%ct%x1f%s': log(...commits),
   })
   const detail = await readRepository(dir, 'alpha', { run })
 
@@ -271,12 +276,8 @@ test('le détail d’un dépôt : remote, upstream, avance/retard et dix commits
   assert.equal(detail.behind, 1)
   assert.equal(detail.dirty, 2)
   assert.equal(detail.remote, 'https://github.com/daedalforge/missions.git')
-  assert.equal(detail.commits.length, 10, 'dix commits, pas douze : la route borne la lecture')
-  assert.equal(detail.commits[0].sha, 'h0')
-  assert.equal(detail.commits[0].date, 1794000000 * 1000)
-  assert.equal(detail.commits[0].subject, 'commit 0')
+  assert.equal('commits' in detail, false, 'la liste des commits a quitté le détail pour History')
   assert.deepEqual(calls.map((call) => call.command).sort(), [
-    'log -n 10 --no-decorate --format=%h%x1f%ct%x1f%s',
     'remote get-url origin',
     'status --porcelain=v2 --branch',
   ])
@@ -306,12 +307,11 @@ test('un dépôt sans remote ni commit reste lisible', async (t) => {
   const { run } = fauxGit({
     'alpha status --porcelain=v2 --branch': '# branch.head main\n',
     'alpha remote get-url origin': Object.assign(new Error('no remote'), { stderr: "error: No such remote 'origin'\n" }),
-    'alpha log -n 10 --no-decorate --format=%h%x1f%ct%x1f%s': Object.assign(new Error('no commits'), { stderr: 'fatal: your current branch \'main\' does not have any commits yet\n' }),
   })
   const detail = await readRepository(dir, 'alpha', { run })
 
   assert.equal(detail.remote, null, 'pas de remote est un état, pas un échec')
-  assert.deepEqual(detail.commits, [])
+  assert.equal('commits' in detail, false)
 })
 
 test('un HEAD détaché se lit par son commit, et le statut parses ses en-têtes', async () => {
@@ -352,4 +352,237 @@ test('le statut et le journal se relisent sans perdre une ligne', () => {
     { sha: 'def5678', date: null, subject: 'date illisible' },
   ])
   assert.deepEqual(parseLog(''), [])
+})
+
+test('une branche se vérifie avant d’atteindre git', () => {
+  for (const good of ['main', 'feat/mis-125', 'release/1.2', 'a_b.c-d']) {
+    assert.equal(isValidBranchName(good), true, good)
+  }
+  for (const bad of ['', ' main', 'main ', '-x', '--all', 'a..b', 'a@{1}', 'a b', 'a//b', 'a/', 'HEAD', '@', 'a\\b', null, 12]) {
+    assert.equal(isValidBranchName(bad), false, String(bad))
+  }
+})
+
+test('un layout machete se lit par ses indentations, annotations comprises', () => {
+  const entries = parseMacheteLayout([
+    '# commentaire',
+    'main',
+    '    feat/a  PR #12',
+    '        feat/a/fix',
+    '    hotfix/24',
+  ].join('\n'))
+  assert.deepEqual(entries, [
+    { name: 'main', depth: 0, annotation: null },
+    { name: 'feat/a', depth: 1, annotation: 'PR #12' },
+    { name: 'feat/a/fix', depth: 2, annotation: null },
+    { name: 'hotfix/24', depth: 1, annotation: null },
+  ])
+
+  assert.deepEqual(flattenLayout(entries).map((row) => [row.name, row.parent]), [
+    ['main', null],
+    ['feat/a', 'main'],
+    ['feat/a/fix', 'feat/a'],
+    ['hotfix/24', 'main'],
+  ])
+  // Une profondeur qui saute est ramenée au niveau atteignable.
+  assert.deepEqual(flattenLayout([{ name: 'seul', depth: 4 }]).map((row) => [row.name, row.depth, row.parent]), [['seul', 0, null]])
+  assert.deepEqual(parseMacheteLayout(''), [])
+  assert.deepEqual(parseBranches('main\n  feat/a  \n\n'), ['main', 'feat/a'], 'une ligne par réf, sans blancs')
+})
+
+test('le layout réel de Manager donne ses seize branches, profondeurs et parents', () => {
+  const text = [
+    'main',
+    '    epic/so-483',
+    '        feat/so-752',
+    '            feat/so-539',
+    '                feat/so-755',
+    '                    feat/so-758',
+    '                        feat/so-761',
+    '                            feat/so-783',
+    '                                feat/so-765',
+    '                                feat/so-768',
+    '        feat/so-1185',
+    '        feat/so-1186',
+    '        feat/so-1184',
+    '    epic/soc-1309 slide-out=no',
+    '        fix/soc-1503',
+    '            feat/soc-1439',
+  ].join('\n')
+  const rows = flattenLayout(parseMacheteLayout(text))
+  assert.equal(rows.length, 16)
+  assert.deepEqual(rows.map((row) => [row.name, row.depth, row.parent]), [
+    ['main', 0, null],
+    ['epic/so-483', 1, 'main'],
+    ['feat/so-752', 2, 'epic/so-483'],
+    ['feat/so-539', 3, 'feat/so-752'],
+    ['feat/so-755', 4, 'feat/so-539'],
+    ['feat/so-758', 5, 'feat/so-755'],
+    ['feat/so-761', 6, 'feat/so-758'],
+    ['feat/so-783', 7, 'feat/so-761'],
+    ['feat/so-765', 8, 'feat/so-783'],
+    ['feat/so-768', 8, 'feat/so-783'],
+    ['feat/so-1185', 2, 'epic/so-483'],
+    ['feat/so-1186', 2, 'epic/so-483'],
+    ['feat/so-1184', 2, 'epic/so-483'],
+    ['epic/soc-1309', 1, 'main'],
+    ['fix/soc-1503', 2, 'epic/soc-1309'],
+    ['feat/soc-1439', 3, 'fix/soc-1503'],
+  ])
+  assert.equal(rows.find((row) => row.name === 'epic/soc-1309').annotation, 'slide-out=no')
+})
+
+test('worktree list se lit en lignes, avec le worktree d’ici', () => {
+  const text = [
+    'worktree /Users/moi/projects/alpha',
+    'HEAD 1a2b3c4d',
+    'branch refs/heads/main',
+    '',
+    'worktree /Users/moi/projects/beta',
+    'HEAD 5e6f7a8b',
+    'detached',
+    '',
+  ].join('\n')
+  assert.deepEqual(parseWorktreeList(text, { current: '/Users/moi/projects/alpha' }), [
+    { path: '/Users/moi/projects/alpha', branch: 'main', head: '1a2b3c4d', current: true },
+    { path: '/Users/moi/projects/beta', branch: null, head: '5e6f7a8b', current: false },
+  ])
+})
+
+test('une page d’historique dit sa branche, son total et sa suite', async (t) => {
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
+  const { run, calls } = fauxGit({
+    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\nfeat/a\n',
+    'alpha rev-list --count refs/heads/main': '3094\n',
+    'alpha log --format=%h%x1f%ct%x1f%s -n 50 --skip=0 refs/heads/main': log(
+      commit('a1b2c3d', 1794468058, 'MIS-116: ajoute l’onglet'),
+      commit('5de99bc', 1794467058, 'MIS-114: empile les étiquettes'),
+    ),
+    'alpha rev-list --count refs/heads/feat/a': '51\n',
+    'alpha log --format=%h%x1f%ct%x1f%s -n 50 --skip=50 refs/heads/feat/a': commit('d00d1e0', 1794460000, 'fin'),
+  })
+
+  const page = await readHistory(dir, 'alpha', { run })
+  assert.equal(page.branch, 'main', 'sans branche demandée, main est lue')
+  assert.deepEqual(page.branches, ['main', 'feat/a'], 'le sélecteur a ses choix dans la réponse')
+  assert.equal(page.total, 3094)
+  assert.equal(page.hasMore, true, 'la page 1 sur 3 094 commits en a d’autres')
+  assert.deepEqual(page.commits.map((row) => row.sha), ['a1b2c3d', '5de99bc'])
+  assert.equal(page.commits[0].date, 1794468058000)
+
+  const second = await readHistory(dir, 'alpha', { run, branch: 'feat/a', skip: 50 })
+  assert.equal(second.branch, 'feat/a')
+  assert.equal(second.hasMore, false, 'la page 2 sur 51 commits est la dernière')
+  assert.deepEqual(second.commits.map((row) => row.sha), ['d00d1e0'])
+  assert.equal(calls.filter((call) => /--skip=50/.test(call.command)).length, 1)
+  assert.ok(calls.some((call) => /refs\/heads\/feat\/a/.test(call.command)), 'la branche est passée en réf, pas en nom nu')
+})
+
+test('sans main, l’historique s’ouvre sur la branche courante', async (t) => {
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
+  const { run } = fauxGit({
+    'alpha for-each-ref --format=%(refname:short) refs/heads': 'dev\nfeat/x\n',
+    'alpha rev-parse --abbrev-ref HEAD': 'dev\n',
+    'alpha rev-list --count refs/heads/dev': '2\n',
+    'alpha log --format=%h%x1f%ct%x1f%s -n 50 --skip=0 refs/heads/dev': log(
+      commit('a1b2c3d', 1794468058, 'un'),
+      commit('5de99bc', 1794467058, 'deux'),
+    ),
+  })
+
+  const page = await readHistory(dir, 'alpha', { run })
+  assert.equal(page.branch, 'dev', 'main manque : la branche courante prend sa place')
+  assert.deepEqual(page.branches, ['dev', 'feat/x'])
+  assert.equal(page.total, 2)
+  assert.equal(page.hasMore, false)
+})
+
+test('une branche refusée ou inconnue est une erreur de demande', async (t) => {
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
+  const { run, calls } = fauxGit({
+    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\n',
+  })
+
+  await assert.rejects(readHistory(dir, 'alpha', { run, branch: '--all' }), (error) => {
+    assert.equal(error.status, 400)
+    assert.match(error.message, /invalid branch name/)
+    return true
+  })
+  await assert.rejects(readHistory(dir, 'alpha', { run, branch: 'feature/zzz' }), (error) => {
+    assert.equal(error.status, 400)
+    assert.match(error.message, /unknown branch/)
+    return true
+  })
+  await assert.rejects(readHistory(dir, 'alpha', { run, skip: -3 }), (error) => {
+    assert.equal(error.status, 400)
+    return true
+  })
+
+  assert.equal(calls.some((call) => /--all/.test(call.command)), false, 'le nom refusé n’atteint jamais git')
+  assert.equal(calls.some((call) => /feature\/zzz/.test(call.command)), false)
+})
+
+test('l’arbre d’un dépôt : layout, commits par branche, worktrees', async (t) => {
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
+  await writeFile(join(dir, 'alpha', '.git', 'machete'), 'main\n    feat/a  PR #12\n    ghost\n')
+  const worktrees = [
+    `worktree ${join(dir, 'alpha')}`, 'HEAD abc1234', 'branch refs/heads/main', '',
+    `worktree ${join(dir, 'alpha-12')}`, 'HEAD def5678', 'branch refs/heads/feat/a', '',
+  ].join('\n')
+  const { run, calls } = fauxGit({
+    'alpha rev-parse --git-common-dir': '.git\n',
+    'alpha worktree list --porcelain': worktrees,
+    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\nfeat/a\n',
+    'alpha log --format=%h%x1f%ct%x1f%s -n 11 main..refs/heads/feat/a': log(
+      ...Array.from({ length: 11 }, (_, i) => commit(`c0ffee${i}`, 1794468058 - i, `commit ${i}`)),
+    ),
+  })
+
+  const tree = await readTree(dir, 'alpha', { run })
+  assert.equal(tree.layout, true)
+  assert.deepEqual(tree.branches.map((row) => [row.name, row.depth, row.parent, row.worktree, row.missing]), [
+    ['main', 0, null, 'alpha', false],
+    ['feat/a', 1, 'main', 'alpha-12', false],
+    ['ghost', 1, 'main', null, true],
+  ])
+  assert.equal(tree.branches[1].annotation, 'PR #12')
+  assert.equal(tree.branches[1].commits.length, 10, 'dix commits, pas onze')
+  assert.equal(tree.branches[1].truncated, true, 'la onzième ligne est le marqueur')
+  assert.deepEqual(tree.branches[2].commits, [], 'une branche absente ne lance pas de log')
+  assert.equal(tree.worktrees.find((row) => row.path === join(dir, 'alpha')).current, true)
+  assert.equal(calls.filter((call) => /^log /.test(call.command)).length, 1, 'seule une branche locale et rattachée lance un log')
+  assert.deepEqual(
+    [...new Set(calls.map((call) => call.command.split(' ')[0]))].sort(),
+    ['for-each-ref', 'log', 'rev-parse', 'worktree'],
+    'l’onglet ne lance que les lectures autorisées',
+  )
+})
+
+test('un layout vide est un layout absent, pas une branche fantôme', async (t) => {
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
+  await writeFile(join(dir, 'alpha', '.git', 'machete'), '   \n\n')
+  const { run, calls } = fauxGit({
+    'alpha rev-parse --git-common-dir': '.git\n',
+    'alpha worktree list --porcelain': `worktree ${join(dir, 'alpha')}\nHEAD abc1234\nbranch refs/heads/main\n`,
+    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\n',
+  })
+
+  const tree = await readTree(dir, 'alpha', { run })
+  assert.equal(tree.layout, false)
+  assert.deepEqual(tree.branches, [])
+  assert.equal(calls.some((call) => /^log /.test(call.command)), false)
+})
+
+test('sans fichier machete, l’arbre est plat mais les worktrees restent', async (t) => {
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
+  const { run } = fauxGit({
+    'alpha rev-parse --git-common-dir': '.git\n',
+    'alpha worktree list --porcelain': `worktree ${join(dir, 'alpha')}\nHEAD abc1234\nbranch refs/heads/main\n`,
+    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\n',
+  })
+
+  const tree = await readTree(dir, 'alpha', { run })
+  assert.equal(tree.layout, false)
+  assert.deepEqual(tree.branches, [])
+  assert.deepEqual(tree.worktrees.map((row) => [row.path, row.branch, row.current]), [[join(dir, 'alpha'), 'main', true]])
 })

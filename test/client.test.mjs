@@ -1782,7 +1782,7 @@ test('un scan en échec est un bandeau, une racine vide est un état vide', () =
   assert.match(textOf(vide.inner), /Scanned \/Users\/moi\/projects\/vide\./)
 })
 
-test('le volet lit le détail du dépôt choisi et le montre', () => {
+test('le volet lit le détail du dépôt choisi et le montre, sans liste de commits', () => {
   const repository = REPO_SCAN.repositories[1]
   const detail = {
     ...repository,
@@ -1802,19 +1802,293 @@ test('le volet lit le détail du dépôt choisi et le montre', () => {
   assert.ok(node, 'le volet du dépôt choisi est monté')
   const inner = renderTree(node)
 
+  // Trois sections, Details au repos : c'est lui que le volet ouvre.
+  const onglets = findAll(inner, 'button').filter((button) => button.props.role === 'tab')
+  assert.deepEqual(onglets.map((button) => textOf(button)), ['Details', 'History', 'Worktrees'])
+  assert.equal(onglets[0].props['aria-selected'], 'true')
+  assert.equal(onglets[1].props['aria-selected'], 'false')
+
   assert.match(textOf(inner), /feat\/mis-116/)
   assert.match(textOf(inner), /https:\/\/github\.com\/daedalforge\/missions\.git/)
   assert.match(textOf(inner), /origin\/feat\/mis-116/)
   assert.match(textOf(inner), /1 ahead · 0 behind/)
-  assert.match(textOf(inner), /2 commits/)
-  assert.match(textOf(inner), /a1b2c3d/)
-  assert.equal(findAll(inner, 'li').filter((li) => li.props.className === 'missions-commit').length, 2)
+  // Les commits ont quitté Details pour History : aucun n'est rendu ici.
+  assert.doesNotMatch(textOf(inner), /a1b2c3d/)
+  assert.doesNotMatch(textOf(inner), /commit/)
+  assert.equal(findAll(inner, 'select').length, 0, 'Details ne montre pas encore le sélecteur de branche')
+  assert.equal(findAll(inner, 'li').length, 0, 'Details n’a plus de liste')
 
   // Le volet se ferme par sa croix, et Échap : la touche est armée et retirée
   // avec le volet.
   assert.match(SOURCE, /if \(event\.key === 'Escape'\) onClose\(\)/)
   assert.match(SOURCE, /document\.addEventListener\('keydown', onKey\)/)
   assert.match(SOURCE, /return \(\) => document\.removeEventListener\('keydown', onKey\)/)
+})
+
+/**
+ * Le volet d'un dépôt, monté avec les états que ses hooks consomment :
+ * `repositoriesStates` puis [section, history, tree] — le volet est invoqué par
+ * `renderTree`, c'est donc là que ses trois `useState` prennent la file.
+ */
+function volet(states) {
+  const { api, ctx, registered, setters, effects } = charger(undefined, states, memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+  const node = findAll(tree, 'RepositoryDrawer')[0]
+  assert.ok(node, 'le volet du dépôt choisi est monté')
+  return { tree, node, inner: renderTree(node), setters, effects }
+}
+
+test('History montre une page, le total de la branche, et charge la suivante', async () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const page = (commits, hasMore) => ({
+    branch: 'feat/mis-116',
+    branches: ['main', 'feat/mis-116'],
+    total: 3094,
+    hasMore,
+    commits,
+  })
+  const history = {
+    loading: false, more: false, error: null,
+    data: page([
+      { sha: 'a1b2c3d', date: REPO_NOW - 60 * 1000, subject: 'MIS-116: ajoute l’onglet' },
+      { sha: '5de99bc', date: REPO_NOW - 26 * HOUR, subject: 'MIS-114: empile les étiquettes' },
+    ], true),
+  }
+  const { inner } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'history', history, { loading: false, data: null, error: null },
+  ])
+
+  const select = findAll(inner, 'select')[0]
+  assert.deepEqual(findAll(inner, 'option').map((option) => option.props.value), ['main', 'feat/mis-116'])
+  assert.equal(select.props.value, 'feat/mis-116', 'le sélecteur montre la branche lue')
+  assert.match(textOf(inner), /3 094 commits on feat\/mis-116/, 'le total porte les milliers espacés')
+  assert.match(textOf(inner), /a1b2c3d/)
+  assert.match(textOf(inner), /MIS-114: empile les étiquettes/)
+  assert.equal(findAll(inner, 'li').filter((li) => li.props.className === 'missions-history-commit').length, 2)
+
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => page([], false) }
+  }
+  try {
+    // Changer de branche repart de la première page, et le dit au serveur.
+    await select.props.onChange({ target: { value: 'main' } })
+    assert.match(appels[0], /repositories\/commits\?name=missions&skip=0&branch=main/)
+
+    // « Show more » demande la page suivante de la branche affichée.
+    const plus = findAll(inner, 'button').find((button) => textOf(button) === 'Show more')
+    assert.ok(plus, 'la page a une suite')
+    await plus.props.onClick()
+    assert.match(appels[1], /skip=2/, 'la page suivante commence après les deux lignes lues')
+    assert.match(appels[1], /branch=feat%2Fmis-116/, 'la branche choisie est conservée')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('passer à History charge la branche par défaut, sans en imposer une', async () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const { effects } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'history', { loading: false, more: false, data: null, error: null }, { loading: false, data: null, error: null },
+  ])
+
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => ({ branch: 'main', branches: ['main'], commits: [], hasMore: false, total: 0 }) }
+  }
+  try {
+    const lecture = effects.find((effect) => Array.isArray(effect.deps) && effect.deps[0] === 'history' && effect.deps[1] === repository.name)
+    assert.ok(lecture, 'un effet lit History à son ouverture')
+    lecture.fn()
+    await new Promise((done) => setImmediate(done))
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+
+  assert.match(appels[0], /repositories\/commits\?name=missions&skip=0$/, 'la première page, sans branche imposée')
+})
+
+test('Show more ajoute la page suivante au lieu de la remplacer', async () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const page = (commits, hasMore) => ({ branch: 'main', branches: ['main'], total: 3, hasMore, commits })
+  const history = {
+    loading: false, more: false, error: null,
+    data: page([
+      { sha: 'a1b2c3d', date: REPO_NOW, subject: 'MIS-1: un' },
+      { sha: '5de99bc', date: REPO_NOW, subject: 'MIS-2: deux' },
+    ], true),
+  }
+  const { inner, setters } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'history', history, { loading: false, data: null, error: null },
+  ])
+
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => page([{ sha: 'fffffff', date: REPO_NOW, subject: 'MIS-3: trois' }], false),
+  })
+  try {
+    const plus = findAll(inner, 'button').find((button) => textOf(button) === 'Show more')
+    await plus.props.onClick()
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+
+  // Pendant la lecture, la page affichée reste sous le sélecteur : il ne
+  // disparaît pas sous le curseur qui vient de demander la suite.
+  const pendant = setters[0](history)
+  assert.equal(pendant.more, true)
+  assert.equal(pendant.data, history.data)
+
+  // À l'arrivée, la page reçue s'ajoute à celle qu'on avait.
+  const apres = setters[1]({ ...history, loading: true, more: true })
+  assert.equal(apres.loading, false)
+  assert.equal(apres.more, false)
+  assert.deepEqual(apres.data.commits.map((commit) => commit.sha), ['a1b2c3d', '5de99bc', 'fffffff'])
+  assert.equal(apres.data.hasMore, false, 'la dernière page le dit')
+})
+
+test('un échec de History est un bandeau, pas un chargement sans fin', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const { inner } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'history', { loading: false, more: false, data: null, error: 'no local branch to read' }, { loading: false, data: null, error: null },
+  ])
+
+  // La première lecture a échoué : rien à montrer, mais l'échec se dit — le
+  // sélecteur n'attend plus une lecture qui n'arrivera jamais.
+  const bandeau = findAll(inner, 'div').find((div) => div.props.className === 'missions-repos-error')
+  assert.ok(bandeau, 'l’échec est visible')
+  assert.equal(bandeau.props.role, 'alert')
+  assert.match(textOf(bandeau), /no local branch to read/)
+  assert.doesNotMatch(textOf(inner), /Reading branches…/, 'le sélecteur ne lit plus indéfiniment')
+  assert.doesNotMatch(textOf(inner), /Loading…/, 'aucun chargement sans fin sous le bandeau')
+})
+
+test('les onglets du volet basculent, et un autre dépôt ramène à Details', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const { inner, setters, effects } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'details', { loading: false, more: false, data: null, error: null }, { loading: false, data: null, error: null },
+  ])
+
+  const onglet = findAll(inner, 'button').find((button) => textOf(button) === 'Worktrees')
+  onglet.props.onClick()
+  assert.equal(setters.at(-1), 'worktrees', 'l’onglet choisi devient la section')
+
+  // La remise à zéro ne dépend que du nom, et ouvre Details.
+  const remise = effects.find((effect) => Array.isArray(effect.deps) && effect.deps.length === 1 && effect.deps[0] === repository.name)
+  assert.ok(remise, 'un effet écoute le changement de dépôt')
+  remise.fn()
+  assert.equal(setters.at(-1), 'details', 'un autre dépôt rouvre le volet sur Details')
+})
+
+test('Worktrees dessine le layout, ses commits, ses marques et ses worktrees', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const arbre = {
+    layout: true,
+    branches: [
+      { name: 'main', depth: 0, parent: null, annotation: null, worktree: 'myapp', commits: [], truncated: false, missing: false },
+      { name: 'feat/a', depth: 1, parent: 'main', annotation: 'PR #12', worktree: 'myapp-12', commits: [{ sha: 'c0ffee1', date: REPO_NOW, subject: 'feat: a' }], truncated: true, missing: false },
+      { name: 'old/x', depth: 1, parent: 'main', annotation: null, worktree: null, commits: [], truncated: false, missing: true },
+    ],
+    worktrees: [
+      { path: '/Users/moi/projects/myapp', branch: 'main', head: 'abc1234', current: true },
+      { path: '/Users/moi/projects/myapp-12', branch: 'feat/a', head: 'def5678', current: false },
+      { path: '/Users/moi/projects/myapp-hot', branch: 'hotfix/24', head: 'fff9012', current: false },
+    ],
+  }
+  const { inner } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'worktrees', { loading: false, more: false, data: null, error: null }, { loading: false, data: arbre, error: null },
+  ])
+
+  const lignes = findAll(inner, 'li').filter((li) => /missions-tree-branch/.test(String(li.props.className)))
+  assert.equal(lignes.length, 3, 'une ligne par branche déclarée')
+  assert.equal(lignes[0].props.style.paddingLeft, '10px', 'la racine est au bord')
+  assert.equal(lignes[1].props.style.paddingLeft, '24px', 'un cran par profondeur')
+
+  assert.match(textOf(lignes[0]), /myapp/, 'le worktree qui porte la branche est nommé')
+  assert.match(textOf(lignes[1]), /PR #12/, 'l’annotation du fichier est lue')
+  assert.match(textOf(lignes[1]), /myapp-12/)
+  assert.match(textOf(lignes[1]), /c0ffee1/)
+  assert.match(textOf(lignes[1]), /\+/, 'au-delà de dix commits, la marque dit qu’il y en a d’autres')
+  assert.match(textOf(lignes[2]), /not local/, 'une branche absente est marquée, pas cachée')
+
+  // Le worktree d'une branche hors du layout n'est pas perdu : il est nommé
+  // dans sa propre section, avec son chemin entier.
+  assert.match(textOf(inner), /Not in the layout/)
+  assert.match(textOf(inner), /\/Users\/moi\/projects\/myapp-hot/, 'le chemin entier se lit')
+  assert.match(textOf(inner), /hotfix\/24/, 'une branche hors du layout garde son worktree')
+})
+
+test('quand toutes les branches sont dans le layout, aucune section hors layout', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const arbre = {
+    layout: true,
+    branches: [
+      { name: 'main', depth: 0, parent: null, annotation: null, worktree: 'myapp', commits: [], truncated: false, missing: false },
+    ],
+    worktrees: [
+      { path: '/Users/moi/projects/myapp', branch: 'main', head: 'abc1234', current: true },
+    ],
+  }
+  const { inner } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'worktrees', { loading: false, more: false, data: null, error: null }, { loading: false, data: arbre, error: null },
+  ])
+  assert.doesNotMatch(textOf(inner), /Not in the layout/)
+})
+
+test('sans layout, Worktrees liste à plat et le dit', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const arbre = {
+    layout: false,
+    branches: [],
+    worktrees: [
+      { path: '/Users/moi/projects/alpha', branch: 'main', head: 'abc', current: true },
+      { path: '/Users/moi/projects/beta', branch: null, head: 'def', current: false },
+    ],
+  }
+  const { inner } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'worktrees', { loading: false, more: false, data: null, error: null }, { loading: false, data: arbre, error: null },
+  ])
+
+  assert.match(textOf(inner), /No git machete layout for this repository/)
+  assert.match(textOf(inner), /alpha/)
+  assert.match(textOf(inner), /beta/)
+  assert.match(textOf(inner), /detached/, 'un worktree détaché le dit, il ne disparaît pas')
+})
+
+test('un layout illisible est un bandeau dans Worktrees', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  const { inner } = volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'worktrees', { loading: false, more: false, data: null, error: null }, { loading: false, data: null, error: 'fatal: not a git repository' },
+  ])
+
+  const bandeau = findAll(inner, 'div').find((div) => div.props.className === 'missions-repos-error')
+  assert.ok(bandeau, 'l’échec est visible')
+  assert.equal(bandeau.props.role, 'alert')
+  assert.match(textOf(bandeau), /fatal: not a git repository/)
 })
 
 test('un clic de ligne ouvre le volet, la croix et Échap le ferment', () => {

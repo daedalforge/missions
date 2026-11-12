@@ -25,12 +25,14 @@ import {
   feedbackSessionPrompt,
   FEEDBACK_BRIEF,
   ticketReadLine,
+  treeIndent,
   STEP_BRIEFS,
   STEP_BY_STATE,
   FILTERS_KEY,
   filterBarState,
   filterMissions,
   filterSnapshot,
+  historyLabel,
   groupByState,
   hasActiveFilters,
   highPriorityStories,
@@ -56,6 +58,7 @@ import {
   suggestBranch,
   TAB_KEY,
   writeFilterSnapshot,
+  worktreeLabel,
   writeTab,
 } from '../lib/view.js'
 import { loadWorkflows, MODELS_DIR, readWorkflow } from '../lib/workflows.js'
@@ -1098,4 +1101,26 @@ test('sans dépôt déclaré, le prompt des remontées n’invente pas de clone'
   const prompt = feedbackSessionPrompt({ ...TEMOIN, repo: null })
   assert.doesNotMatch(prompt, /Dépôt du projet/)
   assert.match(prompt, /gh pr list --head fix\/mis-42 --state all/)
+})
+
+test('historyLabel chiffre le total par milliers, et nomme sa branche', () => {
+  assert.equal(historyLabel({ total: 3094, branch: 'main' }), '3 094 commits on main')
+  assert.equal(historyLabel({ total: 1, branch: 'feat/a' }), '1 commit on feat/a')
+  assert.equal(historyLabel({ total: 0, branch: 'main' }), '0 commits on main')
+  assert.equal(historyLabel({ total: 1234567, branch: 'main' }), '1 234 567 commits on main')
+  assert.equal(historyLabel({}), '', 'un total inconnu ne s’invente pas')
+  assert.equal(historyLabel({ total: 12 }), '', 'sans branche, pas de phrase')
+})
+
+test('treeIndent un cran par profondeur, worktreeLabel la fin du chemin', () => {
+  assert.equal(treeIndent(0), 10)
+  assert.equal(treeIndent(null), 10)
+  assert.equal(treeIndent(-2), 10)
+  assert.equal(treeIndent(1), 24)
+  assert.equal(treeIndent(3), 52)
+
+  assert.equal(worktreeLabel('/Users/moi/projects/myapp'), 'myapp')
+  assert.equal(worktreeLabel('/Users/moi/projects/myapp/'), 'myapp')
+  assert.equal(worktreeLabel('C:\\projects\\myapp'), 'myapp')
+  assert.equal(worktreeLabel(null), '')
 })

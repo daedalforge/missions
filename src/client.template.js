@@ -173,6 +173,8 @@ window.__ModuleLoader__.load({
     const WORKFLOW_MODEL_URL = 'missions/api/workflows/model'
     const REPOSITORIES_URL = 'missions/api/repositories'
     const REPOSITORY_URL = 'missions/api/repositories/detail'
+    const REPOSITORY_HISTORY_URL = 'missions/api/repositories/commits'
+    const REPOSITORY_TREE_URL = 'missions/api/repositories/tree'
   // L'ordre de la méthode, connu avant que le serveur ait répondu : il valide
   // l'étape que la session a laissée ouverte.
   const WORKFLOW_STEPS = ['cadrage', 'execution', 'review', 'cloture']
@@ -230,6 +232,14 @@ window.__ModuleLoader__.load({
       { id: 'details', label: 'Details' },
       { id: 'journal', label: 'Journal' },
       { id: 'checklist', label: 'Checklist' },
+    ]
+
+    // The repository drawer has its own sections: the repository as a whole,
+    // one branch's history, and the declared layout with its worktrees.
+    const REPOSITORY_TABS = [
+      { id: 'details', label: 'Details' },
+      { id: 'history', label: 'History' },
+      { id: 'worktrees', label: 'Worktrees' },
     ]
 
     const THEMES = [
@@ -595,11 +605,42 @@ window.__ModuleLoader__.load({
 .missions-repos-error { margin: 14px 0 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, #cf222e 35%, transparent); border-radius: 6px; background: color-mix(in srgb, #cf222e 8%, transparent); color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 12px; }
 .missions-drawer-section { display: grid; gap: 9px; }
 .missions-drawer-section-title { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
-.missions-commits { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
-.missions-commit { display: grid; grid-template-columns: 58px 44px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 11.5px; }
-.missions-commit-hash { color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; }
-.missions-commit-age { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.missions-commit-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Repository drawer: three sections behind three tabs — the repository, one
+   branch's history, the declared layout with its worktrees. */
+.missions-repo-tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
+.missions-repo-tab { height: 30px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font: inherit; font-size: 11.5px; cursor: pointer; }
+.missions-repo-tab:hover { color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-repo-tab[aria-selected="true"] { border-bottom-color: var(--dsw-alias-label-primary, #1f1f1f); color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
+.missions-history { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.missions-history-bar { display: flex; align-items: center; gap: 10px; }
+.missions-history-branch { min-width: 0; max-width: 62%; height: 26px; padding: 0 22px 0 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 6px; background-color: transparent; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237a7168' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 7px center; background-size: 9px; appearance: none; -webkit-appearance: none; color: var(--dsw-alias-label-secondary, #4a4a4a); font: inherit; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; }
+.missions-history-total { min-width: 0; margin-left: auto; overflow: hidden; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.missions-history-lines { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.missions-history-commit { display: grid; grid-template-columns: 58px 44px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 11.5px; }
+.missions-history-hash { color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; }
+.missions-history-age { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.missions-history-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.missions-history-more { align-self: flex-start; width: auto; }
+.missions-tree { display: flex; flex-direction: column; gap: 14px; }
+.missions-tree-branches, .missions-tree-flat { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.missions-tree-branch { display: grid; gap: 6px; padding-top: 2px; padding-bottom: 2px; }
+.missions-tree-branch--missing .missions-tree-name { color: var(--dsw-alias-label-tertiary, #7a7168); text-decoration: line-through; }
+.missions-tree-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.missions-tree-name { min-width: 0; overflow: hidden; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11.5px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.missions-tree-annotation, .missions-tree-tag, .missions-tree-missing { flex: none; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, currentColor 8%, transparent); color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; white-space: nowrap; }
+.missions-tree-tag { border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); background: none; }
+.missions-tree-missing { font-style: italic; }
+.missions-tree-commits { display: grid; gap: 4px; margin: 0; padding: 2px 0 2px 10px; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); list-style: none; }
+.missions-tree-commit { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 10.5px; }
+.missions-tree-hash { color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+.missions-tree-subject { min-width: 0; overflow: hidden; color: var(--dsw-alias-label-secondary, #4a4a4a); text-overflow: ellipsis; white-space: nowrap; }
+.missions-tree-more { justify-self: start; margin-left: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; font-weight: 700; }
+.missions-tree-worktree { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px 8px; min-width: 0; font-size: 11px; }
+.missions-tree-worktree-label { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-weight: 550; line-height: 1.35; }
+.missions-tree-worktree-branch { min-width: 0; overflow: hidden; color: var(--dsw-alias-label-secondary, #4a4a4a); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.missions-tree-worktree-current { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; }
+.missions-tree-worktrees { display: grid; gap: 8px; }
 @media (max-width: 860px) {
   .missions-repo-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) 78px 52px; }
   .missions-col-commit { display: none; }
@@ -844,12 +885,29 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 .missions-panel[data-theme="manga"] .missions-repo-state { border: 1px solid var(--mm-line-strong); background: var(--mm-page-2); color: var(--mm-ink-2); }
 .missions-panel[data-theme="manga"] .missions-repo-state[data-dirty="true"] { border-color: var(--mm-orange-deep); color: var(--mm-orange-deep); }
 .missions-panel[data-theme="manga"] .missions-repo-state[data-error="true"] { border-color: var(--mm-coral-deep); color: var(--mm-coral-deep); }
-.missions-panel[data-theme="manga"] .missions-repo-age,
-.missions-panel[data-theme="manga"] .missions-commit-hash,
-.missions-panel[data-theme="manga"] .missions-commit-age { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-repo-age { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-repos-note { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-repos-error { border: 1.5px solid var(--mm-coral-deep); background: color-mix(in srgb, var(--mm-coral) 22%, var(--mm-page-2)); color: var(--mm-ink); }
 .missions-panel[data-theme="manga"] .missions-drawer-section-title { color: var(--mm-ink-3); font-family: var(--mm-display); font-size: 9px; letter-spacing: .08em; }
+.missions-panel[data-theme="manga"] .missions-repo-tabs { gap: 20px; border-bottom: 1.5px solid var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-repo-tab { height: 32px; color: var(--mm-ink-3); font-family: var(--mm-display); font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.missions-panel[data-theme="manga"] .missions-repo-tab[aria-selected="true"] { border-bottom: 3px solid var(--mm-orange-deep); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-history-branch { border: 1.5px solid var(--mm-ink); border-radius: 6px; background-color: var(--mm-page-2); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23201b17' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E"); color: var(--mm-ink); font-family: var(--mm-mono); }
+.missions-panel[data-theme="manga"] .missions-history-total { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-history-hash { color: var(--mm-orange-deep); font-family: var(--mm-mono); }
+.missions-panel[data-theme="manga"] .missions-history-age { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-history-subject { color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-history-more { padding: 4px 10px; border: 1.5px solid var(--mm-ink); border-radius: 6px; background: var(--mm-page-2); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-tree-name { color: var(--mm-ink); font-family: var(--mm-mono); }
+.missions-panel[data-theme="manga"] .missions-tree-annotation { border: 1px solid var(--mm-line-strong); background: var(--mm-page-2); color: var(--mm-ink-2); }
+.missions-panel[data-theme="manga"] .missions-tree-tag { border: 1px solid var(--mm-line-strong); color: var(--mm-ink-2); }
+.missions-panel[data-theme="manga"] .missions-tree-missing { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-tree-commits { border-left-color: var(--mm-line-strong); }
+.missions-panel[data-theme="manga"] .missions-tree-hash { color: var(--mm-orange-deep); }
+.missions-panel[data-theme="manga"] .missions-tree-subject { color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-tree-worktree-label { color: var(--mm-ink); font-family: var(--mm-mono); }
+.missions-panel[data-theme="manga"] .missions-tree-worktree-branch { color: var(--mm-ink-2); }
+.missions-panel[data-theme="manga"] .missions-tree-worktree-current { color: var(--mm-ink-3); }
 
 /* Empty result: a tilted Konoha print, the portrait and a speech bubble. */
 .missions-panel[data-theme="manga"] .missions-loader { color: var(--mm-ink-3); min-height: 340px; }
@@ -2434,22 +2492,39 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
     }
 
     /**
+     * One JSON read of the host. A refusal carries the host's own sentence:
+     * the drawer shows "fatal: …", not a status code it cannot explain.
+     */
+    async function readRoute(url) {
+      const response = await fetch(url, { headers: { accept: 'application/json' } })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data?.error ?? `read failed (${response.status})`)
+      return data
+    }
+
+    /**
      * The drawer of one repository: its path, its remote, its upstream, where
-     * it stands against it, and its last ten commits. The detail is read when
-     * the drawer opens — the row the tab holds carries none of that, and forty
-     * detailled reads in one scan would cost more than the scan itself.
+     * it stands against it — then, on their own tab, one branch's history and
+     * the declared layout with its worktrees.
+     *
+     * Each section is read when it is opened: the detail is two git calls, a
+     * history page one, and a layout one log per branch. Reading all three at
+     * mount would spend them on tabs nobody opened.
      */
     function RepositoryDrawer({ repository, onClose, theme }) {
       const [detail, setDetail] = React.useState({ loading: true, data: null, error: null })
+      const [section, setSection] = React.useState('details')
+      const [history, setHistory] = React.useState({ loading: false, more: false, data: null, error: null })
+      const [tree, setTree] = React.useState({ loading: false, data: null, error: null })
+
+      // Another repository is another drawer: its sections start over.
+      React.useEffect(() => {
+        setSection('details')
+      }, [repository.name])
 
       React.useEffect(() => {
         let alive = true
-        fetch(`${REPOSITORY_URL}?name=${encodeURIComponent(repository.name)}`, { headers: { accept: 'application/json' } })
-          .then(async (response) => {
-            const data = await response.json().catch(() => ({}))
-            if (!response.ok) throw new Error(data?.error ?? `read failed (${response.status})`)
-            return data
-          })
+        readRoute(`${REPOSITORY_URL}?name=${encodeURIComponent(repository.name)}`)
           .then((data) => {
             if (alive) setDetail({ loading: false, data, error: null })
           })
@@ -2458,6 +2533,61 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           })
         return () => { alive = false }
       }, [repository.name])
+
+      // A page is ten commits wide on the host's side; "Show more" adds the
+      // next one to what the tab already holds, never replaces it. Changing
+      // branch starts again: the old pages belong to another ref, so the new
+      // page replaces them — the selector stays while it is read.
+      const historyRun = React.useRef(0)
+      const loadHistory = React.useCallback((branch, skip, append = false) => {
+        const query = new URLSearchParams({ name: repository.name, skip: String(skip) })
+        if (branch) query.set('branch', branch)
+        const run = historyRun.current + 1
+        historyRun.current = run
+        setHistory((previous) => ({ ...previous, loading: !append, more: append, error: null }))
+        return readRoute(`${REPOSITORY_HISTORY_URL}?${query}`)
+          .then((data) => {
+            if (historyRun.current !== run) return
+            setHistory((previous) => ({
+              loading: false,
+              more: false,
+              error: null,
+              data: append && previous.data
+                ? { ...data, commits: [...previous.data.commits, ...data.commits] }
+                : data,
+            }))
+          })
+          .catch((error) => {
+            if (historyRun.current !== run) return
+            setHistory((previous) => ({
+              ...previous,
+              loading: false,
+              more: false,
+              error: error?.message ?? String(error),
+            }))
+          })
+      }, [repository.name])
+
+      // The section is read the first time it opens, and kept after: coming
+      // back to it must not pay the git calls again.
+      React.useEffect(() => {
+        if (section !== 'history' || history.data) return
+        loadHistory(null, 0)
+      }, [section, repository.name])
+
+      React.useEffect(() => {
+        if (section !== 'worktrees' || tree.data) return
+        let alive = true
+        setTree({ loading: true, data: null, error: null })
+        readRoute(`${REPOSITORY_TREE_URL}?name=${encodeURIComponent(repository.name)}`)
+          .then((data) => {
+            if (alive) setTree({ loading: false, data, error: null })
+          })
+          .catch((error) => {
+            if (alive) setTree({ loading: false, data: null, error: error?.message ?? String(error) })
+          })
+        return () => { alive = false }
+      }, [section, repository.name])
 
       React.useEffect(() => {
         const onKey = (event) => {
@@ -2472,7 +2602,6 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const ahead = Number(shown.ahead ?? 0)
       const behind = Number(shown.behind ?? 0)
       const track = shown.upstream ? `${ahead} ahead · ${behind} behind` : 'no upstream'
-      const commits = Array.isArray(shown.commits) ? shown.commits : []
 
       return h('aside', {
         className: 'missions-drawer',
@@ -2490,34 +2619,180 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             ),
           ),
         ),
-        h('div', { className: 'missions-drawer-panel' },
+        h('div', { className: 'missions-repo-tabs', role: 'tablist', 'aria-label': 'Repository sections' },
+          REPOSITORY_TABS.map((entry) => h('button', {
+            key: entry.id,
+            type: 'button',
+            role: 'tab',
+            id: `missions-repo-tab-${entry.id}`,
+            className: 'missions-repo-tab',
+            'aria-selected': section === entry.id ? 'true' : 'false',
+            'aria-controls': `missions-repo-panel-${entry.id}`,
+            onClick: () => setSection(entry.id),
+          }, entry.label)),
+        ),
+        h('div', {
+          className: 'missions-drawer-panel',
+          role: 'tabpanel',
+          id: `missions-repo-panel-${section}`,
+          'aria-labelledby': `missions-repo-tab-${section}`,
+        },
           detail.error
             ? h('div', { className: 'missions-repos-error', role: 'alert' }, detail.error)
             : !detail.data
               ? h(PanelLoader, { theme })
-              : h(React.Fragment, null,
-                  h('dl', { className: 'missions-props' },
-                    h(DrawerRow, { label: 'Path', value: shown.path }),
-                    h(DrawerRow, { label: 'Branch', value: repositoryBranch(shown) }),
-                    h(DrawerRow, { label: 'State', value: state.label }),
-                    h(DrawerRow, { label: 'Remote', value: shown.remote ?? 'no remote' }),
-                    h(DrawerRow, { label: 'Upstream', value: shown.upstream ?? 'none' }),
-                    h(DrawerRow, { label: 'Against upstream', value: track }),
-                  ),
-                  h('section', { className: 'missions-drawer-section' },
-                    h('h3', { className: 'missions-drawer-section-title' }, `Last ${commits.length} commit${commits.length === 1 ? '' : 's'}`),
-                    commits.length === 0
-                      ? h('p', { className: 'missions-drawer-note' }, 'No commit yet.')
-                      : h('ul', { className: 'missions-commits' },
-                          commits.map((commit, index) => h('li', { className: 'missions-commit', key: `${commit.sha}-${index}` },
-                            h('span', { className: 'missions-commit-hash' }, commit.sha),
-                            h('span', { className: 'missions-commit-age' }, relativeAge(commit.date)),
-                            h('span', { className: 'missions-commit-subject', title: commit.subject }, commit.subject),
-                          )),
-                        ),
-                  ),
-                ),
+              : section === 'history'
+                ? h(RepositoryHistory, { history, theme, onBranch: (branch) => loadHistory(branch, 0), onMore: () => loadHistory(history.data?.branch ?? null, history.data?.commits?.length ?? 0, true) })
+                : section === 'worktrees'
+                  ? h(RepositoryTree, { tree, theme })
+                  : h(React.Fragment, null,
+                      h('dl', { className: 'missions-props' },
+                        h(DrawerRow, { label: 'Path', value: shown.path }),
+                        h(DrawerRow, { label: 'Branch', value: repositoryBranch(shown) }),
+                        h(DrawerRow, { label: 'State', value: state.label }),
+                        h(DrawerRow, { label: 'Remote', value: shown.remote ?? 'no remote' }),
+                        h(DrawerRow, { label: 'Upstream', value: shown.upstream ?? 'none' }),
+                        h(DrawerRow, { label: 'Against upstream', value: track }),
+                      ),
+                    ),
         ),
+      )
+    }
+
+    /**
+     * One branch's history: the selector, the page of commits, and the total
+     * the page belongs to. The total is the branch's, not the page's: it says
+     * what "Show more" is walking through, and when it is done.
+     *
+     * A read that failed is a banner, like the tree's: the error is tested
+     * before the missing data, or a first read in trouble would wait forever
+     * on "Reading branches…" instead of saying what went wrong.
+     */
+    function RepositoryHistory({ history, theme, onBranch, onMore }) {
+      const data = history.data
+      const commits = Array.isArray(data?.commits) ? data.commits : []
+      const branches = Array.isArray(data?.branches) ? data.branches : []
+      const total = historyLabel(data ?? {})
+      const emptyLabel = data || history.error ? 'No local branch' : 'Reading branches…'
+      return h('section', { className: 'missions-history', 'aria-label': 'Branch history' },
+        h('div', { className: 'missions-history-bar' },
+          h('select', {
+            className: 'missions-history-branch',
+            'aria-label': 'Branch',
+            value: data?.branch ?? '',
+            disabled: branches.length === 0,
+            onChange: (event) => onBranch(event.target.value),
+          },
+            branches.length === 0
+              ? h('option', { value: '' }, emptyLabel)
+              : branches.map((branch) => h('option', { key: branch, value: branch }, branch)),
+          ),
+          total ? h('span', { className: 'missions-history-total' }, total) : null,
+        ),
+        !data && !history.error
+          ? h(PanelLoader, { theme })
+          : history.error
+            ? h('div', { className: 'missions-repos-error', role: 'alert' }, history.error)
+            : history.loading && !history.more
+              ? h(PanelLoader, { theme })
+              : commits.length === 0
+                ? h('p', { className: 'missions-drawer-note' }, 'No commit on this branch.')
+                : h('ul', { className: 'missions-history-lines' },
+                  commits.map((commit, index) => h('li', { className: 'missions-history-commit', key: `${commit.sha}-${index}` },
+                    h('span', { className: 'missions-history-hash' }, commit.sha),
+                    h('span', { className: 'missions-history-age' }, relativeAge(commit.date)),
+                    h('span', { className: 'missions-history-subject', title: commit.subject }, commit.subject),
+                  )),
+                ),
+        data?.hasMore && !history.loading
+          ? h('button', {
+              type: 'button',
+              className: 'missions-btn missions-history-more',
+              onClick: onMore,
+              disabled: history.more,
+            }, history.more ? 'Loading…' : 'Show more')
+          : null,
+      )
+    }
+
+    /**
+     * The declared layout: one row per branch, indented by its depth, carrying
+     * the commits it introduces on its parent (ten at most, then `+`), the
+     * worktree that holds it, and a mark when the branch is not local.
+     *
+     * Below it, every worktree in full — path, branch, current — because a
+     * branch may carry several, and a worktree may carry a branch the layout
+     * does not declare. A layout that is absent or empty is not an empty tab:
+     * the worktrees are still a reading of the repository.
+     */
+    function RepositoryTree({ tree, theme }) {
+      if (tree.error) return h('div', { className: 'missions-repos-error', role: 'alert' }, tree.error)
+      if (!tree.data) return h(PanelLoader, { theme })
+      const branches = Array.isArray(tree.data.branches) ? tree.data.branches : []
+      const worktrees = Array.isArray(tree.data.worktrees) ? tree.data.worktrees : []
+      // Once the layout names its branches, a worktree is "outside" when the
+      // branch it carries is none of them. A detached worktree carries no
+      // branch: it is not a layout branch, so it is not a comparison either.
+      const known = new Set(branches.map((branch) => branch.name))
+      const outside = worktrees.filter((worktree) => worktree.branch && !known.has(worktree.branch))
+
+      if (!tree.data.layout) {
+        return h('section', { className: 'missions-tree', 'aria-label': 'Repository tree' },
+          h('p', { className: 'missions-drawer-note' }, 'No git machete layout for this repository — the worktrees below are the repository.'),
+          worktrees.length === 0
+            ? h('p', { className: 'missions-drawer-note' }, 'No worktree.')
+            : h('ul', { className: 'missions-tree-flat', 'aria-label': 'Worktrees' },
+                worktrees.map((worktree) => h(RepositoryWorktree, { key: worktree.path, worktree })),
+              ),
+        )
+      }
+
+      return h('section', { className: 'missions-tree', 'aria-label': 'Repository tree' },
+        h('ul', { className: 'missions-tree-branches' },
+          branches.map((branch) => h(RepositoryBranch, { key: branch.name, branch })),
+        ),
+        outside.length === 0 ? null : h('div', { className: 'missions-tree-worktrees' },
+          h('h3', { className: 'missions-drawer-section-title' }, 'Not in the layout'),
+          h('ul', { className: 'missions-tree-flat', 'aria-label': 'Worktrees not in the layout' },
+            outside.map((worktree) => h(RepositoryWorktree, { key: worktree.path, worktree })),
+          ),
+        ),
+      )
+    }
+
+    /** One branch of the layout: its indent, its commits, its worktree. */
+    function RepositoryBranch({ branch }) {
+      const commits = Array.isArray(branch.commits) ? branch.commits : []
+      return h('li', {
+        className: branch.missing ? 'missions-tree-branch missions-tree-branch--missing' : 'missions-tree-branch',
+        style: { paddingLeft: `${treeIndent(branch.depth)}px` },
+      },
+        h('div', { className: 'missions-tree-head' },
+          h('span', { className: 'missions-tree-name' }, branch.name),
+          branch.annotation ? h('span', { className: 'missions-tree-annotation' }, branch.annotation) : null,
+          branch.worktree ? h('span', { className: 'missions-tree-tag', title: 'worktree' }, branch.worktree) : null,
+          branch.missing ? h('span', { className: 'missions-tree-missing' }, 'not local') : null,
+        ),
+        commits.length > 0
+          ? h('ul', { className: 'missions-tree-commits' },
+              commits.map((commit, index) => h('li', { className: 'missions-tree-commit', key: `${commit.sha}-${index}` },
+                h('span', { className: 'missions-tree-hash' }, commit.sha),
+                h('span', { className: 'missions-tree-subject', title: commit.subject }, commit.subject),
+              )),
+            )
+          : null,
+        branch.truncated
+          ? h('span', { className: 'missions-tree-more', title: 'More commits introduced on its parent are not shown.' }, '+')
+          : null,
+      )
+    }
+
+    /** One worktree: where it is, the branch it holds, and whether it is here. */
+    function RepositoryWorktree({ worktree }) {
+      return h('li', { className: 'missions-tree-worktree' },
+        h('span', { className: 'missions-tree-worktree-label', title: worktree.path }, worktree.path),
+        h('span', { className: 'missions-tree-worktree-branch' }, worktree.branch ?? 'detached'),
+        worktree.current ? h('span', { className: 'missions-tree-worktree-current' }, 'current') : null,
       )
     }
 
