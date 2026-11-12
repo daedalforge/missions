@@ -1,0 +1,16 @@
+# Ghostty — réglages propres à Linux.
+#
+# Ce fichier est celui que config/links-home.yml lie à ~/.config/ghostty/config sur
+# Linux. Le socle commun (thème, police, fenêtre, intégration shell, raccourcis
+# h/j/k/l) vit dans `config`, inclus ci-dessous. Ghostty n'a pas de syntaxe
+# conditionnelle : le choix Linux/macOS se fait par le lien, pas par ce fichier.
+#
+# L'inclusion est écrite en absolu (~, étendu par Ghostty) : une relative
+# dépendrait de la façon dont Ghostty résout le lien symbolique, et une
+# inclusion introuvable ne produit aucune erreur. L'absolu ne laisse pas place
+# au doute ; en contrepartie, il fixe l'emplacement du dépôt à ~/projects/missions.
+
+config-file = ~/projects/missions/config/tools/ghostty/config
+
+# Rien d'autre pour l'instant. Les liaisons en flèches sont dans config-darwin :
+# sous KDE, Super+Shift+←/→ et Super+Ctrl+flèches sont pris par KWin.

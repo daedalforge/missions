@@ -1,0 +1,23 @@
+# Liens de la configuration du poste : source dans ce dépôt → emplacement réel.
+#
+# Une entrée par lien. `source` est un chemin relatif à la racine du dépôt,
+# `target` un chemin réel exprimé depuis `$HOME`. `platform` borne le lien au
+# système qui lui donne un sens (`darwin`, `linux`) : le même usage ne vit pas au
+# même endroit d'un système à l'autre.
+#
+# Le socle `config/tools/ghostty/config` n'est jamais lié : chaque variante
+# l'inclut par `config-file`, et Ghostty n'a pas de syntaxe conditionnelle — le
+# choix du système tient au lien, jamais au contenu du fichier.
+#
+# Les liens sont posés par « node tools/link-config.mjs --apply ». Le mode par
+# défaut, --check, n'écrit rien et sort en 1 dès qu'un lien manque ou dérive.
+# Un fichier régulier à la place d'une cible n'est jamais écrasé sans --force.
+
+links:
+  - source: config/tools/ghostty/config-darwin
+    target: ~/Library/Application Support/com.mitchellh.ghostty/config
+    platform: darwin
+
+  - source: config/tools/ghostty/config-linux
+    target: ~/.config/ghostty/config
+    platform: linux
