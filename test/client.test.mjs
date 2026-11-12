@@ -1448,3 +1448,245 @@ test('un refus du tracker laisse l’ancienne priorité et le dit', async () => 
   assert.equal(note.error, true)
   assert.match(note.text, /Priority failed: tracker refused/)
 })
+
+/* Repositories: l'onglet, ses lignes, son volet. */
+
+const HOUR = 3600 * 1000
+const REPO_NOW = Date.now()
+
+/** Un scan tel que la route le renvoie : trois dépôts, un worktree, un vide. */
+const REPO_SCAN = {
+  root: '/Users/moi/projects',
+  count: 3,
+  durationMs: 1904,
+  errors: [],
+  repositories: [
+    {
+      name: 'zeta', path: '/Users/moi/projects/zeta', kind: 'clone', branch: 'main',
+      upstream: 'origin/main', ahead: 0, behind: 0, dirty: 0, lastCommit: null, error: null,
+    },
+    {
+      name: 'missions', path: '/Users/moi/projects/missions', kind: 'clone', branch: 'feat/mis-116',
+      upstream: 'origin/feat/mis-116', ahead: 0, behind: 0, dirty: 2,
+      lastCommit: { sha: 'a1b2c3d', date: REPO_NOW - 20 * 1000, subject: 'MIS-116: ajoute l’onglet' }, error: null,
+    },
+    {
+      name: 'missions-gh20', path: '/Users/moi/projects/missions-gh20', kind: 'worktree', branch: 'gh-20-hover',
+      upstream: null, ahead: 0, behind: 0, dirty: 1,
+      lastCommit: { sha: 'd4e5f6a', date: REPO_NOW - 3 * HOUR, subject: 'gh-20: le survol' }, error: null,
+    },
+  ],
+}
+
+/**
+ * Les neuf états du panneau, dans l'ordre de ses hooks, puis celui que la vue
+ * de l'onglet consomme au montage : `useState` les prend dans cet ordre.
+ */
+function repositoriesStates(view, repository = null) {
+  return [
+    EMPTY_BAR,
+    dashboardView(DASH_MISSIONS),
+    'repositories',
+    '',
+    { ...EMPTY_BAR.filters },
+    null,
+    null,
+    'default',
+    repository,
+    view,
+  ]
+}
+
+/** L'état que la vue atteint quand le scan a répondu : le payload, pas le wrapper. */
+function scanReady(data) {
+  return { loading: false, data, error: null }
+}
+
+/** Le panneau monté sur l'onglet Repositories, et la vue résolue. */
+function montrerRepositories(view, repository = null) {
+  const { api, ctx, registered, effects, setters } = charger(undefined, repositoriesStates(view, repository), memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+  const node = findAll(tree, 'RepositoriesView')[0]
+  assert.ok(node, 'l’onglet Repositories porte sa vue')
+  return { tree, node, inner: renderTree(node), effects, setters }
+}
+
+test('la barre d’onglets place Repositories entre Missions et Workflows', () => {
+  assert.match(SOURCE, /const REPOSITORIES_URL = 'missions\/api\/repositories'/)
+  assert.match(SOURCE, /const REPOSITORY_URL = 'missions\/api\/repositories\/detail'/)
+
+  // L'onglet est une entrée de la même barre, pas une vue à part : il passe
+  // par le même câblage, et la même session le mémorise.
+  const start = SOURCE.indexOf('const TABS = [')
+  const tabs = SOURCE.slice(start, SOURCE.indexOf(']', start))
+  assert.ok(tabs.indexOf("'missions'") < tabs.indexOf("'repositories'"))
+  assert.ok(tabs.indexOf("'repositories'") < tabs.indexOf("'workflows'"))
+
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'repositories' }))
+  assert.equal(findAll(tree, 'RepositoriesView').length, 1)
+  assert.equal(findAll(tree, 'DashboardView').length, 0)
+  assert.equal(findAll(tree, 'MissionsView').length, 0)
+  assert.equal(findAll(tree, 'MissionDrawer').length, 0, 'aucune mission n’a de tiroir dans cet onglet')
+  assert.match(textOf(tree), /Select a repository to see its remote/)
+})
+
+test('un clic sur l’onglet Repositories bascule le panneau et ferme le volet', () => {
+  const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+
+  const boutons = findAll(tree, 'button').filter((button) => button.props.role === 'tab')
+  assert.equal(boutons.length, 4, 'Dashboard, Missions, Repositories, Workflows')
+  const bouton = boutons.find((button) => button.props.id === 'missions-tab-repositories')
+  assert.ok(bouton, 'l’onglet a un identifiant stable')
+  assert.equal(bouton.props['aria-selected'], 'false')
+  assert.equal(bouton.props['aria-controls'], 'missions-view-repositories')
+
+  bouton.props.onClick()
+  // Le changement d'onglet écrit l'onglet puis vide la sélection du volet :
+  // un dépôt choisi dans l'onglet ne survit pas à un autre onglet.
+  assert.deepEqual(setters.slice(-2), ['repositories', null])
+})
+
+test('l’onglet demande le scan au serveur, une fois, à son montage', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url, options })
+    return { ok: true, json: async () => REPO_SCAN }
+  }
+  try {
+    const { api, ctx, registered, effects } = charger(undefined, repositoriesStates(scanReady(REPO_SCAN)), memorySession())
+    api.apply(ctx)
+    const tree = registered.main({})
+    const avant = effects.length
+    renderTree(findAll(tree, 'RepositoriesView')[0])
+    // Les effets du panneau (dont son rafraîchissement de 60 s) ne sont pas
+    // joués : seul celui que la vue arme en se montant l'est.
+    assert.equal(effects.length - avant, 1, 'un seul effet de chargement pour l’onglet')
+    for (const effect of effects.slice(avant)) effect.fn()
+    await new Promise((done) => setTimeout(done, 0))
+
+    assert.equal(appels.length, 1, 'un scan par ouverture de l’onglet')
+    assert.equal(appels[0].url, 'missions/api/repositories')
+    assert.equal(appels[0].options.headers.accept, 'application/json')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('chaque dépôt est une ligne : nom, branche, état, dernier commit, âge', () => {
+  const { inner } = montrerRepositories(scanReady(REPO_SCAN))
+
+  // L'en-tête dit ce que le scan a lu : le total mis en avant.
+  assert.match(textOf(inner), /3 repositories · scanned in 1\.9 s/)
+  assert.match(textOf(inner), /\/Users\/moi\/projects/)
+
+  const lignes = findAll(inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.equal(lignes.length, 3)
+  // Le plus récent d'abord ; un dépôt sans commit ferme la liste.
+  assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions', 'missions-gh20', 'zeta'])
+
+  const [missions, worktree, vide] = lignes
+  assert.equal(missions.props.title, '/Users/moi/projects/missions')
+  assert.match(missions.props['aria-label'], /^missions, feat\/mis-116, 2 files, MIS-116: ajoute l’onglet$/)
+  assert.match(textOf(missions), /feat\/mis-116/)
+  assert.match(textOf(missions), /2 files/)
+  assert.match(textOf(missions), /MIS-116: ajoute l’onglet/)
+  assert.match(textOf(missions), /now/, 'le commit a moins d’une minute')
+
+  // Un worktree se distingue d'un clone : même enfant de la racine, autre nature.
+  assert.equal(worktree.props['aria-label'], 'missions-gh20, gh-20-hover, 1 file, gh-20: le survol')
+  assert.match(textOf(worktree), /worktree/)
+  assert.match(textOf(worktree), /3 h/)
+
+  // Un dépôt vide est une ligne, pas une absence.
+  assert.match(textOf(vide), /clean/)
+  assert.match(textOf(vide), /no commit yet/)
+  assert.equal(vide.props['aria-label'], 'zeta, main, clean, no commit yet')
+})
+
+test('un dépôt illisible reste une ligne, et l’en-tête compte les refus', () => {
+  const scan = {
+    ...REPO_SCAN,
+    count: 2,
+    errors: [{ name: 'broken', message: 'not a git repository' }],
+    repositories: [
+      REPO_SCAN.repositories[1],
+      {
+        name: 'broken', path: '/Users/moi/projects/broken', kind: 'clone', branch: null,
+        upstream: null, ahead: 0, behind: 0, dirty: 0, lastCommit: null, error: 'not a git repository',
+      },
+    ],
+  }
+  const { inner } = montrerRepositories(scanReady(scan))
+
+  assert.match(textOf(inner), /2 repositories · scanned in 1\.9 s · 1 unreadable/)
+  const ligne = findAll(inner, 'button').find((button) => button.props['data-repository'] === 'broken')
+  assert.match(ligne.props['aria-label'], /unreadable/)
+  assert.match(ligne.props.title, /not a git repository/)
+  assert.match(textOf(inner), /One repository was left unreadable: broken\./)
+  assert.match(textOf(inner), /The scan did not stop for them\./)
+})
+
+test('un scan en échec est un bandeau, une racine vide est un état vide', () => {
+  const echec = montrerRepositories({ loading: false, data: null, error: 'permission denied' })
+  const bandeau = findAll(echec.inner, 'div').find((div) => div.props.className === 'missions-repos-error')
+  assert.ok(bandeau, 'l’échec est visible')
+  assert.equal(bandeau.props.role, 'alert')
+  assert.match(textOf(bandeau), /The scan failed\./)
+  assert.match(textOf(bandeau), /permission denied/)
+
+  const vide = montrerRepositories(scanReady({ root: '/Users/moi/projects/vide', count: 0, durationMs: 40, errors: [], repositories: [] }))
+  assert.match(textOf(vide.inner), /No repository in the workspace root\./)
+  assert.match(textOf(vide.inner), /Scanned \/Users\/moi\/projects\/vide\./)
+})
+
+test('le volet lit le détail du dépôt choisi et le montre', () => {
+  const repository = REPO_SCAN.repositories[1]
+  const detail = {
+    ...repository,
+    remote: 'https://github.com/daedalforge/missions.git',
+    ahead: 1,
+    behind: 0,
+    commits: [
+      { sha: 'a1b2c3d', date: Date.now() - 60 * 1000, subject: 'MIS-116: ajoute l’onglet' },
+      { sha: '5de99bc', date: Date.now() - 26 * HOUR, subject: 'MIS-114: empile les étiquettes' },
+    ],
+  }
+  const { api, ctx, registered } = charger(undefined, repositoriesStates(scanReady(detail), repository), memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+
+  const node = findAll(tree, 'RepositoryDrawer')[0]
+  assert.ok(node, 'le volet du dépôt choisi est monté')
+  const inner = renderTree(node)
+
+  assert.match(textOf(inner), /feat\/mis-116/)
+  assert.match(textOf(inner), /https:\/\/github\.com\/daedalforge\/missions\.git/)
+  assert.match(textOf(inner), /origin\/feat\/mis-116/)
+  assert.match(textOf(inner), /1 ahead · 0 behind/)
+  assert.match(textOf(inner), /2 commits/)
+  assert.match(textOf(inner), /a1b2c3d/)
+  assert.equal(findAll(inner, 'li').filter((li) => li.props.className === 'missions-commit').length, 2)
+
+  // Le volet se ferme par sa croix, et Échap : la touche est armée et retirée
+  // avec le volet.
+  assert.match(SOURCE, /if \(event\.key === 'Escape'\) onClose\(\)/)
+  assert.match(SOURCE, /document\.addEventListener\('keydown', onKey\)/)
+  assert.match(SOURCE, /return \(\) => document\.removeEventListener\('keydown', onKey\)/)
+})
+
+test('l’onglet Repositories a sa grille et ses deux thèmes', () => {
+  assert.match(regle('.missions-repo-grid'), /grid-template-columns/)
+  assert.match(regle('.missions-repo-grid'), /minmax\(0, 1\.55fr\)/)
+  assert.match(regle('.missions-repo-state[data-dirty="true"]'), /font-weight: 600/)
+  assert.match(regle('.missions-repo-state[data-error="true"]'), /#cf222e/)
+
+  // Le thème manga ne copie pas la grille : il l'habille de papier et d'encre.
+  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-repo \{/)
+  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-repo-head \{/)
+  // La colonne du dernier commit cède la première quand le panneau rétrécit.
+  assert.match(SOURCE, /@media \(max-width: 860px\) \{\s+\.missions-repo-grid \{ grid-template-columns: [^}]+\}\s+\.missions-col-commit \{ display: none; \}/)
+})
