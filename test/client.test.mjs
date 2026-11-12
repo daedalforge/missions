@@ -2444,8 +2444,10 @@ test('un worktree porte la bascule vers son principal, un clone n’en a pas', (
 
   const bouton = bascule(worktree)
   assert.ok(bouton, 'le worktree porte sa bascule')
-  assert.equal(nomDuGeste(bouton), 'Open the main worktree, missions')
-  assert.equal(bouton.props.title, '/Users/moi/projects/missions', 'l’infobulle dit le chemin du principal')
+  assert.equal(nomDuGeste(bouton), 'Bring missions-gh20 into missions')
+  // L'infobulle dit ce que le clic fait : la branche reprise, le dossier perdu.
+  assert.match(bouton.props.title, /^Bring missions-gh20 into missions \(\/Users\/moi\/projects\/missions\)/)
+  assert.match(bouton.props.title, /worktree folder is removed$/)
   assert.equal(bouton.props.disabled, false)
   assert.equal(textOf(bouton), '', 'la bascule ne porte que son dessin')
   const dessin = findAll(bouton, 'svg')
@@ -2483,20 +2485,113 @@ test('une bascule sans cible reste là, désarmée, et dit pourquoi', () => {
   assert.equal(inconnu.props.title, 'main worktree unknown')
 })
 
-test('la bascule ouvre le volet du principal et ne compte qu’une fois', async () => {
+test('la bascule ramène le worktree dans le principal, après confirmation, et ne compte qu’une fois', async () => {
   const spy = espionUsage()
+  const vraiConfirm = globalThis.confirm
+  let question = ''
+  globalThis.confirm = (asked) => { question = String(asked); return true }
   try {
     const rendu = montrerRepositories(scanReady(REPO_SCAN))
     const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
     assert.ok(bouton)
     await bouton.props.onClick()
-    spy.geste('repository.main', 'missions-gh20')
-    const ouvert = rendu.setters.filter((value) => value && typeof value === 'object' && value.name === 'missions').at(-1)
-    assert.ok(ouvert, 'le volet ouvert est celui du principal, pas du worktree')
-    assert.equal(ouvert.kind, 'clone')
+
+    // La confirmation dit ce qui bouge : la branche reprise, le dossier perdu.
+    assert.match(question, /Bring gh-20-hover into missions\?/)
+    assert.match(question, /missions-gh20/)
+    assert.match(question, /will be removed/)
+    assert.match(question, /must be clean/)
+
+    // L'hôte reçoit le nom du worktree sur la route d'écriture, et rien d'autre.
+    const adopt = spy.appels.find((appel) => appel.url === 'missions/api/repositories/adopt')
+    assert.ok(adopt, 'la bascule écrit sur la route dédiée')
+    assert.equal(adopt.method, 'POST')
+    assert.deepEqual(adopt.body, { name: 'missions-gh20' })
+
+    // Un geste, un compte : le relevé nomme l'action, pas une navigation.
+    spy.geste('repository.adopt', 'missions-gh20')
+    assert.equal(spy.postes().length, 0)
+
+    // La vue arme la relecture, et le panneau ne change pas de volet.
+    assert.ok(rendu.setters.includes(1), 'la liste est relue après le geste')
     assert.equal(rendu.setters.some((value) => value === 'missions'), false, 'l’onglet Repositories ne bouge pas')
+    // La ligne est passée par « en cours » avant de célébrer le résultat.
+    const etats = rendu.setters.filter((value) => value && value.name === 'missions-gh20' && value.state)
+    assert.deepEqual(etats.map((value) => value.state), ['running', 'done'])
+    assert.match(etats.at(-1).message, /missions now holds gh-20-hover; the worktree missions-gh20 is gone\./)
   } finally {
+    globalThis.confirm = vraiConfirm
     spy.restore()
+  }
+})
+
+test('une confirmation refusée n’écrit rien et ne compte rien', async () => {
+  const spy = espionUsage()
+  const vraiConfirm = globalThis.confirm
+  globalThis.confirm = () => false
+  try {
+    const rendu = montrerRepositories(scanReady(REPO_SCAN))
+    const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
+    await bouton.props.onClick()
+    assert.deepEqual(spy.appels, [], 'aucune requête sans confirmation')
+    assert.deepEqual(rendu.setters, [], 'aucun état touché')
+  } finally {
+    globalThis.confirm = vraiConfirm
+    spy.restore()
+  }
+})
+
+test('un refus de l’hôte est le bandeau, mot pour mot, et la liste est relue', async () => {
+  const vraiFetch = globalThis.fetch
+  const vraiConfirm = globalThis.confirm
+  const appels = []
+  globalThis.confirm = () => true
+  globalThis.fetch = async (url, init = {}) => {
+    appels.push({ url: String(url), method: init.method ?? 'GET' })
+    if (init.method === 'POST') {
+      return {
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'Manager has uncommitted changes (1 file: yarn.lock) — commit or stash them first', side: 'main', files: ['yarn.lock'] }),
+      }
+    }
+    return { ok: true, json: async () => ({}) }
+  }
+  try {
+    const rendu = montrerRepositories(scanReady(REPO_SCAN))
+    const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
+    await bouton.props.onClick()
+    const erreur = rendu.setters.filter((value) => value && value.state === 'error').at(-1)
+    assert.ok(erreur, 'la ligne porte l’erreur')
+    assert.equal(erreur.message, 'Manager has uncommitted changes (1 file: yarn.lock) — commit or stash them first')
+    assert.ok(rendu.setters.includes(1), 'même un refus relit la liste')
+    assert.equal(appels.some((appel) => appel.method === 'POST' && appel.url.includes('adopt')), true)
+  } finally {
+    globalThis.confirm = vraiConfirm
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un worktree que git garde est un résultat partiel, pas un échec', async () => {
+  const vraiFetch = globalThis.fetch
+  const vraiConfirm = globalThis.confirm
+  globalThis.confirm = () => true
+  globalThis.fetch = async (url, init = {}) => {
+    if (init.method === 'POST') {
+      return { ok: true, status: 200, json: async () => ({ ok: true, branch: 'gh-20-hover', main: { name: 'missions', path: '/Users/moi/projects/missions' }, removed: false, reason: 'is locked' }) }
+    }
+    return { ok: true, json: async () => ({}) }
+  }
+  try {
+    const rendu = montrerRepositories(scanReady(REPO_SCAN))
+    const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
+    await bouton.props.onClick()
+    const fin = rendu.setters.filter((value) => value && value.name === 'missions-gh20').at(-1)
+    assert.equal(fin.state, 'partial')
+    assert.match(fin.message, /missions now holds gh-20-hover, but the worktree missions-gh20 stayed: is locked/)
+  } finally {
+    globalThis.confirm = vraiConfirm
+    globalThis.fetch = vraiFetch
   }
 })
 

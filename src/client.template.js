@@ -186,6 +186,9 @@ window.__ModuleLoader__.load({
     const REPOSITORY_URL = 'missions/api/repositories/detail'
     const REPOSITORY_HISTORY_URL = 'missions/api/repositories/commits'
     const REPOSITORY_TREE_URL = 'missions/api/repositories/tree'
+    // The one write of the tab: bring a worktree's branch back into its main
+    // checkout. A refusal answers 409 with the sentence that says why.
+    const REPOSITORY_ADOPT_URL = 'missions/api/repositories/adopt'
     // The tally of the panel's own gestures. One POST per gesture, never an
     // await: counting is a side note, never a step of what the user asked for.
     const USAGE_URL = 'missions/api/usage'
@@ -684,6 +687,10 @@ window.__ModuleLoader__.load({
 .missions-repos-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .missions-repos-total { color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 12px; font-weight: 600; }
 .missions-repos-root { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; }
+.missions-repos-adopt { margin: 0 0 10px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 14%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 4%, transparent); color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 12px; line-height: 1.45; }
+.missions-repos-adopt.is-done { border-color: color-mix(in srgb, #1a7f37 32%, transparent); background: color-mix(in srgb, #1a7f37 8%, transparent); }
+.missions-repos-adopt.is-partial { border-color: color-mix(in srgb, #bf8700 40%, transparent); background: color-mix(in srgb, #bf8700 10%, transparent); }
+.missions-repos-adopt.is-error { border-color: color-mix(in srgb, #cf222e 35%, transparent); background: color-mix(in srgb, #cf222e 8%, transparent); }
 .missions-repos-note { margin: 12px 2px 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; line-height: 1.5; }
 .missions-repos-error { margin: 14px 0 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, #cf222e 35%, transparent); border-radius: 6px; background: color-mix(in srgb, #cf222e 8%, transparent); color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 12px; }
 .missions-drawer-section { display: grid; gap: 9px; }
@@ -1006,6 +1013,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 .missions-panel[data-theme="manga"] .missions-repo-state[data-dirty="true"] { border-color: var(--mm-orange-deep); color: var(--mm-orange-deep); }
 .missions-panel[data-theme="manga"] .missions-repo-state[data-error="true"] { border-color: var(--mm-coral-deep); color: var(--mm-coral-deep); }
 .missions-panel[data-theme="manga"] .missions-repo-age { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-repos-adopt { border: 1.5px solid var(--mm-ink); border-radius: 8px; background: var(--mm-page-2); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-repos-adopt.is-done { border-color: var(--mm-sage-deep); background: color-mix(in srgb, var(--mm-sage) 28%, var(--mm-page-2)); }
+.missions-panel[data-theme="manga"] .missions-repos-adopt.is-partial { border-color: var(--mm-orange); background: color-mix(in srgb, var(--mm-butter) 30%, var(--mm-page-2)); }
+.missions-panel[data-theme="manga"] .missions-repos-adopt.is-error { border-color: var(--mm-coral-deep); background: color-mix(in srgb, var(--mm-coral) 22%, var(--mm-page-2)); }
 .missions-panel[data-theme="manga"] .missions-repos-note { color: var(--mm-ink-3); }
 .missions-panel[data-theme="manga"] .missions-repos-error { border: 1.5px solid var(--mm-coral-deep); background: color-mix(in srgb, var(--mm-coral) 22%, var(--mm-page-2)); color: var(--mm-ink); }
 .missions-panel[data-theme="manga"] .missions-usage-title { color: var(--mm-ink-3); font-family: var(--mm-display); letter-spacing: .12em; }
@@ -2825,7 +2836,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * row is the button — the tab's job is to get a repository open, not to
      * list it completely.
      */
-    function RepositoryRow({ repository, now, onOpen, onSwitchMain }) {
+    function RepositoryRow({ repository, now, onOpen, onAdopt, adopting }) {
       const state = repositoryState(repository)
       const branch = repositoryBranch(repository)
       const commit = repositoryCommit(repository)
@@ -2836,8 +2847,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const main = repository.main ?? null
       const mainName = main?.name ?? null
       const mainPath = main?.path ?? null
+      // The title says what the click does, not just where the main checkout
+      // is: it moves a branch and removes this folder.
       const switchTitle = mainPath
-        ? (mainName ? mainPath : `outside the workspace root : ${mainPath}`)
+        ? (mainName ? `Bring ${repository.name} into ${mainName} (${mainPath}) — the worktree folder is removed` : `outside the workspace root : ${mainPath}`)
         : 'main worktree unknown'
       return h('li', { className: 'missions-repo-rowitem' },
         h('button', {
@@ -2866,16 +2879,21 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               type: 'button',
               className: 'missions-repo-main',
               title: switchTitle,
-              'aria-label': mainName ? `Open the main worktree, ${mainName}` : 'Open the main worktree',
-              disabled: !mainName,
-              onClick: mainName ? () => onSwitchMain(repository) : undefined,
+              'aria-label': mainName ? `Bring ${repository.name} into ${mainName}` : 'Bring the worktree into its main checkout',
+              'aria-busy': adopting ? 'true' : 'false',
+              disabled: !mainName || adopting,
+              onClick: mainName ? () => onAdopt(repository) : undefined,
             }, h(MainWorktreeIcon))
           : h('span', { className: 'missions-repo-main-slot', 'aria-hidden': 'true' }),
       )
     }
 
     /**
-     * The repositories tab: every clone of the workspace root, read-only.
+     * The repositories tab: every clone of the workspace root.
+     *
+     * It is the one tab that writes, and only through a worktree row's arrow:
+     * a confirmed gesture, one POST, then the workspace read again. Reading it
+     * stays free — the scan is what the list costs, and it runs on every open.
      *
      * The scan starts when the tab opens, not when the panel mounts: forty
      * clones are two git calls each, and a panel that scanned on every mount
@@ -2883,8 +2901,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * of the tab shows the workspace as it is now — the list is never served
      * from a cache.
      */
-    function RepositoriesView({ theme, onOpen, onSwitchMain }) {
+    function RepositoriesView({ theme, onOpen, onAdopted = () => {} }) {
       const [scan, setScan] = React.useState({ loading: true, data: null, error: null })
+      // The tab's own write: the last gesture, its state and the sentence it
+      // shows — then the counter that reads the workspace again, because the
+      // checkouts it listed before the click are not the ones git now has.
+      const [adoption, setAdoption] = React.useState(null)
+      const [reload, setReload] = React.useState(0)
 
       React.useEffect(() => {
         let alive = true
@@ -2901,7 +2924,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             if (alive) setScan({ loading: false, data: null, error: error?.message ?? String(error) })
           })
         return () => { alive = false }
-      }, [])
+        // A finished gesture bumps `reload`: the tab then reads the workspace
+        // again instead of showing the checkouts as they were.
+      }, [reload])
 
       if (scan.error) {
         return h('div', { className: 'missions-repos' },
@@ -2917,16 +2942,54 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const repositories = sortRepositories(data.repositories)
       const now = Date.now()
       const missing = Array.isArray(data.errors) ? data.errors : []
-      // The switch opens the principal's own row: a name that is not in the
-      // list is a path the drawer cannot show, so the click does nothing.
-      const switchToMain = (worktree) => {
-        const name = worktree?.main?.name
-        if (!name) return
-        const target = repositories.find((repository) => repository.name === name)
-        if (target) onSwitchMain(worktree, target)
+      // Bringing a worktree back is the tab's one write: it asks first, then
+      // tells the host what to do and reads the workspace again. The host is
+      // the only judge — its refusal is the sentence the banner shows.
+      const adoptWorktree = async (worktree) => {
+        if (!worktree || !worktree.main?.name) return
+        const mainName = worktree.main.name
+        const branch = worktree.branch || 'its branch'
+        const question = `Bring ${branch} into ${mainName}?\n\n${mainName} will check out ${branch}, and the worktree ${worktree.name} (${worktree.path}) will be removed. Both trees must be clean: one uncommitted change refuses the switch.`
+        const scope = typeof globalThis.confirm === 'function' ? globalThis : (typeof window !== 'undefined' && typeof window.confirm === 'function' ? window : null)
+        if (scope && !scope.confirm(question)) return
+        track('repository.adopt', worktree.name)
+        setAdoption({ name: worktree.name, state: 'running', message: `Bringing ${branch} into ${mainName}…` })
+        try {
+          const response = await fetch(REPOSITORY_ADOPT_URL, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ name: worktree.name }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `switch failed (${response.status})`)
+          const held = data.branch ?? branch
+          const where = data.main?.name ?? mainName
+          setAdoption({
+            name: worktree.name,
+            state: data.removed === false ? 'partial' : 'done',
+            message: data.removed === false
+              ? `${where} now holds ${held}, but the worktree ${worktree.name} stayed${data.reason ? `: ${data.reason}` : '.'}`
+              : `${where} now holds ${held}; the worktree ${worktree.name} is gone.`,
+          })
+          // The drawer of that worktree has no folder left to describe.
+          onAdopted(worktree)
+        } catch (error) {
+          setAdoption({ name: worktree.name, state: 'error', message: error?.message ?? String(error) })
+        }
+        // A refusal changed nothing, a partial switch did: read again anyway.
+        setReload(reload + 1)
       }
 
+      const running = adoption?.state === 'running' ? adoption.name : null
+
       return h('div', { className: 'missions-repos' },
+        adoption
+          ? h('div', {
+              className: `missions-repos-adopt is-${adoption.state}`,
+              role: adoption.state === 'error' ? 'alert' : 'status',
+              'aria-live': 'polite',
+            }, adoption.message)
+          : null,
         h('div', { className: 'missions-repos-head' },
           h('span', { className: 'missions-repos-total' }, scanLabel(data)),
           data.root ? h('span', { className: 'missions-repos-root', title: data.root }, data.root) : null,
@@ -2949,7 +3012,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                 h('span', { className: 'missions-repo-headmain' }),
               ),
               h('ul', { className: 'missions-rows' },
-                repositories.map((repository) => h(RepositoryRow, { key: repository.name, repository, now, onOpen, onSwitchMain: switchToMain })),
+                repositories.map((repository) => h(RepositoryRow, { key: repository.name, repository, now, onOpen, onAdopt: adoptWorktree, adopting: running === repository.name })),
               ),
             ),
         missing.length > 0
@@ -3783,7 +3846,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               ? h(RepositoriesView, {
                   theme,
                   onOpen: (repository) => { track('repository.open', repository.name); setRepository(repository) },
-                  onSwitchMain: (worktree, mainRepository) => { track('repository.main', worktree.name); setRepository(mainRepository) },
+                  // The tab's write removes a folder: a drawer open on it has
+                  // nothing left to describe, so it closes with the worktree.
+                  onAdopted: (worktree) => { if (repository && repository.name === worktree.name) setRepository(null) },
                 })
               : tab === 'done'
               ? h(MissionsView, {
