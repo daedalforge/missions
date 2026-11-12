@@ -581,3 +581,134 @@ test('un refus du tracker devient une erreur d’amont, pas une faute du panneau
   assert.equal(response.status, 502)
   assert.match(response.body.error, /GitHub token missing or invalid/)
 })
+
+/** La même table, mais le projet ne sait pas projeter `low` : le host le dit. */
+const NULL_PRIORITY_PROJECTS = BLOCKED_PROJECTS.replace('        low: priority:low', '        low: null')
+
+test('POST priorité retire les autres labels puis pose le libellé cible', async (t) => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    return trackerResponse({})
+  }
+  const { handler } = await mountBlocked(t, fetchImpl)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/priority',
+    body: { key: 'MIS-110', priority: 'high' },
+  })
+
+  assert.equal(response.status, 200)
+  // Le panneau a envoyé un mot canonique ; l'hôte a choisi la valeur du tracker.
+  assert.deepEqual(response.body, { key: 'MIS-110', value: 'priority:high', priority: 'high', project: 'missions' })
+  assert.deepEqual(calls.map((c) => `${c.method} ${decodeURIComponent(c.url)}`), [
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/priority:urgent',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/priority:normal',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/priority:low',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+  assert.deepEqual(JSON.parse(calls[3].body), { labels: ['priority:high'] })
+})
+
+test('une clé absente est refusée avant le tracker', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const response = await call(handler, { method: 'POST', path: '/missions/api/priority', body: { priority: 'high' } })
+  assert.equal(response.status, 400)
+  assert.match(response.body.error, /key is missing/)
+  assert.equal(touched, 0)
+})
+
+test('une priorité absente est refusée avant le tracker', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const response = await call(handler, { method: 'POST', path: '/missions/api/priority', body: { key: 'MIS-110' } })
+  assert.equal(response.status, 400)
+  assert.match(response.body.error, /priority is missing/)
+  assert.equal(touched, 0)
+})
+
+test('une priorité hors du vocabulaire est refusée avant le tracker', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/priority',
+    body: { key: 'MIS-110', priority: 'medium' },
+  })
+  assert.equal(response.status, 400)
+  assert.match(response.body.error, /unknown priority: medium/)
+  assert.equal(touched, 0)
+})
+
+test('une clé que nul projet ne déclare répond 404 sans toucher le tracker', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/priority',
+    body: { key: 'ZZZ-1', priority: 'high' },
+  })
+  assert.equal(response.status, 404)
+  assert.match(response.body.error, /no project declares ZZZ-1/)
+  assert.equal(touched, 0)
+})
+
+test('une priorité que le projet ne projette pas répond 400 sans toucher le tracker', async (t) => {
+  let touched = 0
+  const { dir, handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+  // Cas limite du chargement : `low` est déclarée mais projetée sur `null`.
+  await writeFile(join(dir, 'missions', 'projects.yml'), NULL_PRIORITY_PROJECTS)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/priority',
+    body: { key: 'MIS-110', priority: 'low' },
+  })
+  assert.equal(response.status, 400)
+  assert.match(response.body.error, /priority low has no tracker value for missions/)
+  assert.equal(touched, 0)
+})
+
+test('GET est refusé sur la route priorité', async (t) => {
+  const { handler } = await mountBlocked(t, async () => trackerResponse({}))
+
+  const response = await call(handler, { method: 'GET', path: '/missions/api/priority' })
+
+  assert.equal(response.status, 405)
+  assert.equal(response.headers.allow, 'POST')
+  assert.match(response.body.error, /method not allowed/)
+})
+
+test('un refus du tracker sur la priorité devient une erreur d’amont', async (t) => {
+  const { handler } = await mountBlocked(t, async () => trackerResponse({ message: 'Bad credentials' }, { status: 401 }))
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/priority',
+    body: { key: 'MIS-110', priority: 'low' },
+  })
+
+  assert.equal(response.status, 502)
+  assert.match(response.body.error, /GitHub token missing or invalid/)
+})

@@ -1320,3 +1320,131 @@ test('le volet bloque avec un champ de raison et un bouton désarmé sans raison
   assert.match(regle('.missions-blocked-input'), /resize: vertical/)
   assert.match(regle('.missions-panel[data-theme="manga"] .missions-blocked'), /border: 1\.5px solid var\(--mm-ink\)/)
 })
+
+/** Le volet monté sur une mission choisie : le panneau le crée, on le rend seul. */
+function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overrides = {}) {
+  const view = { loading: false, missions: [mission], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered, setters } = charger(undefined, [
+    EMPTY_BAR, view, 'missions', '', EMPTY_BAR.filters, null, mission,
+  ])
+  api.apply(ctx)
+
+  const drawer = findAll(registered.main({}), 'MissionDrawer')[0]
+  assert.ok(drawer, 'le panneau doit monter le volet quand une mission est choisie')
+  const tree = renderTree({ ...drawer, props: { ...drawer.props, ...overrides } })
+  return { tree, drawer, setters }
+}
+
+test('le volet rend la priorité comme un select natif, plus comme une ligne morte', () => {
+  const { tree } = monterVolet()
+
+  const select = findAll(tree, 'select')[0]
+  assert.ok(select, 'le volet doit rendre un select de priorité')
+  assert.equal(select.props.className, 'missions-priority-select')
+  assert.equal(select.props['aria-label'], 'Priority')
+  assert.equal(select.props.disabled, false)
+  assert.equal(select.props.value, 'high')
+
+  // Les quatre mots du workflow, dans leur ordre, avec la valeur courante
+  // sélectionnée une seule fois.
+  const options = select.children.filter((child) => child.type === 'option')
+  assert.deepEqual(options.map((option) => option.props.value), ['urgent', 'high', 'normal', 'low'])
+  assert.deepEqual(options.map((option) => option.props.selected), [false, true, false, false])
+  assert.deepEqual(options.map((option) => textOf(option)), ['Urgent', 'High', 'Normal', 'Low'])
+
+  // L'ancienne ligne en lecture seule ne doit pas survivre à côté du select.
+  assert.doesNotMatch(SOURCE, /h\(DrawerRow, \{ label: 'Priority'/)
+  assert.match(SOURCE, /const PRIORITY_URL = 'missions\/api\/priority'/)
+  assert.match(SOURCE, /onPrioritySaved: applyPriority/)
+
+  // Le CSS du select est présent, focus et état désactivé compris.
+  assert.match(regle('.missions-priority-select'), /max-width: 100%/)
+  assert.match(SOURCE, /\.missions-priority-select:focus \{/)
+  assert.match(SOURCE, /\.missions-priority-select:disabled \{/)
+  assert.match(SOURCE, /\.missions-priority-note--error \{/)
+  // Les deux thèmes : la bordure encre de manga, comme le bloc de blocage.
+  assert.match(regle('.missions-panel[data-theme="manga"] .missions-priority-select'), /border: 1\.5px solid var\(--mm-ink\)/)
+  // Le message est rendu dans le volet, en alerte quand le tracker refuse.
+  assert.match(SOURCE, /role: priorityNote\.error \? 'alert' : 'status'/)
+})
+
+test('sans priorité, le select propose une option vide non sélectionnable', () => {
+  const { tree } = monterVolet({ ...MISSION, priority: null, updatedAt: MISSION.updated })
+
+  const select = findAll(tree, 'select')[0]
+  assert.equal(select.props.value, '')
+  const options = select.children.filter((child) => child.type === 'option')
+  assert.equal(options.length, 5)
+  assert.deepEqual(options[0].props, { value: '', disabled: true, selected: true })
+  assert.equal(textOf(options[0]), 'No priority')
+  assert.deepEqual(options.slice(1).map((option) => option.props.value), ['urgent', 'high', 'normal', 'low'])
+
+  // Le gap est reconnu sans le tracker : on ne prétend pas que c'est « low ».
+  assert.match(SOURCE, /No priority/)
+})
+
+test('choisir une priorité écrit le mot canonique et ne patche que ce champ', async () => {
+  const saved = []
+  const calls = []
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) })
+    return { ok: true, status: 200, json: async () => ({ key: 'MIS-42', priority: 'urgent', value: 'priority:urgent', project: 'missions' }) }
+  }
+
+  const { tree, drawer, setters } = monterVolet(undefined, { onPrioritySaved: (data) => saved.push(data) })
+  const select = findAll(tree, 'select')[0]
+
+  await select.props.onChange({ target: { value: 'urgent' } })
+
+  assert.deepEqual(calls, [
+    { url: 'missions/api/priority', method: 'POST', body: { key: 'MIS-42', priority: 'urgent' } },
+  ])
+  assert.deepEqual(saved, [{ key: 'MIS-42', priority: 'urgent' }])
+  // La valeur locale ne bouge qu'après l'accord du tracker.
+  assert.ok(setters.includes('urgent'))
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, false)
+  assert.match(note.text, /Priorité enregistrée/)
+
+  // Choisir la valeur déjà affichée n'écrit rien.
+  await select.props.onChange({ target: { value: 'high' } })
+  assert.equal(calls.length, 1)
+
+  // La mise à jour du panneau ne touche que `priority` : la déclaration
+  // (folder, branch, base) reste intacte — le bug latent de `onSaved`.
+  const previous = { ...MISSION, updatedAt: MISSION.updated, folder: '/w/missions/MIS-42', branch: 'fix/mis-42', base: 'main', blocked: false }
+  const previousView = { loading: false, missions: [previous], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  drawer.props.onPrioritySaved({ key: 'MIS-42', priority: 'urgent' })
+  const setView = setters.at(-2)
+  const setSelected = setters.at(-1)
+  const nextView = setView(previousView)
+  assert.deepEqual(nextView.missions[0], { ...previous, priority: 'urgent' })
+  // La déclaration et le blocage ne bougent pas : seul `priority` est patché.
+  assert.deepEqual(
+    [nextView.missions[0].folder, nextView.missions[0].branch, nextView.missions[0].base, nextView.missions[0].blocked],
+    ['/w/missions/MIS-42', 'fix/mis-42', 'main', false],
+  )
+  const nextSelected = setSelected(previous)
+  assert.deepEqual(nextSelected, { ...previous, priority: 'urgent' })
+})
+
+test('un refus du tracker laisse l’ancienne priorité et le dit', async () => {
+  const saved = []
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 502,
+    json: async () => ({ error: 'tracker refused' }),
+  })
+
+  const { tree, setters } = monterVolet(undefined, { onPrioritySaved: (data) => saved.push(data) })
+  const select = findAll(tree, 'select')[0]
+
+  await select.props.onChange({ target: { value: 'urgent' } })
+
+  // Aucun setter n'a reçu la nouvelle priorité : l'affichage reste l'ancienne.
+  assert.ok(!setters.includes('urgent'))
+  assert.deepEqual(saved, [])
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, true)
+  assert.match(note.text, /Priority failed: tracker refused/)
+})
