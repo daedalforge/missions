@@ -102,6 +102,15 @@ n'écrit que ce `mission.yml`. Le panneau n'édite ni la clé ni le nom du dossi
 pour une migration de clé, on modifie `key` dans le fichier. Un champ vidé
 disparaît du fichier.
 
+La ligne **Priority** s'édite sur place : c'est un `<select>` natif des quatre
+mots du workflow. Choisir une valeur
+l'envoie aussitôt à la route de l'hôte (`POST missions/api/priority`), qui
+traduit le mot canonique avec la table du projet ; le panneau n'a pas de jeton
+et ne connaît jamais la valeur du tracker. L'affichage ne bouge qu'une fois le
+tracker d'accord : un refus laisse l'ancienne priorité en place et affiche
+l'erreur sous la ligne. Une mission sans priorité montre une option vide non
+sélectionnable, jamais un faux niveau.
+
 **Jamais versionné** : `missions/*/` est ignoré par git. Une déclaration reste
 locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
 part donc sans déclaration : on les repose depuis le panneau au premier cadrage.
@@ -248,9 +257,11 @@ les branches et les commits l'emploient ; c'est seulement à la frontière du
 tracker qu'une traduction a lieu.
 
 Cette traduction est une donnée, pas une convention : chaque projet la déclare
-dans [`projects.yml`](projects.yml), bloc `map`. Seul `blocked` échappe à la
-table : il ne se traduit pas, il se pose tel quel sur le ticket — et c'est le
-panneau qui l'écrit, par la route de l'hôte, parce qu'il n'a pas de jeton. Une clé canonique sans valeur
+dans [`projects.yml`](projects.yml), bloc `map`. Deux champs échappent à la
+table parce qu'ils s'écrivent : `blocked` ne se traduit pas, il se pose tel
+quel sur le ticket ; `priority` se traduit, mais c'est l'hôte qui choisit la
+valeur du projet. Le panneau écrit les deux par la route de l'hôte, parce
+qu'il n'a pas de jeton. Une clé canonique sans valeur
 dans le tracker se compense par un libellé ; une valeur `null` dit que l'état
 n'a pas de représentation propre (la fermeture de l'issue, par exemple).
 

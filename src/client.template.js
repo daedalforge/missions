@@ -166,6 +166,7 @@ window.__ModuleLoader__.load({
     const LIST_URL = 'missions/api/list'
     const DECLARE_URL = 'missions/api/branches'
     const BLOCKED_URL = 'missions/api/blocked'
+    const PRIORITY_URL = 'missions/api/priority'
     const JOURNAL_URL = 'missions/api/journal'
     const CHECKLIST_URL = 'missions/api/checklist'
     const WORKFLOWS_URL = 'missions/api/workflows'
@@ -527,6 +528,12 @@ window.__ModuleLoader__.load({
 .missions-blocked-apply:disabled, .missions-blocked-cancel:disabled { opacity: .55; cursor: default; }
 .missions-blocked-hint, .missions-blocked-note { margin: 0; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-blocked-note--error { color: var(--dsw-alias-label-danger, #b42318); }
+/* La priorité s'édite dans la ligne : le select garde la taille du volet. */
+.missions-priority-select { max-width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 6px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12px; }
+.missions-priority-select:focus { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 40%, transparent); outline-offset: 1px; }
+.missions-priority-select:disabled { opacity: .6; }
+.missions-priority-note { margin: 0 0 10px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-priority-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 13%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 46%, transparent); }
 .missions-card[data-blocked="true"]:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 14%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 52%, transparent); }
 .missions-lock { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: auto; border-radius: 999px; background: var(--dsw-alias-label-danger, #b42318); color: #ffffff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 15%, transparent); }
@@ -755,6 +762,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 .missions-panel[data-theme="manga"] .missions-blocked[data-blocked="true"] { border-color: var(--mm-coral-deep); background: color-mix(in srgb, var(--mm-coral) 10%, var(--mm-page-2)); }
 .missions-panel[data-theme="manga"] .missions-blocked-title { font-family: var(--mm-display, inherit); letter-spacing: .01em; }
 .missions-panel[data-theme="manga"] .missions-blocked-input { border: 1.5px solid var(--mm-ink); border-radius: 6px; background: var(--mm-page); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-priority-select { border: 1.5px solid var(--mm-ink); border-radius: 6px; background: var(--mm-page); color: var(--mm-ink); }
+.missions-panel[data-theme="manga"] .missions-priority-note { color: var(--mm-ink-3); }
+.missions-panel[data-theme="manga"] .missions-priority-note--error { color: var(--mm-coral-deep); }
 .missions-panel[data-theme="manga"] .missions-blocked-apply { border: 1.5px solid var(--mm-coral-deep); border-radius: 6px; background: var(--mm-coral); color: var(--mm-page); box-shadow: 2px 2px 0 var(--mm-shadow); }
 .missions-panel[data-theme="manga"] .missions-blocked-cancel { border: 1.5px solid var(--mm-ink); border-radius: 6px; color: var(--mm-ink-2); }
 .missions-panel[data-theme="manga"] .missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--mm-coral) 12%, var(--mm-page-2)); border-color: var(--mm-coral-deep); }
@@ -1492,7 +1502,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       )
     }
 
-    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, theme }) {
+    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, onPrioritySaved, theme }) {
       const [note, setNote] = React.useState(null)
       // A declared branch always wins; otherwise show the convention's name.
       // It stays a suggestion: only Save writes it to mission.yml.
@@ -1515,6 +1525,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const [reason, setReason] = React.useState('')
       const [writingBlock, setWritingBlock] = React.useState(false)
       const [blockNote, setBlockNote] = React.useState(null)
+      // Priority is a tracker field, not a declaration: the select shows the
+      // last answer and the write goes through the host, like the blocked label.
+      const [priorityNow, setPriorityNow] = React.useState(mission.priority ?? null)
+      const [writingPriority, setWritingPriority] = React.useState(false)
+      const [priorityNote, setPriorityNote] = React.useState(null)
 
       React.useEffect(() => {
         let alive = true
@@ -1539,6 +1554,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setReason('')
         setBlockNote(null)
       }, [mission.key, mission.blocked])
+
+      // A refreshed list carries the tracker's answer: the select follows it,
+      // like the blocked switch above.
+      React.useEffect(() => {
+        setPriorityNow(mission.priority ?? null)
+        setPriorityNote(null)
+      }, [mission.key, mission.priority])
 
       React.useEffect(() => {
         const onKey = (event) => {
@@ -1635,6 +1657,31 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         }
       }
 
+      // Choosing a value is the write: the select posts the canonical word and
+      // waits for the tracker's answer. The local value moves only on success,
+      // so a refused write leaves the old priority on screen.
+      const writePriority = async (next) => {
+        if (!next || next === priorityNow) return
+        setWritingPriority(true)
+        setPriorityNote(null)
+        try {
+          const response = await fetch(PRIORITY_URL, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ key: mission.key, priority: next }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `priority failed (${response.status})`)
+          setPriorityNow(next)
+          setPriorityNote({ error: false, text: `Priorité enregistrée dans le tracker : ${PRIORITY_LABELS[next] ?? next}.` })
+          onPrioritySaved?.({ key: mission.key, priority: next })
+        } catch (error) {
+          setPriorityNote({ error: true, text: `Priority failed: ${error?.message ?? error}` })
+        } finally {
+          setWritingPriority(false)
+        }
+      }
+
       // Turning it on only opens the field; turning it off is the unblock.
       const toggleBlocked = (next) => {
         if (next) {
@@ -1659,12 +1706,44 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         h('dl', { className: 'missions-props' },
           h(DrawerRow, { label: 'State', value: STATE_LABELS[mission.state] ?? mission.state }),
           h(DrawerRow, { label: 'Type', value: TYPE_LABELS[mission.type] ?? mission.type }),
-          h(DrawerRow, { label: 'Priority', value: mission.priority }),
+          // The priority is the one editable row: a native select, so the
+          // keyboard and the platform menu work without a custom widget. The
+          // four canonical words keep their order; a value outside the
+          // vocabulary is kept and shown rather than silently dropped.
+          h('dt', null, 'Priority'),
+          h('dd', null,
+            h('select', {
+              className: 'missions-priority-select',
+              'aria-label': 'Priority',
+              value: priorityNow ?? '',
+              disabled: writingPriority,
+              onChange: (event) => writePriority(event.target.value),
+            },
+              priorityNow === null
+                ? h('option', { value: '', disabled: true, selected: true }, 'No priority')
+                : null,
+              (priorityNow !== null && !PRIORITY_ORDER.includes(priorityNow)
+                ? [...PRIORITY_ORDER, priorityNow]
+                : PRIORITY_ORDER
+              ).map((choice) => h('option', {
+                key: choice,
+                value: choice,
+                selected: choice === priorityNow,
+              }, PRIORITY_LABELS[choice] ?? choice)),
+            ),
+          ),
           h(DrawerRow, { label: 'Points', value: mission.points !== null && mission.points !== undefined ? `${mission.points} pts` : null }),
           h(DrawerRow, { label: 'Project', value: mission.projectName ?? mission.project }),
           h(DrawerRow, { label: 'Epic', value: mission.epic }),
           h(DrawerRow, { label: 'Updated', value: relativeAge(mission.updatedAt) }),
         ),
+
+        priorityNote
+          ? h('p', {
+              className: priorityNote.error ? 'missions-priority-note missions-priority-note--error' : 'missions-priority-note',
+              role: priorityNote.error ? 'alert' : 'status',
+            }, priorityNote.text)
+          : null,
 
         h('div', { className: 'missions-blocked', 'data-blocked': blockedNow || armedBlock ? 'true' : 'false' },
           h('div', { className: 'missions-blocked-head' },
@@ -2252,6 +2331,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             : previous
         ))
       }
+      // A priority write touches one field only: the declaration (folder,
+      // branch, base) stays as the tracker list carried it.
+      const applyPriority = (saved) => {
+        setView((previous) => ({
+          ...previous,
+          missions: previous.missions.map((mission) => (
+            mission.key === saved.key ? { ...mission, priority: saved.priority } : mission
+          )),
+        }))
+        setSelected((previous) => (
+          previous && previous.key === saved.key ? { ...previous, priority: saved.priority } : previous
+        ))
+      }
       const hero = theme === 'manga' ? h('div', { className: 'missions-hero', 'aria-hidden': 'true' },
         h('img', { className: 'missions-hero-photo', src: ART.village, alt: '' }),
         h('div', { className: 'missions-hero-bubble' },
@@ -2356,7 +2448,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           tab === 'workflows'
             ? null
             : selected
-            ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, theme })
+            ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, theme })
             : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },
                 h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),
               ),

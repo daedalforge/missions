@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { clearCache, listAll } from '../lib/trackers/index.js'
+import { clearCache, listAll, setPriority } from '../lib/trackers/index.js'
 import { forgetToken as forgetJiraToken } from '../lib/trackers/jira.js'
 
 const MAP = {
@@ -163,4 +163,38 @@ test('GitHub and Jira share the same list', async () => {
   assert.equal(errors.length, 0)
   assert.deepEqual(missions.map((m) => m.key).sort(), ['MIS-2', 'SO-1207'])
   assert.deepEqual(missions.map((m) => m.project).sort(), ['manager', 'missions'])
+})
+
+test('a priority write drops the cached read for its project', async () => {
+  const PRIORITIES = { urgent: 'priority:urgent', high: 'priority:high', normal: 'priority:normal', low: 'priority:low' }
+  const project = { ...PROJECT_OK, map: { ...MAP, priorities: PRIORITIES } }
+  let label = 'priority:high'
+  let reads = 0
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    if (href.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    if (href.includes('/labels')) return response({})
+    reads += 1
+    return response([{ number: 2, title: 'Mission 2', labels: [{ name: 'ready' }, { name: label }], type: { name: 'Feature' } }])
+  }
+
+  const first = await listAll([project], { fetchImpl })
+  assert.equal(first.missions[0].priority, 'high')
+  assert.equal(reads, 1)
+
+  // The write itself does not read; the next list must, and see the new label.
+  await setPriority(project, 'MIS-2', { value: 'priority:urgent', fetchImpl })
+  assert.equal(reads, 1)
+  label = 'priority:urgent'
+
+  const second = await listAll([project], { fetchImpl })
+  assert.equal(reads, 2)
+  assert.equal(second.missions[0].priority, 'urgent')
+})
+
+test('a tracker without a priority writer refuses instead of pretending', async () => {
+  await assert.rejects(
+    () => setPriority({ id: 'x', tracker: 'notion', map: MAP }, 'MIS-2', { value: 'high' }),
+    /unknown tracker: notion/,
+  )
 })

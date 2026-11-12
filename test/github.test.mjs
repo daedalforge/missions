@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { forgetToken, list, setBlocked } from '../lib/trackers/github.js'
+import { forgetToken, list, setBlocked, setPriority } from '../lib/trackers/github.js'
 
 const PROJECT = {
   id: 'missions',
@@ -267,4 +267,60 @@ test('the blocked label comes back as a flag, without touching the state', async
 
   assert.equal(mission.blocked, true)
   assert.equal(mission.state, 'ready')
+})
+
+test('changing the priority removes the other labels, then adds the target', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    return response({})
+  }
+
+  const result = await setPriority(PROJECT, 'MIS-110', { value: 'priority:high', fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', value: 'priority:high' })
+  // The three other labels go first, in declaration order; the target is last.
+  assert.deepEqual(calls.map((call) => `${call.method} ${decodeURIComponent(call.url)}`), [
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/priority:urgent',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/priority:normal',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/priority:low',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+  assert.deepEqual(JSON.parse(calls[3].body), { labels: ['priority:high'] })
+})
+
+test('removing a priority label that is already absent is a success, not a failure', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${String(url)}`)
+    return init.method === 'DELETE'
+      ? response({ message: 'Label does not exist' }, { status: 404 })
+      : response({})
+  }
+
+  const result = await setPriority(PROJECT, 'MIS-110', { value: 'priority:low', fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', value: 'priority:low' })
+  assert.equal(calls.at(-1), 'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels')
+})
+
+test('a priority write keeps a real refusal: only a 404 means "already gone"', async () => {
+  const fetchImpl = async (url, init = {}) =>
+    init.method === 'DELETE' ? response({ message: 'Bad credentials' }, { status: 401 }) : response({})
+
+  await assert.rejects(
+    () => setPriority(PROJECT, 'MIS-110', { value: 'priority:high', fetchImpl }),
+    /GitHub token missing or invalid/,
+  )
+})
+
+test('a priority write needs an issue key and a value', async () => {
+  await assert.rejects(
+    () => setPriority(PROJECT, 'MIS-priority', { value: 'priority:high', fetchImpl: async () => response({}) }),
+    /not an issue key/,
+  )
+  await assert.rejects(
+    () => setPriority(PROJECT, 'MIS-110', { value: '  ', fetchImpl: async () => response({}) }),
+    /priority value is missing/,
+  )
 })

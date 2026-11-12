@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { forgetToken, list, setBlocked } from '../lib/trackers/jira.js'
+import { forgetToken, list, setBlocked, setPriority } from '../lib/trackers/jira.js'
 
 const PROJECT = {
   id: 'manager',
@@ -324,4 +324,44 @@ test('the blocked label comes back as a flag, without touching the state', async
 
   assert.equal(mission.blocked, true)
   assert.equal(mission.state, 'in-progress')
+})
+
+test('changing the priority puts fields.priority.name', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null, auth: init.headers?.authorization })
+    return response(undefined, { status: 204 })
+  }
+
+  const result = await setPriority(PROJECT, 'SO-1', { value: 'Highest', fetchImpl })
+
+  assert.deepEqual(result, { key: 'SO-1', value: 'Highest' })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].method, 'PUT')
+  assert.match(calls[0].url, /\/rest\/api\/3\/issue\/SO-1$/)
+  assert.deepEqual(JSON.parse(calls[0].body), { fields: { priority: { name: 'Highest' } } })
+  assert.match(calls[0].auth, /^Basic /)
+})
+
+test('a priority write keeps the refusal message', async () => {
+  const fetchImpl = async () => response({ message: 'Forbidden' }, { status: 403 })
+
+  await assert.rejects(() => setPriority(PROJECT, 'SO-1', { value: 'High', fetchImpl }), /Jira access denied/)
+})
+
+test('a priority write needs jira.email and a value', async () => {
+  const saved = process.env.JIRA_EMAIL
+  delete process.env.JIRA_EMAIL
+  try {
+    await assert.rejects(
+      () => setPriority({ ...PROJECT, jira: { site: 'https://x', cloud_id: 'cloud-1' } }, 'SO-1', { value: 'High', fetchImpl: async () => response({}) }),
+      /jira\.email is required/,
+    )
+  } finally {
+    process.env.JIRA_EMAIL = saved
+  }
+  await assert.rejects(
+    () => setPriority(PROJECT, 'SO-1', { value: ' ', fetchImpl: async () => response({}) }),
+    /priority value is missing/,
+  )
 })
