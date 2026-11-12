@@ -175,6 +175,9 @@ window.__ModuleLoader__.load({
     const WORKFLOWS_URL = 'missions/api/workflows'
     const WORKFLOW_MODEL_URL = 'missions/api/workflows/model'
     const REPOSITORIES_URL = 'missions/api/repositories'
+    // The tab badge reads this one at mount: the count costs no git process,
+    // where the list above pays two calls per entry.
+    const REPOSITORIES_COUNT_URL = 'missions/api/repositories/count'
     const REPOSITORY_URL = 'missions/api/repositories/detail'
     const REPOSITORY_HISTORY_URL = 'missions/api/repositories/commits'
     const REPOSITORY_TREE_URL = 'missions/api/repositories/tree'
@@ -212,16 +215,17 @@ window.__ModuleLoader__.load({
 
     // Each tab declares what it reads: the tracker tabs share one read, so one
     // failure speaks for both; the workflows tab reads its own files and never
-    // wears the tracker's banner. `badge` marks the tab that carries the count.
-    // Done reads the tracker too, but in its own perimeter: closed missions the
-    // machine declares, with a bar and a read of their own.
+    // wears the tracker's banner. `badge` names the count the tab carries: the
+    // open missions the list already holds, or the root's repositories, read
+    // on its own route. Done reads the tracker too, but in its own perimeter:
+    // closed missions the machine declares, with a bar and a read of their own.
     const TABS = [
       { id: 'dashboard', label: 'Dashboard', source: 'tracker' },
-      { id: 'missions', label: 'Missions', source: 'tracker', badge: true },
+      { id: 'missions', label: 'Missions', source: 'tracker', badge: 'missions' },
       { id: 'done', label: 'Done', source: 'tracker' },
       // The repositories tab reads the host, not the tracker: it declares its
       // own source, so it never wears the tracker's banner.
-      { id: 'repositories', label: 'Repositories', source: 'host' },
+      { id: 'repositories', label: 'Repositories', source: 'host', badge: 'repositories' },
       { id: 'workflows', label: 'Workflows', source: 'files' },
     ]
 
@@ -289,7 +293,9 @@ window.__ModuleLoader__.load({
 .missions-btn { height: 30px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary, #4a4a4a); font: inherit; font-size: 12px; cursor: pointer; }
 .missions-btn:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-btn:disabled { opacity: .55; cursor: default; }
-.missions-tabs { display: flex; gap: 24px; margin-top: 16px; padding: 0 28px; border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); flex: none; }
+.missions-tabs { display: flex; gap: 24px; margin-top: 16px; padding: 0 28px; border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); flex: none; overflow-x: auto; scrollbar-width: none; }
+/* A third tab plus its badge can outgrow a narrow panel: the row scrolls instead of clipping a label, and the bar it would draw is hidden. */
+.missions-tabs::-webkit-scrollbar { display: none; }
 .missions-tab { height: 36px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font: inherit; font-size: 12.5px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
 .missions-tab:hover { color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-tab[aria-selected="true"] { color: var(--dsw-alias-label-primary, #1f1f1f); border-bottom-color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
@@ -2928,6 +2934,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // fixes the value instead of offering the other states.
       const [doneFilters, setDoneFilters] = React.useState({ ...doneRestored.filters, state: ['done'] })
       const [doneSort, setDoneSort] = React.useState(doneRestored.sort)
+      // How many repositories the root holds, for the tab badge: null until the
+      // first read, so the tab shows no number it cannot prove.
+      const [repositoryCount, setRepositoryCount] = React.useState(null)
 
       // One write per change, the clear included: an empty bar drops its key.
       React.useEffect(() => {
@@ -2992,9 +3001,26 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           })
       }, [])
 
+      // The badge's count costs no git process, so the panel reads it at mount
+      // even while another tab is open. A failed read keeps the count already
+      // shown: the tick retries, and the tab never blanks or reports a zero it
+      // cannot prove.
+      const loadRepositoryCount = React.useCallback(() => {
+        return fetch(REPOSITORIES_COUNT_URL, { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => {
+            const count = Number(data?.count)
+            if (Number.isInteger(count) && count >= 0) setRepositoryCount(count)
+          })
+          .catch(() => { /* the badge keeps the count it has */ })
+      }, [])
+
+      // The count is read at mount too: the badge must answer without the tab
+      // being opened, and the route costs no git process.
       React.useEffect(() => {
         load()
-      }, [load])
+        loadRepositoryCount()
+      }, [load, loadRepositoryCount])
 
       // Opening Done pays the closed read once; the server caches it for 60 s.
       // The panel never reads closed work at mount, whichever tab it lands on.
@@ -3005,15 +3031,17 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       }, [tab, loadDone])
 
       // The tick keeps the perimeter of the open tab: Done refreshes the closed
-      // read, the other tracker tabs refresh the open one.
+      // read, the other tracker tabs refresh the open one. The repository count
+      // is refreshed whatever the tab, Done included.
       React.useEffect(() => {
         const timer = setInterval(() => {
           if (document.hidden) return
           if (tab === 'done') loadDone({ silent: true, refresh: true })
           else load({ silent: true, refresh: true })
+          loadRepositoryCount()
         }, REFRESH_MS)
         return () => clearInterval(timer)
-      }, [load, loadDone, tab])
+      }, [load, loadDone, tab, loadRepositoryCount])
 
       const { loading, missions, errors, workspaceId, workspaceRoot } = view
       // Done is a perimeter, not a tab looking at the open list: its rows, its
@@ -3131,20 +3159,32 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setRepository(null)
       }
 
+      // A tab carries the count its badge names. The repositories count is
+      // `null` until the host answers, so the tab draws no badge before that
+      // first read: a zero nobody proved is not a count.
+      const tabBadge = (entry) => {
+        if (entry.badge === 'missions') return openMissions.length
+        if (entry.badge === 'repositories') return repositoryCount
+        return null
+      }
+
       const tabBar = h('div', { className: 'missions-tabs', role: 'tablist', 'aria-label': 'Missions views' },
-        TABS.map((entry) => h('button', {
-          key: entry.id,
-          type: 'button',
-          role: 'tab',
-          className: 'missions-tab',
-          'aria-selected': tab === entry.id ? 'true' : 'false',
-          'aria-controls': `missions-view-${entry.id}`,
-          id: `missions-tab-${entry.id}`,
-          onClick: () => changeTab(entry.id),
-        },
-          entry.label,
-          entry.badge ? h('span', { className: 'missions-tab-count' }, String(openMissions.length)) : null,
-        )),
+        TABS.map((entry) => {
+          const badge = tabBadge(entry)
+          return h('button', {
+            key: entry.id,
+            type: 'button',
+            role: 'tab',
+            className: 'missions-tab',
+            'aria-selected': tab === entry.id ? 'true' : 'false',
+            'aria-controls': `missions-view-${entry.id}`,
+            id: `missions-tab-${entry.id}`,
+            onClick: () => changeTab(entry.id),
+          },
+            entry.label,
+            badge === null ? null : h('span', { className: 'missions-tab-count' }, String(badge)),
+          )
+        }),
       )
 
       return h('div', { className: 'missions-panel', 'data-theme': theme },
