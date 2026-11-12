@@ -1723,15 +1723,23 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       }, [onClose])
 
       const blocker = executionBlocker(mission)
+      // The free session plays no step: only `done` closes it, and its button
+      // stays live in cadrage, before the branch exists.
+      const freeBlocker = freeSessionBlocker(mission)
       const step = missionStep(mission)
       const sessionLabel = step ? `Start a session — ${step}` : 'Start a session'
       // The label says « remontées » without imitating the step session: the
       // step button stays the primary, at the bottom.
       const feedbackLabel = 'Check the PR feedback'
-      // Both prompts live in `lib/view.js`, inlined into this bundle: the
+      // A free session answers a question without moving the ticket; its title
+      // says so, since the foot's "Session blocked" note is about the step.
+      const freeLabel = 'Start a free session'
+      const freeTitle = 'Ask a question without playing the workflow step'
+      // Every prompt lives in `lib/view.js`, inlined into this bundle: the
       // drawer only picks which one a button sends.
       const prompt = missionSessionPrompt(mission)
       const feedbackPrompt = feedbackSessionPrompt(mission)
+      const freePrompt = freeSessionPrompt(mission)
 
       const openSession = async (sessionPrompt) => {
         setNote('Starting a session…')
@@ -1763,6 +1771,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // Same gesture, same prefill path, other prompt: the session reads the
       // PR's remarks and hands back; the merge stays the requester's.
       const startFeedbackSession = () => openSession(feedbackPrompt)
+      // Same gesture again, with the prompt that plays no step and writes
+      // nothing: a question, not work on the ticket.
+      const startFreeSession = () => openSession(freePrompt)
 
       const saveDeclaration = async () => {
         setSaving(true)
@@ -2138,6 +2149,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
                 }, feedbackLabel)
               : null,
+            // The free session sits above the step session, which stays the
+            // primary at the bottom: a question is never the default gesture.
+            // A closed mission plays no session at all, so `done` hides it.
+            mission.state === 'done'
+              ? null
+              : h('button', {
+                  type: 'button',
+                  className: 'missions-action',
+                  onClick: startFreeSession,
+                  disabled: freeBlocker !== null,
+                  title: freeBlocker ?? freeTitle,
+                  'aria-describedby': freeBlocker ? 'missions-session-blocked' : undefined,
+                }, freeLabel),
             h('button', { type: 'button', className: 'missions-action missions-action--primary', onClick: startSession, disabled: blocker !== null, title: blocker ?? undefined, 'aria-describedby': blocker ? 'missions-session-blocked' : undefined }, sessionLabel),
         ),
       )
