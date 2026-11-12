@@ -20,10 +20,13 @@ import {
   parseChecklist,
   dashboardScope,
   executionBlocker,
+  freeSessionBlocker,
   missionStep,
   missionSessionPrompt,
   feedbackSessionPrompt,
+  freeSessionPrompt,
   FEEDBACK_BRIEF,
+  FREE_BRIEF,
   ticketReadLine,
   treeIndent,
   STEP_BRIEFS,
@@ -335,6 +338,26 @@ test('une session exige un état unique, une branche et une base déclarées', (
   assert.equal(executionBlocker({}), 'branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker({ branch: null, base: null }), 'branch is not declared, set it below or in the mission folder')
   assert.equal(executionBlocker(), 'branch is not declared, set it below or in the mission folder')
+})
+
+test('une session libre ne se ferme que sur done, jamais sur un champ manquant', () => {
+  // Une session libre n'exécute rien : elle s'ouvre en cadrage, avant la
+  // branche, et un conflit d'états ne la concerne pas.
+  for (const state of ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod']) {
+    assert.equal(freeSessionBlocker({ state }), null, `session libre ouverte pour ${state}`)
+    assert.equal(freeSessionBlocker({ state, branch: null, base: null }), null, `sans branche pour ${state}`)
+  }
+  assert.equal(
+    freeSessionBlocker({ state: 'in-review', stateConflict: ['in-review', 'ready-for-prod'] }),
+    null,
+    'un conflit d’états ne ferme pas une session qui n’écrit rien',
+  )
+  assert.equal(freeSessionBlocker({}), null)
+  assert.equal(freeSessionBlocker(), null)
+  assert.equal(
+    freeSessionBlocker({ state: 'done', branch: 'fix/mis-42', base: 'main' }),
+    'mission is done: a closed mission plays no session',
+  )
 })
 
 test('chaque statut nomme l’étape de son workflow, et done n’en a pas', () => {
@@ -1150,6 +1173,81 @@ test('sans dépôt déclaré, le prompt des remontées n’invente pas de clone'
   const prompt = feedbackSessionPrompt({ ...TEMOIN, repo: null })
   assert.doesNotMatch(prompt, /Dépôt du projet/)
   assert.match(prompt, /gh pr list --head fix\/mis-42 --state all/)
+})
+
+test('le prompt de session libre porte l’identité, le ticket, le statut et les chemins', () => {
+  const prompt = freeSessionPrompt(TEMOIN)
+
+  assert.match(prompt, /^Travaille sur la mission MIS-42 — Reload onglet mission\./)
+  // Le ticket se lit au CLI, commentaires compris, jamais sur sa page HTML.
+  assert.match(prompt, /gh issue view 42 -R daedalforge\/missions --json [^\n]*comments/)
+  assert.doesNotMatch(prompt, /https:\/\/github\.com/)
+  // Le statut est une information, pas une étape.
+  assert.match(prompt, /Statut du ticket : in-progress \(information seule\)\./)
+  // Le clone du projet et la branche déclarée : la session n'a rien à deviner.
+  assert.match(prompt, /Dépôt du projet : ~\/projects\/missions\./)
+  assert.match(prompt, /Branche : fix\/mis-42 ; base : main\./)
+  // Journal et checklist sont nommés, en lecture seule.
+  assert.match(prompt, /Journal de mission : missions\/MIS-42\/journal\.md — en lecture seule/)
+  assert.match(prompt, /Checklist de mission : missions\/MIS-42\/checklist\.md — en lecture seule/)
+})
+
+test('un ticket Jira en session libre garde son lien, sans commande gh inventée', () => {
+  const prompt = freeSessionPrompt({ ...TEMOIN, url: 'https://saasoffice.atlassian.net/browse/SOC-1541' })
+
+  assert.match(prompt, /^Travaille sur la mission MIS-42 — Reload onglet mission\./)
+  assert.match(prompt, /Ouvre d'abord le ticket : https:\/\/saasoffice\.atlassian\.net\/browse\/SOC-1541 — depuis le CLI du tracker, jamais la page HTML/)
+  // Aucune commande `gh` ne s'invente pour un tracker qui n'en a pas.
+  assert.doesNotMatch(prompt, /gh issue view/)
+})
+
+test('le prompt de session libre ne joue aucune étape du workflow', () => {
+  const prompt = freeSessionPrompt(TEMOIN)
+
+  assert.match(prompt, /Session libre/)
+  assert.match(prompt, /aucune étape du workflow/)
+  // Aucune ligne d'étape, et chacun des quatre briefs est absent.
+  assert.doesNotMatch(prompt, /Étape en cours/)
+  for (const brief of Object.values(STEP_BRIEFS)) {
+    assert.ok(!prompt.includes(brief), `le brief d'étape ne doit pas fuiter : ${brief.slice(0, 40)}…`)
+  }
+  assert.doesNotMatch(prompt, /Chaque étape se joue dans une nouvelle session/)
+  assert.doesNotMatch(prompt, /la branche depuis la base/)
+})
+
+test('le prompt de session libre ferme les écritures puis demande de s’arrêter', () => {
+  const prompt = freeSessionPrompt(TEMOIN)
+
+  // Le ticket, la branche, le journal et la checklist restent intacts.
+  assert.match(prompt, /tu ne modifies pas le ticket \(statut, labels, commentaire\)/)
+  assert.match(prompt, /ni la branche/)
+  assert.match(prompt, /ni le journal/)
+  assert.match(prompt, /ni la checklist/)
+  // Aucun geste git ni GitHub.
+  assert.match(prompt, /tu ne commites pas/)
+  assert.match(prompt, /tu ne pousses pas/)
+  assert.match(prompt, /tu n’ouvres pas de PR/)
+  assert.match(prompt, /tu ne merges pas/)
+  assert.match(prompt, /tu n’écris jamais sur main/)
+  // La sortie de la session : répondre, puis s'arrêter.
+  assert.match(prompt, /Réponds à la question écrite à la suite de ce message/)
+  assert.match(prompt, /Tu réponds, puis tu t’arrêtes\./)
+})
+
+test('sans branche ni base, le prompt libre n’invente pas de branche', () => {
+  const prompt = freeSessionPrompt({ ...TEMOIN, branch: null, base: null })
+
+  assert.doesNotMatch(prompt, /Branche : /)
+  // Les chemins et l'identité restent : seule la déclaration manque.
+  assert.match(prompt, /^Travaille sur la mission MIS-42 — Reload onglet mission\./)
+  assert.match(prompt, /Journal de mission : missions\/MIS-42\/journal\.md/)
+})
+
+test('sans dossier, le prompt libre omet journal et checklist', () => {
+  const prompt = freeSessionPrompt({ ...TEMOIN, folder: null })
+
+  assert.doesNotMatch(prompt, /Journal de mission/)
+  assert.doesNotMatch(prompt, /Checklist de mission/)
 })
 
 test('historyLabel chiffre le total par milliers, et nomme sa branche', () => {

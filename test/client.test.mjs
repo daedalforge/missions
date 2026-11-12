@@ -365,6 +365,123 @@ test('le prompt n’est plus construit en ligne dans le gabarit du volet', async
   assert.match(SOURCE, /const FEEDBACK_BRIEF =/)
   assert.match(SOURCE, /Check the PR feedback/)
   assert.match(SOURCE, /mission\.state === 'in-review'/)
+  // La session libre suit le même chemin : son prompt vit à côté, pas en ligne.
+  assert.match(template, /const freePrompt = freeSessionPrompt\(mission\)/)
+  assert.match(SOURCE, /function freeSessionPrompt\(mission = \{\}\)/)
+  assert.match(SOURCE, /const FREE_BRIEF =/)
+})
+
+/** Le bouton de session libre du volet, ou null quand la mission n'en rend pas. */
+function boutonLibre(tree) {
+  return findAll(tree, 'button').find((node) => textOf(node).trim() === 'Start a free session') ?? null
+}
+
+test('le volet rend « Start a free session » à toutes les étapes sauf done', () => {
+  for (const state of ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod']) {
+    const { tree } = monterVolet({ ...MISSION, state, updatedAt: MISSION.updated })
+    assert.ok(boutonLibre(tree), `le bouton libre doit être rendu pour ${state}`)
+  }
+  // Une mission fermée ne joue aucune session : le bouton disparaît.
+  const { tree } = monterVolet({ ...MISSION, state: 'done', updatedAt: MISSION.updated })
+  assert.equal(boutonLibre(tree), null, 'aucune session libre sur une mission done')
+})
+
+test('le bouton libre est secondaire, titré et reste au-dessus de la session', () => {
+  const { tree } = monterVolet({ ...MISSION, state: 'in-progress', updatedAt: MISSION.updated })
+  const bouton = boutonLibre(tree)
+  assert.ok(bouton, 'le bouton libre doit être rendu')
+
+  // Secondaire, actif, avec le titre qui le distingue de la note du verrou.
+  assert.equal(bouton.props.className, 'missions-action')
+  assert.doesNotMatch(bouton.props.className, /--primary/)
+  assert.equal(bouton.props.disabled, false)
+  assert.equal(bouton.props.title, 'Ask a question without playing the workflow step')
+  assert.equal(bouton.props['aria-describedby'], undefined)
+  assert.equal(typeof bouton.props.onClick, 'function')
+
+  // Il précède le bouton de session, qui reste le primaire en bas.
+  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+  assert.ok(actions, 'le volet doit rendre la barre d’actions')
+  const boutons = actions.children.filter((child) => child.type === 'button')
+  const iLibre = boutons.findIndex((node) => textOf(node).trim() === 'Start a free session')
+  const iSession = boutons.findIndex((node) => /^Start a session/.test(textOf(node).trim()))
+  assert.ok(iLibre >= 0, 'le bouton libre est dans la barre d’actions')
+  assert.ok(iSession > iLibre, 'la session d’étape reste sous la session libre')
+  assert.match(boutons[iSession].props.className, /missions-action--primary/)
+})
+
+test('le thème Naruto rend le bouton libre sans règle nouvelle', () => {
+  const { tree } = monterVolet({ ...MISSION, state: 'in-progress', updatedAt: MISSION.updated })
+  const bouton = boutonLibre(tree)
+  assert.equal(bouton.props.className, 'missions-action')
+
+  // La classe suffit : le manga ne réécrit que `.missions-action` et le primaire.
+  const manga = regle('.missions-panel[data-theme="manga"] .missions-action')
+  assert.match(manga, /border: 1\.5px solid var\(--mm-ink\)/)
+  assert.match(manga, /box-shadow: 2px 2px 0 var\(--mm-shadow\)/)
+  assert.match(regle('.missions-panel[data-theme="manga"] .missions-action--primary'), /background: var\(--mm-ink\)/)
+})
+
+test('le clic sur la session libre ouvre une session avec le prompt libre, sans envoi', async () => {
+  const captures = []
+  const services = {
+    getService: (name) =>
+      name === 'uiWorkspace'
+        ? { startSession: (id, options) => captures.push({ id, options }) }
+        : null,
+  }
+  const { tree } = monterVolet(
+    {
+      ...MISSION,
+      state: 'in-progress',
+      repo: '~/projects/missions',
+      url: 'https://github.com/daedalforge/missions/issues/42',
+      updatedAt: MISSION.updated,
+    },
+    { services, workspaceId: 'w' },
+  )
+
+  await boutonLibre(tree).props.onClick()
+  assert.equal(captures.length, 1)
+  assert.equal(captures[0].id, 'w')
+  // Le préremplissage seul : le prompt, rien d'autre, aucun envoi.
+  assert.deepEqual(Object.keys(captures[0].options), ['prompt'])
+  const prompt = captures[0].options.prompt
+
+  // L'identité, le ticket au CLI et le statut en information.
+  assert.match(prompt, /^Travaille sur la mission MIS-42 — Reload onglet mission\./)
+  assert.match(prompt, /gh issue view 42 -R daedalforge\/missions --json [^\n]*comments/)
+  assert.match(prompt, /Statut du ticket : in-progress \(information seule\)\./)
+  assert.match(prompt, /Dépôt du projet : ~\/projects\/missions\./)
+  // Journal et checklist sont nommés en lecture seule.
+  assert.match(prompt, /Journal de mission : /)
+  assert.match(prompt, /Checklist de mission : /)
+  // Ce n'est pas le prompt d'étape : ni étape, ni avancement du ticket.
+  assert.match(prompt, /Session libre/)
+  assert.match(prompt, /aucune étape du workflow/)
+  assert.doesNotMatch(prompt, /Étape en cours/)
+  assert.doesNotMatch(prompt, /Tu ne fais que l’exécution/)
+})
+
+test('sans branche, la session libre reste active quand la session d’étape est bloquée', () => {
+  const { tree } = monterVolet({
+    ...MISSION,
+    state: 'to-refine',
+    branch: null,
+    base: null,
+    updatedAt: MISSION.updated,
+  })
+
+  const libre = boutonLibre(tree)
+  assert.ok(libre, 'le bouton libre doit être rendu en cadrage sans branche')
+  assert.equal(libre.props.disabled, false)
+  assert.equal(libre.props.title, 'Ask a question without playing the workflow step')
+  assert.equal(libre.props['aria-describedby'], undefined)
+
+  // L'étape, elle, reste fermée : la note du pied la concerne.
+  const session = findAll(tree, 'button').find((node) => /^Start a session/.test(textOf(node).trim()))
+  assert.equal(session.props.disabled, true)
+  assert.match(textOf(tree), /Session blocked: branch is not declared/)
 })
 
 test('le volet lit le journal de mission, sans dépendance de rendu', () => {
