@@ -2151,3 +2151,106 @@ test('l’onglet Repositories a sa grille et ses deux thèmes', () => {
   // La colonne du dernier commit cède la première quand le panneau rétrécit.
   assert.match(SOURCE, /@media \(max-width: 860px\) \{\s+\.missions-repo-grid \{ grid-template-columns: [^}]+\}\s+\.missions-col-commit \{ display: none; \}/)
 })
+
+function monterVoletCloture(mission = { ...MISSION, state: 'ready-for-prod', updatedAt: MISSION.updated }) {
+  return monterVolet(mission)
+}
+
+function boutonCloture(tree) {
+  return findAll(tree, 'button').find((node) => /close the local checkout/i.test(textOf(node).trim())) ?? null
+}
+
+test('le volet ne propose la clôture locale qu’en ready-for-prod', () => {
+  for (const state of ['to-refine', 'ready', 'in-progress', 'in-review', 'done', 'blocked', null]) {
+    const { tree } = monterVoletCloture({ ...MISSION, state, updatedAt: MISSION.updated })
+    assert.equal(boutonCloture(tree), null, `aucun bouton de clôture pour ${state}`)
+  }
+
+  const { tree } = monterVoletCloture()
+  const bouton = boutonCloture(tree)
+  assert.ok(bouton, 'le bouton doit être rendu en ready-for-prod')
+  assert.equal(bouton.props.className, 'missions-action missions-action--danger')
+  assert.equal(bouton.props.disabled, false)
+  assert.equal(typeof bouton.props.onClick, 'function')
+
+  // Il est au-dessus de la session, qui reste le geste primaire en dernier.
+  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+  const boutons = actions.children.filter((child) => child.type === 'button')
+  const iCloture = boutons.findIndex((node) => /close the local checkout/i.test(textOf(node).trim()))
+  const iSession = boutons.findIndex((node) => /^Start a session/.test(textOf(node).trim()))
+  assert.ok(iCloture >= 0 && iSession > iCloture)
+
+  // Le câblage du bundle, en plus du rendu.
+  assert.match(SOURCE, /const LOCAL_CLOSE_URL = 'missions\/api\/local-close'/)
+  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key \}\)/)
+  assert.match(SOURCE, /mission\.state === 'ready-for-prod'/)
+  assert.match(SOURCE, /\.missions-action--danger \{/)
+})
+
+test('le premier clic arme la clôture, le second envoie la clé', async () => {
+  const calls = []
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) })
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        key: 'MIS-42', branch: 'fix/mis-42', base: 'main', cloneSha: '1234567',
+        worktreesRemoved: ['/w/wt'], branchRemoved: true, macheteUpdated: true,
+      }),
+    }
+  }
+
+  const { tree, setters } = monterVoletCloture()
+  const bouton = boutonCloture(tree)
+
+  await bouton.props.onClick()
+  assert.deepEqual(calls, [], 'le premier clic n’écrit rien')
+  assert.ok(setters.includes(true), 'le premier clic arme le bouton')
+  const armeNote = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(armeNote.error, false)
+  assert.match(armeNote.text, /Click again to confirm/)
+
+  await bouton.props.onClick()
+  assert.deepEqual(calls, [
+    { url: 'missions/api/local-close', method: 'POST', body: { key: 'MIS-42' } },
+  ])
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, false)
+  assert.match(note.text, /Local checkout closed: fix\/mis-42 deleted, 1 worktree\(s\) removed, clone on main \(1234567\)/)
+})
+
+test('un refus de clôture se dit, et le bouton se réarme pour un nouvel essai', async () => {
+  const calls = []
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url) })
+    return { ok: false, status: 409, json: async () => ({ error: 'pull request #7 is not merged' }) }
+  }
+
+  const { tree, setters } = monterVoletCloture()
+  const bouton = boutonCloture(tree)
+
+  await bouton.props.onClick()
+  await bouton.props.onClick()
+
+  assert.equal(calls.length, 1)
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, true)
+  assert.match(note.text, /Local close refused: pull request #7 is not merged/)
+
+  // Le refus rend le geste inoffensif mais réarmable : un clic de plus
+  // redevient une demande, pas une écriture immédiate.
+  await bouton.props.onClick()
+  assert.equal(calls.length, 1, 'le clic après refus réarme sans écrire')
+  const rearme = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.match(rearme.text, /Click again to confirm/)
+})
+
+test('une mission sans branche garde le bouton de clôture, mais désarmé', () => {
+  const { tree } = monterVoletCloture({ ...MISSION, state: 'ready-for-prod', branch: null, updatedAt: MISSION.updated })
+  const bouton = boutonCloture(tree)
+  assert.ok(bouton)
+  assert.equal(bouton.props.disabled, true)
+  assert.match(bouton.props.title, /branch is not declared/)
+  assert.equal(bouton.props['aria-describedby'], 'missions-session-blocked')
+})

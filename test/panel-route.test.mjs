@@ -934,3 +934,177 @@ test('les routes des dépôts refusent une requête non locale', async (t) => {
     assert.equal(response.status, 403, path)
   }
 })
+
+/**
+ * La clôture locale : une clé en entrée, une preuve lue au tracker, des gestes
+ * git en sortie. Le faux runner enregistre tout : un refus ne doit lui avoir
+ * envoyé aucun verbe d'écriture.
+ */
+const LOCAL_CLOSE = { tip: 'a'.repeat(40), base: 'b'.repeat(40), merge: 'c'.repeat(40) }
+
+function closeProjects(repo) {
+  return `canonical:
+  states: [to-refine, ready, in-progress, in-review, ready-for-prod]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    repo: ${repo}
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+        ready-for-prod: ready-for-prod
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`
+}
+
+async function mountClose(t, { fetchImpl } = {}) {
+  // Le runner est installé après coup : ses réponses dépendent des chemins que
+  // ce montage crée, alors que le handler est déjà construit.
+  const runner = { fn: async () => { throw new Error('git runner not installed') } }
+  const mounted = await mount(t, {
+    runGit: (...args) => runner.fn(...args),
+    fetchImpl,
+    githubToken: 'test-token',
+  })
+  const repo = join(mounted.dir, 'repo')
+  const worktree = join(mounted.dir, 'wt')
+  await mkdir(join(repo, '.git'), { recursive: true })
+  await mkdir(worktree, { recursive: true })
+  await mkdir(join(mounted.dir, 'missions', 'MIS-136'), { recursive: true })
+  await writeFile(join(mounted.dir, 'missions', 'projects.yml'), closeProjects(repo))
+  await writeFile(
+    join(mounted.dir, 'missions', 'MIS-136', MISSION_FILE),
+    'key: MIS-136\nbranch: feat/mis-136\nbase: main\n',
+  )
+  await writeFile(join(repo, '.git', 'machete'), 'main\n  feat/mis-136\n    fix/one\n')
+  return { ...mounted, repo, worktree, useRun: (run) => { runner.fn = run } }
+}
+
+function closeTracker({ labels = ['ready-for-prod'] } = {}) {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET' })
+    if (String(url).includes('/pulls')) {
+      return trackerResponse([
+        {
+          number: 7,
+          html_url: 'https://github.com/daedalforge/missions/pull/7',
+          merged_at: '2026-11-12T10:00:00Z',
+          merge_commit_sha: LOCAL_CLOSE.merge,
+          head: { ref: 'feat/mis-136', sha: 'e'.repeat(40) },
+          base: { ref: 'main' },
+        },
+      ])
+    }
+    return trackerResponse({ number: 136, title: 'Cloturer proprement le local', state: 'open', labels: labels.map((name) => ({ name })) })
+  }
+  return { fetchImpl, calls }
+}
+
+test('POST local-close ferme le checkout après la preuve tracker', async (t) => {
+  const tracker = closeTracker()
+  const { dir, handler, repo, worktree, useRun } = await mountClose(t, { fetchImpl: tracker.fetchImpl })
+  const { run, calls } = fauxGitRun({
+    'repo rev-parse --git-common-dir': '.git',
+    'repo rev-parse --verify --quiet refs/heads/feat/mis-136': LOCAL_CLOSE.tip,
+    'repo rev-parse --verify --quiet origin/main': LOCAL_CLOSE.base,
+    'repo worktree list --porcelain': [
+      `worktree ${repo}`,
+      `HEAD ${LOCAL_CLOSE.tip}`,
+      'branch refs/heads/feat/mis-136',
+      '',
+      `worktree ${worktree}`,
+      `HEAD ${LOCAL_CLOSE.tip}`,
+      'branch refs/heads/feat/mis-136',
+      '',
+    ].join('\n'),
+    'repo status --porcelain': '',
+    'wt status --porcelain': '',
+    [`repo merge-base --is-ancestor ${LOCAL_CLOSE.tip} origin/main`]: '',
+    [`repo merge-base --is-ancestor ${LOCAL_CLOSE.merge} origin/main`]: '',
+    'repo fetch origin main': '',
+    [`repo worktree remove ${worktree}`]: '',
+    'repo checkout main': '',
+    'repo merge --ff-only origin/main': '',
+    'repo rev-parse HEAD': LOCAL_CLOSE.base,
+    'repo branch -D feat/mis-136': '',
+  })
+  useRun(run)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/local-close',
+    body: { key: 'MIS-136' },
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body.branch, 'feat/mis-136')
+  assert.equal(response.body.base, 'main')
+  assert.deepEqual(response.body.worktreesRemoved, [worktree])
+  assert.equal(response.body.branchRemoved, true)
+  assert.equal(response.body.macheteUpdated, true)
+
+  assert.equal(await readFile(join(repo, '.git', 'machete'), 'utf8'), 'main\n  fix/one\n')
+  const journal = await readFile(join(dir, 'missions', 'MIS-136', 'journal.md'), 'utf8')
+  assert.match(journal, /^# Journal — MIS-136/)
+  assert.match(journal, /## \d{4}-\d{2}-\d{2} — Clôture/)
+  assert.match(journal, /PR : #7/)
+
+  assert.equal(tracker.calls.length, 2, 'deux GET, aucun écrit tracker')
+  assert.deepEqual(tracker.calls.map((c) => c.method), ['GET', 'GET'])
+  const commands = calls.join('\n')
+  assert.ok(commands.indexOf('repo fetch origin main') < commands.indexOf('repo worktree remove'))
+  assert.ok(commands.indexOf('repo worktree remove') < commands.indexOf('repo branch -D feat/mis-136'))
+})
+
+test('POST local-close refuse une mission pas ready-for-prod sans écrire', async (t) => {
+  const tracker = closeTracker({ labels: ['in-review'] })
+  const { run, calls } = fauxGitRun({})
+  const { handler } = await mountClose(t, { runGit: run, fetchImpl: tracker.fetchImpl })
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/local-close',
+    body: { key: 'MIS-136' },
+  })
+
+  assert.equal(response.status, 409)
+  assert.match(response.body.error, /not ready-for-prod/)
+  assert.deepEqual(calls, [], 'aucun verbe git envoyé')
+  assert.deepEqual(tracker.calls.map((c) => c.method), ['GET', 'GET'])
+})
+
+test('POST local-close valide la clé, le projet et la méthode', async (t) => {
+  const tracker = closeTracker()
+  const { run } = fauxGitRun({})
+  const { handler } = await mountClose(t, { runGit: run, fetchImpl: tracker.fetchImpl })
+
+  const missing = await call(handler, { method: 'POST', path: '/missions/api/local-close', body: {} })
+  assert.equal(missing.status, 400)
+  assert.match(missing.body.error, /key is missing/)
+
+  const unknown = await call(handler, { method: 'POST', path: '/missions/api/local-close', body: { key: 'ZZZ-1' } })
+  assert.equal(unknown.status, 404)
+  assert.match(unknown.body.error, /no project declares ZZZ-1/)
+
+  const wrongMethod = await call(handler, { path: '/missions/api/local-close' })
+  assert.equal(wrongMethod.status, 405)
+  assert.equal(wrongMethod.headers.allow, 'POST')
+})

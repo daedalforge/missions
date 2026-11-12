@@ -90,8 +90,8 @@ base: main
 
 **Depuis le panneau** : le volet de détail se lit en trois onglets —
 **Details** (propriétés et champs ci-dessous), **Journal** et **Checklist** —
-et les actions (ouvrir le ticket, démarrer une session) restent en pied de
-volet, sous les onglets. Journal et Checklist prennent la hauteur restante,
+et les actions (ouvrir le ticket, fermer le checkout local, démarrer une
+session) restent en pied de volet, sous les onglets. Journal et Checklist prennent la hauteur restante,
 du trait des onglets à la note de session ou à l'avertissement de blocage
 quand ils sont là, aux actions sinon : c'est leur contenu qui défile, pas le
 volet. Details garde le défilement du volet. L'onglet Details porte deux
@@ -115,6 +115,32 @@ sélectionnable, jamais un faux niveau.
 locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
 part donc sans déclaration : on les repose depuis le panneau au premier cadrage.
 Le panneau n'écrit que ce fichier, le versionnement n'est pas son affaire.
+
+### Fermer le checkout local
+
+Quand la mission est en `ready-for-prod` et que sa PR est mergée, le volet
+propose **« Close the local checkout »**. C'est le seul geste du panneau qui
+supprime une branche ; il ne remplace ni le merge ni la fermeture du ticket,
+qui restent ceux du demandeur.
+
+- **Il vérifie avant d'agir.** L'hôte relit l'issue (encore en
+  `ready-for-prod`, sans conflit de labels) et les PR de la branche : il faut
+  une PR mergée vers la base déclarée, et un merge commit (ou la tête) ancêtre
+  de `origin/<base>`. Un `git fetch` précède la seconde vérification. Sans
+  preuve, rien n'est supprimé.
+- **Deux temps.** Un premier clic annonce ce qui va disparaître, un second
+  envoie la clé. Le panneau n'envoie que `{ key }` : chemins, noms et gestes
+  sont décidés par l'hôte.
+- **Ce qu'il fait.** `git worktree remove` (jamais `--force`, un worktree sale
+  refuse) ; le clone passe sur la base par `checkout` puis
+  `merge --ff-only origin/<base>` ; `git branch -D` ; la ligne est retirée de
+  `.git/machete` à la main (enfants remontés, annotations conservées, aucun
+  processus `git machete`) ; une section `## <date> — Clôture` est ajoutée au
+  journal avec la PR et les gestes.
+- **Ce qu'il ne fait pas.** Aucun écrit tracker, aucune branche distante, aucun
+  `main` touché. Chaque refus (pas de clone, état, PR, base, commit, worktree
+  sale, commit local non livré) est un 409 et un message, sans suppression
+  partielle.
 
 ## Journal de mission
 
