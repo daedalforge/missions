@@ -64,9 +64,12 @@ window.__ModuleLoader__.load({
 
       // Reference path: startSession creates, attaches, opens and prefills in one
       // gesture — the prompt goes into the composer, nothing is sent.
+      //
+      // It is the only call: connectWorkspace would first create a blank session
+      // for startSession to re-target, which costs a Host round-trip and leaves
+      // nothing behind.
       if (ui && typeof ui.startSession === 'function' && id) {
         try {
-          if (typeof ui.connectWorkspace === 'function') await ui.connectWorkspace(id)
           ui.startSession(id, { prompt })
           return {
             sessionId: null,
@@ -74,8 +77,7 @@ window.__ModuleLoader__.load({
             openedBy: 'uiWorkspace.startSession',
           }
         } catch (error) {
-          const raison = error?.message ?? String(error)
-          return { sessionId: null, prefilledBy: null, openedBy: null, uiError: raison }
+          return { sessionId: null, prefilledBy: null, openedBy: null, uiError: error?.message ?? String(error) }
         }
       }
 
@@ -1741,29 +1743,23 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const feedbackPrompt = feedbackSessionPrompt(mission)
       const freePrompt = freeSessionPrompt(mission)
 
+      // DSH tears the panel down the moment a session opens (`replaceMain` closes
+      // it), so a note written after a successful click lives under 50 ms: long
+      // enough to look like an error, far too short to read it. The happy path
+      // therefore says nothing, and every failure stays one short line that the
+      // drawer can still show once the gesture is over.
       const openSession = async (sessionPrompt) => {
-        setNote('Starting a session…')
         try {
           const { prefilledBy, openedBy, uiError } = await openMissionSession(services, sessionPrompt, workspaceId, workspaceRoot)
           if (uiError) {
-            setNote(`uiWorkspace refused: ${uiError}`)
-          } else if (openedBy) {
-            setNote(`Session opened via ${openedBy}, prompt prefilled via ${prefilledBy ?? 'nothing'} — press Enter to send.`)
-          } else if (prefilledBy === 'clipboard') {
+            setNote(`Session not opened: ${uiError}`)
+          } else if (!openedBy && !prefilledBy) {
             setNote(
-              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'}; the prompt is on your clipboard — paste it in the session.`,
-            )
-          } else if (prefilledBy) {
-            setNote(
-              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'} and prefilled via ${prefilledBy}, but this panel cannot open it — pick it in the sidebar.`,
-            )
-          } else {
-            setNote(
-              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'}, but neither opened nor prefilled — pick it in the sidebar.`,
+              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'} — pick it in the sidebar.`,
             )
           }
         } catch (error) {
-          setNote(`Session failed: ${error?.message ?? error}`)
+          setNote(`Session not opened: ${error?.message ?? error}`)
         }
       }
 
