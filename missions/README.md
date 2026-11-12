@@ -40,6 +40,7 @@ workflow ; le filtre de statut, lui, garde l'ordre du workflow.
 | Branche et base (déclarées) | `missions/<dossier>/mission.yml` | Non — local, ignoré par git |
 | Journal de mission (récit de la session) | `missions/<dossier>/journal.md` | Non — local, ignoré par git |
 | Checklist de mission (gestes à vérifier) | `missions/<dossier>/checklist.md` | Non — local, ignoré par git |
+| Dossier archivé | `missions/archives/<dossier>/` | Non — local, ignoré par git |
 | Branche et commits | Dépôt du projet | Selon le projet |
 | Preuves de clôture | Commentaire du ticket | Non |
 | Méthode (ce document, workflows) | Ce dépôt | Oui |
