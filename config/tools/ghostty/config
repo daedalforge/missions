@@ -1,0 +1,155 @@
+# Ghostty Configuration — base commune
+# Pour Stéphane - Techlead Saas-Office
+# Fusion de l'ancienne config (Catppuccin Latte/Mocha auto) + nouvelle config
+# Documentation: https://ghostty.org/docs/config
+#
+# Ce fichier est le socle partagé : il n'est jamais lié tel quel au poste.
+# config/links-home.yml déclare le lien de config-linux ou de config-darwin,
+# posé par « node tools/link-config.mjs --apply » ; les deux variantes l'incluent
+# par `config-file` puis ajoutent leurs réglages propres. Ghostty n'a pas de
+# syntaxe conditionnelle : la séparation vit dans ces deux fichiers.
+
+# =============================================================================
+# THÈME NARUTO — harmonisé avec btop et K9s
+# =============================================================================
+
+background = #101217
+# Le fond reste légèrement transparent sans dénaturer la palette sombre.
+background-opacity = 0.75
+foreground = #D9E1EA
+
+# Sélection et curseur : orange Konoha dominant
+selection-background = #6E3A10
+selection-foreground = #F4F7FA
+cursor-color = #FF7A00
+cursor-text = #101217
+cursor-style = block
+cursor-style-blink = true
+
+# Palette ANSI — orange Konoha, bleu chakra, vert feuille, rouge Akatsuki
+palette = 0=#101217
+palette = 1=#D72638
+palette = 2=#63A65F
+palette = 3=#FF7A00
+palette = 4=#2979B8
+palette = 5=#9C5DA8
+palette = 6=#29B6F6
+palette = 7=#D9E1EA
+palette = 8=#596273
+palette = 9=#FF5A67
+palette = 10=#A8D672
+palette = 11=#FFD166
+palette = 12=#5CCBFF
+palette = 13=#C082D1
+palette = 14=#7DDFFF
+palette = 15=#F4F7FA
+
+# =============================================================================
+# POLICE
+# =============================================================================
+
+font-family = JetBrainsMono Nerd Font Mono
+font-size = 12
+font-thicken = true
+
+# =============================================================================
+# FENETRE
+# =============================================================================
+
+window-padding-x = 8
+window-padding-y = 6
+window-padding-balance = true
+
+# Scrollback
+scrollback-limit = 100000
+
+# =============================================================================
+# SHELL INTEGRATION
+# =============================================================================
+
+shell-integration = zsh
+shell-integration-features = sudo,title,ssh-env,ssh-terminfo
+
+# =============================================================================
+# RACCOURCIS CLAVIER (Actions officielles Ghostty)
+# Documentation: https://ghostty.org/docs/config/keybind/reference
+# =============================================================================
+
+# --- Unbinds (conflits macOS/AZERTY) ---
+keybind = alt+left=unbind
+keybind = alt+right=unbind
+keybind = cmd+d=unbind
+keybind = cmd+bracket_left=unbind
+keybind = cmd+bracket_right=unbind
+keybind = cmd+alt+right=unbind
+keybind = cmd+alt+left=unbind
+keybind = cmd+alt+up=unbind
+keybind = cmd+alt+down=unbind
+
+# --- Navigation entre panes ---
+# Géométrie en h/j/k/l : sous KDE, Super+Shift+←/→ est pris par KWin (« fenêtre
+# vers l'écran voisin ») et Super+Ctrl+flèches par le changement de bureau
+# virtuel — les liaisons en flèches n'arrivent jamais à Ghostty sous Linux.
+# Les variantes en flèches vivent dans config-darwin, inclus sur macOS seul.
+keybind = cmd+shift+h=goto_split:left
+keybind = cmd+shift+j=goto_split:down
+keybind = cmd+shift+k=goto_split:up
+keybind = cmd+shift+l=goto_split:right
+
+# --- Split Panes ---
+# Créer : même géométrie, un modificateur de plus (Shift reste le repère).
+keybind = cmd+ctrl+shift+h=new_split:left
+keybind = cmd+ctrl+shift+j=new_split:down
+keybind = cmd+ctrl+shift+k=new_split:up
+keybind = cmd+ctrl+shift+l=new_split:right
+keybind = cmd+shift+r=new_split:right
+keybind = cmd+shift+u=new_split:up
+keybind = cmd+shift+d=new_split:down
+
+# --- Redimensionner : géométrie h/j/k/l, Alt en plus de Shift ---
+# Les variantes cmd+ctrl+flèches vivent aussi dans config-darwin.
+keybind = cmd+alt+shift+h=resize_split:left,20
+keybind = cmd+alt+shift+j=resize_split:down,20
+keybind = cmd+alt+shift+k=resize_split:up,20
+keybind = cmd+alt+shift+l=resize_split:right,20
+
+# --- Fermer ---
+# cmd+shift+k est libéré : k est devenu la navigation vers le haut.
+keybind = cmd+w=close_surface
+
+# --- Clear Buffer ---
+keybind = cmd+k=clear_screen
+
+# --- Égaliser et zoomer ---
+keybind = cmd+shift+e=equalize_splits
+keybind = cmd+shift+z=toggle_split_zoom
+
+# --- Scroll ---
+keybind = cmd+up=scroll_page_up
+keybind = cmd+down=scroll_page_down
+keybind = cmd+shift+s=write_scrollback_file:open
+
+# --- Onglets ---
+keybind = cmd+t=new_tab
+keybind = cmd+q=quit
+
+# ctrl+tab / ctrl+shift+tab sont liés par défaut à next_tab / previous_tab.
+# Les libérer pour qu'Emacs (tab-line) les reçoive : la navigation entre
+# onglets Ghostty reste assurée par cmd+1..9.
+keybind = ctrl+tab=unbind
+keybind = ctrl+shift+tab=unbind
+
+# --- Copier/Coller ---
+keybind = cmd+c=copy_to_clipboard
+keybind = cmd+v=paste_from_clipboard
+
+# --- Switch onglets (1-9) ---
+keybind = cmd+1=goto_tab:1
+keybind = cmd+2=goto_tab:2
+keybind = cmd+3=goto_tab:3
+keybind = cmd+4=goto_tab:4
+keybind = cmd+5=goto_tab:5
+keybind = cmd+6=goto_tab:6
+keybind = cmd+7=goto_tab:7
+keybind = cmd+8=goto_tab:8
+keybind = cmd+9=goto_tab:9
