@@ -288,7 +288,9 @@ test('blocking updates the labels and posts the reason as ADF', async () => {
 
   assert.equal(result.key, 'SO-1')
   assert.equal(result.blocked, true)
-  assert.match(result.comment, /comment\/10001$/)
+  // Le panneau affiche ce lien dans la carte : c'est la permalink de navigation,
+  // pas l'URL REST du commentaire.
+  assert.equal(result.comment, 'https://example.atlassian.net/browse/SO-1?focusedCommentId=10001')
   assert.equal(calls.length, 2)
   // `update.labels` ajoute ou retire un label sans renvoyer les autres.
   assert.equal(calls[0].method, 'PUT')
@@ -316,6 +318,17 @@ test('unblocking removes the label without a comment', async () => {
   assert.deepEqual(result, { key: 'SO-1', blocked: false, comment: null })
   assert.equal(calls.length, 1)
   assert.match(calls[0], /^PUT /)
+})
+
+test('a block whose answer has no comment id still links to the ticket', async () => {
+  const fetchImpl = async (url) =>
+    String(url).endsWith('/comment')
+      ? response({ self: 'https://example.atlassian.net/rest/api/3/issue/SO-1/comment/10001' })
+      : response(undefined, { status: 204 })
+
+  const result = await setBlocked(PROJECT, 'SO-1', { blocked: true, message: 'Attente.', fetchImpl })
+
+  assert.equal(result.comment, 'https://example.atlassian.net/browse/SO-1')
 })
 
 test('the blocked label comes back as a flag, without touching the state', async () => {

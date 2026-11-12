@@ -1536,8 +1536,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       }
       return h('p', { className: 'missions-blocked-reason-note' },
         reason.state === 'empty'
-          ? 'Aucun commentaire sur le ticket : la raison n’y est pas écrite.'
-          : 'Raison illisible pour l’instant ; nouvelle tentative au prochain rafraîchissement.',
+          ? "Aucun commentaire sur le ticket : la raison n'y est pas écrite."
+          : "Raison illisible pour l'instant ; nouvelle tentative au prochain rafraîchissement.",
       )
     }
 

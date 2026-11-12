@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import { MODELS_DIR, readWorkflow } from '../lib/workflows.js'
+import { blockedReasonAfterWrite } from '../lib/view.js'
+import { forgetToken, setBlocked } from '../lib/trackers/jira.js'
 
 /**
  * Smoke test for the generated client bundle.
@@ -1587,7 +1589,7 @@ test('une raison absente ou illisible est dite, sans texte inventé', () => {
     blockedReason: { state: 'empty', author: null, body: '', createdAt: null, url: null },
   }).tree
   const note = findAll(empty, 'p').find((node) => node.props.className === 'missions-blocked-reason-note')
-  assert.equal(textOf(note), 'Aucun commentaire sur le ticket : la raison n’y est pas écrite.')
+  assert.equal(textOf(note), "Aucun commentaire sur le ticket : la raison n'y est pas écrite.")
   assert.equal(textOf(empty).includes('Voir le commentaire'), false)
 
   const unavailable = monterVolet({
@@ -1597,7 +1599,7 @@ test('une raison absente ou illisible est dite, sans texte inventé', () => {
     blockedReason: { state: 'unavailable', author: null, body: '', createdAt: null, url: null },
   }).tree
   const note2 = findAll(unavailable, 'p').find((node) => node.props.className === 'missions-blocked-reason-note')
-  assert.equal(textOf(note2), 'Raison illisible pour l’instant ; nouvelle tentative au prochain rafraîchissement.')
+  assert.equal(textOf(note2), "Raison illisible pour l'instant ; nouvelle tentative au prochain rafraîchissement.")
 })
 
 test('une mission non bloquée garde le formulaire et l’indice, sans raison', () => {
@@ -1614,6 +1616,42 @@ test('une mission non bloquée garde le formulaire et l’indice, sans raison', 
 test('une raison écrite est posée sans attendre la lecture suivante', () => {
   assert.match(SOURCE, /setBlockedReason\(blockedReasonAfterWrite\(/)
   assert.match(SOURCE, /setBlockedReason\(mission\.blockedReason \?\? null\)/)
+})
+
+test('un blocage Jira ouvre la carte sur le ticket, jamais sur l’API', async () => {
+  process.env.JIRA_API_TOKEN = 'test-token'
+  forgetToken()
+  const project = {
+    id: 'manager',
+    name: 'Manager',
+    reference: 'SO',
+    tracker: 'jira',
+    jira: { site: 'https://example.atlassian.net', cloud_id: 'cloud-1', email: 'me@example.test' },
+    map: { states: {}, types: {}, priorities: {}, labels: {} },
+  }
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).endsWith('/comment') && init.method === 'POST') {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({
+          id: '10101',
+          self: 'https://example.atlassian.net/rest/api/3/issue/SO-1/comment/10101',
+        }),
+      }
+    }
+    return { ok: true, status: 204, headers: { get: () => null }, text: async () => '' }
+  }
+
+  // La chaîne réelle : le blocage rend son lien, le helper le pose, la carte l'affiche.
+  const written = await setBlocked(project, 'SO-1', { blocked: true, message: 'Attente du contrat.', fetchImpl })
+  const blockedReason = blockedReasonAfterWrite({ next: true, message: 'Attente du contrat.', comment: written.comment })
+  const { tree } = monterVolet({ ...MISSION, updatedAt: MISSION.updated, blocked: true, blockedReason })
+
+  const link = findAll(tree, 'a').find((node) => node.props.className === 'missions-blocked-reason-link')
+  assert.ok(link, 'la carte doit offrir le lien vers le commentaire')
+  assert.equal(link.props.href, 'https://example.atlassian.net/browse/SO-1?focusedCommentId=10101')
 })
 
 /** Le volet monté sur une mission choisie : le panneau le crée, on le rend seul. */
