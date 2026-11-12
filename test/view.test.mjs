@@ -1089,6 +1089,20 @@ test('l’en-tête dit ce que le scan a lu, et ce qu’il n’a pas pu lire', ()
   assert.equal(scanLabel({ count: 0 }), '0 repositories')
   assert.equal(scanLabel({}), '0 repositories')
 
+  // Les lignes portent leur nature : l'en-tête sépare les clones des worktrees
+  // au lieu de compter un checkout comme un dépôt. C'est le compte de la
+  // pastille, aligné sur celui de l'onglet.
+  const lignes = [
+    { name: 'missions', kind: 'clone' },
+    { name: 'socle', kind: 'clone' },
+    { name: 'missions-gh20', kind: 'worktree' },
+  ]
+  assert.equal(scanLabel({ repositories: lignes, durationMs: 1904, errors: [] }), '2 repositories · 1 worktree · scanned in 1.9 s')
+  assert.equal(scanLabel({ repositories: lignes.slice(0, 2), durationMs: 1904, errors: [] }), '2 repositories · scanned in 1.9 s')
+  assert.equal(scanLabel({ repositories: [lignes[2]], durationMs: 900, errors: [] }), '0 repositories · 1 worktree · scanned in 0.9 s')
+  assert.equal(scanLabel({ repositories: [{ name: 'missions', kind: 'clone' }], durationMs: 900, errors: [{ name: 'b', message: 'x' }] }), '1 repository · scanned in 0.9 s · 1 unreadable')
+  assert.equal(scanLabel({ repositories: [], durationMs: 40, errors: [] }), '0 repositories · scanned in 0.0 s')
+
   assert.equal(scanDuration(1904), '1.9 s')
   assert.equal(scanDuration(0), '0.0 s')
   assert.equal(scanDuration(-1), '')

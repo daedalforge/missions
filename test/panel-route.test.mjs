@@ -864,6 +864,44 @@ test('GET repositories ignore la racine demandée par le client', async (t) => {
   assert.equal(response.body.root, root)
 })
 
+test('GET repositories/count compte les clones sans lancer git', async (t) => {
+  // La pastille de l'onglet lit ce compte au montage : il ne doit coûter aucun
+  // processus git. Le faux lanceur lèverait sur la moindre commande, et
+  // `calls` prouve qu'aucune n'a été demandée.
+  const root = await workspace(t, [
+    { name: 'alpha' },
+    { name: 'beta' },
+    { name: 'gamma', kind: 'worktree' },
+    { name: 'plain', kind: 'plain' },
+  ])
+  const { run, calls } = fauxGitRun({})
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const response = await call(handler, { path: '/missions/api/repositories/count' })
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body, { count: 2 }, 'les clones seulement : le worktree et le dossier nu ne comptent pas')
+  assert.equal(response.headers['cache-control'], 'no-store')
+  assert.deepEqual(calls, [], 'aucune commande git pour un compte')
+
+  // La racine du serveur reste la seule : `?root=` est ignoré.
+  const ailleurs = await call(handler, { path: '/missions/api/repositories/count?root=/etc' })
+  assert.equal(ailleurs.status, 200)
+  assert.deepEqual(ailleurs.body, { count: 2 })
+
+  // Une route de lecture, comme les autres.
+  const post = await call(handler, { method: 'POST', path: '/missions/api/repositories/count', body: {} })
+  assert.equal(post.status, 405)
+  assert.equal(post.headers.allow, 'GET')
+})
+
+test('GET repositories/count nomme une racine illisible', async (t) => {
+  const { handler } = await mount(t, { workspaceRoot: join(tmpdir(), 'missions-absente-142') })
+
+  const response = await call(handler, { path: '/missions/api/repositories/count' })
+  assert.equal(response.status, 500)
+  assert.match(response.body.error, /missions-absente-142/)
+})
+
 test('GET repositories/detail lit un dépôt, refuse un nom, un inconnu et un POST', async (t) => {
   const root = await workspace(t, ['alpha'])
   // Un dossier sans `.git` n'est pas un dépôt : c'est le 404 de la route.
@@ -990,6 +1028,7 @@ test('les routes des dépôts refusent une requête non locale', async (t) => {
 
   for (const path of [
     '/missions/api/repositories',
+    '/missions/api/repositories/count',
     '/missions/api/repositories/detail?name=alpha',
     '/missions/api/repositories/commits?name=alpha',
     '/missions/api/repositories/tree?name=alpha',
