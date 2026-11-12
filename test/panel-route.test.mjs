@@ -715,13 +715,22 @@ test('un refus du tracker sur la priorité devient une erreur d’amont', async 
 
 /**
  * Un dossier de travail jetable, avec les dépôts que le scan doit y trouver.
- * Le lanceur est un faux : la route est jugée sur ce qu'elle envoie et sur ce
- * qu'elle renvoie, pas sur l'état de la machine.
+ * Un clone porte un dossier `.git`, un worktree un fichier `.git`, et un
+ * dossier nu n'en porte aucun. Le lanceur git est un faux : la route est jugée
+ * sur ce qu'elle envoie et sur ce qu'elle renvoie, pas sur l'état de la machine.
  */
-async function workspace(t, names = ['alpha', 'beta']) {
+async function workspace(t, entries = [{ name: 'alpha' }, { name: 'beta' }]) {
   const dir = await mkdtemp(join(tmpdir(), 'missions-workspace-'))
   t.after(() => rm(dir, { recursive: true, force: true }))
-  for (const name of names) await mkdir(join(dir, name, '.git'), { recursive: true })
+  for (const entry of entries) {
+    const spec = typeof entry === 'string' ? { name: entry } : entry
+    await mkdir(join(dir, spec.name), { recursive: true })
+    if (spec.kind === 'worktree') {
+      await writeFile(join(dir, spec.name, '.git'), `gitdir: ${join(dir, '.git', 'worktrees', spec.name)}\n`)
+    } else if (spec.kind !== 'plain') {
+      await mkdir(join(dir, spec.name, '.git'))
+    }
+  }
   return dir
 }
 
@@ -742,13 +751,21 @@ function fauxGitRun(answers = {}) {
 const ROUTE_STATUS = '# branch.head main\n# branch.ab +0 -0\n'
 const ROUTE_COMMIT = 'a1b2c3d\x1f1794468058\x1fMIS-116: ajoute l’onglet repositories'
 
-test('GET repositories renvoie le scan de la racine du panneau', async (t) => {
-  const root = await workspace(t)
+test('GET repositories rend une entrée par enfant direct, worktree compris', async (t) => {
+  // Le fixture du cadrage : 4 dossiers, 2 clones, 1 worktree, 1 non-git.
+  const root = await workspace(t, [
+    { name: 'alpha' },
+    { name: 'beta' },
+    { name: 'gamma', kind: 'worktree' },
+    { name: 'plain', kind: 'plain' },
+  ])
   const { run, calls } = fauxGitRun({
     'alpha status --porcelain=v2 --branch': ROUTE_STATUS,
     'alpha log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
     'beta status --porcelain=v2 --branch': ROUTE_STATUS,
     'beta log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n# branch.ab +0 -0\n',
+    'gamma log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
   })
   const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
 
@@ -758,11 +775,14 @@ test('GET repositories renvoie le scan de la racine du panneau', async (t) => {
   assert.match(String(response.headers['content-type']), /application\/json/)
   assert.equal(response.headers['cache-control'], 'no-store', 'un scan ne se sert jamais du cache')
   assert.equal(response.body.root, root)
-  assert.equal(response.body.count, 2)
+  assert.equal(response.body.count, 3, '4 dossiers, 3 dépôts : le dossier nu ne devient pas une ligne')
   assert.ok(Number.isFinite(response.body.durationMs))
-  assert.deepEqual(response.body.repositories.map((row) => row.name), ['alpha', 'beta'])
+  assert.deepEqual(response.body.repositories.map((row) => row.name), ['alpha', 'beta', 'gamma'])
+  assert.deepEqual(response.body.repositories.map((row) => row.kind), ['clone', 'clone', 'worktree'])
+  assert.equal(response.body.repositories.find((row) => row.name === 'gamma').branch, 'gh-20-hover')
+  assert.ok(!response.body.repositories.some((row) => row.name === 'plain'))
   assert.deepEqual(response.body.errors, [])
-  assert.equal(calls.length, 4)
+  assert.equal(calls.length, 6, 'deux commandes par dépôt, aucune pour le dossier nu')
 })
 
 test('GET repositories ignore la racine demandée par le client', async (t) => {
