@@ -978,6 +978,64 @@ test('GET repositories/commits sert une page de branche, et refuse le reste', as
   assert.equal(post.headers.allow, 'GET')
 })
 
+test('POST repositories/adopt écrit une fois, et refuse tout le reste', async (t) => {
+  const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }, { name: 'plain', kind: 'plain' }])
+  const { run, calls } = fauxGitRun({
+    'gamma worktree list --porcelain': `worktree ${join(root, 'alpha')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n',
+    'alpha status --porcelain=v2 --branch': '# branch.head main\n',
+    'gamma switch --detach': '',
+    'alpha switch gh-20-hover': '',
+    [`alpha worktree remove ${join(root, 'gamma')}`]: '',
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const ok = await call(handler, { method: 'POST', path: '/missions/api/repositories/adopt', body: { name: 'gamma' } })
+  assert.equal(ok.status, 200)
+  assert.deepEqual(ok.body, {
+    ok: true,
+    source: 'gamma',
+    branch: 'gh-20-hover',
+    main: { name: 'alpha', path: join(root, 'alpha') },
+    removed: true,
+    reason: null,
+  })
+  assert.equal(ok.headers['cache-control'], 'no-store', 'la réponse d’un geste ne se sert pas du cache')
+
+  // La route n'accepte qu'un POST : la lire n'est pas un geste.
+  const get = await call(handler, { path: '/missions/api/repositories/adopt' })
+  assert.equal(get.status, 405)
+  assert.equal(get.headers.allow, 'POST')
+
+  // Un nom absent, un dossier sans `.git`, un nom qui sort de la racine.
+  const missing = await call(handler, { method: 'POST', path: '/missions/api/repositories/adopt', body: {} })
+  assert.equal(missing.status, 400)
+  assert.match(missing.body.error, /invalid repository name/)
+  const plain = await call(handler, { method: 'POST', path: '/missions/api/repositories/adopt', body: { name: 'plain' } })
+  assert.equal(plain.status, 404)
+  const traversal = await call(handler, { method: 'POST', path: '/missions/api/repositories/adopt', body: { name: '../etc' } })
+  assert.equal(traversal.status, 400)
+  assert.equal(calls.filter((line) => line.includes(' switch ')).length, 2, 'un seul geste : deux switch, pas quatre')
+})
+
+test('POST repositories/adopt rend le refus de l’état, avec son côté et ses fichiers', async (t) => {
+  const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }])
+  const { run, calls } = fauxGitRun({
+    'gamma worktree list --porcelain': `worktree ${join(root, 'alpha')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n',
+    'alpha status --porcelain=v2 --branch': '# branch.head main\n1 .M N... 100644 100644 100644 aaa bbb yarn.lock\n',
+    'alpha status --porcelain': ' M yarn.lock\n',
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const refused = await call(handler, { method: 'POST', path: '/missions/api/repositories/adopt', body: { name: 'gamma' } })
+  assert.equal(refused.status, 409)
+  assert.equal(refused.body.side, 'main')
+  assert.deepEqual(refused.body.files, ['yarn.lock'])
+  assert.equal(refused.body.error, 'alpha has uncommitted changes (one file: yarn.lock) — commit or stash them first')
+  assert.equal(calls.some((line) => line.includes(' switch ')), false, 'un refus n’écrit pas')
+})
+
 test('GET repositories/tree lit le layout, les commits et les worktrees', async (t) => {
   const root = await workspace(t, ['alpha'])
   await writeFile(join(root, 'alpha', '.git', 'machete'), 'main\n    feat/a  PR #12\n    ghost\n')
