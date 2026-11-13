@@ -164,7 +164,11 @@ Une mission `done` peut être rangée depuis le volet, onglet **Done** :
 l'icône **« Archive »**, en tête de la rangée du pied, déplace son dossier sous
 `missions/archives/<dossier>/`. Comme la clôture locale, elle se confirme en
 deux clics : le premier l'arme — coche, fond plein, nom « Confirm — archive the
-mission » — le second envoie.
+mission » — le second envoie. Sous le pied, la note d'une mission `done` nomme
+ce geste (« This mission is done: no session. Archive moves the folder to
+missions/archives. ») au lieu de la phrase de blocage de session : sur une
+mission fermée, l'archive est la seule action possible, et la note doit dire
+laquelle. Le clic qui confirme se compte (`mission.archive` dans le relevé).
 
 - **Ce qu'il déplace.** Le dossier entier, avec son nom, son `mission.yml`, son
   journal et sa checklist. Rien n'est supprimé, rien n'est réécrit.

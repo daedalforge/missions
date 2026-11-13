@@ -2161,6 +2161,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         }
         armedArchiveRef.current = false
         setArmedArchive(false)
+        track('mission.archive')
         setArchiving(true)
         setArchiveNote(null)
         try {
@@ -2442,6 +2443,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
       const panelContent = section === 'journal' ? journalPanel : section === 'checklist' ? checklistPanel : detailsPanel
 
+      // A done mission plays no session: the note under the foot says so in one
+      // clause and names the gesture that is left, the archive. The blocker
+      // sentence alone read like a refusal of the archive click (MIS-174).
+      const doneNote = mission.state === 'done'
+        ? 'This mission is done: no session. Archive moves the folder to missions/archives.'
+        : null
+
       const drawerTabs = h('div', { className: 'missions-drawer-tabs', role: 'tablist', 'aria-label': 'Mission sections' },
         DRAWER_TABS.map((entry) => h('button', {
           key: entry.id,
@@ -2485,7 +2493,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
           closeNote ? h('p', { className: closeNote.error ? 'missions-drawer-note missions-drawer-note--error' : 'missions-drawer-note' }, closeNote.text) : null,
           archiveNote ? h('p', { className: archiveNote.error ? 'missions-drawer-note missions-drawer-note--error' : 'missions-drawer-note' }, archiveNote.text) : null,
-          blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}.`) : null,
+          doneNote
+            ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note' }, doneNote)
+            : blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}.`) : null,
 
           h('div', { className: 'missions-drawer-foot' },
             // Every action of the foot shares one row: icon only, its name in
