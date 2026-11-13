@@ -6338,6 +6338,15 @@ function renduTheme(theme, session = {}, vue) {
   return renderTree(arbreTheme(theme, session, vue))
 }
 
+/** Le thème que le panneau lit dans un stockage donné, avant tout choix. */
+function themeDuStockage(storage) {
+  const { api, ctx, registered } = charger(storage, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+  api.apply(ctx)
+  const panneau = findAll(registered.main({}), 'div').find((node) => node.props.className === 'missions-panel')
+  assert.ok(panneau, 'le panneau est monté')
+  return panneau.props['data-theme']
+}
+
 test('Noël et Naruto partagent une seule peau illustrée', () => {
   // Les deux thèmes demandent la peau ; le thème par défaut n'en porte pas.
   const manga = JSON.stringify(renduTheme('manga', { 'missions.tab': 'missions' }))
@@ -6445,4 +6454,116 @@ test('Noël anime un flocon sur le rafraîchissement et la pastille en attente',
   assert.match(corpsDe('.missions-panel[data-skin="paper"][data-theme="noel"] .missions-icon-snowflake'), /animation: missions-snowflake-turn 2\.6s linear infinite/)
   assert.match(SOURCE, /@keyframes missions-snowflake-turn \{ to \{ transform: rotate\(360deg\); \} \}/)
   assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-icon-snowflake \{ animation: none; \}/)
+})
+
+test('le sélecteur de thème propose Default, Naruto et Noël dans cet ordre', () => {
+  // Given
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'])
+  api.apply(ctx)
+  const themeSelect = findAll(registered.main({}), 'ThemeSelect')[0]
+  assert.ok(themeSelect, 'le sélecteur de thème est monté')
+
+  // When
+  const select = findAll(renderTree(themeSelect), 'select').find((node) => node.props['aria-label'] === 'Theme')
+
+  // Then
+  assert.ok(select, 'le select « Theme » est rendu')
+  assert.deepEqual(select.children.map((option) => option.props.value), ['default', 'manga', 'noel'])
+  assert.deepEqual(select.children.map((option) => textOf(option)), ['Default', 'Naruto', 'Noël'])
+  assert.equal(select.props.value, 'default')
+})
+
+test('un thème Noël stocké devient la valeur courante du sélecteur', () => {
+  // Given
+  const { api, ctx, registered } = charger({ getItem: () => 'noel', setItem: () => {} }, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+  api.apply(ctx)
+  const rendu = renderTree(findAll(registered.main({}), 'ThemeSelect')[0])
+
+  // When
+  const select = findAll(rendu, 'select').find((node) => node.props['aria-label'] === 'Theme')
+  const libelle = findAll(rendu, 'span').find((node) => node.props.className === 'missions-theme-value')
+
+  // Then
+  assert.equal(select.props.value, 'noel')
+  assert.equal(textOf(libelle), 'Noël')
+})
+
+test('THEMES déclare les trois thèmes dans l’ordre', () => {
+  // Given
+  const debut = SOURCE.indexOf('const THEMES = [')
+  assert.ok(debut >= 0, 'THEMES est déclaré')
+
+  // When
+  const bloc = SOURCE.slice(debut, SOURCE.indexOf('\n    ]', debut))
+
+  // Then
+  const entrees = [...bloc.matchAll(/\{ id: '([^']+)', label: '([^']+)' \}/g)].map((match) => [match[1], match[2]])
+  assert.deepEqual(entrees, [['default', 'Default'], ['manga', 'Naruto'], ['noel', 'Noël']])
+})
+
+test('un thème Noël stocké devient le thème du panneau', () => {
+  // Given
+  const stockage = { getItem: () => 'noel', setItem: () => {} }
+
+  // When
+  const theme = themeDuStockage(stockage)
+
+  // Then
+  assert.equal(theme, 'noel')
+})
+
+test('un thème stocké inconnu retombe sur Default', () => {
+  // Given
+  const stockage = { getItem: () => 'sapin', setItem: () => {} }
+
+  // When
+  const theme = themeDuStockage(stockage)
+
+  // Then
+  assert.equal(theme, 'default')
+})
+
+test('un stockage absent laisse le panneau en Default', () => {
+  // Given
+  const stockage = undefined
+
+  // When
+  const theme = themeDuStockage(stockage)
+
+  // Then
+  assert.equal(theme, 'default')
+})
+
+test('un stockage qui échoue laisse le panneau en Default', () => {
+  // Given
+  const stockage = { getItem: () => { throw new Error('blocked') }, setItem: () => {} }
+
+  // When
+  const theme = themeDuStockage(stockage)
+
+  // Then
+  assert.equal(theme, 'default')
+})
+
+test('changer de thème écrit missions.theme et compte le geste', () => {
+  // Given
+  const ecritures = []
+  const stockage = { getItem: () => 'manga', setItem: (cle, valeur) => ecritures.push([cle, valeur]) }
+  const { api, ctx, registered, setters } = charger(stockage, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+  api.apply(ctx)
+  const select = findAll(renderTree(findAll(registered.main({}), 'ThemeSelect')[0]), 'select')
+    .find((node) => node.props['aria-label'] === 'Theme')
+  const spy = espionUsage()
+
+  try {
+    // When
+    select.props.onChange({ target: { value: 'noel' } })
+
+    // Then
+    assert.deepEqual(ecritures, [['missions.theme', 'noel']])
+    assert.ok(setters.includes('noel'), 'le thème courant devient Noël')
+    spy.geste('action.theme', 'noel')
+  } finally {
+    spy.restore()
+  }
 })
