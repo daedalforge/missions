@@ -186,6 +186,9 @@ window.__ModuleLoader__.load({
     const WORKFLOWS_URL = 'missions/api/workflows'
     const WORKFLOW_MODEL_URL = 'missions/api/workflows/model'
     const REPOSITORIES_URL = 'missions/api/repositories'
+    // The dashboard's digest of the root: the same scan, answered from the
+    // host's five-minute memory. Its `refresh=1` query is the section's Retry.
+    const REPOSITORIES_SUMMARY_URL = 'missions/api/repositories/summary'
     // The tab badge reads this one at mount: the count costs no git process,
     // where the list above pays two calls per entry.
     const REPOSITORIES_COUNT_URL = 'missions/api/repositories/count'
@@ -583,8 +586,20 @@ window.__ModuleLoader__.load({
 .missions-row[data-state="in-progress"] .missions-rowdot { background: #bf8700; }
 .missions-row[data-state="ready"] .missions-rowdot { background: #1a7f37; }
 .missions-row[data-state="to-refine"] .missions-rowdot { background: #8250df; }
+/* A repository row: the repository, its branch, why it is there, its age. */
+.missions-dash-card--branches, .missions-dash-card--checkouts, .missions-dash-card--closed, .missions-dash-card--left { grid-column: span 3; }
+.missions-row--repo { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr) auto 42px; }
+.missions-row--closed { grid-template-columns: 56px minmax(0, 1fr) auto 42px; }
+.missions-rowwhy { justify-self: end; max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 7%, transparent); color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 10px; font-variant-numeric: tabular-nums; }
+.missions-rowwhy[data-reason="never-pushed"] { background: color-mix(in srgb, #bf8700 18%, transparent); color: #8a5a00; }
+.missions-rowwhy[data-reason="error"] { background: color-mix(in srgb, #cf222e 14%, transparent); color: #b31d28; }
+.missions-rowpoints { justify-self: end; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A section whose read failed: the sentence and its Retry, never a zero. */
+.missions-sect-error { display: flex; align-items: baseline; gap: 10px; margin-top: 11px; padding: 8px 12px; border: 1px solid color-mix(in srgb, #cf222e 32%, transparent); border-radius: 8px; background: color-mix(in srgb, #cf222e 7%, transparent); font-size: 11.5px; }
+.missions-sect-error-text { min-width: 0; overflow-wrap: anywhere; color: #b31d28; }
+.missions-sect-error .missions-retry { flex: none; margin-left: auto; }
 @media (prefers-reduced-motion: reduce) { .missions-sect-arrow, .missions-rowarrow { transition: none; } }
-@container (max-width: 820px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } .missions-dash-card--flight, .missions-dash-card--queue, .missions-dash-card--bugs, .missions-dash-card--stories { grid-column: auto; } }
+@container (max-width: 820px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } .missions-dash-card--flight, .missions-dash-card--queue, .missions-dash-card--bugs, .missions-dash-card--stories, .missions-dash-card--branches, .missions-dash-card--checkouts, .missions-dash-card--closed, .missions-dash-card--left { grid-column: auto; } }
 .missions-drawer { flex: none; width: 380px; max-width: 46%; display: flex; flex-direction: column; gap: 16px; padding: 16px 22px 24px; overflow: auto; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); animation: missions-slide .14s ease; }
 @keyframes missions-slide { from { opacity: 0 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
@@ -978,6 +993,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-icon-btn 
 .missions-panel[data-theme="manga"] .missions-row[data-state="in-progress"] .missions-rowdot { background: #8a6a1f; }
 .missions-panel[data-theme="manga"] .missions-row[data-state="ready"] .missions-rowdot { background: var(--mm-sage-deep); }
 .missions-panel[data-theme="manga"] .missions-row[data-state="to-refine"] .missions-rowdot { background: var(--mm-lilac-deep); }
+.missions-panel[data-theme="manga"] .missions-rowwhy { font-family: var(--mm-display); border: 1px solid var(--mm-line-strong); background: var(--mm-page); color: var(--mm-ink-2); }
 :root[data-ds-dark-theme] .missions-rowage[data-quiet="true"],
 body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: #e3b341; }
 
@@ -1246,8 +1262,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * the number the list will show. It returns nothing at all when the card
      * fits: no empty rule under the last row.
      */
-    function widgetFoot({ note, total, onViewAll }) {
-      const more = total > WIDGET_ROWS
+    function widgetFoot({ note, total, onViewAll, cap = WIDGET_ROWS }) {
+      const more = total > cap
       if (!note && !more) return null
       return h(React.Fragment, null,
         note ? h('span', { className: 'missions-dash-card-note' }, note) : null,
@@ -1261,13 +1277,105 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
     }
 
     /**
-     * The dashboard: a section per domain, a card per widget. The only section
-     * today is Missions, opening on the two cross-cutting lenses the list makes
-     * you filter by hand — your unresolved bugs, and high-priority stories —
-     * then the work already running and the queue. All four read the same
-     * mission list the panel already loaded.
+     * The header of a dashboard section: its title, what it counts, and the tab
+     * it opens. The link is the digest's way out, and it is the only way the
+     * section acts on the panel.
      */
-    function DashboardView({ missions = [], loading, theme, failed, now = Date.now(), onOpen, onOpenAll, onViewAll }) {
+    function SectionHead({ id, title, scope, label, tab, onOpen }) {
+      return h('header', { className: 'missions-sect-head' },
+        h('h2', { className: 'missions-sect-title', id }, title),
+        h('span', { className: 'missions-sect-scope' }, scope),
+        h('button', { type: 'button', className: 'missions-sect-link', onClick: () => onOpen(tab) },
+          label,
+          h('span', { className: 'missions-sect-arrow', 'aria-hidden': 'true' }, '→'),
+        ),
+      )
+    }
+
+    /**
+     * One row of a repository card: what the row is about — a repository, or a
+     * mission whose branch lingers — the branch, the reason it is there, and
+     * the age of the checkout's last commit. The row opens the repository
+     * drawer, where the gesture lives.
+     */
+    function DigestRow({ row, now, onOpen }) {
+      const age = missionAge(row.repository?.lastCommit?.date, now)
+      const name = row.repository?.name ?? ''
+      const key = row.mission?.key ?? name
+      const title = row.branch ?? row.repository?.branch ?? ''
+      const reason = row.reason ?? 'other'
+      return h('li', { className: 'missions-rowitem' },
+        h('button', {
+          type: 'button',
+          className: 'missions-row missions-row--repo',
+          'data-reason': reason,
+          onClick: () => onOpen(row.repository),
+          title: `Open ${name}`,
+          'aria-label': `${key} ${title}, ${row.label}${age.label ? `, last commit ${age.label} ago` : ''}`,
+        },
+          h('span', { className: 'missions-rowkey' }, key),
+          h('span', { className: 'missions-rowtitle' }, title || row.label),
+          h('span', { className: 'missions-rowwhy', 'data-reason': reason }, row.label),
+          h('span', { className: 'missions-rowage', 'data-quiet': age.quiet ? 'true' : 'false' }, age.label),
+        ),
+      )
+    }
+
+    /**
+     * One row of the Done digest: the closed mission, the points it carried,
+     * and the tracker's last update — the closest the model comes to a closure
+     * date. The row opens the mission in its drawer.
+     */
+    function ClosedRow({ mission, now, onOpen }) {
+      const age = missionAge(mission.updatedAt, now)
+      const value = Number(mission.points)
+      const counted = mission.points !== null && mission.points !== undefined && mission.points !== ''
+        && Number.isFinite(value)
+      const points = counted ? `${value} pt${value === 1 ? '' : 's'}` : ''
+      return h('li', { className: 'missions-rowitem' },
+        h('button', {
+          type: 'button',
+          className: 'missions-row missions-row--closed',
+          'data-state': 'done',
+          onClick: () => onOpen(mission),
+          title: `Open ${mission.key}`,
+          'aria-label': `${mission.key} ${mission.title}${points ? `, ${points}` : ''}${
+            age.label ? `, last updated ${age.label} ago` : ''
+          }`,
+        },
+          h('span', { className: 'missions-rowkey' }, mission.key),
+          h('span', { className: 'missions-rowtitle' }, mission.title),
+          h('span', { className: 'missions-rowpoints' }, points),
+          h('span', { className: 'missions-rowage', 'data-quiet': age.quiet ? 'true' : 'false' }, age.label),
+        ),
+      )
+    }
+
+    /**
+     * The dashboard: a section per domain, a card per widget. Missions opens on
+     * the four lenses the list makes you filter by hand; Repositories and Done
+     * digest the reads their own tabs make — the root's cached scan, and the
+     * Done tab's list — so no section pays for a second read. A section whose
+     * read failed keeps what it already showed and names the failure: the
+     * digest never turns a broken read into a zero.
+     */
+    function DashboardView({
+      missions = [],
+      loading,
+      theme,
+      failed,
+      now = Date.now(),
+      onOpen,
+      onOpenAll,
+      onViewAll,
+      summary = null,
+      summaryError = null,
+      closed = null,
+      onOpenSection,
+      onOpenRepository,
+      onOpenClosed,
+      onRetrySummary,
+    }) {
       const queue = needsYou(missions)
       const flight = inFlight(missions)
       const bugs = assignedBugs(missions)
@@ -1386,6 +1494,154 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               ),
             )
 
+      // The repository digest. A cold failure has no rows to keep, so its cards
+      // stay empty and the section's line names the root's failure; a warm one
+      // keeps the rows it had. `summary` is null exactly when no read has ever
+      // come back, and that is the only case where a card says "—" rather than
+      // a number: the panel never invents a zero.
+      const repositories = Array.isArray(summary?.repositories) ? summary.repositories : []
+      const branches = branchesToPush(missions, repositories)
+      const checkouts = checkoutsToFix(repositories)
+      const neverPushed = branches.filter((row) => row.neverPushed).length
+      const commitsAhead = branches.reduce((total, row) => total + row.ahead, 0)
+      const cold = repositories.filter((repository) => {
+        const days = ageDays(repository?.lastCommit?.date, now)
+        return days !== null && days > COLD_CHECKOUT_DAYS
+      }).length
+      const scanAge = summary?.scannedAt ? missionAge(summary.scannedAt, now).label : ''
+      const scanNote = scanAge ? `scanned ${scanAge} ago` : ''
+      const branchFoot = [branches.length > 0
+        ? `${neverPushed} never pushed · ${commitsAhead} commit${commitsAhead === 1 ? '' : 's'} ahead`
+        : null, scanNote].filter(Boolean).join(' · ')
+
+      const repositoriesSection = summary || summaryError
+        ? h('section', { className: 'missions-sect', 'aria-labelledby': 'missions-sect-repositories' },
+            h(SectionHead, {
+              id: 'missions-sect-repositories',
+              title: 'Repositories',
+              scope: summary ? repositoryScope(summary).label : 'scan failed',
+              label: 'Open Repositories',
+              tab: 'repositories',
+              onOpen: onOpenSection,
+            }),
+            // The failure keeps its own line: the section still shows what it
+            // has, and the Retry is one gesture that pays a new scan.
+            summaryError
+              ? h('div', { className: 'missions-sect-error', role: 'alert' },
+                  h('span', { className: 'missions-sect-error-text' }, `The repository scan failed: ${summaryError}`),
+                  h('button', { type: 'button', className: 'missions-retry', onClick: onRetrySummary }, 'Retry'),
+                )
+              : null,
+            h('div', { className: 'missions-sectgrid' },
+              h(DashboardCard, {
+                title: 'Branches to push',
+                sub: 'Open missions whose branch is not on the remote yet.',
+                meta: summary ? branches.length : '—',
+                className: 'missions-dash-card--branches',
+                footer: summary ? branchFoot : null,
+              },
+                !summary
+                  ? null
+                  : branches.length === 0
+                    ? h('p', { className: 'missions-dash-card-empty' }, 'Every open mission branch is pushed.')
+                    : h('ul', { className: 'missions-rows' },
+                        branches.map((row) => h(DigestRow, {
+                          key: `${row.repository.name} ${row.branch}`,
+                          row,
+                          now,
+                          onOpen: onOpenRepository,
+                        })),
+                      ),
+              ),
+              h(DashboardCard, {
+                title: 'Checkouts to fix',
+                sub: 'Unreadable, behind, or dirty: the gravest reason wins.',
+                meta: summary ? checkouts.length : '—',
+                className: 'missions-dash-card--checkouts',
+                footer: summary
+                  ? [`${cold} cold ${cold === 1 ? 'clone' : 'clones'}`, scanNote].filter(Boolean).join(' · ')
+                  : null,
+              },
+                !summary
+                  ? null
+                  : checkouts.length === 0
+                    ? h('p', { className: 'missions-dash-card-empty' }, 'No checkout needs a gesture.')
+                    : h('ul', { className: 'missions-rows' },
+                        checkouts.map((row) => h(DigestRow, {
+                          key: row.repository.name,
+                          row,
+                          now,
+                          onOpen: onOpenRepository,
+                        })),
+                      ),
+              ),
+            ),
+          )
+        : null
+
+      // The Done digest. Its rows are the Done tab's read, shared on the host
+      // with the badge, so the dashboard opens it once and the tick leaves it
+      // alone. `closed` is null while that read has nothing to show — a failed
+      // read is not "nothing is closed", so the section waits instead.
+      const closedMissions = Array.isArray(closed) ? closed : null
+      const closedCount = closedMissions ? doneScope(closedMissions).count : 0
+      const recent = closedMissions ? recentlyClosed(closedMissions) : []
+      const leftovers = closedMissions && summary ? leftBehind(closedMissions, repositories) : []
+      const recentHidden = closedCount - recent.length
+
+      const doneSection = closedMissions
+        ? h('section', { className: 'missions-sect', 'aria-labelledby': 'missions-sect-done' },
+            h(SectionHead, {
+              id: 'missions-sect-done',
+              title: 'Done',
+              scope: doneScope(closedMissions).label,
+              label: 'Open Done',
+              tab: 'done',
+              onOpen: onOpenSection,
+            }),
+            h('div', { className: 'missions-sectgrid' },
+              h(DashboardCard, {
+                title: 'Recently closed',
+                sub: 'The three last closed, by their last tracker update: the model keeps no closure date.',
+                meta: recentHidden > 0 ? `${recent.length} of ${closedCount}` : String(closedCount),
+                className: 'missions-dash-card--closed',
+                footer: widgetFoot({
+                  note: recentHidden > 0 ? `${recentHidden} more closed` : null,
+                  total: closedCount,
+                  cap: RECENT_CLOSED_ROWS,
+                  onViewAll: () => onOpenSection('done'),
+                }),
+              },
+                recent.length === 0
+                  ? h('p', { className: 'missions-dash-card-empty' }, 'No mission is closed yet.')
+                  : h('ul', { className: 'missions-rows' },
+                      recent.map((mission) => h(ClosedRow, { key: mission.key, mission, now, onOpen: onOpenClosed })),
+                    ),
+              ),
+              h(DashboardCard, {
+                title: 'Left behind',
+                sub: 'Closed missions whose branch still sits in a worktree.',
+                meta: summary ? leftovers.length : '—',
+                className: 'missions-dash-card--left',
+                footer: summary ? 'Removing a worktree stays in the repository drawer.' : null,
+              },
+                !summary
+                  ? h('p', { className: 'missions-dash-card-empty' }, 'The repository scan has not run, so leftovers are unknown.')
+                  : leftovers.length === 0
+                    ? h('p', { className: 'missions-dash-card-empty' }, 'No closed mission still holds a worktree.')
+                    : h('ul', { className: 'missions-rows' },
+                        leftovers.map((row) => h(DigestRow, {
+                          key: row.mission.key,
+                          row,
+                          now,
+                          onOpen: onOpenRepository,
+                        })),
+                      ),
+              ),
+            ),
+          )
+        : null
+
       return h('div', { className: 'missions-dashboard' },
         h('section', { className: 'missions-sect', 'aria-labelledby': 'missions-sect-missions' },
           h('header', { className: 'missions-sect-head' },
@@ -1398,6 +1654,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           ),
           body,
         ),
+        repositoriesSection,
+        doneSection,
       )
     }
 
@@ -4074,6 +4332,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // no longer holds the folder, so the tab reads the workspace again. It
       // comes last so the states above keep their session slot.
       const [repositoryRefresh, setRepositoryRefresh] = React.useState(0)
+      // The dashboard's digest of the root: its own read, kept apart from the
+      // Repositories tab's scan. The tab pays a live scan when it opens; the
+      // digest reads the host's five-minute memory instead, so it is the only
+      // read a minute of ticks can afford.
+      const [summaryView, setSummaryView] = React.useState({ loading: true, data: null, error: null })
 
       // The view's declared perimeter: a tab carries its own source, Settings
       // reads whatever its open section reads — so the banner and the tick
@@ -4205,6 +4468,25 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           .catch(() => { /* the badge keeps the count it has */ })
       }, [])
 
+      // The dashboard's digest, read through the host's five-minute memory.
+      // Opening the tab and its tick both pay this cache, so a minute of ticks
+      // costs one scan; only the section's Retry asks for a new one.
+      const loadSummary = React.useCallback(({ refresh = false } = {}) => {
+        const url = refresh ? `${REPOSITORIES_SUMMARY_URL}?refresh=1` : REPOSITORIES_SUMMARY_URL
+        setSummaryView((previous) => ({ ...previous, loading: true }))
+        return readRoute(url)
+          .then((data) => setSummaryView({ loading: false, data, error: null }))
+          // A failed read keeps the rows it already has and names the failure:
+          // the section shows both, and never a zero it cannot prove.
+          .catch((error) => {
+            setSummaryView((previous) => ({
+              loading: false,
+              data: previous.data,
+              error: error?.message ?? 'scan failed',
+            }))
+          })
+      }, [])
+
       // Both counts are read at mount too: a badge must answer without its tab
       // being opened. The repository count pays no git process, and the Done
       // count shares the closed read with the Done tab: no tracker read is paid
@@ -4225,6 +4507,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         return undefined
       }, [tab, loadDone])
 
+      // The dashboard owns its digest: it reads it when the tab opens, and the
+      // tick keeps it fresh. Another tab never pays the read, and the closed
+      // rows come from the Done tab's read, which the tick leaves alone.
+      React.useEffect(() => {
+        if (tab !== 'dashboard') return undefined
+        loadSummary()
+        loadDone()
+        return undefined
+      }, [tab, loadSummary, loadDone])
+
       // The tick keeps the perimeter of the open view: Done refreshes the
       // closed read, the tracker views refresh the open one — Settings reads
       // neither, so its tick only keeps the badge. The repository count is
@@ -4232,12 +4524,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       React.useEffect(() => {
         const timer = setInterval(() => {
           if (document.hidden) return
-          if (tab === 'done') loadDone({ silent: true, refresh: true })
+          // The dashboard pays the cached digest, not the scan it answers from.
+          if (tab === 'dashboard') loadSummary()
+          else if (tab === 'done') loadDone({ silent: true, refresh: true })
           else if (trackerTab) load({ silent: true, refresh: true })
           loadRepositoryCount()
         }, REFRESH_MS)
         return () => clearInterval(timer)
-      }, [load, loadDone, tab, trackerTab, loadRepositoryCount])
+      }, [load, loadDone, tab, trackerTab, loadRepositoryCount, loadSummary])
 
       const { count, loading, missions, errors, workspaceId, workspaceRoot } = view
       // Done is a perimeter, not a tab looking at the open list: its rows, its
@@ -4256,6 +4550,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // Done view shows is history, not a mission waiting on anyone.
       const openMissions = missions.filter((mission) => mission.state !== 'done')
       const projectCount = new Set(openMissions.map((mission) => mission.project).filter(Boolean)).size
+      // One way into a repository drawer, so the tab's row and the dashboard's
+      // digest rows count the same gesture from the same place.
+      const openRepository = (repository) => {
+        if (!repository) return
+        track('repository.open', repository.name)
+        setRepository(repository)
+      }
+
       const changeTheme = (value) => {
         track('action.theme', value)
         setTheme(value)
@@ -4513,7 +4815,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               : tab === 'repositories'
               ? h(RepositoriesView, {
                   theme,
-                  onOpen: (repository) => { track('repository.open', repository.name); setRepository(repository) },
+                  onOpen: openRepository,
                   // The tab's write removes a folder: a drawer open on it has
                   // nothing left to describe, so it closes with the worktree.
                   onAdopted: (worktree) => { if (repository && repository.name === worktree.name) setRepository(null) },
@@ -4533,9 +4835,24 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                   loading,
                   theme,
                   failed,
+                  summary: summaryView.data,
+                  // Only a read that failed carries an error: a warm refresh
+                  // keeps the data the section already shows.
+                  summaryError: summaryView.error,
+                  closed: doneView.loading || doneView.errors.length > 0 ? null : doneMissions,
                   onOpen: (mission) => { openMission(mission); setTab('missions') },
                   onOpenAll: () => { setSelected(null); changeTab('missions') },
                   onViewAll,
+                  onOpenSection: (next) => changeTab(next),
+                  // A row of the digest opens what it names: the repository
+                  // drawer for a checkout, the mission's drawer for a closed
+                  // mission. The tab follows, so the drawer is not a ghost.
+                  onOpenRepository: (repository) => {
+                    changeTab('repositories')
+                    openRepository(repository)
+                  },
+                  onOpenClosed: (mission) => { openMission(mission); setTab('done') },
+                  onRetrySummary: () => { track('list.retry', 'summary'); return loadSummary({ refresh: true }) },
                 })
               : h(MissionsView, {
                   missions, query, onQuery, onSearchEnd, filters, onFilter, onClear, sort, onSort,

@@ -923,27 +923,32 @@ test('chaque carte porte un repère de priorité qui se lit sans la couleur', ()
   assert.ok(SOURCE.includes('.missions-prio .prio-bar, .missions-prio .prio-mark { fill: currentColor; }'))
 })
 
-test('le montage lit l’ouvert et les deux comptes ; Done paie sa lecture, le bouton et le tick forcent', () => {
+test('le montage lit l’ouvert et les deux comptes ; Done et le résumé paient leur lecture, le bouton et le tick forcent', () => {
   // Le panneau est remonté à chaque changement de vue : forcer au montage
   // paierait tout le trajet tracker à chaque retour sur Missions. Le cache
   // serveur de 60 s est lu ; le bouton Refresh et le tick de 60 s forcent.
   assert.match(SOURCE, /const load = React\.useCallback\(\(\{ silent = false, refresh = false \} = \{\}\) => \{/)
   assert.match(SOURCE, /const loadDone = React\.useCallback\(\(\{ silent = false, refresh = false \} = \{\}\) => \{/)
   assert.match(SOURCE, /const loadDoneCount = React\.useCallback\(\(\) => \{/)
+  assert.match(SOURCE, /const loadSummary = React\.useCallback\(\(\{ refresh = false \} = \{\}\) => \{/)
   assert.match(SOURCE, /const url = refresh \? `\$\{LIST_URL\}\?refresh=1` : LIST_URL/)
   assert.match(SOURCE, /const url = `\$\{LIST_URL\}\?done=1\$\{refresh \? '&refresh=1' : ''\}`/)
+  assert.match(SOURCE, /const url = refresh \? `\$\{REPOSITORIES_SUMMARY_URL\}\?refresh=1` : REPOSITORIES_SUMMARY_URL/)
   // Le montage appelle load(), le compte de Done et celui des dépôts, sans
-  // option ; les lignes closes attendent l'ouverture de leur onglet, et le
-  // compte des dépôts se relit au tick quel que soit l'onglet.
+  // option ; les lignes closes et le résumé attendent l'ouverture de leur
+  // onglet, et le compte des dépôts se relit au tick quel que soit l'onglet.
   assert.match(SOURCE, /React\.useEffect\(\(\) => \{\n\s+load\(\)\n\s+loadDoneCount\(\)\n\s+loadRepositoryCount\(\)\n\s+\}, \[load, loadDoneCount, loadRepositoryCount\]\)/)
   assert.match(SOURCE, /if \(tab !== 'done'\) return undefined\n\s+loadDone\(\)/)
-  // Le tick suit le périmètre de la vue ouverte : Done relit le clos, les vues
-  // tracker lisent l'ouvert, et Settings n'en relit aucune.
-  assert.match(SOURCE, /if \(tab === 'done'\) loadDone\(\{ silent: true, refresh: true \}\)\n\s+else if \(trackerTab\) load\(\{ silent: true, refresh: true \}\)/)
+  assert.match(SOURCE, /if \(tab !== 'dashboard'\) return undefined\n\s+loadSummary\(\)\n\s+loadDone\(\)\n\s+return undefined\n\s+\}, \[tab, loadSummary, loadDone\]\)/)
+  // Le tick suit le périmètre de la vue ouverte : le Dashboard relit son
+  // résumé, Done relit le clos, les vues tracker lisent l'ouvert, et Settings
+  // n'en relit aucune.
+  assert.match(SOURCE, /if \(tab === 'dashboard'\) loadSummary\(\)\n\s+else if \(tab === 'done'\) loadDone\(\{ silent: true, refresh: true \}\)\n\s+else if \(trackerTab\) load\(\{ silent: true, refresh: true \}\)/)
   assert.match(SOURCE, /loadRepositoryCount\(\)\n\s+\}, REFRESH_MS\)/)
   assert.match(SOURCE, /doneTab \? loadDone\(\{ refresh: true \}\) : load\(\{ refresh: true \}\)/)
-  // Aucun autre appel ne force : le seul refresh=1 est derrière `refresh`.
-  assert.equal((SOURCE.match(/\?refresh=1/g) ?? []).length, 1)
+  // Deux lectures savent forcer — la liste ouverte et le résumé du Dashboard ;
+  // aucune ne part sans que la fonction ait reçu `refresh`.
+  assert.equal((SOURCE.match(/\?refresh=1/g) ?? []).length, 2)
 })
 
 test('un refresh garde la vue montée : le châssis et le loader, jamais un écran vide', () => {
@@ -1471,6 +1476,303 @@ test('dix lignes pile : la carte est pleine, mais complète', () => {
   const foot = textOf(findAll(flight, 'p').at(-1))
   assert.match(foot, /10 pts in flight/)
   assert.doesNotMatch(foot, /more/)
+})
+
+/** Le digeste du scan tel que la route le rend : trois lignes à problèmes. */
+const DASH_SUMMARY = {
+  root: '/Users/moi/projects',
+  count: 5,
+  durationMs: 1904,
+  scannedAt: '2026-11-11T09:00:00Z',
+  errors: [],
+  repositories: [
+    { name: 'missions', kind: 'clone', branch: 'feat/mis-192', upstream: 'origin/main', ahead: 3, behind: 0, dirty: 0, error: null, lastCommit: { sha: 'a1b2c3d', date: '2026-11-11T08:00:00Z', subject: 'MIS-191' }, main: null },
+    { name: 'missions-mis-192', kind: 'worktree', branch: 'feat/mis-192', upstream: 'origin/main', ahead: 3, behind: 0, dirty: 0, error: null, lastCommit: { sha: 'a1b2c3d', date: '2026-11-11T08:00:00Z', subject: 'MIS-191' }, main: { name: 'missions', path: '/Users/moi/projects/missions' } },
+    { name: 'missions-mis-100', kind: 'worktree', branch: 'feat/mis-100', upstream: null, ahead: 0, behind: 0, dirty: 2, error: null, lastCommit: { sha: 'd4e5f6a', date: '2026-10-01T09:00:00Z', subject: 'MIS-100' }, main: { name: 'missions', path: '/Users/moi/projects/missions' } },
+    { name: 'retard', kind: 'clone', branch: 'main', upstream: 'origin/main', ahead: 0, behind: 2, dirty: 0, error: null, lastCommit: { sha: 'c3d4e5f', date: '2026-11-11T06:00:00Z', subject: 'main' }, main: null },
+    { name: 'casse', kind: 'clone', branch: null, upstream: null, ahead: 0, behind: 0, dirty: 0, error: 'not a git repository', lastCommit: null, main: null },
+  ],
+}
+
+/** Cinq closes, dont une dont la branche traîne encore dans un worktree. */
+const DASH_CLOSED = [
+  { key: 'MIS-10', title: 'livrée un', state: 'done', points: 5, updatedAt: '2026-11-10T12:00:00Z', branch: 'feat/mis-100' },
+  { key: 'MIS-11', title: 'livrée deux', state: 'done', points: 2, updatedAt: '2026-11-09T12:00:00Z', branch: null },
+  { key: 'MIS-12', title: 'livrée trois', state: 'done', points: 1, updatedAt: '2026-11-08T12:00:00Z', branch: null },
+  { key: 'MIS-13', title: 'livrée quatre', state: 'done', points: 1, updatedAt: '2026-11-07T12:00:00Z', branch: null },
+  { key: 'MIS-14', title: 'livrée cinq', state: 'done', points: 0, updatedAt: '2026-11-06T12:00:00Z', branch: null },
+]
+
+/** Le dashboard monté avec le digeste du scan et les closes. */
+function renderDigest(props = {}) {
+  const missions = DASH_MISSIONS.map((mission) => (
+    mission.key === 'MIS-1' ? { ...mission, branch: 'feat/mis-192' } : mission
+  ))
+  const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], {
+    now: DASH_NOW,
+    summary: DASH_SUMMARY,
+    closed: DASH_CLOSED,
+    ...props,
+  })
+  const section = (title) => findAll(tree, 'section').find((node) => {
+    const head = findAll(node, 'h2')[0]
+    return head !== undefined && textOf(head) === title
+  })
+  return { tree, setters, section, missions }
+}
+
+test('le dashboard ajoute Repositories et Done, et les quatre cartes ne bougent pas', () => {
+  const { tree, section } = renderDigest()
+
+  const sections = findAll(tree, 'section')
+  assert.deepEqual(sections.map((node) => textOf(findAll(node, 'h2')[0])), ['Missions', 'Repositories', 'Done'])
+  assert.equal(findAll(tree, 'article').length, 8, 'quatre cartes par section')
+
+  // La section Missions garde ses quatre cartes, dans l'ordre et avec leurs
+  // lignes : le digeste s'ajoute, il ne réordonne rien.
+  const [, , flight, queue] = findAll(section('Missions'), 'article')
+  assert.deepEqual(
+    findAll(section('Missions'), 'article').map((card) => textOf(findAll(card, 'h3')[0])),
+    ['Bugs', 'High-priority stories', 'In flight', 'Needs you'],
+  )
+  const keys = (card) => findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  assert.deepEqual(keys(queue), ['MIS-1', 'MIS-2', 'MIS-5'])
+  assert.deepEqual(keys(flight), ['MIS-3', 'MIS-4'])
+  assert.match(textOf(findAll(flight, 'p').at(-1)), /8 pts in flight · oldest 11 d/)
+
+  // Les deux nouvelles sections portent leur périmètre et leur sortie.
+  const scope = (title) => textOf(findAll(findAll(section(title), 'header')[0], 'span').find((span) => span.props.className === 'missions-sect-scope'))
+  assert.equal(scope('Repositories'), '5 repositories · 3 to fix')
+  assert.equal(scope('Done'), '5 closed · 9 pts')
+  const links = findAll(tree, 'button').filter((button) => button.props.className === 'missions-sect-link').map(textOf)
+  assert.deepEqual(links, ['Open Missions→', 'Open Repositories→', 'Open Done→'])
+})
+
+test('les branches à pousser portent leur avance, et leur clic ouvre le dépôt', () => {
+  const ouverts = []
+  const { section, tree } = renderDigest({ onOpenRepository: (repository) => ouverts.push(repository) })
+  const card = findAll(section('Repositories'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Branches to push')
+  const rows = findAll(card, 'button').filter((button) => button.props['data-reason'] !== undefined)
+
+  // Une seule ligne pour la branche tenue par le clone et le worktree, et
+  // c'est le worktree qui la porte. La close n'en est pas, la mission sans
+  // branche non plus.
+  assert.equal(rows.length, 1)
+  assert.deepEqual(findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf), ['MIS-1'])
+  assert.deepEqual(findAll(card, 'span').filter((span) => span.props.className === 'missions-rowwhy').map(textOf), ['+3 commits'])
+  assert.match(textOf(findAll(card, 'p').at(-1)), /0 never pushed · 3 commits ahead · scanned 3 h ago/)
+
+  rows[0].props.onClick()
+  assert.equal(ouverts.length, 1)
+  assert.equal(ouverts[0].name, 'missions-mis-192')
+
+  // La sortie de section ouvre l'onglet Repositories, comme les cartes ouvrent
+  // la liste : le digeste route par le panneau.
+  const sortie = findAll(tree, 'button').find((button) => textOf(button) === 'Open Repositories→')
+  sortie.props.onClick()
+  assert.ok(findAll(tree, 'section').length === 3)
+})
+
+test('les dépôts à réparer disent leur raison la plus grave et l’âge du dernier commit', () => {
+  const { section } = renderDigest()
+  const card = findAll(section('Repositories'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Checkouts to fix')
+  const rows = findAll(card, 'button').filter((button) => button.props['data-reason'] !== undefined)
+
+  // Une raison par ligne, de la plus grave à la moins grave, puis par nom.
+  assert.deepEqual(rows.map((row) => row.props['data-reason']), ['error', 'behind', 'dirty'])
+  assert.deepEqual(findAll(card, 'span').filter((span) => span.props.className === 'missions-rowwhy').map(textOf), ['unreadable', '2 behind', '2 dirty'])
+  assert.deepEqual(findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf), ['casse', 'retard', 'missions-mis-100'])
+  // L'âge du dernier commit : rien à lire pour l'entrée illisible, six heures
+  // pour le retard, et un dépôt qui dort depuis plus d'un mois est marqué.
+  const ages = findAll(card, 'span').filter((span) => span.props.className === 'missions-rowage')
+  assert.deepEqual(ages.map(textOf), ['', '6 h', '41 d'])
+  assert.equal(ages[2].props['data-quiet'], 'true')
+  assert.match(textOf(findAll(card, 'p').at(-1)), /1 cold clone · scanned 3 h ago/)
+})
+
+test('les closes récentes portent leurs points, et la carte dit trois sur N', () => {
+  const { section, tree } = renderDigest()
+  const card = findAll(section('Done'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Recently closed')
+
+  const keys = findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  assert.deepEqual(keys, ['MIS-10', 'MIS-11', 'MIS-12'], 'les trois dernières, par mise à jour')
+  const points = findAll(card, 'span').filter((span) => span.props.className === 'missions-rowpoints').map(textOf)
+  assert.deepEqual(points, ['5 pts', '2 pts', '1 pt'])
+  // Le total dépasse le plafond : la carte dit ce qu'elle montre et le pied le
+  // reste, avec un lien vers l'onglet Done.
+  const meta = textOf(findAll(card, 'span').find((span) => span.props.className === 'missions-dash-card-meta'))
+  assert.equal(meta, '3 of 5')
+  const foot = findAll(card, 'p').at(-1)
+  assert.match(textOf(foot), /2 more closed/)
+  assert.match(textOf(foot), /View all 5/)
+
+  // La carte des restes nomme le geste, qui reste dans le volet du dépôt.
+  const left = findAll(section('Done'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Left behind')
+  assert.match(textOf(findAll(left, 'p').at(-1)), /Removing a worktree stays in the repository drawer/)
+  assert.deepEqual(findAll(left, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf), ['MIS-10'], 'seule la close dont la branche vit dans un worktree')
+
+  const sortie = findAll(tree, 'button').find((button) => textOf(button) === 'Open Done→')
+  assert.ok(sortie, 'la section Done a sa sortie')
+})
+
+test('une close laissée derrière ouvre le volet de son worktree', () => {
+  const ouverts = []
+  const { section } = renderDigest({ onOpenRepository: (repository) => ouverts.push(repository) })
+  const card = findAll(section('Done'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Left behind')
+  const row = findAll(card, 'button').find((button) => button.props['data-reason'] === 'left-behind')
+  assert.ok(row, 'la close dont la branche vit dans un worktree a sa ligne')
+  assert.match(row.props['aria-label'], /^MIS-10 feat\/mis-100, closed/)
+
+  row.props.onClick()
+  assert.equal(ouverts.length, 1)
+  // Le volet s'ouvre sur le worktree, pas sur le clone principal : c'est lui
+  // qu'il faudra supprimer.
+  assert.equal(ouverts[0].name, 'missions-mis-100')
+})
+
+test('un scan en échec garde la section, nomme l’échec et propose Retry', () => {
+  const essais = []
+  const { tree, section } = renderDigest({ summary: null, summaryError: 'permission denied', onRetrySummary: () => essais.push('retry') })
+
+  // Aucune ligne n'a jamais été lue : les cartes ne prétendent pas un zéro.
+  const alert = findAll(section('Repositories'), 'div').find((node) => node.props.className === 'missions-sect-error')
+  assert.ok(alert, 'la section nomme l’échec')
+  assert.equal(alert.props.role, 'alert')
+  assert.match(textOf(alert), /The repository scan failed: permission denied/)
+  const retry = findAll(alert, 'button').find((button) => button.props.className === 'missions-retry')
+  assert.equal(textOf(retry), 'Retry')
+  retry.props.onClick()
+  assert.deepEqual(essais, ['retry'])
+
+  const metas = findAll(section('Repositories'), 'span').filter((span) => span.props.className === 'missions-dash-card-meta').map(textOf)
+  assert.deepEqual(metas, ['—', '—'], 'un scan absent ne se lit pas comme zéro')
+  // Les autres sections restent visibles : l'échec est local.
+  assert.ok(section('Missions'))
+  assert.ok(section('Done'))
+  assert.ok(findAll(tree, 'article').length >= 8)
+})
+
+test('un échec chaud garde les lignes du scan précédent', () => {
+  const { section } = renderDigest({ summaryError: 'offline' })
+  const card = findAll(section('Repositories'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Checkouts to fix')
+  // La section nomme l'échec et garde ses trois lignes : un zéro serait un
+  // mensonge, une liste effacée aussi.
+  assert.deepEqual(findAll(card, 'button').filter((button) => button.props['data-reason'] !== undefined).map((button) => button.props['data-reason']), ['error', 'behind', 'dirty'])
+  assert.equal(findAll(section('Repositories'), 'div').filter((node) => node.props.className === 'missions-sect-error').length, 1)
+})
+
+test('le résumé se lit à l’ouverture du Dashboard et à son tick, jamais ailleurs', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  const vraiSetInterval = globalThis.setInterval
+  const vraiDocument = globalThis.document
+  let tick = null
+  globalThis.setInterval = (fn) => { tick = fn; return 0 }
+  // Le panneau injecte sa feuille de style au montage : le faux document sert
+  // aussi ce geste-là, pas seulement le drapeau du tick.
+  globalThis.document = {
+    hidden: false,
+    createElement: () => ({ dataset: {}, textContent: '', remove: () => {} }),
+    head: { append: () => {} },
+  }
+  globalThis.fetch = async (url) => {
+    const cible = String(url)
+    appels.push(cible)
+    if (cible === 'missions/api/repositories/summary') return { ok: true, json: async () => DASH_SUMMARY }
+    return { ok: true, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  try {
+    // Onglet Missions : l'ouverture du Dashboard ne paie rien.
+    const ferme = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'missions' }))
+    ferme.api.apply(ferme.ctx)
+    ferme.registered.main({})
+    const ouverture = ferme.effects.find((effect) => String(effect.fn).includes("if (tab !== 'dashboard')"))
+    assert.ok(ouverture, 'le Dashboard a son effet d’ouverture')
+    assert.equal(ouverture.deps[0], 'missions')
+    ouverture.fn()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.deepEqual(appels, [], 'aucun autre onglet ne paie le résumé')
+
+    // Onglet Dashboard : le résumé et les closes, sans forcer.
+    appels.length = 0
+    const ouvert = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'dashboard' }))
+    ouvert.api.apply(ouvert.ctx)
+    ouvert.registered.main({})
+    const effet = ouvert.effects.find((effect) => String(effect.fn).includes("if (tab !== 'dashboard')"))
+    assert.equal(effet.deps[0], 'dashboard')
+    await effet.fn()
+    assert.deepEqual(appels, ['missions/api/repositories/summary', 'missions/api/list?done=1'], 'le résumé et les closes, chacun une fois')
+    assert.equal(appels.some((url) => url.includes('refresh=1')), false, 'l’ouverture ne force pas')
+
+    // Le tick : page cachée, rien ne part ; page visible, le résumé se relit
+    // sans forcer, et le compte toujours.
+    appels.length = 0
+    for (const effect of ouvert.effects) effect.fn()
+    await new Promise((done) => setTimeout(done, 0))
+    appels.length = 0
+    globalThis.document.hidden = true
+    tick()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.deepEqual(appels, [], 'une page cachée ne relit rien')
+    globalThis.document.hidden = false
+    tick()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.deepEqual(appels, ['missions/api/repositories/summary', 'missions/api/repositories/count'], 'le tick relit le résumé et le compte')
+  } finally {
+    globalThis.fetch = vraiFetch
+    globalThis.setInterval = vraiSetInterval
+    if (vraiDocument === undefined) delete globalThis.document
+    else globalThis.document = vraiDocument
+  }
+})
+
+test('un résumé en échec nomme l’échec au panneau, et le Retry force le scan', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: false, status: 500, json: async () => ({ error: '/Users/moi/projects: permission denied' }) }
+  }
+  const panneau = [
+    EMPTY_BAR,
+    dashboardView(DASH_MISSIONS),
+    'dashboard',
+    '',
+    { ...EMPTY_BAR.filters },
+    null,
+    null,
+    'default',
+    null,
+    EMPTY_BAR,
+    { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null },
+    '',
+    { ...EMPTY_BAR.filters, state: ['done'] },
+    null,
+    null,
+    'usage',
+    0,
+    // Le résumé tel qu'une tentative ratée l'a laissé : la ligne d'échec est là.
+    { loading: false, data: null, error: '/Users/moi/projects: permission denied' },
+  ]
+  try {
+    const { api, ctx, registered } = charger(undefined, [...panneau], memorySession())
+    api.apply(ctx)
+    const view = findAll(registered.main({}), 'DashboardView')[0]
+    assert.ok(view, 'l’onglet Dashboard est ouvert')
+    const tree = renderTree(view)
+    const alert = findAll(tree, 'div').find((node) => node.props.className === 'missions-sect-error')
+    assert.ok(alert, 'le panneau reçoit l’échec du résumé')
+    assert.match(textOf(alert), /The repository scan failed: \/Users\/moi\/projects: permission denied/)
+
+    const retry = findAll(alert, 'button').find((button) => button.props.className === 'missions-retry')
+    await retry.props.onClick()
+    // Le seul geste du résumé qui force : le Retry paie un nouveau scan. Le
+    // geste est compté au passage, comme tous ceux du panneau.
+    assert.equal(appels.at(-1), 'missions/api/repositories/summary?refresh=1')
+    assert.equal(appels.filter((url) => url.includes('repositories/summary')).length, 1)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
 })
 
 test('le lien du widget ouvre la liste sur les états de la carte', () => {
@@ -2188,6 +2490,8 @@ function repositoriesStates(view, repository = null, count = null) {
     'usage',
     // Le compteur de relecture de la liste Repositories, après une suppression.
     0,
+    // Le résumé du Dashboard : lu à l'ouverture de l'onglet, gardé en mémoire.
+    { loading: true, data: null, error: null },
     view,
   ]
 }
@@ -4899,7 +5203,9 @@ function monterUsage(releve = USAGE_LOADED) {
       'usage',
       // Le dix-septième est le compteur de relecture de la liste Repositories.
       0,
-      // Le dix-huitième est celui de `UsageTab`, consommé quand on la rend.
+      // Le dix-huitième est le résumé du Dashboard, lu à l'ouverture du sien.
+      { loading: true, data: null, error: null },
+      // Le dix-neuvième est celui de `UsageTab`, consommé quand on la rend.
       { loading: false, usage: releve, error: null },
     ],
     memorySession({ 'missions.tab': 'usage' }),
@@ -5384,6 +5690,8 @@ function monterVoletAvec(mission, etatsVolet = []) {
     'usage',
     // Le compteur de relecture de la liste Repositories.
     0,
+    // Le résumé du Dashboard, avant le volet comme dans le panneau.
+    { loading: true, data: null, error: null },
   ]
   const { api, ctx, registered, setters, queue } = charger(undefined, [...panneau, ...etatsVolet], memorySession())
   api.apply(ctx)

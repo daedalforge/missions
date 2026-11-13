@@ -9,6 +9,7 @@ import { parse } from 'yaml'
 
 import { MISSION_FILE } from '../lib/branches.js'
 import { apply } from '../lib/index.js'
+import { resetRepositorySummary } from '../lib/repositories.js'
 import { clearCache } from '../lib/trackers/index.js'
 
 /**
@@ -1057,6 +1058,8 @@ function fauxGitRun(answers = {}) {
     calls.push(`${name} ${command}`)
     const answer = answers[`${name} ${command}`]
     if (answer === undefined) throw Object.assign(new Error('commande imprévue'), { stderr: '' })
+    // Une `Error` en réponse est un échec de git : le module lit `stderr`.
+    if (answer instanceof Error) throw Object.assign(answer, { stderr: answer.stderr ?? answer.message })
     return { stdout: answer, stderr: '' }
   }
   return { run, calls }
@@ -2306,4 +2309,87 @@ test('la route tolgee est un POST qui demande une clé', async (t) => {
   const unknown = await postTolgee(handler, 'OTHER-1')
   assert.equal(unknown.status, 404)
   assert.match(unknown.body.error, /no project declares OTHER-1/)
+})
+
+test('GET repositories/summary rend le scan, sa date de lecture et ses erreurs', async (t) => {
+  resetRepositorySummary()
+  // Le fixture du ticket : deux clones et un worktree, un dossier nu.
+  const root = await workspace(t, [
+    { name: 'alpha' },
+    { name: 'beta' },
+    { name: 'gamma', kind: 'worktree' },
+    { name: 'plain', kind: 'plain' },
+  ])
+  const { run, calls } = fauxGitRun({
+    'alpha status --porcelain=v2 --branch': ROUTE_STATUS,
+    'alpha log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+    'beta status --porcelain=v2 --branch': Object.assign(new Error('fatal: not a git repository'), { stderr: 'fatal: not a git repository' }),
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n# branch.ab +0 -0\n',
+    'gamma log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+    'gamma worktree list --porcelain': `worktree ${join(root, 'alpha')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const response = await call(handler, { path: '/missions/api/repositories/summary' })
+
+  assert.equal(response.status, 200)
+  assert.match(String(response.headers['content-type']), /application\/json/)
+  assert.equal(response.headers['cache-control'], 'no-store')
+  assert.equal(response.body.root, root)
+  assert.equal(response.body.count, 3)
+  assert.ok(Number.isFinite(response.body.durationMs))
+  assert.equal(Number.isFinite(Date.parse(response.body.scannedAt)), true)
+  // Le résumé est le scan : mêmes lignes, mêmes erreurs, une entrée illisible
+  // qui ne fait pas échouer la racine.
+  // L'entrée illisible n'a pas de dernier commit : elle ferme la marche.
+  assert.deepEqual(response.body.repositories.map((row) => row.name), ['alpha', 'gamma', 'beta'])
+  assert.match(response.body.repositories.find((row) => row.name === 'beta').error, /not a git repository/)
+  assert.deepEqual(response.body.errors, [{ name: 'beta', message: 'not a git repository' }])
+  // Un `status` et un `log` par entrée lisible, la liste des worktrees du
+  // worktree, et un seul `status` pour l'entrée qui échoue.
+  assert.equal(calls.length, 6)
+
+  // La racine du serveur reste la seule : `?root=` est ignoré.
+  const ailleurs = await call(handler, { path: '/missions/api/repositories/summary?root=/etc' })
+  assert.equal(ailleurs.status, 200)
+  assert.equal(ailleurs.body.root, root)
+})
+
+test('GET repositories/summary relit le scan sur refresh=1, et le tient sinon', async (t) => {
+  resetRepositorySummary()
+  const root = await workspace(t, ['alpha'])
+  const { run, calls } = fauxGitRun({
+    'alpha status --porcelain=v2 --branch': ROUTE_STATUS,
+    'alpha log -1 --no-decorate --format=%h%x1f%ct%x1f%s': ROUTE_COMMIT,
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const first = await call(handler, { path: '/missions/api/repositories/summary' })
+  assert.equal(first.status, 200)
+  assert.equal(calls.length, 2)
+  // Deux lectures rapprochées, un seul scan : le bouton Retry est le seul à
+  // forcer.
+  const again = await call(handler, { path: '/missions/api/repositories/summary' })
+  assert.equal(again.status, 200)
+  assert.equal(calls.length, 2)
+  assert.equal(again.body.scannedAt, first.body.scannedAt)
+
+  const forced = await call(handler, { path: '/missions/api/repositories/summary?refresh=1' })
+  assert.equal(forced.status, 200)
+  assert.equal(calls.length, 4)
+  assert.ok(Date.parse(forced.body.scannedAt) >= Date.parse(first.body.scannedAt))
+
+  // Une route de lecture, comme les autres.
+  const post = await call(handler, { method: 'POST', path: '/missions/api/repositories/summary', body: {} })
+  assert.equal(post.status, 405)
+  assert.equal(post.headers.allow, 'GET')
+})
+
+test('GET repositories/summary nomme une racine illisible', async (t) => {
+  resetRepositorySummary()
+  const { handler } = await mount(t, { workspaceRoot: join(tmpdir(), 'missions-absente-192') })
+
+  const response = await call(handler, { path: '/missions/api/repositories/summary' })
+  assert.equal(response.status, 500)
+  assert.match(response.body.error, /missions-absente-192/)
 })

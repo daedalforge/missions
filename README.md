@@ -63,6 +63,20 @@ Depuis cet onglet, une mission close peut être **archivée** : son dossier pass
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
 modifié — la mission quitte Done et reste sur le disque.
 
+Le **Dashboard** ajoute deux sections à son périmètre. **Repositories**
+croise les missions ouvertes avec le scan des dépôts — la route
+`missions/api/repositories/summary`, mémorisée cinq minutes
+(`SUMMARY_TTL_MS`) et partagée entre appels simultanés — en deux cartes :
+*Branches to push* (une branche de mission que le scan porte, jamais poussée
+ou en avance sur son amont) et *Checkouts to fix* (un dépôt illisible, en
+retard ou sale, une raison par ligne, la plus grave). **Done** relit ce que
+l'onglet Done a déjà ramené : les trois closes les plus récemment mises à
+jour, et celles dont la branche déclarée vit encore dans un worktree du scan.
+Le résumé des dépôts ne se relit qu'à l'ouverture du Dashboard et à son tick,
+quand c'est l'onglet ouvert et la page visible, jamais avec `?refresh=1` : le
+bouton **Retry** est le seul à forcer. Un scan en échec garde les lignes et
+nomme l'échec, jamais un zéro.
+
 Un projet peut déclarer ses **traductions** dans
 [`missions/projects.yml`](missions/projects.yml) — `translations.locales`,
 `translations.languageFile`, `translations.reference`. Le volet d'une mission de

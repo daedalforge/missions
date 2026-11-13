@@ -5,7 +5,11 @@ import {
   actionVerb,
   endPoints,
   layoutWorkflow,
+  leftBehind,
   modelOf,
+  recentlyClosed,
+  RECENT_CLOSED_ROWS,
+  repositoryScope,
   readStep,
   readStoredView,
   storedView,
@@ -18,7 +22,11 @@ import {
   ageDays,
   assignedBugs,
   blockedReasonAfterWrite,
+  branchesToPush,
   branchFieldValue,
+  checkoutsToFix,
+  COLD_CHECKOUT_DAYS,
+  doneScope,
   EMPTY_FILTERS,
   epicOptions,
   parseChecklist,
@@ -1754,4 +1762,147 @@ test('le rapport est total : un relevé absent, sale ou cassé parle quand même
   // lecture : la ligne reste lisible même si le fichier a été édité à la main.
   assert.deepEqual(row.details, [{ detail: 'ok', count: 3 }])
   assert.equal(USAGE_MAX_VALUES >= 5, true)
+})
+
+test('les branches à pousser croisent les missions ouvertes et le scan', () => {
+  const missions = [
+    { key: 'M-1', state: 'in-progress', branch: 'feat/mis-192' },
+    { key: 'M-2', state: 'ready', branch: 'feat/mis-200' },
+    // Une branche que la racine ne porte pas n'a pas de ligne : le widget
+    // n'ouvre que ce qu'il peut montrer.
+    { key: 'M-3', state: 'ready', branch: 'feat/absente' },
+    // Sans branche déclarée, rien à pousser.
+    { key: 'M-4', state: 'ready', branch: null },
+    // Une close ne pousse plus rien, même si son worktree traîne encore.
+    { key: 'M-5', state: 'done', branch: 'feat/closes' },
+  ]
+  const repositories = [
+    { name: 'missions', kind: 'clone', branch: 'feat/mis-192', upstream: 'origin/main', ahead: 2, behind: 0, dirty: 0 },
+    { name: 'missions-mis-192', kind: 'worktree', branch: 'feat/mis-192', upstream: 'origin/main', ahead: 4, behind: 0, dirty: 0 },
+    { name: 'missions-mis-200', kind: 'worktree', branch: 'feat/mis-200', upstream: null, ahead: 0, behind: 0, dirty: 0 },
+    { name: 'missions-closes', kind: 'worktree', branch: 'feat/closes', upstream: 'origin/main', ahead: 7, behind: 0, dirty: 0 },
+  ]
+
+  const rows = branchesToPush(missions, repositories)
+  // Une branche tenue par un clone et par un worktree est une ligne, et c'est
+  // le worktree qui la porte : c'est là que le travail se fait.
+  assert.deepEqual(rows.map((row) => row.mission.key), ['M-1', 'M-2'])
+  assert.equal(rows[0].repository.name, 'missions-mis-192')
+  assert.equal(rows[0].label, '+4 commits')
+  assert.equal(rows[0].neverPushed, false)
+  // Jamais partie : aucun amont, donc aucune avance à afficher.
+  assert.equal(rows[1].neverPushed, true)
+  assert.equal(rows[1].label, 'never pushed')
+  assert.equal(rows[1].reason, 'never-pushed')
+
+  assert.deepEqual(branchesToPush([], repositories), [])
+  assert.deepEqual(branchesToPush(missions, []), [])
+})
+
+test('une branche avec amont et rien à envoyer ne fait pas de ligne', () => {
+  const rows = branchesToPush(
+    [{ key: 'M-1', state: 'in-progress', branch: 'feat/tranquille' }],
+    [{ name: 'missions', kind: 'clone', branch: 'feat/tranquille', upstream: 'origin/feat/tranquille', ahead: 0, behind: 0, dirty: 0 }],
+  )
+  assert.deepEqual(rows, [])
+
+  // Une avance d'un seul commit se dit au singulier.
+  const une = branchesToPush(
+    [{ key: 'M-1', state: 'in-progress', branch: 'feat/tranquille' }],
+    [{ name: 'missions', kind: 'clone', branch: 'feat/tranquille', upstream: 'origin/feat/tranquille', ahead: 1, behind: 0, dirty: 0 }],
+  )
+  assert.equal(une[0].label, '+1 commit')
+})
+
+test('les dépôts à réparer portent une raison, la plus grave, et jamais deux', () => {
+  const rows = checkoutsToFix([
+    { name: 'propre', error: null, behind: 0, dirty: 0 },
+    { name: 'sale', error: null, behind: 0, dirty: 3 },
+    // Un retard et de la saleté : le retard passe, il demande un autre geste.
+    { name: 'retard', error: null, behind: 2, dirty: 5 },
+    // Illisible : la gravité l'emporte sur tout le reste.
+    { name: 'casse', error: 'fatal: not a git repository', behind: 4, dirty: 1 },
+  ])
+
+  assert.deepEqual(rows.map((row) => [row.repository.name, row.reason, row.label]), [
+    ['casse', 'error', 'unreadable'],
+    ['retard', 'behind', '2 behind'],
+    ['sale', 'dirty', '3 dirty'],
+  ])
+  // Un dépôt propre n'est pas une ligne : le dashboard est un digest.
+  assert.equal(rows.some((row) => row.repository.name === 'propre'), false)
+  assert.deepEqual(checkoutsToFix([]), [])
+})
+
+test('les closes récentes se trient sur la dernière mise à jour, et gardent leurs points', () => {
+  const missions = [
+    { key: 'M-1', state: 'done', updatedAt: '2026-11-01T00:00:00Z', points: 2 },
+    { key: 'M-2', state: 'done', updatedAt: '2026-11-04T00:00:00Z', points: 5 },
+    { key: 'M-3', state: 'done', updatedAt: '2026-11-02T00:00:00Z', points: null },
+    { key: 'M-4', state: 'done', updatedAt: '2026-11-03T00:00:00Z', points: 1 },
+    // Une ouverte reste une ouverte, même très récemment mise à jour.
+    { key: 'M-5', state: 'in-review', updatedAt: '2026-11-05T00:00:00Z', points: 8 },
+  ]
+
+  // Trois lignes, les plus récentes ; le modèle n'a pas de date de clôture,
+  // c'est la dernière mise à jour du tracker qui ordonne.
+  const rows = recentlyClosed(missions)
+  assert.deepEqual(rows.map((mission) => mission.key), ['M-2', 'M-4', 'M-3'])
+  assert.equal(rows[0].points, 5)
+  assert.equal(RECENT_CLOSED_ROWS, 3)
+
+  // La limite est un paramètre : le pied de carte la compare au total.
+  assert.deepEqual(recentlyClosed(missions, { limit: 2 }).map((mission) => mission.key), ['M-2', 'M-4'])
+  assert.deepEqual(recentlyClosed([]), [])
+})
+
+test('les closes laissées derrière sont celles dont la branche vit dans un worktree', () => {
+  const missions = [
+    { key: 'M-1', state: 'done', branch: 'feat/mis-100', updatedAt: '2026-11-02T00:00:00Z' },
+    { key: 'M-2', state: 'done', branch: 'feat/mis-101', updatedAt: '2026-11-03T00:00:00Z' },
+    { key: 'M-3', state: 'done', branch: null, updatedAt: '2026-11-04T00:00:00Z' },
+    { key: 'M-4', state: 'in-review', branch: 'feat/mis-102', updatedAt: '2026-11-05T00:00:00Z' },
+  ]
+  const repositories = [
+    { name: 'missions-mis-100', kind: 'worktree', branch: 'feat/mis-100', error: null, behind: 0, dirty: 0 },
+    // Un clone n'est pas un reste : sa branche est son affaire.
+    { name: 'missions', kind: 'clone', branch: 'feat/mis-101', error: null, behind: 0, dirty: 0 },
+    { name: 'missions-mis-102', kind: 'worktree', branch: 'feat/mis-102', error: null, behind: 0, dirty: 0 },
+  ]
+
+  const rows = leftBehind(missions, repositories)
+  assert.deepEqual(rows.map((row) => row.mission.key), ['M-1'])
+  assert.equal(rows[0].repository.name, 'missions-mis-100')
+  assert.equal(rows[0].label, 'closed')
+  assert.deepEqual(leftBehind(missions, []), [])
+})
+
+test('les périmètres des deux sections comptent ce que les cartes montrent', () => {
+  const summary = {
+    count: 3,
+    repositories: [
+      { name: 'propre', error: null, behind: 0, dirty: 0 },
+      { name: 'retard', error: null, behind: 2, dirty: 0 },
+      { name: 'sale', error: null, behind: 0, dirty: 1 },
+    ],
+  }
+  assert.deepEqual(repositoryScope(summary), { count: 3, toFix: 2, label: '3 repositories · 2 to fix' })
+  // Sans compte annoncé, la longueur du scan fait foi.
+  assert.equal(repositoryScope({ repositories: [summary.repositories[0]] }).label, '1 repository · 0 to fix')
+  // Un scan absent ne prétend rien : zéro ligne, zéro à réparer.
+  assert.equal(repositoryScope().label, '0 repositories · 0 to fix')
+
+  const closed = [
+    { key: 'M-1', state: 'done', points: 3 },
+    { key: 'M-2', state: 'done', points: 2 },
+    { key: 'M-3', state: 'in-review', points: 8 },
+  ]
+  assert.deepEqual(doneScope(closed), { count: 2, points: 5, label: '2 closed · 5 pts' })
+  assert.equal(doneScope([{ key: 'M-1', state: 'done', points: 1 }]).label, '1 closed · 1 pt')
+  assert.equal(doneScope().label, '0 closed · 0 pts')
+})
+
+test('un clone froid se compte en jours, pas en heures', () => {
+  // La constante est la règle du pied de carte : trois dépôts, pas un de moins.
+  assert.equal(COLD_CHECKOUT_DAYS, 30)
 })
