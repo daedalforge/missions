@@ -235,6 +235,8 @@ window.__ModuleLoader__.load({
   // L'ordre de la méthode, connu avant que le serveur ait répondu : il valide
   // l'étape que la session a laissée ouverte.
   const WORKFLOW_STEPS = ['cadrage', 'execution', 'review', 'cloture']
+  const WORKFLOW_KIND_LABELS = { etape: 'étapes', statuts: 'statuts' }
+  const WORKFLOW_FORM = { key: '', title: '', kind: 'etape', document: '', entry: '', exit: '' }
     const REFRESH_MS = 60000
 
     const STATE_LABELS = {
@@ -477,7 +479,9 @@ window.__ModuleLoader__.load({
 .wf-card-title { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); margin-bottom: 8px; }
 .wf-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
 .wf-field > span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
-.wf-field input, .wf-field select { font: inherit; font-size: 12px; height: 28px; padding: 0 7px; border-radius: 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); background: transparent; color: inherit; }
+.wf-field input, .wf-field select, .wf-field textarea { font: inherit; font-size: 12px; height: 28px; padding: 0 7px; border-radius: 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); background: transparent; color: inherit; }
+.wf-field textarea { height: auto; padding: 6px 7px; resize: vertical; }
+.wf-field-hint { font-size: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .wf-arc { display: flex; align-items: center; gap: 6px; padding: 2px 4px; margin: 0 -4px; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .wf-arc:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); }
@@ -485,6 +489,54 @@ window.__ModuleLoader__.load({
 .wf-arc-del { border: 0; background: none; padding: 0 3px; color: #a33a2a; cursor: pointer; font-size: 13px; line-height: 1; }
 .wf-error { color: #a33a2a; font-size: 12px; margin: 2px 0; }
 .wf-ok { color: #3f7a4b; font-size: 12px; margin: 2px 0; }
+.wf-toolbar-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-right: auto; }
+.wf-overview-title { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+.wf-primary { background: var(--dsw-alias-label-primary, #1f1f1f); border-color: transparent; color: var(--dsw-alias-bg-base, #fbfaf8); }
+.wf-primary:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 86%, var(--dsw-alias-bg-base, #fbfaf8)); color: var(--dsw-alias-bg-base, #fbfaf8); }
+.wf-primary:disabled { background: var(--dsw-alias-label-primary, #1f1f1f); }
+.wf-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 0 0 16px; padding: 0; list-style: none; }
+.wf-pick { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; font: inherit; color: inherit; background: var(--dsw-alias-bg-layer-1, #ffffff); cursor: pointer; }
+.wf-pick:hover { border-color: color-mix(in srgb, currentColor 24%, transparent); }
+.wf-pick[aria-pressed="true"] { border-color: var(--dsw-alias-label-primary, #1f1f1f); box-shadow: inset 0 0 0 1px var(--dsw-alias-label-primary, #1f1f1f); }
+.wf-pick-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wf-pick-title { font-size: 13px; font-weight: 600; }
+.wf-pick-kind { flex: none; padding: 1px 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 999px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
+.wf-pick-summary { font-size: 12px; color: var(--dsw-alias-label-secondary, #4a4a4a); }
+.wf-pick-meta { font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.wf-pick-flow { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.wf-pick-flow code { padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, currentColor 8%, transparent); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; }
+.wf-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.wf-detail-title { margin: 0; font-size: 15px; font-weight: 650; }
+.wf-empty { display: grid; gap: 6px; padding: 30px 16px; text-align: center; }
+.wf-legend { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; padding: 8px 4px 2px; font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.wf-swatch { display: inline-block; width: 14px; height: 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.18)); border-radius: 3px; background: var(--dsw-alias-bg-base, #fbfaf8); }
+.wf-swatch--initial { border-color: #1a7f37; background: color-mix(in srgb, #1a7f37 18%, transparent); }
+.wf-swatch--terminal { border-color: #8250df; background: color-mix(in srgb, #8250df 18%, transparent); }
+.wf-swatch--back { width: 18px; height: 0; border: 0; border-top: 1.5px dashed var(--dsw-alias-label-tertiary, #7a7168); border-radius: 0; background: none; }
+.wf-node-id { fill: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 8.5px; pointer-events: none; }
+.wf-node-label--center { text-anchor: middle; }
+.wf-node-badge { fill: var(--dsw-alias-label-tertiary, #7a7168); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; pointer-events: none; }
+.wf-link-hit { fill: none; stroke: transparent; stroke-width: 12; }
+.wf-link-group { cursor: pointer; }
+.wf-link-group:focus-visible .wf-link { stroke: var(--dsw-alias-label-primary, #1f1f1f); }
+.wf-link--selected { stroke: var(--dsw-alias-label-primary, #1f1f1f); stroke-width: 2; }
+.wf-link-label--selected { fill: var(--dsw-alias-label-primary, #1f1f1f); }
+.wf-props { margin: 8px 0; padding-top: 8px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
+.wf-prop { display: flex; justify-content: space-between; gap: 10px; margin: 3px 0; font-size: 11.5px; }
+.wf-prop > span { color: var(--dsw-alias-label-tertiary, #7a7168); }
+.wf-prop code { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; }
+.wf-map-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 11px; }
+.wf-map-table th { padding: 2px 0; text-align: left; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.wf-map-table td { padding: 3px 0; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.07)); vertical-align: top; }
+.wf-map-table code { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.wf-modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.wf-modal-backdrop { position: absolute; inset: 0; background: color-mix(in srgb, #1f1f1f 38%, transparent); }
+.wf-modal-card { position: relative; width: min(560px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 18px 20px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 14px; background: var(--dsw-alias-bg-layer-1, #ffffff); box-shadow: 0 18px 50px rgba(0,0,0,.18); }
+.wf-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.wf-modal-title { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+.missions-drawer-close { flex: none; padding: 0 2px; border: 0; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 20px; line-height: 1; cursor: pointer; }
+.wf-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.wf-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
 .missions-group { margin-top: 20px; }
 .missions-group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); position: sticky; top: 0; background: var(--dsw-alias-bg-base, #fbfaf8); z-index: 1; }
 .missions-group-head .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -842,6 +894,17 @@ window.__ModuleLoader__.load({
   .missions-col-commit { display: none; }
   .missions-repo-headmain { width: 22px; }
   .missions-repo-main, .missions-repo-main-slot { width: 22px; }
+}
+@media (max-width: 900px) {
+  .wf-layout { grid-template-columns: minmax(0, 1fr); }
+  .wf-list { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+}
+@media (max-width: 640px) {
+  .wf-toolbar { align-items: flex-start; }
+  .wf-list { grid-template-columns: minmax(0, 1fr); }
+  .wf-form { grid-template-columns: minmax(0, 1fr); }
+  .wf-modal { padding: 10px; }
+  .wf-modal-card { max-height: calc(100vh - 20px); }
 }
 `
 
@@ -3030,15 +3093,26 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
     // même image et le modèle reste lisible à la main.
     function WorkflowsView() {
       const [view, setView] = React.useState({ loading: true, error: null, workflows: [], writers: [], states: [] })
-      const [step, setStep] = React.useState(() => readStep(filterStorage(), WORKFLOW_STEPS))
+      const [step, setStep] = React.useState(() => {
+        try {
+          return filterStorage()?.getItem?.(STEP_KEY) ?? null
+        } catch {
+          return null
+        }
+      })
       const [draft, setDraft] = React.useState(null)
       const [chosen, setChosen] = React.useState(null)
       const [status, setStatus] = React.useState(null)
       const [saving, setSaving] = React.useState(false)
       const [arc, setArc] = React.useState({ from: '', to: '', when: '' })
-      // Chaque rechargement rend la main au serveur : le brouillon repart du
-      // fichier, les retouches non enregistrées comprises.
       const [version, setVersion] = React.useState(0)
+      const [baseline, setBaseline] = React.useState(null)
+      const [selectedArc, setSelectedArc] = React.useState(null)
+      const [creating, setCreating] = React.useState(false)
+      const [form, setForm] = React.useState(WORKFLOW_FORM)
+      const [formErrors, setFormErrors] = React.useState({})
+      const [creatingBusy, setCreatingBusy] = React.useState(false)
+      const documentTouched = React.useRef(false)
 
       const load = React.useCallback(() => {
         fetch(WORKFLOWS_URL, { headers: { accept: 'application/json' } })
@@ -3053,18 +3127,26 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
       React.useEffect(() => { load() }, [load])
 
-      // L'étape ouverte suit la session, comme l'onglet : fermer le panneau sur
-      // la revue le rouvre sur la revue.
-      React.useEffect(() => { writeStep(filterStorage(), step, WORKFLOW_STEPS) }, [step])
+      // Le workflow ouvert suit la session, comme l'onglet : fermer le panneau
+      // sur la revue le rouvre sur la revue. Une clé que le dossier ne porte
+      // plus retombe sur la première entrée de la liste.
+      const entry = view.workflows.find((item) => item.workflow === step) ?? view.workflows[0] ?? null
 
-      const entry = view.workflows.find((item) => item.workflow === step) ?? null
-
-      // Le brouillon suit l'étape : la réponse du serveur porte des champs
-      // d'affichage (`errors`, `headings`, `file`) que le fichier ne contient pas.
       React.useEffect(() => {
-        if (!entry) { setDraft(null); return }
-        setDraft(modelOf(entry))
+        if (!entry) return
+        writeStep(filterStorage(), entry.workflow, view.workflows.map((item) => item.workflow))
+      }, [entry && entry.workflow, view.workflows])
+
+      // Le brouillon suit le workflow : la réponse du serveur porte des champs
+      // d'affichage (`errors`, `headings`, `file`, `summary`) que le fichier ne
+      // contient pas.
+      React.useEffect(() => {
+        if (!entry) { setDraft(null); setBaseline(null); return }
+        const model = modelOf(entry)
+        setDraft(model)
+        setBaseline(model)
         setChosen(null)
+        setSelectedArc(null)
         setStatus(null)
         setArc({ from: '', to: '', when: '' })
       }, [entry && entry.workflow, version])
@@ -3072,18 +3154,34 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const patchNode = (key, value) => {
         if (!chosen) return
         setDraft((previous) => ({ ...previous, nodes: previous.nodes.map((node) => (node.id === chosen ? { ...node, [key]: value } : node)) }))
+        setStatus(null)
+      }
+
+      const patchEdge = (from, to, key, value) => {
+        setDraft((previous) => ({
+          ...previous,
+          edges: previous.edges.map((edge) => (edge.from === from && edge.to === to ? { ...edge, [key]: value } : edge)),
+        }))
+        setStatus(null)
       }
 
       const labelOf = (id) => (draft ? draft.nodes.find((node) => node.id === id)?.label ?? id : id)
       const sectionOf = (id) => (draft ? draft.nodes.find((node) => node.id === id)?.section ?? '' : '')
       const writerOf = (id) => (draft ? draft.nodes.find((node) => node.id === id)?.writer ?? '' : '')
+      const roleOf = (id) => {
+        if (!entry) return null
+        if (id === entry.entry) return 'initial'
+        if ((entry.exit ?? []).includes(id)) return 'terminal'
+        return 'intermédiaire'
+      }
 
       const addGesture = () => {
-        if (!draft) return
+        if (!draft || draft.kind === 'statuts') return
         track('workflow.gesture.add')
         const id = nextGestureId(draft)
-        const heading = entry?.headings?.[0]?.text ?? ''
+        const heading = entry?.headings?.[0] ?? ''
         setDraft({ ...draft, nodes: [...draft.nodes, { id, label: 'Nouveau geste', section: heading, writer: view.writers[0] ?? 'session' }] })
+        setSelectedArc(null)
         setChosen(id)
         setStatus(null)
       }
@@ -3096,13 +3194,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setStatus(null)
       }
 
-      // Un même couple (départ, arrivée) ne se double pas : le geste se relit,
-      // il ne s'ajoute pas. Réappliquer le couple met la condition à jour.
+      // Un même couple (départ, arrivée) ne se double pas : l'arc se relit, il
+      // ne s'ajoute pas. Réappliquer le couple met la condition à jour.
       const addArc = () => {
         if (!draft || !arc.from || !arc.to) { setStatus({ kind: 'error', message: 'Choisis un départ et une arrivée.' }); return }
-        if (arc.from === arc.to) { setStatus({ kind: 'error', message: 'Un geste ne se suit pas lui-même : passe par un autre geste.' }); return }
-        // Re-applying a couple updates the arc it already has: the gesture is
-        // an update, not a second add.
+        if (arc.from === arc.to) { setStatus({ kind: 'error', message: 'Un arc ne revient pas sur lui-même : passe par un autre point.' }); return }
         const exists = (draft.edges ?? []).some((edge) => edge.from === arc.from && edge.to === arc.to)
         track(exists ? 'workflow.arc.update' : 'workflow.arc.add')
         setDraft(upsertEdge(draft, arc.from, arc.to, arc.when.trim()))
@@ -3110,10 +3206,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setStatus(null)
       }
 
-      // Cliquer un arc le charge dans le formulaire : le modifier, c'est le
-      // relire puis le reposer, sans le supprimer d'abord.
-      const pickArc = (edge) => {
-        setArc({ from: edge.from, to: edge.to, when: edge.when ?? '' })
+      const openArc = (edge) => {
+        setChosen(null)
+        setSelectedArc({ from: edge.from, to: edge.to })
         setStatus(null)
       }
 
@@ -3121,6 +3216,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         if (!draft) return
         track('workflow.arc.remove')
         setDraft(withoutEdge(draft, from, to))
+        setSelectedArc(null)
         setStatus(null)
       }
 
@@ -3142,21 +3238,105 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               setStatus({ kind: 'error', message: data?.error ?? 'save failed', errors: data?.errors ?? [] })
               return
             }
-            setView((previous) => ({
-              ...previous,
-              workflows: previous.workflows.map((item) => (item.workflow === data.workflow
-                ? { ...item, ...data.model, headings: data.headings, orphanSections: data.orphanSections, errors: [] }
-                : item)),
-            }))
+            if (data.entry) {
+              const model = modelOf(data.entry)
+              setView((previous) => ({
+                ...previous,
+                workflows: previous.workflows.map((item) => (item.workflow === data.workflow ? data.entry : item)),
+              }))
+              setDraft(model)
+              setBaseline(model)
+            }
             setStatus({ kind: 'ok', message: `Enregistré — ${data.file}` })
           })
           .catch((error) => setStatus({ kind: 'error', message: error?.message ?? 'save failed' }))
           .finally(() => setSaving(false))
       }
 
-      // Deux attentes : le parcours (la liste) puis le modèle de l'étape. Entre
-      // les deux, l'entrée existe et le brouillon n'est pas encore posé — lire
-      // `draft` ici ferait tomber le panneau entier, pas seulement le graphe.
+      // Annuler rend le brouillon au dernier état lu sur le serveur : les
+      // retouches non enregistrées partent, le fichier n'a jamais bougé.
+      const revert = () => {
+        if (!baseline) return
+        setDraft({
+          ...baseline,
+          nodes: (baseline.nodes ?? []).map((node) => ({ ...node })),
+          edges: (baseline.edges ?? []).map((edge) => ({ ...edge })),
+        })
+        setChosen(null)
+        setSelectedArc(null)
+        setStatus({ kind: 'ok', message: 'Modifications annulées.' })
+      }
+
+      const updateForm = (field, value) => {
+        setForm((previous) => {
+          const next = { ...previous, [field]: value }
+          if (field === 'key' && !documentTouched.current) next.document = value ? `workflows/${value}.md` : ''
+          return next
+        })
+        setFormErrors((previous) => ({ ...previous, [field]: undefined }))
+      }
+
+      const openCreate = () => {
+        documentTouched.current = false
+        setForm(WORKFLOW_FORM)
+        setFormErrors({})
+        setCreating(true)
+      }
+
+      const closeCreate = () => {
+        setCreating(false)
+        setFormErrors({})
+      }
+
+      const create = () => {
+        if (creatingBusy) return
+        const errors = {}
+        if (!form.key.trim()) errors.key = 'La clé est obligatoire.'
+        if (!form.title.trim()) errors.title = 'Le titre est obligatoire.'
+        if (!form.document.trim()) errors.document = 'Le document est obligatoire.'
+        if (!form.entry.trim()) errors.entry = 'L’entrée est obligatoire.'
+        if (!form.exit.trim()) errors.exit = 'Au moins une sortie est obligatoire.'
+        if (Object.keys(errors).length) { setFormErrors(errors); return }
+        setCreatingBusy(true)
+        fetch(WORKFLOWS_URL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({
+            workflow: form.key.trim(),
+            title: form.title.trim(),
+            kind: form.kind,
+            document: form.document.trim(),
+            entry: form.entry.trim(),
+            exit: form.exit.split(',').map((value) => value.trim()).filter(Boolean),
+          }),
+        })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) {
+              const errors = {}
+              for (const error of data?.errors ?? []) errors[error.field] = error.message
+              setFormErrors(errors)
+              return
+            }
+            setCreating(false)
+            setStep(data.workflow)
+            setStatus({ kind: 'ok', message: `Créé — ${data.document}` })
+            load()
+          })
+          .catch((error) => setStatus({ kind: 'error', message: error?.message ?? 'create failed' }))
+          .finally(() => setCreatingBusy(false))
+      }
+
+      React.useEffect(() => {
+        if (!creating) return
+        const onKey = (event) => { if (event.key === 'Escape') setCreating(false) }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+      }, [creating])
+
+      // Deux attentes : le parcours (la liste) puis le modèle du workflow.
+      // Entre les deux, l'entrée existe et le brouillon n'est pas encore posé —
+      // lire l'entrée du brouillon ici ferait tomber le panneau entier.
       if (!entry || !draft) {
         return h('div', { className: 'wf-view' },
           h('div', { className: 'wf-toolbar' },
@@ -3170,29 +3350,107 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       }
 
       const graph = layoutWorkflow(draft)
-      const node = draft && chosen ? draft.nodes.find((item) => item.id === chosen) ?? null : null
+      const chosenNode = chosen ? draft.nodes.find((item) => item.id === chosen) ?? null : null
+      const chosenEdge = selectedArc
+        ? draft.edges.find((edge) => edge.from === selectedArc.from && edge.to === selectedArc.to) ?? null
+        : null
       const clip = (text, max) => {
         const value = String(text ?? '')
         return value.length > max ? `${value.slice(0, max - 1)}…` : value
       }
-      const headingTexts = (entry.headings ?? []).map((heading) => heading.text)
-      const sectionChoices = node && node.section && !headingTexts.includes(node.section) ? [node.section, ...headingTexts] : headingTexts
+      const headingTexts = (entry.headings ?? []).slice()
+      const sectionChoices = chosenNode && chosenNode.section && !headingTexts.includes(chosenNode.section)
+        ? [chosenNode.section, ...headingTexts]
+        : headingTexts
       const ends = endPoints(draft)
+      const statuts = draft.kind === 'statuts'
+      const counts = (workflow) => (workflow.kind === 'statuts'
+        ? `${workflow.counts?.nodes ?? workflow.nodes.length} états · ${workflow.counts?.edges ?? workflow.edges.length} événements`
+        : `${workflow.counts?.nodes ?? workflow.nodes.length} gestes · ${workflow.counts?.edges ?? workflow.edges.length} arcs`)
+      const incoming = (id) => draft.edges.filter((edge) => edge.to === id)
+      const outgoing = (id) => draft.edges.filter((edge) => edge.from === id)
+      const prop = (label, value) => h('p', { className: 'wf-prop' }, h('span', null, label), h('code', null, value ?? '—'))
+
+      const modal = creating
+        ? h('div', { className: 'wf-modal' },
+            h('div', { className: 'wf-modal-backdrop', 'data-close': 'modal', onClick: closeCreate }),
+            h('form', {
+              className: 'wf-modal-card',
+              role: 'dialog',
+              'aria-modal': 'true',
+              'aria-labelledby': 'wf-new-title',
+              onSubmit: (event) => { event.preventDefault(); create() },
+            },
+              h('div', { className: 'wf-modal-head' },
+                h('div', null,
+                  h('h2', { className: 'wf-modal-title', id: 'wf-new-title' }, 'Nouveau workflow'),
+                  h('p', { className: 'wf-note' }, 'Le modèle et le document sont écrits sous workflows/, jamais à la place d’un fichier existant.'),
+                ),
+                h('button', { type: 'button', className: 'missions-drawer-close', 'aria-label': 'Fermer', onClick: closeCreate }, '×'),
+              ),
+              h('div', { className: 'wf-form' },
+                h('label', { className: 'wf-field' },
+                  h('span', null, 'Clé'),
+                  h('input', { value: form.key, autoFocus: true, 'aria-invalid': formErrors.key ? 'true' : 'false', onChange: (event) => updateForm('key', event.target.value) }),
+                  h('small', { className: 'wf-field-hint' }, 'minuscules, chiffres et tirets (ex. mon-workflow)'),
+                  formErrors.key ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.key) : null,
+                ),
+                h('label', { className: 'wf-field' },
+                  h('span', null, 'Titre'),
+                  h('input', { value: form.title, onChange: (event) => updateForm('title', event.target.value) }),
+                  formErrors.title ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.title) : null,
+                ),
+                h('label', { className: 'wf-field' },
+                  h('span', null, 'Type'),
+                  h('select', { value: form.kind, onChange: (event) => updateForm('kind', event.target.value) },
+                    h('option', { value: 'etape' }, 'Étapes'),
+                    h('option', { value: 'statuts' }, 'Statuts'),
+                  ),
+                  formErrors.kind ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.kind) : null,
+                ),
+                h('label', { className: 'wf-field' },
+                  h('span', null, 'Document'),
+                  h('input', {
+                    value: form.document,
+                    onChange: (event) => { documentTouched.current = true; updateForm('document', event.target.value) },
+                  }),
+                  formErrors.document ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.document) : null,
+                ),
+                h('label', { className: 'wf-field' },
+                  h('span', null, 'Entrée'),
+                  h('select', { value: form.entry, onChange: (event) => updateForm('entry', event.target.value) },
+                    h('option', { value: '' }, '—'),
+                    view.states.map((state) => h('option', { key: state, value: state }, state)),
+                  ),
+                  formErrors.entry ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.entry) : null,
+                ),
+                h('label', { className: 'wf-field' },
+                  h('span', null, 'Sorties'),
+                  h('input', { value: form.exit, placeholder: 'done, in-review', onChange: (event) => updateForm('exit', event.target.value) }),
+                  h('small', { className: 'wf-field-hint' }, 'un ou plusieurs états, séparés par des virgules'),
+                  formErrors.exit ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.exit) : null,
+                ),
+              ),
+              h('div', { className: 'wf-modal-foot' },
+                h('button', { type: 'button', className: 'missions-btn', onClick: closeCreate }, 'Annuler'),
+                h('button', { type: 'submit', className: 'missions-btn wf-primary', disabled: creatingBusy }, creatingBusy ? 'Création…' : 'Créer'),
+              ),
+            ),
+          )
+        : null
 
       return h('div', { className: 'wf-view' },
         h('div', { className: 'wf-toolbar' },
-          h('div', { className: 'wf-steps', role: 'group', 'aria-label': 'Étapes du parcours' },
-            view.workflows.map((item) => h('button', {
-              key: item.workflow,
-              type: 'button',
-              className: 'wf-step',
-              'aria-pressed': item.workflow === step,
-              onClick: () => { track('workflow.step', item.workflow); setStep(item.workflow) },
-            }, item.title || item.workflow)),
+          h('div', { className: 'wf-toolbar-head' },
+            h('h2', { className: 'wf-overview-title', id: 'wf-overview-title' }, 'Workflows'),
+            h('p', { className: 'wf-note' }, `${view.workflows.length} workflow(s) · le fichier YAML est la source, le panneau l’édite.`),
           ),
-          h('span', { className: 'wf-note' }, `${entry.document} — ${entry.entry ?? '?'} → ${(entry.exit ?? []).join(', ') || '?'}`),
-          h('button', { type: 'button', className: 'missions-btn', onClick: save, disabled: saving }, saving ? 'Enregistrement…' : 'Enregistrer'),
-          h('button', { type: 'button', className: 'missions-btn', onClick: () => { track('workflow.reload'); return load() } }, 'Recharger'),
+          h('div', { className: 'wf-actions' },
+            h('button', { type: 'button', className: 'missions-btn', onClick: () => { track('workflow.reload'); return load() } }, 'Recharger'),
+            h('button', { type: 'button', className: 'missions-btn', onClick: save, disabled: saving || !baseline }, saving ? 'Enregistrement…' : 'Enregistrer'),
+            h('button', { type: 'button', className: 'missions-btn', onClick: revert, disabled: !baseline }, 'Annuler'),
+            h('button', { type: 'button', className: 'missions-btn wf-primary', onClick: openCreate }, 'Nouveau workflow'),
+          ),
         ),
 
         entry.errors && entry.errors.length > 0
@@ -3208,86 +3466,217 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             )
           : null,
 
+        h('ul', { className: 'wf-list', 'aria-label': 'Workflows' },
+          view.workflows.map((workflow) => h('li', { key: workflow.workflow },
+            h('button', {
+              type: 'button',
+              className: 'wf-card wf-pick',
+              'data-workflow': workflow.workflow,
+              'data-kind': workflow.kind,
+              'aria-pressed': workflow.workflow === entry.workflow,
+              onClick: () => { track('workflow.step', workflow.workflow); setStep(workflow.workflow) },
+            },
+              h('span', { className: 'wf-pick-top' },
+                h('span', { className: 'wf-pick-title' }, workflow.title || workflow.workflow),
+                h('span', { className: 'wf-pick-kind' }, WORKFLOW_KIND_LABELS[workflow.kind] ?? workflow.kind),
+              ),
+              h('span', { className: 'wf-pick-summary' }, workflow.summary || '—'),
+              h('span', { className: 'wf-pick-meta' }, counts(workflow)),
+              h('span', { className: 'wf-pick-flow' },
+                h('code', null, workflow.entry ?? '?'),
+                ' → ',
+                h('code', null, (workflow.exit ?? []).join(' / ') || '?'),
+              ),
+            ),
+          )),
+        ),
+
+        h('div', { className: 'wf-detail-head' },
+          h('div', null,
+            h('h3', { className: 'wf-detail-title' }, entry.title || entry.workflow),
+            h('p', { className: 'wf-note' }, `${entry.document} — entrée ${entry.entry ?? '?'} · sortie(s) ${(entry.exit ?? []).join(', ') || '?'}`),
+          ),
+          statuts
+            ? h('span', { className: 'wf-pick-kind' }, WORKFLOW_KIND_LABELS.statuts)
+            : h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: addGesture }, 'Ajouter un geste')),
+        ),
+
         h('div', { className: 'wf-layout' },
-          h('div', { className: 'wf-canvas-wrap' },
-            graph.boxes.length === 0
-              ? h('p', { className: 'wf-note' }, 'Ce modèle est vide.')
-              : h('svg', {
-                  className: 'wf-canvas',
-                  viewBox: `0 0 ${graph.width} ${graph.height}`,
-                  width: graph.width,
-                  height: graph.height,
-                  role: 'img',
-                  'aria-label': `${entry.title} — ${graph.boxes.length} gestes, ${graph.links.length} arcs`,
-                },
-                  h('defs', null, h('marker', { id: 'wf-arrow', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor', opacity: 0.45 }))),
-                  graph.links.map((link) => h('g', { key: `${link.from}→${link.to}` },
-                    h('path', { className: link.back ? 'wf-link wf-link--back' : 'wf-link', d: link.path, 'marker-end': 'url(#wf-arrow)' }),
-                    // Chaque condition s'affiche en entier : le losange dit où
-                    // l'on choisit, l'étiquette dit sur quoi.
-                    link.when ? h('text', {
-                      className: link.back ? 'wf-link-label wf-link-label--back' : 'wf-link-label wf-link-label--forward',
-                      x: link.labelX,
-                      y: link.labelY,
-                      textAnchor: link.labelAnchor,
-                    }, link.when) : null,
-                  )),
-                  graph.decisions.map((decision) => h('g', {
-                    key: `decision-${decision.id}`,
-                    className: 'wf-node-group wf-node-group--decision',
-                    onClick: () => { setChosen(decision.id); setStatus(null) },
+          h('div', null,
+            h('div', { className: 'wf-canvas-wrap' },
+              graph.boxes.length === 0
+                ? h('div', { className: 'wf-empty' },
+                    h('p', { className: 'wf-note' }, 'Graphe vide'),
+                    h('p', { className: 'wf-note' }, statuts
+                      ? 'Aucun événement : ajoute un arc entre deux états pour relier le parcours.'
+                      : 'Aucun geste : ajoute le premier point du parcours.'),
+                  )
+                : h('svg', {
+                    className: 'wf-canvas',
+                    viewBox: `0 0 ${graph.width} ${graph.height}`,
+                    width: graph.width,
+                    height: graph.height,
+                    role: 'img',
+                    'aria-label': statuts
+                      ? `${entry.title} — ${graph.boxes.length} états, ${graph.links.length} événements`
+                      : `${entry.title} — ${graph.boxes.length} gestes, ${graph.links.length} arcs`,
                   },
-                    h('polygon', {
-                      className: `wf-node wf-node--decision${decision.id === chosen ? ' wf-node--selected' : ''}`,
-                      points: `${decision.x + decision.width / 2},${decision.y} ${decision.x + decision.width},${decision.y + decision.height / 2} ${decision.x + decision.width / 2},${decision.y + decision.height} ${decision.x},${decision.y + decision.height / 2}`,
+                    h('defs', null,
+                      h('marker', { id: 'wf-arrow', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor', opacity: 0.45 })),
+                      h('marker', { id: 'wf-arrow-selected', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor' })),
+                    ),
+                    graph.links.map((link) => {
+                      const selected = selectedArc && selectedArc.from === link.from && selectedArc.to === link.to
+                      return h('g', {
+                        key: `${link.from}→${link.to}`,
+                        className: 'wf-link-group',
+                        role: 'button',
+                        tabIndex: 0,
+                        'data-from': link.from,
+                        'data-to': link.to,
+                        'aria-label': `Événement de ${link.from} vers ${link.to}${link.when ? ` — ${link.when}` : ''}`,
+                        onClick: () => openArc(link),
+                        onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openArc(link) } },
+                      },
+                        h('path', { className: 'wf-link-hit', d: link.path }),
+                        h('path', {
+                          className: `wf-link${link.back ? ' wf-link--back' : ''}${selected ? ' wf-link--selected' : ''}`,
+                          d: link.path,
+                          'marker-end': selected ? 'url(#wf-arrow-selected)' : 'url(#wf-arrow)',
+                        }),
+                        link.when ? h('text', {
+                          className: `wf-link-label ${link.back ? 'wf-link-label--back' : 'wf-link-label--forward'}${selected ? ' wf-link-label--selected' : ''}`,
+                          x: link.labelX,
+                          y: link.labelY,
+                          textAnchor: link.labelAnchor,
+                        }, link.when) : null,
+                      )
                     }),
-                  )),
-                  graph.boxes.map((box) => h('g', {
-                    key: box.id,
-                    className: 'wf-node-group',
-                    onClick: box.kind === 'geste' ? () => { setChosen(box.id); setStatus(null) } : null,
-                  },
-                    h('rect', { className: `wf-node wf-node--${box.kind}${box.id === chosen ? ' wf-node--selected' : ''}`, x: box.x, y: box.y, width: box.width, height: box.height, rx: 9 }),
-                    h('text', { className: 'wf-node-label', x: box.x + 10, y: box.y + (box.kind === 'etat' ? 22 : 20) }, clip(box.label, box.kind === 'geste' ? 30 : 20)),
-                    box.kind === 'geste' ? h('text', { className: 'wf-node-section', x: box.x + 10, y: box.y + 36 }, clip(`${sectionOf(box.id)} · ${writerOf(box.id)}`, 30)) : null,
-                  )),
-                ),
+                    graph.decisions.map((decision) => h('g', {
+                      key: `decision-${decision.id}`,
+                      className: 'wf-node-group wf-node-group--decision',
+                      onClick: () => { setSelectedArc(null); setChosen(decision.id); setStatus(null) },
+                    },
+                      h('polygon', {
+                        className: `wf-node wf-node--decision${decision.id === chosen ? ' wf-node--selected' : ''}`,
+                        points: `${decision.x + decision.width / 2},${decision.y} ${decision.x + decision.width},${decision.y + decision.height / 2} ${decision.x + decision.width / 2},${decision.y + decision.height} ${decision.x},${decision.y + decision.height / 2}`,
+                      }),
+                    )),
+                    graph.boxes.map((box) => {
+                      const state = box.kind === 'etat'
+                      const role = entry && box.id === entry.entry ? 'initial' : entry && (entry.exit ?? []).includes(box.id) ? 'terminal' : null
+                      return h('g', {
+                        key: box.id,
+                        className: 'wf-node-group',
+                        role: 'button',
+                        tabIndex: 0,
+                        'data-node': box.id,
+                        'data-kind': box.kind,
+                        'aria-label': `${state ? 'État' : 'Geste'} ${box.label}`,
+                        onClick: () => { setSelectedArc(null); setChosen(box.id); setStatus(null) },
+                        onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedArc(null); setChosen(box.id); setStatus(null) } },
+                      },
+                        h('rect', { className: `wf-node wf-node--${box.kind}${box.id === chosen ? ' wf-node--selected' : ''}`, x: box.x, y: box.y, width: box.width, height: box.height, rx: 9 }),
+                        state
+                          ? [
+                              role ? h('text', { key: 'badge', className: 'wf-node-badge', x: box.x + box.width / 2, y: box.y - 6, textAnchor: 'middle' }, role) : null,
+                              h('text', { key: 'label', className: 'wf-node-label wf-node-label--center', x: box.x + box.width / 2, y: box.y + 15, textAnchor: 'middle' }, clip(box.label, 22)),
+                              h('text', { key: 'id', className: 'wf-node-id', x: box.x + box.width / 2, y: box.y + 27, textAnchor: 'middle' }, box.id),
+                            ]
+                          : [
+                              h('text', { key: 'label', className: 'wf-node-label', x: box.x + 10, y: box.y + 20 }, clip(box.label, 30)),
+                              h('text', { key: 'section', className: 'wf-node-section', x: box.x + 10, y: box.y + 36 }, clip(`${sectionOf(box.id)} · ${writerOf(box.id)}`, 30)),
+                            ],
+                      )
+                    }),
+                  ),
+            ),
+            statuts
+              ? h('div', { className: 'wf-legend', 'aria-label': 'Légende' },
+                  h('span', { className: 'wf-swatch wf-swatch--etat' }), 'état',
+                  h('span', { className: 'wf-swatch wf-swatch--initial' }), 'initial',
+                  h('span', { className: 'wf-swatch wf-swatch--terminal' }), 'terminal',
+                  h('span', { className: 'wf-swatch wf-swatch--back' }), 'arc retour',
+                )
+              : null,
           ),
 
           h('div', { className: 'wf-side' },
-            h('div', { className: 'wf-card' },
-              h('div', { className: 'wf-card-title' }, node ? 'Geste' : 'Graphe'),
-              node
-                ? h('div', null,
-                    h('p', { className: 'wf-note' }, node.id),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Libellé'), h('input', { value: node.label ?? '', onChange: (event) => patchNode('label', event.target.value) })),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Section du document'), h('select', { value: node.section ?? '', onChange: (event) => patchNode('section', event.target.value) }, sectionChoices.map((text) => h('option', { key: text, value: text }, text)))),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Écrivain'), h('select', { value: node.writer ?? '', onChange: (event) => patchNode('writer', event.target.value) }, view.writers.map((writer) => h('option', { key: writer, value: writer }, writer)))),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Condition'), h('input', { value: node.condition ?? '', placeholder: 'Quand ce geste a lieu', onChange: (event) => patchNode('condition', event.target.value) })),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Artefact'), h('input', { value: node.artifact ?? '', placeholder: 'Ce que le geste produit', onChange: (event) => patchNode('artifact', event.target.value) })),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Porte'), h('input', { value: node.gate ?? '', placeholder: 'Ce qui doit être vrai pour avancer', onChange: (event) => patchNode('gate', event.target.value) })),
-                    h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: removeGesture }, 'Supprimer le geste')),
-                  )
-                : h('div', null,
-                    h('p', { className: 'wf-note' }, 'Clique un geste pour le modifier.'),
-                    h('p', { className: 'wf-note' }, `Écrivains : ${view.writers.join(', ') || '—'}`),
-                    h('p', { className: 'wf-note' }, `${draft.nodes.length} gestes · ${draft.edges.length} arcs`),
-                    h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: addGesture }, 'Ajouter un geste')),
+            chosenNode
+              ? h('div', { className: 'wf-card' },
+                  h('div', { className: 'wf-card-title' }, statuts ? 'État' : 'Geste'),
+                  h('p', { className: 'wf-note' }, chosenNode.id),
+                  h('label', { className: 'wf-field' }, h('span', null, 'Libellé'), h('input', { value: chosenNode.label ?? '', onChange: (event) => patchNode('label', event.target.value) })),
+                  statuts
+                    ? h('label', { className: 'wf-field' }, h('span', null, 'Description'), h('textarea', { rows: 3, value: chosenNode.description ?? '', onChange: (event) => patchNode('description', event.target.value) }))
+                    : h('div', null,
+                        h('label', { className: 'wf-field' }, h('span', null, 'Section du document'), h('select', { value: chosenNode.section ?? '', onChange: (event) => patchNode('section', event.target.value) }, sectionChoices.map((text) => h('option', { key: text, value: text }, text || '—')))),
+                        h('label', { className: 'wf-field' }, h('span', null, 'Écrivain'), h('select', { value: chosenNode.writer ?? '', onChange: (event) => patchNode('writer', event.target.value) }, view.writers.map((writer) => h('option', { key: writer, value: writer }, writer)))),
+                        h('label', { className: 'wf-field' }, h('span', null, 'Condition'), h('input', { value: chosenNode.condition ?? '', placeholder: 'Quand ce geste a lieu', onChange: (event) => patchNode('condition', event.target.value) })),
+                        h('label', { className: 'wf-field' }, h('span', null, 'Artefact'), h('input', { value: chosenNode.artifact ?? '', placeholder: 'Ce que le geste produit', onChange: (event) => patchNode('artifact', event.target.value) })),
+                        h('label', { className: 'wf-field' }, h('span', null, 'Porte'), h('input', { value: chosenNode.gate ?? '', placeholder: 'Ce qui doit être vrai pour avancer', onChange: (event) => patchNode('gate', event.target.value) })),
+                      ),
+                  h('div', { className: 'wf-props' },
+                    prop('Identifiant', chosenNode.id),
+                    prop('Rôle', roleOf(chosenNode.id)),
+                    statuts ? prop('Tracker', chosenNode.tracker) : null,
                   ),
-            ),
+                  h('p', { className: 'wf-note' }, statuts
+                    ? 'Identifiant, rôle et tracker sont en lecture seule : ils viennent du vocabulaire du workspace.'
+                    : `Entrants : ${incoming(chosenNode.id).map((edge) => edge.from).join(', ') || '—'} · Sortants : ${outgoing(chosenNode.id).map((edge) => edge.to).join(', ') || '—'}`),
+                  statuts
+                    ? null
+                    : h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: removeGesture }, 'Supprimer le geste')),
+                )
+              : chosenEdge
+                ? h('div', { className: 'wf-card' },
+                    h('div', { className: 'wf-card-title' }, 'Événement'),
+                    h('p', { className: 'wf-note' }, `${labelOf(chosenEdge.from)} → ${labelOf(chosenEdge.to)}`),
+                    h('div', { className: 'wf-props' },
+                      prop('De', chosenEdge.from),
+                      prop('Vers', chosenEdge.to),
+                    ),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Quand (condition)'), h('input', { value: chosenEdge.when ?? '', placeholder: 'ce qui déclenche l’arc', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'when', event.target.value) })),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Écrivain'),
+                      h('select', { value: chosenEdge.writer ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'writer', event.target.value) },
+                        h('option', { value: '' }, '—'),
+                        view.writers.map((writer) => h('option', { key: writer, value: writer }, writer)),
+                      )),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Artefact'), h('input', { value: chosenEdge.artifact ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'artifact', event.target.value) })),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Porte'), h('input', { value: chosenEdge.gate ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'gate', event.target.value) })),
+                    h('p', { className: 'wf-note' }, 'Le couple départ/arrivée est en lecture seule : supprime l’arc et repose-le pour le changer.'),
+                    h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: () => removeArc(chosenEdge.from, chosenEdge.to) }, 'Supprimer l’arc')),
+                  )
+                : h('div', { className: 'wf-card' },
+                    h('div', { className: 'wf-card-title' }, 'Graphe'),
+                    h('p', { className: 'wf-note' }, statuts ? 'Clique un état ou un événement pour ouvrir son détail.' : 'Clique un geste ou un arc pour ouvrir son détail.'),
+                    h('p', { className: 'wf-note' }, `Écrivains : ${view.writers.join(', ') || '—'}`),
+                    h('p', { className: 'wf-note' }, statuts
+                      ? `${draft.nodes.length} états · ${draft.edges.length} événements`
+                      : `${draft.nodes.length} gestes · ${draft.edges.length} arcs`),
+                    statuts
+                      ? h('div', null,
+                          h('div', { className: 'wf-card-title' }, 'Mapping tracker'),
+                          h('table', { className: 'wf-map-table' },
+                            h('thead', null, h('tr', null, h('th', null, 'État'), h('th', null, 'Tracker'))),
+                            h('tbody', null, draft.nodes.map((node) => h('tr', { key: node.id }, h('td', null, node.label), h('td', null, h('code', null, node.tracker ?? '—'))))),
+                          ),
+                        )
+                      : h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: addGesture }, 'Ajouter un geste')),
+                  ),
 
             h('div', { className: 'wf-card' },
-              h('div', { className: 'wf-card-title' }, 'Arcs'),
+              h('div', { className: 'wf-card-title' }, statuts ? 'Événements' : 'Arcs'),
               draft.edges.length === 0
-                ? h('p', { className: 'wf-note' }, 'Aucun arc.')
+                ? h('p', { className: 'wf-note' }, statuts ? 'Aucun événement.' : 'Aucun arc.')
                 : h('div', null, draft.edges.map((edge) => h('div', {
                     key: `${edge.from}→${edge.to}`,
                     className: 'wf-arc',
                     role: 'button',
                     tabIndex: 0,
-                    title: 'Reprendre cet arc dans le formulaire',
-                    onClick: () => pickArc(edge),
-                    onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pickArc(edge) } },
+                    title: 'Ouvrir le détail de cet arc',
+                    onClick: () => openArc(edge),
+                    onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openArc(edge) } },
                   },
                     h('span', null, `${labelOf(edge.from)} → ${labelOf(edge.to)}`),
                     edge.when ? h('span', { className: 'wf-arc-when' }, edge.when) : null,
@@ -3302,6 +3691,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             ),
           ),
         ),
+        modal,
       )
     }
 

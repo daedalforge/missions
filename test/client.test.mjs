@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { USAGE_ELEMENTS } from '../lib/view.js'
+import { USAGE_ELEMENTS, modelOf } from '../lib/view.js'
 import { MODELS_DIR, readWorkflow } from '../lib/workflows.js'
 import { blockedReasonAfterWrite } from '../lib/view.js'
 import { forgetToken, setBlocked } from '../lib/trackers/jira.js'
@@ -2086,6 +2086,17 @@ test('le graphe a ses règles : nœuds, sélection, retour en pointillé', () =>
   // Le graphe reprend le vocabulaire visuel du panneau : les variables du
   // thème, pas des couleurs figées — le thème manga suit sans règle de plus.
   assert.match(regle('.wf-card'), /border-radius: 12px/)
+})
+
+test('la liste et le volet tiennent à 1280 px comme à 640 px, sans débordement de page', () => {
+  // La grille des cartes se replie d'elle-même ; sous 900 px le volet passe
+  // sous le graphe ; sous 640 px le formulaire passe sur une colonne. Le canevas
+  // garde son propre défilement : jamais la page entière.
+  assert.match(regle('.wf-list'), /grid-template-columns: repeat\(auto-fill, minmax\(240px, 1fr\)\)/)
+  assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\.wf-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  assert.match(SOURCE, /@media \(max-width: 640px\) \{[\s\S]*?\.wf-form \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  assert.match(regle('.wf-canvas-wrap'), /overflow: auto/)
+  assert.match(regle('.missions-body'), /overflow: auto/)
 })
 
 test('le losange du choix se dessine, montre les conditions entières et ouvre le geste', async () => {
@@ -6007,7 +6018,9 @@ test('chaque geste du graphe de workflows compte un seul POST', async () => {
     }
 
     const graph = monterGraphe()
-    bouton(graph, null, 'wf-step').props.onClick()
+    const carte = findAll(graph, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+    assert.ok(carte, 'la carte du workflow est rendue')
+    carte.props.onClick()
     spy.geste('workflow.step', 'review')
 
     bouton(graph, 'Recharger').props.onClick()
@@ -6260,6 +6273,245 @@ test('archiver retire la ligne de Done et referme le volet', async () => {
       .find((next) => next.count === 2)
     assert.ok(pastille, 'la pastille décroît sans attendre la relecture')
     assert.deepEqual(calls, ['missions/api/list?done=1&refresh=1'])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+const WORKFLOW_STATES = ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done']
+
+/** Une entrée de la liste, telle que la route la rend. */
+function workflowEntry(over = {}) {
+  return {
+    workflow: 'cadrage',
+    kind: 'etape',
+    title: 'Cadrage',
+    document: 'workflows/cadrage.md',
+    summary: 'Comprendre le ticket.',
+    entry: 'to-refine',
+    exit: ['ready'],
+    nodes: [
+      { id: 'lire', label: 'Lire le ticket', section: "Ce qu'on fait", writer: 'session' },
+      { id: 'ecrire', label: 'Écrire la fiche', section: "Ce qu'on fait", writer: 'session' },
+    ],
+    edges: [
+      { from: 'to-refine', to: 'lire' },
+      { from: 'lire', to: 'ecrire' },
+      { from: 'ecrire', to: 'ready' },
+    ],
+    counts: { nodes: 2, edges: 3 },
+    headings: ["Ce qu'on fait"],
+    errors: [],
+    orphanSections: [],
+    file: 'workflows/model/cadrage.yml',
+    text: 'workflow: cadrage',
+    ...over,
+  }
+}
+
+/** Le workflow des statuts, l'autre genre de modèle. */
+function statutsEntry() {
+  return {
+    workflow: 'statuts',
+    kind: 'statuts',
+    title: 'Statuts des missions',
+    document: 'workflows/statuts.md',
+    summary: 'Les six états canoniques et les huit transitions qui les relient.',
+    entry: 'to-refine',
+    exit: ['done'],
+    nodes: [
+      { id: 'to-refine', label: 'À cadrer', description: 'Rien n’est décidé.', tracker: 'label to-refine' },
+      { id: 'ready', label: 'Prête', description: 'Le cadrage est validé.', tracker: 'label ready' },
+      { id: 'in-progress', label: 'En cours', description: 'La branche est poussée.', tracker: 'label in-progress' },
+      { id: 'in-review', label: 'En revue', description: 'La PR est ouverte.', tracker: 'label in-review' },
+      { id: 'ready-for-prod', label: 'Prête à partir', description: 'La PR est approuvée.', tracker: 'label ready-for-prod' },
+      { id: 'done', label: 'Terminée', description: 'Merge fait.', tracker: 'issue fermée (map: null)' },
+    ],
+    edges: [
+      { from: 'to-refine', to: 'ready', when: 'cadrage validé', writer: 'session' },
+      { from: 'ready', to: 'in-progress', when: 'branche poussée', writer: 'session' },
+      { from: 'in-progress', to: 'in-review', when: 'PR ouverte et complète', writer: 'session' },
+      { from: 'in-progress', to: 'to-refine', when: 'cadrage faux', writer: 'demandeur' },
+      { from: 'in-review', to: 'ready-for-prod', when: 'revue approuvée', writer: 'session' },
+      { from: 'in-review', to: 'in-progress', when: 'changements demandés', writer: 'demandeur' },
+      { from: 'in-review', to: 'to-refine', when: 'diff hors périmètre', writer: 'demandeur' },
+      { from: 'ready-for-prod', to: 'done', when: 'merge et ticket fermé', writer: 'demandeur' },
+    ],
+    counts: { nodes: 6, edges: 8 },
+    headings: [],
+    errors: [],
+    orphanSections: [],
+    file: 'workflows/model/statuts.yml',
+    text: 'workflow: statuts',
+  }
+}
+
+/** Le panneau monté sur Workflows, avec la liste et l'entrée voulues. */
+function montrerWorkflows(workflows, options = {}) {
+  const active = workflows.find((workflow) => workflow.workflow === options.step) ?? workflows[0]
+  const { api, ctx, registered, queue, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'workflows' }))
+  api.apply(ctx)
+  const vue = findAll(registered.main({}), 'WorkflowsView')[0]
+  assert.ok(vue, 'l’onglet Workflows est monté')
+  queue.push(
+    { loading: false, error: null, workflows, writers: ['demandeur', 'session', 'outil'], states: WORKFLOW_STATES },
+    options.step ?? active.workflow,
+    options.draft ?? modelOf(active),
+    options.chosen ?? null,
+    null,
+    false,
+    options.arc ?? { from: '', to: '', when: '' },
+    0,
+    modelOf(active),
+    options.selectedArc ?? null,
+    options.creating ?? false,
+    options.form ?? { key: '', title: '', kind: 'etape', document: '', entry: '', exit: '' },
+    options.formErrors ?? {},
+    false,
+  )
+  return { rendered: renderTree(vue), setters, queue }
+}
+
+test('la liste des workflows montre genre, résumé, compteurs et entrée → sorties', () => {
+  const { rendered, setters } = montrerWorkflows([workflowEntry(), statutsEntry()])
+
+  const cartes = findAll(rendered, 'button').filter((node) => /wf-pick/.test(node.props.className ?? ''))
+  assert.equal(cartes.length, 2)
+  assert.deepEqual(cartes.map((carte) => carte.props['data-workflow']), ['cadrage', 'statuts'])
+  assert.equal(cartes[0].props['data-kind'], 'etape')
+  assert.equal(cartes[1].props['data-kind'], 'statuts')
+  assert.match(textOf(cartes[0]), /Cadrage/)
+  assert.match(textOf(cartes[0]), /étapes/)
+  assert.match(textOf(cartes[0]), /Comprendre le ticket/)
+  assert.match(textOf(cartes[0]), /2 gestes · 3 arcs/)
+  assert.match(textOf(cartes[1]), /6 états · 8 événements/)
+  assert.match(textOf(cartes[1]), /to-refine/)
+  assert.match(textOf(cartes[1]), /done/)
+
+  cartes[1].props.onClick()
+  assert.equal(setters.at(-1), 'statuts', 'le clic choisit le workflow')
+})
+
+test('le workflow des statuts dessine six états, huit événements et sa légende', () => {
+  const { rendered } = montrerWorkflows([workflowEntry(), statutsEntry()], { step: 'statuts' })
+
+  const nodes = findAll(rendered, 'g').filter((node) => node.props['data-node'])
+  assert.deepEqual(nodes.map((node) => node.props['data-node']), WORKFLOW_STATES)
+  assert.ok(nodes.every((node) => node.props['data-kind'] === 'etat'), 'les points sont des états')
+  const links = findAll(rendered, 'g').filter((node) => node.props.className === 'wf-link-group')
+  assert.equal(links.length, 8, 'les huit transitions sont des arcs')
+  assert.match(textOf(rendered), /arc retour/, 'la légende dit le retour')
+  assert.match(textOf(rendered), /initial/)
+  assert.match(textOf(rendered), /terminal/)
+
+  const table = findAll(rendered, 'table').find((node) => node.props.className === 'wf-map-table')
+  assert.ok(table, 'le mapping tracker est là')
+  assert.equal(findAll(table, 'tr').length, 7, 'un en-tête et six états')
+  assert.match(textOf(table), /issue fermée \(map: null\)/)
+})
+
+test('un état de statuts se modifie par son libellé et sa description, le reste est en lecture seule', () => {
+  const { rendered, setters } = montrerWorkflows([statutsEntry()], { step: 'statuts', chosen: 'in-review' })
+
+  const titres = findAll(rendered, 'div').filter((node) => node.props.className === 'wf-card-title')
+  assert.equal(textOf(titres[0]), 'État')
+  const champs = findAll(rendered, 'input')
+  const libelle = champs.find((input) => input.props.value === 'En revue')
+  assert.ok(libelle, 'le libellé de l’état est un champ')
+  libelle.props.onChange({ target: { value: 'En relecture' } })
+  const miseAJour = setters.at(-2)
+  const draft = typeof miseAJour === 'function' ? miseAJour(modelOf(statutsEntry())) : miseAJour
+  assert.equal(draft.nodes.find((node) => node.id === 'in-review').label, 'En relecture')
+  const description = findAll(rendered, 'textarea').find((node) => node.props.value === 'La PR est ouverte.')
+  assert.ok(description, 'la description est un champ')
+  assert.match(textOf(rendered), /Identifiant/)
+  assert.match(textOf(rendered), /Rôle/)
+  assert.match(textOf(rendered), /Tracker/)
+  assert.match(textOf(rendered), /lecture seule/)
+  const carteEtat = findAll(rendered, 'div').find((node) => node.props.className === 'wf-card' && textOf(node).includes('Identifiant'))
+  assert.equal(findAll(carteEtat, 'select').length, 0, 'id, rôle et tracker ne sont pas des selects')
+})
+
+test('un événement montre départ et arrivée en lecture seule et s’édite par ses quatre champs', () => {
+  const { rendered, setters } = montrerWorkflows([statutsEntry()], {
+    step: 'statuts',
+    selectedArc: { from: 'in-review', to: 'in-progress' },
+  })
+
+  const titres = findAll(rendered, 'div').filter((node) => node.props.className === 'wf-card-title')
+  assert.equal(textOf(titres[0]), 'Événement')
+  assert.match(textOf(rendered), /Dein-review/)
+  assert.match(textOf(rendered), /Versin-progress/)
+  assert.match(textOf(rendered), /changements demandés/)
+  const quand = findAll(rendered, 'input').find((input) => input.props.value === 'changements demandés')
+  quand.props.onChange({ target: { value: 'la revue demande un correctif' } })
+  const miseAJour = setters.at(-2)
+  const draft = typeof miseAJour === 'function' ? miseAJour(modelOf(statutsEntry())) : miseAJour
+  assert.equal(draft.edges.find((edge) => edge.from === 'in-review' && edge.to === 'in-progress').when, 'la revue demande un correctif')
+  const ecrivain = findAll(rendered, 'select').find((select) => select.props.value === 'demandeur')
+  assert.ok(ecrivain, 'l’écrivain de l’arc est un select')
+  assert.match(textOf(rendered), /lecture seule/)
+})
+
+test('Enregistrer envoie le brouillon entier à la route du modèle', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url: String(url), options })
+    return { ok: true, json: async () => ({ workflow: 'statuts', file: 'workflows/model/statuts.yml', entry: statutsEntry() }) }
+  }
+  try {
+    const { rendered } = montrerWorkflows([statutsEntry()], { step: 'statuts' })
+    findAll(rendered, 'button').find((node) => textOf(node).trim() === 'Enregistrer').props.onClick()
+    await new Promise((done) => setTimeout(done, 0))
+    const envois = appels.filter((appel) => String(appel.url).includes('workflows/model'))
+    assert.equal(envois.length, 1)
+    assert.equal(envois[0].url, 'missions/api/workflows/model')
+    const body = JSON.parse(envois[0].options.body)
+    assert.equal(body.workflow, 'statuts')
+    assert.equal(body.model.kind, 'statuts')
+    assert.equal(body.model.nodes.length, 6)
+    assert.equal(body.model.edges.length, 8)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Annuler rend le brouillon au fichier lu, sans rien poster', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (...args) => { appels.push(args); return { ok: true, json: async () => ({}) } }
+  try {
+    const { rendered, setters } = montrerWorkflows([statutsEntry()], { step: 'statuts', chosen: 'done' })
+    const annuler = findAll(rendered, 'button').find((node) => textOf(node).trim() === 'Annuler')
+    assert.ok(annuler, 'Annuler est rendu')
+    annuler.props.onClick()
+    const draft = setters.at(-4)
+    assert.equal(draft.nodes.find((node) => node.id === 'done').label, 'Terminée')
+    assert.equal(appels.length, 0, 'Annuler n’écrit rien')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('le dialogue de création valide chaque champ avant d’écrire', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (...args) => { appels.push(args); return { ok: true, json: async () => ({}) } }
+  try {
+    const { rendered, setters } = montrerWorkflows([workflowEntry()], { creating: true })
+    assert.match(textOf(rendered), /Nouveau workflow/)
+    assert.match(textOf(rendered), /minuscules, chiffres et tirets/)
+
+    const formulaire = findAll(rendered, 'form').find((node) => node.props.role === 'dialog')
+    formulaire.props.onSubmit({ preventDefault() {} })
+    const erreurs = setters.at(-1)
+    assert.equal(erreurs.key, 'La clé est obligatoire.')
+    assert.equal(erreurs.title, 'Le titre est obligatoire.')
+    assert.equal(erreurs.document, 'Le document est obligatoire.')
+    assert.equal(erreurs.entry, 'L’entrée est obligatoire.')
+    assert.equal(erreurs.exit, 'Au moins une sortie est obligatoire.')
+    assert.equal(appels.length, 0, 'un formulaire vide n’écrit rien')
   } finally {
     globalThis.fetch = vraiFetch
   }
