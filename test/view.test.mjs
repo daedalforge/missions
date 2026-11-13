@@ -1758,7 +1758,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'tab.dashboard', 'tab.missions', 'tab.done', 'tab.repositories', 'tab.workflows', 'tab.usage',
     'filter.search', 'filter.state', 'filter.type', 'filter.epic', 'filter.project', 'filter.priority',
     'filter.sort', 'filter.missing', 'filter.clear', 'list.refresh', 'list.retry', 'mission.open',
-    'dashboard.view-all',
+    'dashboard.view-all', 'mission.archive.batch',
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
     'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
     'mission.session', 'mission.feedback-session',
