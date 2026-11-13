@@ -77,6 +77,18 @@ quand c'est l'onglet ouvert et la page visible, jamais avec `?refresh=1` : le
 bouton **Retry** est le seul à forcer. Un scan en échec garde les lignes et
 nomme l'échec, jamais un zéro.
 
+Le **volet droit** du Dashboard devient le **poste de décision** de la file :
+il reprend ce que le widget *Needs you* ordonne déjà. La carte est la tête de
+`needsYou` — clé, titre, état sous son verbe d'action, ancienneté (la marque
+*quiet* au-delà de `QUIET_AFTER_DAYS`), points, marque `blocked` — avec sa
+position sur le total (« 1 of 4 »), puis les autres missions en lignes
+compactes : un clic met la ligne dans la carte sans quitter le Dashboard. Deux
+gestes : **Start a session — <étape>** ouvre la session de l'étape avec le
+prompt de `missionSessionPrompt` déjà dans le composer, sans rien envoyer ;
+**Details** ouvre la mission dans l'onglet Missions, son volet complet. Rien
+n'attend de décision ? Le volet le dit et ramène à Missions. Sous Missions, Done
+et Repositories, le volet garde son contenu d'avant.
+
 Un projet peut déclarer ses **traductions** dans
 [`missions/projects.yml`](missions/projects.yml) — `translations.locales`,
 `translations.languageFile`, `translations.reference`. Le volet d'une mission de
@@ -87,6 +99,19 @@ relève les clés `t()` qu'ils utilisent et écrit
 dans au moins une locale déclarée. Les clés sans valeur dans la locale de
 référence sont listées à part, jamais dans le fichier ; Tolgee n'est jamais appelé, l'import du fichier
 reste un geste manuel.
+
+## Les thèmes
+
+Le panneau propose trois thèmes, choisis dans le sélecteur **Theme** et retenus
+dans la session (`missions.theme`) : **Default**, **Naruto** et **Noël**. Un
+thème n'a pas sa propre copie de la mise en page : les deux thèmes illustrés
+partagent la même peau (`data-skin="paper"`) et n'apportent que leurs tokens
+`--skin-*` et leurs rares variantes de décor. Noël remplace les images de Konoha
+par un décor hivernal en CSS/SVG — nuit d'hiver, crème, sapin, rouge baie et or,
+typographie d'affichage sérif — et anime un flocon sur le rafraîchissement et
+les pastilles en attente, sauf si le système demande moins de mouvement
+(`prefers-reduced-motion: reduce`). Aucune image raster ni ressource distante
+n'entre dans ce thème ; une valeur stockée inconnue retombe sur Default.
 
 ## La barre et Settings
 
