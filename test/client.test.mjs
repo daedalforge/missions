@@ -508,10 +508,10 @@ test('le thème Naruto rend le bouton libre sans règle nouvelle', () => {
   assert.equal(bouton.props.className, 'missions-action missions-action--icon')
 
   // La classe suffit : le manga ne réécrit que `.missions-action` et le primaire.
-  const manga = regle('.missions-panel[data-theme="manga"] .missions-action')
-  assert.match(manga, /border: 1\.5px solid var\(--mm-ink\)/)
-  assert.match(manga, /box-shadow: 2px 2px 0 var\(--mm-shadow\)/)
-  assert.match(regle('.missions-panel[data-theme="manga"] .missions-action--primary'), /background: var\(--mm-ink\)/)
+  const manga = regle('.missions-panel[data-skin="paper"] .missions-action')
+  assert.match(manga, /border: 1\.5px solid var\(--skin-ink\)/)
+  assert.match(manga, /box-shadow: 2px 2px 0 var\(--skin-shadow\)/)
+  assert.match(regle('.missions-panel[data-skin="paper"] .missions-action--primary'), /background: var\(--skin-ink\)/)
 })
 
 test('la rangée du pied aligne les icônes sur une seule ligne', () => {
@@ -531,8 +531,8 @@ test('la rangée du pied aligne les icônes sur une seule ligne', () => {
   // Le focus reste visible au clavier, et le manga garde son encre.
   assert.match(regle('.missions-action:focus-visible'), /outline: 2px solid/)
   assert.match(
-    regle('.missions-panel[data-theme="manga"] .missions-action:focus-visible'),
-    /outline-color: var\(--mm-ink\)/,
+    regle('.missions-panel[data-skin="paper"] .missions-action:focus-visible'),
+    /outline-color: var\(--skin-ink\)/,
   )
 
   // Le pied empile deux choses seulement : la clôture textuelle et la rangée.
@@ -672,11 +672,11 @@ test('le volet découpe le détail en trois onglets', () => {
   assert.match(SOURCE, /h\('pre', \{ className: 'missions-journal-text', tabIndex: 0 \}/)
   // Les deux thèmes stylent la barre : le défaut et le manga.
   assert.match(SOURCE, /\.missions-drawer-tabs \{/)
-  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-tabs \{/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-drawer-tabs \{/)
   // Le panneau est déjà séparé par le trait des onglets : aucun bloc ne
   // rajoute une bordure haute, propriétés comprises.
   assert.match(SOURCE, /\.missions-drawer-panel \.missions-props, \.missions-drawer-panel \.missions-journal, \.missions-drawer-panel \.missions-checklist \{ padding-top: 0; border-top: 0; \}/)
-  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-drawer-panel \.missions-props \{ border-top: 0; \}/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-drawer-panel \.missions-props \{ border-top: 0; \}/)
   // Un seul bloc à la fois : le panneau ne rend que la section active.
   assert.match(SOURCE, /const panelContent = section === 'journal' \? journalPanel : section === 'checklist' \? checklistPanel : detailsPanel/)
 })
@@ -796,53 +796,53 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   assert.match(SOURCE, /Naruto theme/)
   assert.match(flat, /missions-drawer--empty/)
   assert.doesNotMatch(SOURCE, /missions-drawer--empty \{ display: none; \}/)
-  assert.match(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*background: color-mix/)
-  assert.doesNotMatch(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*translateY/)
+  assert.match(SOURCE, /\[data-skin="paper"\] \.missions-card:hover \{[^}]*background: color-mix/)
+  assert.doesNotMatch(SOURCE, /\[data-skin="paper"\] \.missions-card:hover \{[^}]*translateY/)
 })
 
 test('le compteur de l’onglet prend l’anneau des groupes, pas une pastille pâle', () => {
-  const ring = regle('.missions-panel[data-theme="manga"] .missions-tab-count')
+  const ring = regle('.missions-panel[data-skin="paper"] .missions-tab-count')
   // Même dessin que `.missions-group-ring` : le trait, la taille, le chiffre.
   assert.match(ring, /display: grid/)
   assert.match(ring, /width: 24px/)
   assert.match(ring, /height: 24px/)
-  assert.match(ring, /border: 1\.5px solid var\(--mm-ink\)/)
+  assert.match(ring, /border: 1\.5px solid var\(--skin-ink\)/)
   assert.match(ring, /border-radius: 50%/)
-  assert.match(ring, /font: 700 11px\/1 var\(--mm-mono\)/)
+  assert.match(ring, /font: 700 11px\/1 var\(--skin-mono\)/)
   // Un compteur d'onglet n'a pas d'état : l'accent du panneau remplace la
   // teinte d'état que l'anneau des groupes reçoit de son groupe.
-  assert.match(ring, /background: var\(--mm-orange\)/)
+  assert.match(ring, /background: var\(--skin-accent\)/)
   // La pastille du thème par défaut ne bouge pas.
   assert.match(regle('.missions-tab-count'), /border-radius: 9px/)
   // En thème sombre, le chiffre reste en encre sombre sur l'orange, comme
   // l'anneau et la marque du titre : c'est le bloc, pas seulement l'entrée de
   // la liste, qui doit porter la couleur.
   for (const prefix of [':root[data-ds-dark-theme]', 'body[data-ds-dark-theme]']) {
-    const at = SOURCE.indexOf(`${prefix} .missions-panel[data-theme="manga"] .missions-tab-count,`)
+    const at = SOURCE.indexOf(`${prefix} .missions-panel[data-skin="paper"] .missions-tab-count,`)
     assert.ok(at >= 0, `sélecteur sombre manquant : ${prefix}`)
-    assert.match(SOURCE.slice(at, SOURCE.indexOf('}', at)), /color: #2c2621/)
+    assert.match(SOURCE.slice(at, SOURCE.indexOf('}', at)), /color: var\(--skin-accent-ink\)/)
   }
 })
 
 test('le thème Naruto finit le formulaire de branche, le filtre et la liste vide', () => {
-  const manga = (name) => regle(`.missions-panel[data-theme="manga"] ${name}`)
+  const manga = (name) => regle(`.missions-panel[data-skin="paper"] ${name}`)
 
   // Le formulaire du volet suivait le thème par défaut : champs blancs, bordure
   // grise. Il prend le cadre encre, le fond page-2 et l'ombre papier.
   for (const field of ['.missions-declare-input', '.missions-declare-save']) {
-    assert.match(manga(field), /border: 1\.5px solid var\(--mm-ink\)/)
-    assert.match(manga(field), /background: var\(--mm-page-2\)/)
-    assert.match(manga(field), /box-shadow: [12]px [12]px 0 var\(--mm-shadow\)/)
+    assert.match(manga(field), /border: 1\.5px solid var\(--skin-ink\)/)
+    assert.match(manga(field), /background: var\(--skin-page-2\)/)
+    assert.match(manga(field), /box-shadow: [12]px [12]px 0 var\(--skin-shadow\)/)
   }
-  assert.match(manga('.missions-declare'), /border-top: 1\.5px solid var\(--mm-ink\)/)
+  assert.match(manga('.missions-declare'), /border-top: 1\.5px solid var\(--skin-ink\)/)
   // Les cases du filtre Statut prennent les teintes du thème ; la palette
   // GitHub ne reste que sur le thème par défaut.
   const accents = [
-    ['in-review', 'var(--mm-sky-deep)'],
-    ['ready-for-prod', 'var(--mm-teal-deep)'],
-    ['in-progress', '#8a6a1f'],
-    ['ready', 'var(--mm-sage-deep)'],
-    ['to-refine', 'var(--mm-lilac-deep)'],
+    ['in-review', 'var(--skin-info-strong)'],
+    ['ready-for-prod', 'var(--skin-alt-strong)'],
+    ['in-progress', 'var(--skin-warn-ink)'],
+    ['ready', 'var(--skin-good-strong)'],
+    ['to-refine', 'var(--skin-quiet-strong)'],
   ]
   for (const [state, color] of accents) {
     assert.ok(
@@ -852,12 +852,12 @@ test('le thème Naruto finit le formulaire de branche, le filtre et la liste vid
   }
   assert.match(regle('.missions-status-option[data-state="to-refine"] input'), /accent-color: #8250df/)
   // La liste vide n'est plus un texte gris nu : un bandeau pointillé.
-  assert.match(manga('.missions-empty'), /border: 1\.5px dashed var\(--mm-line-strong\)/)
-  assert.match(manga('.missions-empty'), /background: var\(--mm-page-2\)/)
+  assert.match(manga('.missions-empty'), /border: 1\.5px dashed var\(--skin-line-strong\)/)
+  assert.match(manga('.missions-empty'), /background: var\(--skin-page-2\)/)
   // L'aide d'erreur repasse au corail clair en thème sombre : le corail profond
   // du thème clair tomberait à 2,6:1 sur le fond sombre.
-  const darkError = SOURCE.slice(SOURCE.indexOf(':root[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-declare-note--error,'))
-  assert.match(darkError.slice(0, darkError.indexOf('}')), /color: var\(--mm-coral\)/)
+  const darkError = SOURCE.slice(SOURCE.indexOf(':root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-declare-note--error,'))
+  assert.match(darkError.slice(0, darkError.indexOf('}')), /color: var\(--skin-danger\)/)
 })
 
 /** Une ligne complète, telle que `missions/api/list` la renvoie. */
@@ -916,7 +916,7 @@ test('chaque carte porte un repère de priorité qui se lit sans la couleur', ()
   // manga contrasté en thème sombre, et aucun voile sur l'absence.
   assert.match(SOURCE, /\.missions-prio \.prio-bar--off \{ opacity: \.22; \}/)
   assert.ok(SOURCE.includes('.prio-none { fill: none; stroke: currentColor; stroke-width: 1.25; stroke-dasharray: 2.4 2; }'))
-  assert.ok(SOURCE.includes('body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data-priority="high"] { color: var(--mm-orange); }'))
+  assert.ok(SOURCE.includes('body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-priority="high"] { color: var(--skin-accent); }'))
   assert.ok(!SOURCE.includes('.missions-prio[data-priority="none"] { opacity: .55; }'))
   // Le remplissage est la seule chose qui rend les barres visibles : sans lui
   // elles prennent le noir par défaut et disparaissent en thème sombre.
@@ -1138,12 +1138,12 @@ test('l’icône de rafraîchissement est servie par les deux thèmes', () => {
   assert.match(regle('.missions-icon-btn:focus-visible'), /outline:/)
 
   // Naruto : la même commande, au trait d'encre et à l'ombre portée.
-  const manga = regle('.missions-panel[data-theme="manga"] .missions-icon-btn')
-  assert.match(manga, /1\.5px solid var\(--mm-ink\)/)
-  assert.match(manga, /var\(--mm-shadow\)/)
+  const manga = regle('.missions-panel[data-skin="paper"] .missions-icon-btn')
+  assert.match(manga, /1\.5px solid var\(--skin-ink\)/)
+  assert.match(manga, /var\(--skin-shadow\)/)
   // Les deux ancrages du thème sombre sont couverts.
-  assert.match(SOURCE, /:root\[data-ds-dark-theme\] \.missions-panel\[data-theme="manga"\] \.missions-icon-btn/)
-  assert.match(SOURCE, /body\[data-ds-dark-theme\] \.missions-panel\[data-theme="manga"\] \.missions-icon-btn/)
+  assert.match(SOURCE, /:root\[data-ds-dark-theme\] \.missions-panel\[data-skin="paper"\] \.missions-icon-btn/)
+  assert.match(SOURCE, /body\[data-ds-dark-theme\] \.missions-panel\[data-skin="paper"\] \.missions-icon-btn/)
   // Comme le spinner, l'animation du shuriken s'éteint si l'on demande moins de mouvement.
   assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{ \.missions-icon-shuriken \{ animation: none; \} \}/)
 })
@@ -2152,8 +2152,8 @@ test('une carte bloquée se teinte entièrement et porte un cadenas, sans mot', 
   assert.match(regle('.missions-card[data-blocked="true"]'), /background: color-mix/)
   assert.match(regle('.missions-lock'), /border-radius: 999px/)
   assert.match(
-    regle('.missions-panel[data-theme="manga"] .missions-card[data-blocked="true"]'),
-    /border-color: var\(--mm-coral-deep\)/,
+    regle('.missions-panel[data-skin="paper"] .missions-card[data-blocked="true"]'),
+    /border-color: var\(--skin-danger-strong\)/,
   )
 })
 
@@ -2164,7 +2164,7 @@ test('le volet bloque avec un champ de raison et un bouton désarmé sans raison
   assert.match(SOURCE, /disabled: writingBlock \|\| !reason\.trim\(\)/)
   assert.match(regle('.missions-blocked'), /display: grid/)
   assert.match(regle('.missions-blocked-input'), /resize: vertical/)
-  assert.match(regle('.missions-panel[data-theme="manga"] .missions-blocked'), /border: 1\.5px solid var\(--mm-ink\)/)
+  assert.match(regle('.missions-panel[data-skin="paper"] .missions-blocked'), /border: 1\.5px solid var\(--skin-ink\)/)
 })
 
 test('le volet montre la raison du blocage : auteur, âge, texte et lien', () => {
@@ -2340,7 +2340,7 @@ test('le volet rend la priorité comme un select natif, plus comme une ligne mor
   assert.match(SOURCE, /\.missions-priority-select:disabled \{/)
   assert.match(SOURCE, /\.missions-priority-note--error \{/)
   // Les deux thèmes : la bordure encre de manga, comme le bloc de blocage.
-  assert.match(regle('.missions-panel[data-theme="manga"] .missions-priority-select'), /border: 1\.5px solid var\(--mm-ink\)/)
+  assert.match(regle('.missions-panel[data-skin="paper"] .missions-priority-select'), /border: 1\.5px solid var\(--skin-ink\)/)
   // Le message est rendu dans le volet, en alerte quand le tracker refuse.
   assert.match(SOURCE, /role: priorityNote\.error \? 'alert' : 'status'/)
 })
@@ -2625,10 +2625,14 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
 
   const defaults = dessins('default')
   const manga = dessins('manga')
-  // Le même onglet, deux dessins : le thème n'est pas un simple recoloriage.
+  const noel = dessins('noel')
+  // Le même onglet, trois dessins : le thème n'est pas un simple recoloriage.
   for (const id of Object.keys(defaults)) {
     assert.notDeepEqual(manga[id].paths, defaults[id].paths, `dessin identique dans les deux thèmes : ${id}`)
+    assert.notDeepEqual(noel[id].paths, defaults[id].paths, `dessin identique en Noël : ${id}`)
+    assert.notDeepEqual(noel[id].paths, manga[id].paths, `dessin identique entre Naruto et Noël : ${id}`)
     assert.ok(manga[id].paths.length > 0)
+    assert.ok(noel[id].paths.length > 0)
     assert.ok(defaults[id].paths.length > 0)
   }
   // La pastille en attente suit le même thème : la flèche du thème par défaut
@@ -2636,11 +2640,15 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
   for (const id of ['missions-tab-missions', 'missions-tab-done', 'missions-tab-repositories']) {
     assert.equal(defaults[id].badge.length, 1, `pastille en attente absente : ${id}`)
     assert.equal(manga[id].badge.length, 1, `pastille en attente absente en manga : ${id}`)
+    assert.equal(noel[id].badge.length, 1, `pastille en attente absente en Noël : ${id}`)
     assert.notDeepEqual(manga[id].badge, defaults[id].badge, `pastille identique dans les deux thèmes : ${id}`)
+    assert.notDeepEqual(noel[id].badge, defaults[id].badge, `pastille identique en Noël : ${id}`)
+    assert.notDeepEqual(noel[id].badge, manga[id].badge, `pastille identique entre Naruto et Noël : ${id}`)
   }
   // L'encre manga est plus épaisse, comme le reste de la barre.
   assert.equal(defaults['missions-tab-dashboard'].strokeWidth, 1.3)
   assert.equal(manga['missions-tab-dashboard'].strokeWidth, 1.7)
+  assert.equal(noel['missions-tab-dashboard'].strokeWidth, 1.5)
 })
 
 test('Settings montre ses deux sections dans une navigation verticale, et la section active seule', () => {
@@ -3488,7 +3496,7 @@ test('la pastille en attente prend le gabarit du chiffre et tourne', () => {
   assert.match(SOURCE, /@keyframes missions-tab-count-spin \{ to \{ transform: rotate\(360deg\); \} \}/)
   assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{ \.missions-tab-count-loader svg \{ animation: none; \} \}/)
   // L'anneau manga garde ses 24 px : la pastille en attente est la même pastille.
-  const ring = regle('.missions-panel[data-theme="manga"] .missions-tab-count')
+  const ring = regle('.missions-panel[data-skin="paper"] .missions-tab-count')
   assert.match(ring, /width: 24px/)
   assert.match(ring, /height: 24px/)
 })
@@ -3502,7 +3510,7 @@ test('la rangée d’onglets défile plutôt que de couper un libellé', () => {
   // La pastille ne gagne aucune règle propre : elle est celle de Missions, dans
   // les deux thèmes.
   assert.match(regle('.missions-tab-count'), /border-radius: 9px/)
-  assert.match(regle('.missions-panel[data-theme="manga"] .missions-tab-count'), /background: var\(--mm-orange\)/)
+  assert.match(regle('.missions-panel[data-skin="paper"] .missions-tab-count'), /background: var\(--skin-accent\)/)
   assert.doesNotMatch(SOURCE, /missions-tab-count--/)
 })
 
@@ -4714,8 +4722,8 @@ test('l’onglet Repositories a sa grille et ses deux thèmes', () => {
   assert.match(regle('.missions-repo-state[data-error="true"]'), /#cf222e/)
 
   // Le thème manga ne copie pas la grille : il l'habille de papier et d'encre.
-  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-repo \{/)
-  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-repo-head \{/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-repo \{/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-repo-head \{/)
   // La colonne du dernier commit cède la première quand le panneau rétrécit.
   assert.match(SOURCE, /@media \(max-width: 860px\) \{\s+\.missions-repo-grid \{ grid-template-columns: [^}]+\}\s+\.missions-col-commit \{ display: none; \}/)
 })
@@ -5033,7 +5041,7 @@ test('le volet ne propose la clôture locale qu’en ready-for-prod', () => {
   assert.match(SOURCE, /missions-action--danger-armed/)
   assert.match(SOURCE, /h\(ActionIcon, \{ name: closing \|\| !armedClose \? 'close' : 'confirm' \}\)/)
   assert.match(SOURCE, /\.missions-action--danger-armed \{[^}]*background: var\(--dsw-alias-label-danger/)
-  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-action--danger-armed \{[^}]*--mm-orange-deep/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-action--danger-armed \{[^}]*--skin-accent-strong/)
 
   // Le câblage du bundle, en plus du rendu.
   assert.match(SOURCE, /const LOCAL_CLOSE_URL = 'missions\/api\/local-close'/)
@@ -5587,7 +5595,7 @@ test('Usage se place avant Workflows dans les sections de Settings, et ses verdi
   for (const verdict of ['grow', 'keep', 'improve', 'remove', 'none']) {
     assert.ok(regle(`.missions-usage-verdict--${verdict}`).length > 0, `règle absente : ${verdict}`)
   }
-  assert.match(SOURCE, /\.missions-panel\[data-theme="manga"\] \.missions-usage-verdict--grow/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-usage-verdict--grow/)
 })
 
 // ---------------------------------------------------------------------------
@@ -6263,4 +6271,178 @@ test('archiver retire la ligne de Done et referme le volet', async () => {
   } finally {
     globalThis.fetch = vraiFetch
   }
+})
+
+// --- Thème Noël (MIS-194) -------------------------------------------------
+// La même peau illustrée porte les deux thèmes : la structure est partagée,
+// chaque thème n'apporte que ses tokens et ses rares variantes de décor.
+
+/** Le corps d'une règle dont le sélecteur tient sur une ligne. */
+function corpsDe(selector) {
+  const at = SOURCE.indexOf(`${selector} {`)
+  assert.ok(at >= 0, `règle absente : ${selector}`)
+  return SOURCE.slice(at + selector.length + 2, SOURCE.indexOf('}', at))
+}
+
+/** Les tokens de couleur littérale d'un bloc de palette. */
+function paletteDe(debut) {
+  const at = SOURCE.indexOf(debut)
+  assert.ok(at >= 0, `palette absente : ${debut}`)
+  const open = SOURCE.indexOf('{', at)
+  const body = SOURCE.slice(open + 1, SOURCE.indexOf('}', open))
+  const tokens = new Map()
+  for (const match of body.matchAll(/--skin-([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)) tokens.set(match[1], match[2].toLowerCase())
+  return tokens
+}
+
+/** Contraste WCAG d'un texte sur son fond. */
+function contraste(texte, fond) {
+  const luminance = (hex) => {
+    const n = parseInt(hex.slice(1), 16)
+    const canaux = [n >> 16 & 255, n >> 8 & 255, n & 255].map((v) => {
+      const c = v / 255
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * canaux[0] + 0.7152 * canaux[1] + 0.0722 * canaux[2]
+  }
+  const [haut, bas] = [luminance(texte), luminance(fond)].sort((a, b) => b - a)
+  return (haut + 0.05) / (bas + 0.05)
+}
+
+/** Toutes les règles du bloc de thème, sélecteur et corps. */
+function reglesDeTheme() {
+  const start = SOURCE.indexOf('const THEME_CSS = `')
+  assert.ok(start >= 0)
+  const css = SOURCE.slice(start, SOURCE.indexOf('\n`', start)).replace(/\/\*[\s\S]*?\*\//g, '')
+  const regles = []
+  for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = match[1].trim().replace(/\s+/g, ' ')
+    if (selector) regles.push({ selector, body: match[2] })
+  }
+  return regles
+}
+
+const NOEL_CLAIR = '.missions-panel[data-skin="paper"][data-theme="noel"]'
+const NOEL_SOMBRE = ':root[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="noel"]'
+const MANGA_CLAIR = '.missions-panel[data-skin="paper"][data-theme="manga"]'
+const MANGA_SOMBRE = ':root[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="manga"]'
+
+function arbreTheme(theme, session = {}, vue = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }, initial = [EMPTY_BAR, vue]) {
+  const { api, ctx, registered } = charger({ getItem: () => theme, setItem: () => {} }, initial, memorySession(session))
+  api.apply(ctx)
+  return registered.main({})
+}
+
+/** L'arbre rendu, comme React le ferait : les composants deviennent leurs nœuds. */
+function renduTheme(theme, session = {}, vue) {
+  return renderTree(arbreTheme(theme, session, vue))
+}
+
+test('Noël et Naruto partagent une seule peau illustrée', () => {
+  // Les deux thèmes demandent la peau ; le thème par défaut n'en porte pas.
+  const manga = JSON.stringify(renduTheme('manga', { 'missions.tab': 'missions' }))
+  const noel = JSON.stringify(renduTheme('noel', { 'missions.tab': 'missions' }))
+  const defaut = JSON.stringify(renduTheme('default'))
+  assert.match(manga, /"data-skin":"paper"/)
+  assert.match(noel, /"data-skin":"paper"/)
+  assert.doesNotMatch(defaut, /"data-skin"/)
+
+  // Mêmes tokens de couleur des deux côtés : aucun thème n'en possède un en
+  // propre, sinon la structure cesserait d'être commune. Le bloc sombre n'est
+  // qu'une surcharge : il ne peut nommer que des tokens déjà définis.
+  assert.deepEqual([...paletteDe(MANGA_CLAIR).keys()].sort(), [...paletteDe(NOEL_CLAIR).keys()].sort(), 'tokens clairs différents')
+  const clairs = new Set([...paletteDe(NOEL_CLAIR).keys()])
+  for (const nom of paletteDe(NOEL_SOMBRE).keys()) assert.ok(clairs.has(nom), `token sombre inconnu : ${nom}`)
+  for (const nom of paletteDe(MANGA_SOMBRE).keys()) assert.ok(clairs.has(nom), `token sombre inconnu : ${nom}`)
+
+  // La structure vit une fois, sous data-skin, et aucune règle par thème ne la
+  // recopie : pas de carte, de rangée ni de barre propre à Naruto ou à Noël.
+  // Le bandeau est le seul décor admis à surcharger son propre fond.
+  for (const classe of ['missions-card', 'missions-row', 'missions-group', 'missions-toolbar', 'missions-tabs', 'missions-tab-count', 'missions-drawer-tabs', 'missions-empty-state']) {
+    assert.match(SOURCE, new RegExp(`\\.missions-panel\\[data-skin="paper"\\] \\.${classe}[ ,{]`), `${classe} absente de la peau`)
+    assert.doesNotMatch(SOURCE, new RegExp(`\\[data-theme="(manga|noel)"\\] \\.${classe}\\b`), `${classe} dupliquée par thème`)
+  }
+})
+
+test('les palettes Noël gardent les textes lisibles, clair comme sombre', () => {
+  for (const [nom, debut, seuils, base] of [
+    ['clair', NOEL_CLAIR, [7, 4.5, 4.5], NOEL_CLAIR],
+    ['sombre', NOEL_SOMBRE, [7, 4.5, 4.5], NOEL_CLAIR],
+  ]) {
+    const tokens = new Map([...paletteDe(base), ...paletteDe(debut)])
+    const paires = [
+      ['ink sur page', tokens.get('ink'), tokens.get('page')],
+      ['ink-2 sur page-2', tokens.get('ink-2'), tokens.get('page-2')],
+      ['ink-3 sur page', tokens.get('ink-3'), tokens.get('page')],
+    ]
+    for (const [index, [label, texte, fond]] of paires.entries()) {
+      assert.ok(texte && fond, `${nom} : token manquant pour ${label}`)
+      assert.ok(contraste(texte, fond) >= seuils[index], `${nom} : ${label} sous le seuil (${contraste(texte, fond).toFixed(2)})`)
+    }
+  }
+  // Le thème sombre suit les deux attributs que le host pose : root et body.
+  assert.ok(SOURCE.includes(':root[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="noel"]'))
+  assert.ok(SOURCE.includes('body[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="noel"]'))
+})
+
+test('la peau partagée ne porte aucun constant de Konoha', () => {
+  const partagees = reglesDeTheme().filter(({ selector }) => selector.includes('[data-skin="paper"]') && !selector.includes('[data-theme='))
+  assert.ok(partagees.length > 50, 'la peau partagée est bien le gros du bloc de thème')
+  const texte = partagees.map(({ selector, body }) => `${selector} {${body}}`).join('\n')
+  assert.doesNotMatch(texte, /data:image|webp/i, 'aucune image embarquée dans la peau')
+  assert.doesNotMatch(texte, /Naruto|忍/, 'aucun glyphe ni nom de Konoha dans la peau')
+  assert.doesNotMatch(texte, /#f2a26f|#a85526|#fbf4e6|#aec7a7/i, 'aucune teinte Naruto en dur dans la peau')
+  // Et aucune règle de structure par thème : les variantes de thème sont des
+  // tokens ou des décors, jamais une seconde peau.
+  assert.doesNotMatch(SOURCE, /\[data-skin="paper"\]\[data-theme="(manga|noel)"\] \.missions-(card|row|group|toolbar|tabs|tab-count|drawer-tabs)\b/)
+})
+
+test('Noël rend son bandeau, sa marque et son état vide sans image Konoha', () => {
+  const arbre = arbreTheme('noel', { 'missions.tab': 'missions' })
+  const flat = JSON.stringify(renderTree(arbre))
+  assert.match(flat, /"data-theme":"noel"/)
+  assert.match(flat, /"data-skin":"paper"/)
+  // Bandeau : la scène SVG, la marque ❄ et le kicker Noël.
+  assert.match(flat, /missions-hero-scene/)
+  assert.match(flat, /missions-title-mark/)
+  assert.match(flat, /❄/)
+  assert.match(flat, /Noël · mission log/)
+  // Aucune image raster : ni les webp de Konoha, ni une autre ressource.
+  assert.doesNotMatch(flat, /data:image\/webp/)
+
+  // État vide filtré : l'art CSS/SVG remplace la photo de Konoha.
+  const vue = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const vide = JSON.stringify(renderTree(arbreTheme('noel', { 'missions.tab': 'missions' }, vue, [{ ...EMPTY_BAR, query: 'zzz' }, vue])))
+  assert.match(vide, /missions-empty-scene/)
+  assert.doesNotMatch(vide, /data:image/)
+})
+
+test('le thème Naruto garde ses images et son glyphe', () => {
+  const flat = JSON.stringify(renduTheme('manga', { 'missions.tab': 'missions' }))
+  assert.match(flat, /"data-theme":"manga"/)
+  assert.match(flat, /"data-skin":"paper"/)
+  assert.match(flat, /missions-hero-photo/)
+  assert.match(flat, /data:image\/webp/)
+  assert.match(flat, /忍/)
+})
+
+test('Noël anime un flocon sur le rafraîchissement et la pastille en attente', () => {
+  const vue = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger({ getItem: () => 'noel', setItem: () => {} }, [EMPTY_BAR, vue, 'missions'])
+  api.apply(ctx)
+  const list = findAll(registered.main({}), 'MissionsView')[0]
+  const tree = renderTree({ ...list, props: { ...list.props } })
+  const icones = findAll(tree, 'svg').filter((node) => String(node.props.className ?? '').startsWith('missions-icon-'))
+  assert.equal(icones.length, 1)
+  assert.equal(icones[0].props.className, 'missions-icon-snowflake')
+
+  // Pastille en attente : le même flocon, dans la barre.
+  const attente = renderTree(arbreTheme('noel', {}, vueSansReponse()))
+  const flocons = findAll(attente, 'svg').filter((node) => node.props.className === 'missions-icon-snowflake')
+  assert.ok(flocons.length >= 2, 'les trois onglets en attente portent le flocon')
+
+  // Le flocon tourne, et s'arrête quand moins de mouvement est demandé.
+  assert.match(corpsDe('.missions-panel[data-skin="paper"][data-theme="noel"] .missions-icon-snowflake'), /animation: missions-snowflake-turn 2\.6s linear infinite/)
+  assert.match(SOURCE, /@keyframes missions-snowflake-turn \{ to \{ transform: rotate\(360deg\); \} \}/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-icon-snowflake \{ animation: none; \}/)
 })
