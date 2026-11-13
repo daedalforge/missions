@@ -3310,6 +3310,22 @@ test('un refus du serveur s’affiche avec sa cause et la liste des manques', as
   }
 })
 
+test('Save et Cancel restent fermés sans retouche, et s’ouvrent au premier caractère', () => {
+  const gestes = (tree) => findAll(tree, 'button').filter((node) => ['Save', 'Saving…', 'Cancel'].includes(textOf(node)))
+
+  // Sans retouche, enregistrer n'aurait rien à écrire et annuler rien à rendre.
+  const propre = monterPlaybook(playbookStates())
+  assert.deepEqual(gestes(propre.tree).map((node) => node.props.disabled), [true, true])
+
+  // Un caractère de plus réveille les deux gestes.
+  const retouche = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
+  assert.deepEqual(gestes(retouche.tree).map((node) => node.props.disabled), [false, false])
+
+  // Pendant l'envoi, les deux se referment — un second clic ne double pas l'écriture.
+  const envoi = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n', saving: true }))
+  assert.deepEqual(gestes(envoi.tree).map((node) => node.props.disabled), [true, true])
+})
+
 test('quitter une page au brouillon demande confirmation en ligne, et les deux issues tiennent', () => {
   const { tree, setters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n' }))
   const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
