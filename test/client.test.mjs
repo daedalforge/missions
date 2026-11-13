@@ -2911,9 +2911,11 @@ test('l’onglet demande le scan au serveur, une fois, à son montage', async ()
     const avant = effects.length
     renderTree(findAll(tree, 'RepositoriesView')[0])
     // Les effets du panneau (dont son rafraîchissement de 60 s) ne sont pas
-    // joués : seul celui que la vue arme en se montant l'est.
-    assert.equal(effects.length - avant, 1, 'un seul effet de chargement pour l’onglet')
-    for (const effect of effects.slice(avant)) effect.fn()
+    // joués : la vue arme le chargement, puis le menu de l'état fermé arme sa
+    // fermeture au clic extérieur. Seul le premier des deux part au montage.
+    const poses = effects.slice(avant)
+    assert.equal(poses.length, 2, 'le chargement, puis la fermeture du menu de l’état')
+    for (const pose of poses.slice(0, 1)) pose.fn()
     await new Promise((done) => setTimeout(done, 0))
 
     assert.equal(appels.length, 1, 'un scan par ouverture de l’onglet')
@@ -2922,6 +2924,85 @@ test('l’onglet demande le scan au serveur, une fois, à son montage', async ()
   } finally {
     globalThis.fetch = vraiFetch
   }
+})
+
+test('la barre des dépôts filtre la liste affichée, sans relire la racine', () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => REPO_SCAN }
+  }
+  try {
+    // Given le scan, et la barre au repos : deux contrôles, pas de Clear
+    const { inner, session, rerendre } = montrerRepositories(scanReady(REPO_SCAN), null, memorySession())
+    const barre = findAll(inner, 'div').find((node) => node.props.className === 'missions-filters missions-repos-filters')
+    assert.ok(barre, 'la barre se place entre l’en-tête et la liste')
+    const recherche = findAll(inner, 'input').find((node) => node.props['aria-label'] === 'Filter repositories')
+    assert.equal(recherche.props.type, 'search')
+    assert.equal(recherche.props.placeholder, 'Filter by name, branch or commit…')
+    assert.equal(findAll(inner, 'button').some((button) => textOf(button) === 'Clear'), false, 'aucun Clear sans filtre')
+    assert.ok(findAll(inner, 'button').some((button) => /^Filter by state \(All\)$/.test(button.props['aria-label'])))
+
+    // When la recherche filtre sur la branche
+    recherche.props.onChange({ target: { value: 'feat/mis' } })
+    const filtre = rerendre()
+    const lignes = findAll(filtre, 'button').filter((button) => button.props['data-repository'] !== undefined)
+    assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions'])
+    // The flag writes the session, and the search does not read the root again
+    assert.equal(session.entries.get('missions.repositories.filters'), '{"query":"feat/mis","state":null}')
+    assert.equal(appels.length, 0, 'aucune requête pendant la saisie')
+
+    // When le Clear efface la barre
+    const clear = findAll(filtre, 'button').find((button) => textOf(button) === 'Clear')
+    assert.ok(clear, 'le Clear apparaît avec le filtre')
+    clear.props.onClick()
+    const repos = rerendre()
+    const ramenees = findAll(repos, 'button').filter((button) => button.props['data-repository'] !== undefined)
+    assert.deepEqual(ramenees.map((ligne) => ligne.props['data-repository']), ['missions', 'zeta'])
+    assert.equal(session.entries.has('missions.repositories.filters'), false, 'une barre vide ne laisse aucune clé')
+    assert.equal(appels.length, 0)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('une barre restaurée rouvre la recherche et les états, et le switch garde son genre', () => {
+  // Given la session qui a laissé une recherche et un état
+  const session = memorySession({ 'missions.repositories.filters': '{"query":"116","state":["dirty"]}' })
+  const { inner } = montrerRepositories(scanReady(REPO_SCAN), null, session)
+  const lignes = findAll(inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions'], 'la recherche et l’état se cumulent')
+  assert.equal(findAll(inner, 'input').find((node) => node.props['aria-label'] === 'Filter repositories').props.value, '116')
+  assert.ok(findAll(inner, 'button').some((button) => /^Filter by state \(Dirty\)$/.test(button.props['aria-label'])))
+
+  // When le switch passe aux worktrees, le même état s'applique à leur liste
+  const ouverts = memorySession({ ...session.entries, 'missions.repositories.worktrees': '1' })
+  const worktrees = montrerRepositories(scanReady(REPO_SCAN), null, ouverts)
+  const worktree = findAll(worktrees.inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(worktree.map((ligne) => ligne.props['data-repository']), ['missions-gh20'])
+  // L'en-tête reste celui du scan, pas celui des lignes gardées
+  assert.match(textOf(worktrees.inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
+})
+
+test('aucune ligne ne répond : la barre le dit et son bouton efface', () => {
+  // Given une recherche qui ne garde rien
+  const session = memorySession({ 'missions.repositories.filters': '{"query":"introuvable"}' })
+  const { inner, rerendre } = montrerRepositories(scanReady(REPO_SCAN), null, session)
+
+  // Then l'état vide de la barre, distinct des trois états du genre
+  assert.match(textOf(inner), /No repository matches these filters\./)
+  assert.equal(findAll(inner, 'li').filter((li) => li.props.className === 'missions-repo-rowitem').length, 0)
+  const clear = findAll(inner, 'button').find((button) => textOf(button) === 'Clear filters')
+  assert.ok(clear, 'le bouton de l’état vide')
+  assert.match(textOf(inner), /Show worktrees/, 'le switch reste offert')
+
+  // When on efface
+  clear.props.onClick()
+  const rendu = rerendre()
+  assert.equal(session.entries.has('missions.repositories.filters'), false)
+  const lignes = findAll(rendu, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions', 'zeta'])
 })
 
 test('chaque clone est une ligne : nom, branche, état, dernier commit, âge', () => {
