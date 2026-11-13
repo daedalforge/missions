@@ -29,6 +29,7 @@ d'étape n'ont pas eu à être réécrits.
 ```yaml
 workflow: cadrage            # le nom de l'étape, égal au nom du fichier
 title: Cadrage               # ce que le panneau affiche
+description: Lire le ticket # facultatif : une ligne, 280 caractères au plus
 document: workflows/cadrage.md
 entry: to-refine             # l'état d'où l'étape part
 exit:
@@ -46,6 +47,11 @@ edges:
     to: lire-ticket          # un geste ou un état
     when: …                  # facultatif : la condition de la transition
 ```
+
+`description` est facultatif et purement documentaire : une ligne, 280
+caractères au plus, écrite seulement quand elle est renseignée. C'est elle que
+la carte de la liste affiche ; sans elle, la carte montre `summary`, le premier
+paragraphe du document.
 
 `writer` vaut `demandeur`, `session` ou `outil`.
 
@@ -102,12 +108,44 @@ Le fichier est validé à chaque écriture, et par `node tools/check-workflows.m
 
 ## Créer un workflow
 
-Le panneau le fait par le bouton **Nouveau workflow** : la clé (un slug), le
-titre, le genre, le document, l'entrée et les sorties. La route écrit
-`workflows/model/<clé>.yml` et le document `workflows/<clé>.md` (un titre seul,
-`# <titre>`), et refuse une clé dont l'un des deux fichiers existe déjà — un
-fichier n'est jamais écrasé. Un workflow d'étape neuf naît sans geste ; un
-workflow de statuts neuf naît avec ses six états et sans événement.
+Le panneau le fait par le bouton **Nouveau workflow**, dans l'onglet
+**Informations** du panneau de droite : **trois champs seulement**, le titre, la
+description et le genre (`Étapes` ou `Statuts`). Tout le reste est dérivé du
+titre ou posé par défaut, et n'est jamais ressaisi.
+
+- **La clé** est le titre replié en slug : accents retirés, casse basse, tout ce
+  qui n'est pas une lettre ou un chiffre devient un tiret, 80 caractères au
+  plus. `Déjà vu !` donne `deja-vu` ; un titre sans lettre ni chiffre est
+  refusé (`cle-invalide`).
+- **Le document** est `workflows/<clé>.md`.
+- **L'entrée** vaut `to-refine`, **les sorties** valent `[done]`. La validation
+  reste stricte : un état inconnu est refusé comme avant.
+- **Le document** naît avec un squelette : `# <titre>\n\n## Ce qu'on fait\n`
+  pour un parcours d'étapes — la section que le premier geste citera — et
+  `# <titre>\n` pour un vocabulaire de statuts.
+- **Une collision** est refusée, jamais suffixée : si `workflows/model/<clé>.yml`
+  ou `workflows/<clé>.md` existe déjà, la création rend 400 (`cle-double` ou
+  `document-double`) et n'écrit rien.
+
+Le formulaire de création n'envoie que `{ title, description, kind }`. La route
+accepte encore `workflow`, `document`, `entry` et `exit` quand un appel direct
+les fournit — c'est la compatibilité des tests, pas la voie du panneau.
+
+## Modifier un workflow
+
+Cliquer un workflow ouvre le panneau sur l'onglet **Informations** : le titre, la
+**description**, l'entrée et les sorties s'éditent ; la **clé**, le **genre** et
+le **document** se lisent seulement — la clé nomme les fichiers, le genre change
+la nature du modèle. **Enregistrer** poste le modèle complet à
+`missions/api/workflows/model` ; **Annuler** revient au dernier état lu.
+
+Quand le titre change, le premier titre de niveau 1 du document est réécrit en
+`# <titre>` et le reste du fichier n'est pas touché. Sans changement de titre,
+le document n'est pas réécrit. Un document absent n'est jamais créé par une
+sauvegarde.
+
+L'onglet **Graphe** porte l'édition du point et de l'arc sélectionnés, la carte
+**Graphe** et le formulaire d'arc ; cliquer un nœud du canevas y bascule.
 
 ## Vérifier à la main
 
