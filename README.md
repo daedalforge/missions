@@ -1,9 +1,8 @@
 # Workspace missions
 
 L'épine dorsale du workspace tient en trois dossiers : ce qu'est une mission
-(`missions/`), comment elle avance (`workflows/`) et les règles qu'une session
-applique pour écrire et relire (`standards/`). Tout le reste — code, configuration,
-outils — s'y accroche.
+(`missions/`), comment elle avance (`workflows/`) et comment on la joue
+(`playbook/`). Tout le reste — code, configuration, outils — s'y accroche.
 
 ## Une mission vit dans son tracker
 
@@ -30,19 +29,14 @@ tracker sont déclarés une fois dans [`missions/projects.yml`](missions/project
   elle vit, le gabarit qui la décrit, et le tableau des projets.
 - [`workflows/`](workflows/README.md) — le parcours : une page par étape, plus
   la table de correspondance entre états du workflow et états du tracker.
-- [`standards/`](standards/README.md) — les règles : conventions de code, interdits,
-  critères de revue et fiche de chaque dépôt.
+- [`playbook/`](playbook/README.md) — le mode d'emploi par étape : l'ordre des
+  gestes, les commandes exactes, les pièges observés et la preuve de sortie.
+  Son contrat de lecture dit quelle page chaque étape lit ; le prompt de session
+  nomme cette page, et la session la suit au lieu de redériver la recette.
 
-## Les standards
-
-Les conventions de code et les garde-fous vivent dans [`standards/`](standards/README.md),
-versionnés avec la méthode : le clone d'une session les contient, et une règle qui
-n'y est pas ne s'oppose pas en revue. Le prompt d'une session ne les recopie pas,
-il nomme les fichiers de son étape — le [contrat de
-lecture](standards/README.md#le-contrat-de-lecture) dit, étape par étape, ce
-qu'elle lit. `node tools/check-standards.mjs` vérifie que l'index, les fichiers
-présents et les prompts disent la même chose, et `npm test` fait de même pour la
-partie que le test peut couvrir.
+`workflows/` dit **quoi** faire, `playbook/` dit **comment** le faire, et les
+règles (code, revue, interdits) vivent dans `standards/`. Une page de playbook
+renvoie à ces documents, elle ne les recopie pas.
 
 ## Le plugin
 
@@ -110,6 +104,3 @@ jamais un geste.
   ce qui doit être vérifiable à sa sortie.
 - Ce dépôt ne contient ni code produit, ni fiche de mission, ni journal de
   session.
-- Un standard se lit dans `standards/`, jamais ailleurs : une session qui a besoin
-d'une règle la trouve dans l'index, et la fiche du dépôt suit le dépôt de la
-mission.

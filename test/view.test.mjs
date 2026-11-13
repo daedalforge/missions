@@ -26,14 +26,10 @@ import {
   missionSessionPrompt,
   feedbackSessionPrompt,
   freeSessionPrompt,
+  repositoryConflictPrompt,
   FEEDBACK_BRIEF,
   FREE_BRIEF,
   ticketReadLine,
-  standardsFiles,
-  standardsProject,
-  standardsReadLine,
-  STANDARDS_DIR,
-  STANDARDS_STEP_FILES,
   treeIndent,
   STEP_BRIEFS,
   STEP_BY_STATE,
@@ -1179,8 +1175,9 @@ const TEMOIN = {
   repo: '~/projects/missions',
 }
 
-test('le prompt de session est la chaîne attendue, au caractère près', () => {
-  // Given
+test('le prompt de session est la chaîne d’hier, au caractère près', () => {
+  // Cette chaîne est celle que le volet construisait en ligne : l'extraction en
+  // helper ne doit pas la réécrire, les tests du bundle la pincent déjà.
   const attendu =
     'Travaille sur la mission MIS-42 — Reload onglet mission.\n\n' +
     "Lis d'abord le ticket avec le CLI, jamais sa page HTML (tronquée) :\n" +
@@ -1188,108 +1185,36 @@ test('le prompt de session est la chaîne attendue, au caractère près', () => 
     'Étape en cours : exécution (statut in-progress). Tu ne fais que l’exécution : la branche depuis la base, les commits, la PR vers la base avec `Closes #N`, le journal et la checklist à jour ; à la fin, le ticket passe en in-review et tu t’arrêtes.\n\n' +
     "Chaque étape se joue dans une nouvelle session : à la fin de celle-ci, arrête-toi ; l'étape suivante sera une nouvelle session.\n\n" +
     'Branche : fix/mis-42 ; base : main.\n\n' +
-    'Standards à lire : standards/code.md, standards/interdits.md, standards/repos/missions.md.\n\n' +
+    'Playbook à lire : playbook/execution.md.\n\n' +
     'Journal de mission : missions/MIS-42/journal.md — tiens-le à jour à chaque étape.\n\n' +
     'Checklist de mission : missions/MIS-42/checklist.md — coche chaque point avec sa preuve.\n\n' +
     "Garde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande."
 
-  // When
-  const prompt = missionSessionPrompt(TEMOIN)
-
-  // Then
-  assert.equal(prompt, attendu)
-  assert.doesNotMatch(prompt, /Dépôt du projet/)
+  assert.equal(missionSessionPrompt(TEMOIN), attendu)
+  // Le prompt de session ne porte pas le clone : c'est le prompt des remontées
+  // qui a besoin de savoir où lire la PR.
+  assert.doesNotMatch(missionSessionPrompt(TEMOIN), /Dépôt du projet/)
 })
 
-test('le prompt de chaque étape nomme ses standards et la fiche du dépôt', () => {
-  // Given
-  const cas = [
-    ['to-refine', '~/projects/missions', [
-      'standards/README.md',
-      'standards/repos/missions.md',
-    ]],
-    ['ready', '~/projects/Manager', [
-      'standards/code.md',
-      'standards/interdits.md',
-      'standards/repos/manager.md',
-    ]],
-    ['in-review', '~/projects/Connect', [
-      'standards/revue.md',
-      'standards/code.md',
-      'standards/interdits.md',
-      'standards/repos/connect.md',
-    ]],
-    ['ready-for-prod', '~/projects/missions', [
-      'standards/interdits.md',
-      'standards/revue.md',
-    ]],
-  ]
-
-  // When
-  const prompts = cas.map(([state, repo, files]) => [
-    state,
-    missionSessionPrompt({ ...TEMOIN, state, repo }),
-    `Standards à lire : ${files.join(', ')}.`,
-  ])
-
-  // Then
-  for (const [state, prompt, ligne] of prompts) {
-    assert.ok(prompt.includes(ligne), `${state} lit « ${ligne} »`)
+test('chaque état nomme la page de playbook de son étape', () => {
+  // La correspondance est épinglée ici, indépendamment de lib/view.js : une
+  // table retournée doit casser ce test, pas le traverser.
+  const PAGE_BY_STATE = {
+    'to-refine': 'playbook/cadrage.md',
+    ready: 'playbook/execution.md',
+    'in-progress': 'playbook/execution.md',
+    'in-review': 'playbook/revue.md',
+    'ready-for-prod': 'playbook/cloture.md',
+  }
+  for (const [state, page] of Object.entries(PAGE_BY_STATE)) {
+    const prompt = missionSessionPrompt({ ...TEMOIN, state })
+    assert.ok(prompt.includes(`Playbook à lire : ${page}.`), `${state} → ${page}`)
   }
 })
 
-test('sans dépôt déclaré, le prompt d’étape omet la fiche du dépôt', () => {
-  // Given
-  const mission = { ...TEMOIN, repo: null }
-
-  // When
-  const prompt = missionSessionPrompt(mission)
-
-  // Then
-  assert.ok(prompt.includes('Standards à lire : standards/code.md, standards/interdits.md.'))
-  assert.doesNotMatch(prompt, /<projet>/)
-})
-
-test('la fiche d’un dépôt se déduit de son clone', () => {
-  // Given
-  const cas = [
-    ['~/projects/Manager', 'manager'],
-    ['~/projects/Connect/', 'connect'],
-    ['~/projects/missions', 'missions'],
-    ['missions', 'missions'],
-    [null, null],
-    ['  ', null],
-  ]
-
-  // When
-  const fiches = cas.map(([repo]) => standardsProject(repo))
-
-  // Then
-  assert.deepEqual(fiches, cas.map(([, attendu]) => attendu))
-})
-
-test('les fichiers d’une étape sont des chemins de standards, dans l’ordre', () => {
-  // Given
-  const cas = [
-    ['cadrage', 'missions', ['standards/README.md', 'standards/repos/missions.md']],
-    ['clôture', 'manager', ['standards/interdits.md', 'standards/revue.md']],
-    ['revue', null, ['standards/revue.md', 'standards/code.md', 'standards/interdits.md']],
-    ['inconnue', 'missions', null],
-  ]
-
-  // When
-  const fichiers = cas.map(([step, project]) => standardsFiles(step, project))
-
-  // Then
-  assert.deepEqual(fichiers, cas.map(([, , attendu]) => attendu))
-  assert.equal(standardsReadLine('inconnue', 'missions'), null)
-  assert.equal(STANDARDS_DIR, 'standards')
-  assert.deepEqual(Object.keys(STANDARDS_STEP_FILES).sort(), [
-    'cadrage',
-    'clôture',
-    'exécution',
-    'revue',
-  ])
+test('la session libre et les remontées nomment la page workspace', () => {
+  assert.match(freeSessionPrompt(TEMOIN), /Playbook à lire : playbook\/workspace\.md\./)
+  assert.match(feedbackSessionPrompt(TEMOIN), /Playbook à lire : playbook\/workspace\.md\./)
 })
 
 test('le prompt des remontées demande la PR, le tri, le push et le garde-fou', () => {
@@ -1410,6 +1335,46 @@ test('sans dossier, le prompt libre omet journal et checklist', () => {
   assert.doesNotMatch(prompt, /Checklist de mission/)
 })
 
+test('le prompt des conflits nomme le chemin, la branche, le geste et le garde-fou', () => {
+  const depot = { name: 'missions', path: '/Users/moi/projects/missions', branch: 'feat/mis-163' }
+  // La chaîne est pinnée au caractère près, comme celle du prompt de session :
+  // elle est écrite une fois ici, pas recopiée dans le gabarit client.
+  const attendu = [
+    'Travaille sur les conflits du dépôt missions — résous ceux de sa branche courante.',
+    '',
+    'Chemin : /Users/moi/projects/missions.',
+    'Branche courante : feat/mis-163.',
+    '',
+    'Inspecte d’abord l’état du dépôt avec `git status` et `git diff --name-only --diff-filter=U` : les fichiers qu’ils listent sont les conflits en cours (merge, rebase ou cherry-pick). S’il n’y a rien à résoudre, dis-le et arrête-toi, sans geste git.',
+    '',
+    'Sinon, résous chaque conflit en gardant l’intention des deux côtés, sans écraser le travail en cours et sans `--ours` ni `--theirs`, marque les fichiers résolus (`git add`) et termine l’opération commencée. Tu ne lances ni `git merge --abort`, ni `git rebase --abort`, ni `git stash` sans le demander.',
+    '',
+    'Garde-fou : tu ne merges jamais la PR et tu n’écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s’il te le demande.',
+    '',
+    'Quand la branche est propre, résume ce que tu as résolu et arrête-toi.',
+  ].join('\n')
+
+  assert.equal(repositoryConflictPrompt(depot), attendu)
+  // Le geste ne joue aucune étape : ce n'est pas une session de mission.
+  assert.doesNotMatch(repositoryConflictPrompt(depot), /Étape en cours/)
+  assert.doesNotMatch(repositoryConflictPrompt(depot), /Chaque étape se joue dans une nouvelle session/)
+})
+
+test('sans branche, le prompt des conflits dit le HEAD détaché et ne ment pas', () => {
+  const prompt = repositoryConflictPrompt({ name: 'missions', path: '/Users/moi/projects/missions', branch: null })
+
+  assert.match(prompt, /Branche courante : \(HEAD détaché\)\./)
+  // Le geste ne connaît pas de conflit : le prompt le dit, sans le promettre.
+  assert.match(prompt, /S’il n’y a rien à résoudre, dis-le et arrête-toi, sans geste git\./)
+})
+
+test('sans dépôt nommé, le prompt des conflits ne laisse pas de trou dans la phrase', () => {
+  const prompt = repositoryConflictPrompt({})
+
+  assert.match(prompt, /^Travaille sur les conflits du dépôt \(dépôt inconnu\)/)
+  assert.match(prompt, /Chemin : \(chemin inconnu\)\./)
+})
+
 test('historyLabel chiffre le total par milliers, et nomme sa branche', () => {
   assert.equal(historyLabel({ total: 3094, branch: 'main' }), '3 094 commits on main')
   assert.equal(historyLabel({ total: 1, branch: 'feat/a' }), '1 commit on feat/a')
@@ -1471,7 +1436,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout',
     'mission.session', 'mission.feedback-session',
     'repository.open', 'repository.adopt', 'repository.tab.details', 'repository.tab.history', 'repository.tab.worktrees',
-    'repository.branch', 'repository.more',
+    'repository.branch', 'repository.more', 'repository.resolve',
     'workflow.step', 'workflow.save', 'workflow.reload', 'workflow.gesture.add', 'workflow.gesture.remove',
     'workflow.arc.add', 'workflow.arc.update', 'workflow.arc.remove',
     'action.theme',
