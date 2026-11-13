@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import YAML, { parse } from 'yaml'
 
 import { loadProjects } from '../lib/projects.js'
@@ -20,12 +20,14 @@ import {
   expectedDocument,
   LOCAL_MODEL_DIR,
   LOCAL_MODELS_DIR,
+  MODELS_DIR,
   loadWorkflows,
   readHeadings,
   scopeOf,
   readWorkflow,
   saveWorkflow,
   validateModel,
+  workflowDirs,
 } from '../lib/workflows.js'
 
 /**
@@ -630,6 +632,42 @@ test('le dossier dit le rangement, et chaque rangement a son document', () => {
   assert.equal(expectedDocument('model', 'cadrage'), 'workflows/cadrage.md')
   assert.equal(expectedDocument('local', 'cadrage'), 'workflows/local/cadrage.md')
   assert.equal(LOCAL_MODEL_DIR, 'workflows/local/model')
+})
+
+test('workflowDirs rend les dossiers du paquet sans projetsFile, et les dérive du fichier sinon', async (t) => {
+  // Given : un fichier de projets dans un dépôt temporaire.
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-dirs-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const projectsFile = pathToFileURL(join(dir, 'missions', 'projects.yml'))
+
+  // When
+  const defaults = workflowDirs(undefined)
+  const derived = workflowDirs(projectsFile)
+
+  // Then : sans fichier de projets, les dossiers sont ceux que le paquet lit déjà.
+  assert.equal(defaults.modelsDir.href, MODELS_DIR.href)
+  assert.equal(defaults.localModelsDir.href, LOCAL_MODELS_DIR.href)
+  // Avec, les deux dossiers restent à côté de `projects.yml`.
+  assert.equal(derived.modelsDir.href, pathToFileURL(join(dir, 'workflows', 'model') + '/').href)
+  assert.equal(derived.localModelsDir.href, pathToFileURL(join(dir, 'workflows', 'local', 'model') + '/').href)
+})
+
+test('createWorkflow écrit la création locale dans le dossier local rendu par workflowDirs', async (t) => {
+  // Given : les dossiers dérivés d'un fichier de projets temporaire.
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-dirs-create-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const { modelsDir } = workflowDirs(pathToFileURL(join(dir, 'missions', 'projects.yml')))
+
+  // When
+  const created = await createWorkflow(modelsDir, { title: 'Brouillon local', kind: 'etape', local: true }, { states: STATES })
+
+  // Then : le modèle et son document sont sous `workflows/local/`, pas sous un `undefined/`.
+  assert.deepEqual(created.errors, [])
+  assert.equal(created.entry.local, true)
+  assert.equal(created.entry.file, 'workflows/local/model/brouillon-local.yml')
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'model', 'brouillon-local.yml'), 'utf8').then(() => true), true)
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'brouillon-local.md'), 'utf8'), '# Brouillon local\n\n## Ce qu\'on fait\n')
+  assert.equal(await readFile(join(dir, 'undefined', 'local', 'model', 'brouillon-local.yml'), 'utf8').catch(() => null), null, 'aucun dossier undefined/')
 })
 
 test('validateModel refuse un document hors du dossier de son workflow', () => {
