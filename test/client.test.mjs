@@ -2132,7 +2132,7 @@ test('la barre ouvre Settings sur la section stockée, et Workflows y monte l’
   // section restaurée est la sélectionnée.
   const settings = renderTree(findAll(tree, 'SettingsView')[0])
   const nav = findAll(settings, 'button').filter((node) => node.props.className === 'missions-settings-tab')
-  assert.deepEqual(nav.map((node) => textOf(node)), ['Usage', 'Workflows'])
+  assert.deepEqual(nav.map((node) => textOf(node)), ['Usage', 'Workflows', 'Playbook'])
   assert.equal(nav[1].props['aria-selected'], 'true', 'la section stockée est la sélectionnée')
   assert.equal(nav[0].props['aria-selected'], 'false')
   assert.equal(findAll(settings, 'svg').filter((node) => /missions-tab-icon-/.test(node.props.className ?? '')).length >= 2, true)
@@ -3050,7 +3050,7 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
   assert.equal(manga['missions-tab-dashboard'].strokeWidth, 1.7)
 })
 
-test('Settings montre ses deux sections dans une navigation verticale, et la section active seule', () => {
+test('Settings montre ses trois sections dans une navigation verticale, et la section active seule', () => {
   const { api, ctx, registered, setters } = charger(
     undefined,
     [EMPTY_BAR, dashboardView(DASH_MISSIONS)],
@@ -3070,11 +3070,13 @@ test('Settings montre ses deux sections dans une navigation verticale, et la sec
   assert.equal(nav.props['aria-label'], 'Settings views')
 
   const sections = findAll(nav, 'button').filter((node) => node.props.role === 'tab')
-  assert.deepEqual(sections.map((node) => textOf(node)), ['Usage', 'Workflows'])
+  assert.deepEqual(sections.map((node) => textOf(node)), ['Usage', 'Workflows', 'Playbook'])
   assert.equal(sections[0].props['aria-selected'], 'true', 'Usage est la section par défaut')
   assert.equal(sections[1].props['aria-selected'], 'false')
+  assert.equal(sections[2].props['aria-selected'], 'false')
   assert.equal(sections[0].props['aria-controls'], 'missions-settings-panel-usage')
   assert.equal(sections[1].props['aria-controls'], 'missions-settings-panel-workflows')
+  assert.equal(sections[2].props['aria-controls'], 'missions-settings-panel-playbook')
 
   // Le panneau est décrit par son onglet, et une seule section est montée.
   const panel = findAll(view, 'section').find((node) => node.props.role === 'tabpanel')
@@ -3083,6 +3085,7 @@ test('Settings montre ses deux sections dans une navigation verticale, et la sec
   assert.equal(panel.props['aria-labelledby'], 'missions-settings-tab-usage')
   assert.equal(findAll(panel, 'UsageTab').length, 1, 'la section Usage porte sa vue')
   assert.equal(findAll(panel, 'WorkflowsView').length, 0, 'la section Workflows ne se monte pas en double')
+  assert.equal(findAll(panel, 'PlaybookView').length, 0, 'la section Playbook ne se monte pas en double')
 
   // Choisir Workflows bascule la section sans quitter l'onglet.
   sections[1].props.onClick()
@@ -3092,7 +3095,7 @@ test('Settings montre ses deux sections dans une navigation verticale, et la sec
   for (const section of sections) {
     const html = renderTree(section)
     assert.equal(findAll(html, 'svg')[0].props['aria-hidden'], 'true')
-    assert.match(textOf(html), /Usage|Workflows/)
+    assert.match(textOf(html), /Usage|Workflows|Playbook/)
   }
 })
 
@@ -3111,6 +3114,273 @@ test('une session Usage ou Workflows rouvre la section, une valeur inconnue reto
   const unknown = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'epics' }))
   assert.equal(findAll(unknown, 'SettingsView').length, 0)
   assert.equal(findAll(unknown, 'DashboardView').length, 1)
+})
+
+
+/** Les cinq pages que le serveur liste, avec leurs titres et leurs étapes. */
+// La forme exacte de la route : `page`, `file`, `step`, `title`, `lines`,
+// `exists` — `name` n'en fait pas partie, le client ne doit pas en dépendre.
+const PLAYBOOK_VIEW_PAGES = [
+  { page: 'cadrage', file: 'playbook/cadrage.md', step: 'cadrage', title: 'Cadrage — la fiche du dépôt', lines: 12, exists: true },
+  { page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 40, exists: true },
+  { page: 'revue', file: 'playbook/revue.md', step: 'revue', title: 'Revue — la vérification', lines: 30, exists: true },
+  { page: 'cloture', file: 'playbook/cloture.md', step: 'clôture', title: 'Clôture — la sortie', lines: 20, exists: true },
+  { page: 'workspace', file: 'playbook/workspace.md', step: null, title: 'Workspace — la fiche du dépôt', lines: 18, exists: true },
+]
+
+/** Les dix hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
+const PLAYBOOK_HOOKS = ['view', 'chosen', 'draft', 'baseline', 'mtimeMs', 'status', 'pageError', 'saving', 'pending', 'attempt']
+
+/** L'état de `PlaybookView`, par défaut sur la page d'exécution, sans retouche. */
+function playbookStates(patch = {}) {
+  const base = {
+    view: { loading: false, error: null, pages: PLAYBOOK_VIEW_PAGES },
+    chosen: 'execution',
+    draft: '## Avant d’agir\n',
+    baseline: '## Avant d’agir\n',
+    mtimeMs: 1234,
+    status: null,
+    pageError: null,
+    saving: false,
+    pending: null,
+    attempt: 0,
+  }
+  return PLAYBOOK_HOOKS.map((name) => (name in patch ? patch[name] : base[name]))
+}
+
+/** Le panneau monté sur la section Playbook, puis la vue résolue. */
+function monterPlaybook(states, session = memorySession({ 'missions.tab': 'playbook' })) {
+  const { api, ctx, registered, setters, queue, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+  api.apply(ctx)
+  const panneau = registered.main({})
+  const node = findAll(panneau, 'PlaybookView')[0]
+  assert.ok(node, 'la section Playbook porte sa vue')
+  const avant = effects.length
+  queue.push(...states)
+  const tree = renderTree(node)
+  return { panneau, node, tree, setters, effects, session, propres: effects.slice(avant) }
+}
+
+/** Laisse filer une chaîne de promesses de `fetch`, sans minuterie. */
+const tick = () => new Promise((resolve) => setImmediate(resolve))
+
+test('la section Playbook liste les cinq pages et ouvre celle de la session', () => {
+  const { tree } = monterPlaybook(playbookStates())
+
+  // Cinq pages, dans l'ordre du parcours puis le workspace, chacune avec son
+  // nom d'étape lisible — le titre du fichier, puis l'étape.
+  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
+  assert.equal(pages.length, 5)
+  assert.match(textOf(pages[0]), /Cadrage — la fiche du dépôt/)
+  assert.match(textOf(pages[0]), /Étape cadrage/)
+  assert.match(textOf(pages[4]), /Workspace — la fiche du dépôt/)
+  assert.match(textOf(pages[4]), /Workspace/)
+  assert.match(textOf(pages[1]), /40 lignes/, 'chaque page dit son nombre de lignes')
+
+  // La page retenue est marquée, les autres non.
+  assert.equal(pages[1].props['aria-current'], 'true', 'la page de la session est ouverte')
+  assert.equal(pages[0].props['aria-current'], 'false')
+
+  // L'éditeur porte le texte de la page, son chemin et son compte de lignes.
+  const champ = findAll(tree, 'textarea').find((node) => node.props.className === 'pb-text')
+  assert.equal(champ.props.value, '## Avant d’agir\n')
+  assert.match(textOf(tree), /playbook\/execution\.md — 40 lignes/)
+  assert.match(textOf(tree), /exécution/)
+})
+
+test('une page inconnue retombe sur la première, jamais sur un éditeur vide', () => {
+  const { tree } = monterPlaybook(playbookStates({ chosen: 'archive' }))
+  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
+  assert.equal(pages[0].props['aria-current'], 'true')
+  assert.equal(findAll(tree, 'textarea').find((node) => node.props.className === 'pb-text').props.value, '## Avant d’agir\n')
+})
+
+test('la page ouverte se range dans la session sous missions.playbook-page', () => {
+  const { effects, session } = monterPlaybook(playbookStates())
+  const ecriture = effects.find(({ fn }) => String(fn).includes('writePlaybookPage('))
+  assert.ok(ecriture, 'la page ouverte est écrite dans la session, pas seulement lue')
+  ecriture.fn()
+  assert.equal(session.entries.get('missions.playbook-page'), 'execution')
+})
+
+test('l’éditeur demande les cinq pages, puis la page choisie, au serveur', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => ({ pages: PLAYBOOK_VIEW_PAGES }) }
+  }
+  try {
+    const { propres } = monterPlaybook(playbookStates({ chosen: null }))
+    // Le chargement de la liste, puis celui du texte : deux routes distinctes.
+    for (const effect of propres) effect.fn()
+    assert.equal(appels[0], 'missions/api/playbooks')
+    await tick()
+    await tick()
+    assert.match(appels[1], /^missions\/api\/playbooks\/page\?page=/)
+    assert.match(appels[1], /cadrage/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('une page illisible montre le refus du serveur et propose une page lisible', async () => {
+  const refus = 'playbook/execution.md is missing'
+  const vraiFetch = globalThis.fetch
+  // La liste dit la page absente, puis la lecture de cette page est refusée.
+  globalThis.fetch = async (url) => {
+    if (String(url) === 'missions/api/playbooks') {
+      return {
+        ok: true,
+        json: async () => ({ pages: PLAYBOOK_VIEW_PAGES.map((entry) => (entry.page === 'execution' ? { ...entry, exists: false, lines: 0 } : entry)) }),
+      }
+    }
+    return { ok: false, json: async () => ({ error: refus }) }
+  }
+  try {
+    // Le refus du serveur remonte à la vue, tel qu'il est écrit.
+    const lecture = monterPlaybook(playbookStates({ chosen: 'execution', draft: null, baseline: null, mtimeMs: null }))
+    for (const effect of lecture.propres) effect.fn()
+    await tick()
+    await tick()
+    assert.equal(lecture.setters.filter((value) => value === refus).at(-1), refus, 'le refus de lecture arrive à l’écran')
+
+    // Rendu, la page absente dit le refus et cesse d'attendre.
+    const rendu = monterPlaybook(playbookStates({ chosen: 'execution', draft: null, baseline: null, mtimeMs: null, pageError: refus }))
+    assert.match(textOf(rendu.tree), /playbook\/execution\.md is missing/)
+    assert.doesNotMatch(textOf(rendu.tree), /Chargement de la page…/)
+
+    // Et la première page lisible s'ouvre d'un clic.
+    const retour = findAll(rendu.tree, 'button').find((node) => textOf(node) === 'Ouvrir « cadrage »')
+    assert.ok(retour, 'une page illisible propose une page lisible')
+    retour.props.onClick()
+    assert.ok(rendu.setters.includes('cadrage'), 'le clic ouvre la page proposée')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Enregistrer envoie le texte et la version lues, puis affiche le fichier écrit', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, options = {}) => {
+    appels.push({ url: String(url), options })
+    return { ok: true, json: async () => ({ page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 41, exists: true, mtimeMs: 9999 }) }
+  }
+  try {
+    const { tree, setters } = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
+    const bouton = findAll(tree, 'button').find((node) => textOf(node) === 'Save')
+    bouton.props.onClick()
+    await tick()
+    await tick()
+
+    assert.equal(appels[0].url, 'missions/api/playbooks/page')
+    assert.equal(appels[0].options.method, 'POST')
+    assert.equal(appels[0].options.headers['content-type'], 'application/json')
+    assert.deepEqual(JSON.parse(appels[0].options.body), { page: 'execution', text: '## Avant d’agir\n\nretouche\n', mtimeMs: 1234 })
+
+    const statut = setters.filter((value) => value && typeof value === 'object' && value.kind === 'ok').at(-1)
+    assert.ok(statut, 'un enregistrement accepté se dit')
+    assert.match(statut.message, /Enregistré — playbook\/execution\.md/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un refus du serveur s’affiche avec sa cause et la liste des manques', async () => {
+  const manque = 'playbook/execution.md : section manquante « Les règles »'
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: 'page invalid', errors: [manque] }) })
+  try {
+    const { tree, setters } = monterPlaybook(playbookStates({ draft: 'court\n' }))
+    findAll(tree, 'button').find((node) => textOf(node) === 'Save').props.onClick()
+    await tick()
+    await tick()
+    const refus = setters.filter((value) => value && typeof value === 'object' && value.kind === 'error').at(-1)
+    assert.deepEqual(refus, { kind: 'error', message: 'page invalid', errors: [manque] })
+
+    // Rendue, la liste des manques est un vrai texte, pas un compteur.
+    const { tree: rendu } = monterPlaybook(playbookStates({ status: { kind: 'error', message: 'page invalid', errors: [manque] } }))
+    const alerte = findAll(rendu, 'div').find((node) => /pb-status pb-status--error/.test(node.props.className ?? ''))
+    assert.equal(alerte.props.role, 'alert')
+    assert.match(textOf(alerte), /page invalid/)
+    assert.equal(findAll(alerte, 'li')[0] && textOf(findAll(alerte, 'li')[0]), manque)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Save et Cancel restent fermés sans retouche, et s’ouvrent au premier caractère', () => {
+  const gestes = (tree) => findAll(tree, 'button').filter((node) => ['Save', 'Saving…', 'Cancel'].includes(textOf(node)))
+
+  // Sans retouche, enregistrer n'aurait rien à écrire et annuler rien à rendre.
+  const propre = monterPlaybook(playbookStates())
+  assert.deepEqual(gestes(propre.tree).map((node) => node.props.disabled), [true, true])
+
+  // Un caractère de plus réveille les deux gestes.
+  const retouche = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
+  assert.deepEqual(gestes(retouche.tree).map((node) => node.props.disabled), [false, false])
+
+  // Pendant l'envoi, les deux se referment — un second clic ne double pas l'écriture.
+  const envoi = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n', saving: true }))
+  assert.deepEqual(gestes(envoi.tree).map((node) => node.props.disabled), [true, true])
+})
+
+test('quitter une page au brouillon demande confirmation en ligne, et les deux issues tiennent', () => {
+  const { tree, setters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n' }))
+  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
+  setters.length = 0
+
+  // Un clic sur une autre page n'ouvre rien : il pose la question, et le
+  // brouillon reste où il est.
+  pages[4].props.onClick()
+  assert.deepEqual(setters, ['workspace'], 'la page demandée attend la réponse')
+  assert.equal(findAll(tree, 'textarea').length, 1, 'aucune boîte système, le panneau reste monté')
+
+  // « Keep editing » efface la question et laisse la page ouverte.
+  const { tree: question } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  const dialogue = findAll(question, 'div').find((node) => /pb-confirm\b/.test(node.props.className ?? ''))
+  assert.ok(dialogue, 'la confirmation vit dans la section')
+  assert.equal(dialogue.props.role, 'alertdialog')
+  assert.match(textOf(dialogue), /modifications non enregistrées/)
+  assert.match(textOf(dialogue), /« workspace »/)
+  const garder = findAll(dialogue, 'button').find((node) => textOf(node) === 'Keep editing')
+  const abandonner = findAll(dialogue, 'button').find((node) => textOf(node) === 'Discard')
+  assert.ok(garder && abandonner, 'les deux issues sont des boutons')
+
+  const { tree: garde, setters: gardeSetters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  findAll(garde, 'button').find((node) => textOf(node) === 'Keep editing').props.onClick()
+  assert.deepEqual(gardeSetters, [null], 'Keep editing ne change pas de page')
+
+  // « Discard » charge la page demandée, et le brouillon repart du fichier.
+  const { tree: abandon, setters: abandonSetters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  findAll(abandon, 'button').find((node) => textOf(node) === 'Discard').props.onClick()
+  // Discard ouvre la page, vide le brouillon le temps de la relecture (Save
+  // retombe désactivé), puis efface la question.
+  assert.deepEqual(abandonSetters, ['workspace', null, null, null, null])
+
+  // Jamais de boîte système : la question est du panneau.
+  const debut = SOURCE.indexOf('function PlaybookView')
+  const fin = SOURCE.indexOf('function RepositoriesView')
+  const source = SOURCE.slice(debut, fin)
+  assert.ok(debut > -1 && fin > debut)
+  assert.equal(/\bconfirm\(/.test(source), false)
+})
+
+test('Cancel rend le brouillon au dernier état enregistré', () => {
+  const { tree, setters } = monterPlaybook(playbookStates({ draft: 'retouche non enregistrée\n' }))
+  findAll(tree, 'button').find((node) => textOf(node) === 'Cancel').props.onClick()
+  assert.deepEqual(setters.slice(-2), ['## Avant d’agir\n', { kind: 'ok', message: 'Modifications annulées.' }])
+})
+
+test('la page Playbook a ses règles, l’onglet son glyphe dans les deux thèmes', () => {
+  assert.match(regle('.pb-layout'), /grid-template-columns: 240px minmax\(0, 1fr\)/)
+  assert.match(regle('.pb-page[aria-current="true"]'), /box-shadow/)
+  assert.match(regle('.pb-text'), /font-family: var\(--dsw-font-mono/)
+  assert.match(regle('.pb-errors'), /color: #a33a2a/)
+  // Un dessin par thème, et un seul : le glyphe suit le thème actif.
+  assert.equal((SOURCE.match(/playbook: \[/g) ?? []).length, 2)
+  assert.match(SOURCE, /missions-tab-icon-\$\{id\}/)
 })
 
 test('sous Settings, le tick ne relit pas la liste des missions ouvertes', async () => {

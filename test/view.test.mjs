@@ -10,9 +10,12 @@ import {
   recentlyClosed,
   RECENT_CLOSED_ROWS,
   repositoryScope,
+  PLAYBOOK_PAGE_KEY,
+  readPlaybookPage,
   readStep,
   readStoredView,
   storedView,
+  writePlaybookPage,
   writeStep,
   writeStoredView,
   nextGestureId,
@@ -1125,6 +1128,41 @@ test('l’étape ouverte se garde comme l’onglet, et retombe sur la première'
   assert.equal(readStep(null, steps), 'cadrage')
 })
 
+test('la page du playbook se garde comme l’étape, et retombe sur la première', () => {
+  const pages = ['cadrage', 'execution', 'review', 'cloture', 'workspace']
+  const memoire = () => {
+    const map = new Map()
+    return { map, getItem: (key) => (map.has(key) ? map.get(key) : null), setItem: (key, value) => map.set(key, String(value)), removeItem: (key) => map.delete(key) }
+  }
+
+  const session = memoire()
+  assert.equal(readPlaybookPage(session, pages), 'cadrage', 'une session neuve ouvre la première page')
+  writePlaybookPage(session, 'workspace', pages)
+  assert.equal(session.map.get(PLAYBOOK_PAGE_KEY), 'workspace')
+  assert.equal(readPlaybookPage(session, pages), 'workspace', 'la page survit à un remontage')
+  writePlaybookPage(session, 'cadrage', pages)
+  assert.equal(session.map.has(PLAYBOOK_PAGE_KEY), false, 'la première page ne laisse pas de clé')
+
+  // Une page que la liste ne porte plus ne rouvre pas un éditeur vide : la
+  // première page reprend la main, et l'écriture ne garde pas la valeur morte.
+  session.setItem(PLAYBOOK_PAGE_KEY, 'archive')
+  assert.equal(readPlaybookPage(session, pages), 'cadrage')
+  writePlaybookPage(session, 'archive', pages)
+  assert.equal(session.map.has(PLAYBOOK_PAGE_KEY), false)
+
+  // Un stockage absent, en panne, ou une liste vide ne lèvent pas.
+  assert.equal(readPlaybookPage(null, pages), 'cadrage')
+  assert.equal(readPlaybookPage(session, []), null)
+  const enPanne = {
+    getItem: () => { throw new Error('blocked') },
+    setItem: () => { throw new Error('quota') },
+    removeItem: () => { throw new Error('blocked') },
+  }
+  assert.equal(readPlaybookPage(enPanne, pages), 'cadrage')
+  assert.doesNotThrow(() => writePlaybookPage(enPanne, 'review', pages))
+  assert.doesNotThrow(() => writePlaybookPage(null, 'review', pages))
+})
+
 test('modelOf ne renvoie que le modèle, jamais les champs d’affichage du serveur', () => {
   const entree = {
     workflow: 'cadrage',
@@ -1756,6 +1794,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
   // volet. Le registre ne prend pas d'autre liberté avec le contrat.
   assert.deepEqual(ids, [
     'tab.dashboard', 'tab.missions', 'tab.done', 'tab.repositories', 'tab.workflows', 'tab.usage',
+    'tab.playbook',
     'filter.search', 'filter.state', 'filter.type', 'filter.epic', 'filter.project', 'filter.priority',
     'filter.sort', 'filter.missing', 'filter.clear', 'list.refresh', 'list.retry', 'mission.open',
     'dashboard.view-all', 'mission.archive.batch',

@@ -188,6 +188,11 @@ window.__ModuleLoader__.load({
     const TOLGEE_URL = 'missions/api/tolgee'
     const WORKFLOWS_URL = 'missions/api/workflows'
     const WORKFLOW_MODEL_URL = 'missions/api/workflows/model'
+    // The playbook pages: the list the section shows, then the page the editor
+    // reads and writes. A save carries the version it read, and the host
+    // applies the CLI's own rules before writing — the panel never judges.
+    const PLAYBOOKS_URL = 'missions/api/playbooks'
+    const PLAYBOOK_PAGE_URL = 'missions/api/playbooks/page'
     const REPOSITORIES_URL = 'missions/api/repositories'
     // The dashboard's digest of the root: the same scan, answered from the
     // host's five-minute memory. Its `refresh=1` query is the section's Retry.
@@ -296,6 +301,9 @@ window.__ModuleLoader__.load({
     const SETTINGS_VIEWS = [
       { id: 'usage', label: 'Usage', source: 'host' },
       { id: 'workflows', label: 'Workflows', source: 'files' },
+      // The playbook is the method itself: the five pages a session reads and
+      // the panel can now edit, next to the workflows that name them.
+      { id: 'playbook', label: 'Playbook', source: 'files' },
     ]
     const SETTINGS_IDS = SETTINGS_VIEWS.map((entry) => entry.id)
 
@@ -557,6 +565,41 @@ window.__ModuleLoader__.load({
 .missions-drawer-close { flex: none; padding: 0 2px; border: 0; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 20px; line-height: 1; cursor: pointer; }
 .wf-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 .wf-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
+/* Playbook: the five pages on the left, the open page's markdown on the right. */
+.pb-view { padding-top: 8px; }
+.pb-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
+.pb-pages { display: flex; flex-direction: column; gap: 4px; }
+.pb-page { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.pb-page:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); }
+.pb-page[aria-current="true"] { border-color: var(--dsw-alias-label-primary, #1f1f1f); box-shadow: inset 0 0 0 1px var(--dsw-alias-label-primary, #1f1f1f); }
+.pb-page-title { font-size: 12.5px; font-weight: 600; }
+.pb-page-meta { display: flex; align-items: baseline; gap: 8px; }
+.pb-page-step { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.pb-page-lines { font-size: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.pb-confirm { padding: 8px 10px; border: 1px solid color-mix(in srgb, #a33a2a 35%, transparent); border-radius: 9px; }
+.pb-confirm-text { margin: 0 0 8px; font-size: 12px; }
+.pb-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.pb-page-missing { font-size: 10.5px; color: #a33a2a; }
+.pb-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pb-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.pb-title { margin: 0; font-size: 15px; font-weight: 650; }
+.pb-note { margin: 0; font-size: 12px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.pb-dirty { flex: none; padding: 1px 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 999px; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.pb-field { display: flex; flex-direction: column; gap: 6px; }
+.pb-field > span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.pb-text { width: 100%; min-height: 420px; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 10px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: inherit; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; line-height: 1.55; resize: vertical; }
+.pb-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.pb-primary { background: var(--dsw-alias-label-primary, #1f1f1f); border-color: transparent; color: var(--dsw-alias-bg-base, #fbfaf8); }
+.pb-primary:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 86%, var(--dsw-alias-bg-base, #fbfaf8)); color: var(--dsw-alias-bg-base, #fbfaf8); }
+.pb-primary:disabled { background: var(--dsw-alias-label-primary, #1f1f1f); }
+.pb-status { padding: 8px 10px; border-radius: 9px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
+.pb-status--ok { border-color: color-mix(in srgb, #3f7a4b 40%, transparent); }
+.pb-status--error { border-color: color-mix(in srgb, #a33a2a 40%, transparent); }
+.pb-status-text { margin: 0; font-size: 12px; }
+.pb-status--ok .pb-status-text { color: #3f7a4b; }
+.pb-status--error .pb-status-text { color: #a33a2a; }
+.pb-errors { margin: 6px 0 0; padding-left: 18px; font-size: 11.5px; color: #a33a2a; }
+@media (max-width: 720px) { .pb-layout { grid-template-columns: minmax(0, 1fr); } .pb-pages { flex-direction: row; flex-wrap: wrap; } .pb-page { width: auto; } }
 .missions-group { margin-top: 20px; }
 .missions-group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); position: sticky; top: 0; background: var(--dsw-alias-bg-base, #fbfaf8); z-index: 1; }
 .missions-group-head .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -3944,6 +3987,247 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
     }
 
     /**
+     * The playbook section: the five pages of the method, read and written
+     * here. The panel never judges a page — the host applies the rules the CLI
+     * applies, refuses without writing, and the screen shows the refusal as it
+     * comes. The index (`playbook/README.md`) is not in the list: the section
+     * edits the pages a session reads, and nothing it does creates a file.
+     */
+    function PlaybookView() {
+      const [view, setView] = React.useState({ loading: true, error: null, pages: [] })
+      const [chosen, setChosen] = React.useState(null)
+      const [draft, setDraft] = React.useState(null)
+      const [baseline, setBaseline] = React.useState(null)
+      const [mtimeMs, setMtimeMs] = React.useState(null)
+      const [status, setStatus] = React.useState(null)
+      // A page the host refuses to read says so here: the editor never shows
+      // the text of the previous page in its place.
+      const [pageError, setPageError] = React.useState(null)
+      const [saving, setSaving] = React.useState(false)
+      const [pending, setPending] = React.useState(null)
+      // Recharger re-reads the list AND the page: bumping this key re-runs the
+      // page read when the page itself did not change.
+      const [attempt, setAttempt] = React.useState(0)
+
+      const load = React.useCallback(() => {
+        fetch(PLAYBOOKS_URL, { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.error) throw new Error(data.error)
+            const pages = data?.pages ?? []
+            setView({ loading: false, error: null, pages })
+            // The session's page takes over on load: a value the list no
+            // longer carries falls back to the first page.
+            setChosen((current) => current ?? readPlaybookPage(filterStorage(), pages.map((entry) => entry.page)))
+          })
+          .catch((error) => setView((previous) => ({ ...previous, loading: false, error: error?.message ?? 'read failed' })))
+      }, [])
+
+      React.useEffect(() => { load() }, [load])
+
+      // The open page follows the session like the workflow step: a reopened
+      // panel lands on the page being edited, and an unknown page falls back to
+      // the first — never to an empty editor.
+      const page = view.pages.find((entry) => entry.page === chosen) ?? view.pages[0] ?? null
+
+      React.useEffect(() => {
+        if (!page) return
+        writePlaybookPage(filterStorage(), page.page, view.pages.map((entry) => entry.page))
+      }, [page && page.page, view.pages])
+
+      // The text is read again per page: the draft and the version it came
+      // from arrive together, or a save would carry the previous version.
+      React.useEffect(() => {
+        if (!page) {
+          setDraft(null)
+          setBaseline(null)
+          setMtimeMs(null)
+          return
+        }
+        let current = true
+        setPageError(null)
+        fetch(`${PLAYBOOK_PAGE_URL}?page=${encodeURIComponent(page.page)}`, { headers: { accept: 'application/json' } })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!current) return
+            if (!ok) {
+              const message = data?.error ?? 'read failed'
+              setPageError(message)
+              setStatus({ kind: 'error', message })
+              return
+            }
+            setDraft(data.text ?? '')
+            setBaseline(data.text ?? '')
+            setMtimeMs(data.mtimeMs ?? null)
+            setStatus(null)
+          })
+          .catch((error) => {
+            if (!current) return
+            const message = error?.message ?? 'read failed'
+            setPageError(message)
+            setStatus({ kind: 'error', message })
+          })
+        return () => { current = false }
+      }, [page && page.page, attempt])
+
+      // An unsaved edit shows itself and opens the only question the screen
+      // asks: abandon or stay. Nothing is sent before Enregistrer — the file
+      // does not move on a keystroke.
+      const dirty = baseline !== null && draft !== baseline
+
+      // The confirmation is inline, never a system box: Discard loads the
+      // asked page, Keep editing changes nothing and keeps the draft.
+      const openPage = (next) => {
+        if (!next || next.page === page?.page) return
+        if (dirty) {
+          setPending(next.page)
+          return
+        }
+        setChosen(next.page)
+        setDraft(null)
+        setBaseline(null)
+        setStatus(null)
+      }
+
+      const discardDraft = () => {
+        setChosen(pending)
+        setDraft(null)
+        setBaseline(null)
+        setPending(null)
+        setStatus(null)
+      }
+
+      const keepEditing = () => setPending(null)
+
+      // The host judges, says no, and writes nothing: the button only sends
+      // the text and the version it read.
+      const save = () => {
+        if (!page || draft === null || saving) return
+        setSaving(true)
+        setStatus(null)
+        fetch(PLAYBOOK_PAGE_URL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({ page: page.page, text: draft, mtimeMs }),
+        })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) {
+              setStatus({ kind: 'error', message: data?.error ?? 'save failed', errors: data?.errors ?? [] })
+              return
+            }
+            // The answer carries the new version: the next save starts from
+            // it, without re-reading the page or losing the cursor.
+            setBaseline(draft)
+            setMtimeMs(data.mtimeMs ?? null)
+            setView((previous) => ({
+              ...previous,
+              pages: previous.pages.map((entry) => (entry.page === page.page ? { ...entry, ...data } : entry)),
+            }))
+            const heure = savedAt(data.mtimeMs)
+            setStatus({ kind: 'ok', message: `Enregistré — ${data.file}${heure ? ` à ${heure}` : ''}` })
+          })
+          .catch((error) => setStatus({ kind: 'error', message: error?.message ?? 'save failed' }))
+          .finally(() => setSaving(false))
+      }
+
+      // Annuler returns the draft to the last saved state: the edits go away,
+      // the file never moved.
+      const revert = () => {
+        if (baseline === null) return
+        setDraft(baseline)
+        setStatus({ kind: 'ok', message: 'Modifications annulées.' })
+      }
+
+      const stepLabel = (entry) => (entry.step ? `Étape ${entry.step}` : 'Workspace')
+
+      const savedAt = (value) => {
+        if (!value) return ''
+        const date = new Date(value)
+        return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      }
+
+      // The page the host refused says why, and offers the page a session can
+      // open right away: never a spinner that never ends.
+      const fallback = pageError
+        ? view.pages.find((entry) => entry.exists && entry.page !== page?.page) ?? null
+        : null
+
+      if (!page || draft === null) {
+        return h('div', { className: 'pb-view' },
+          h('p', { className: 'pb-note' },
+            view.loading ? 'Chargement du playbook…'
+              : view.error ?? pageError ?? (!page ? 'Aucune page de playbook.' : 'Chargement de la page…')),
+          h('div', { className: 'pb-actions' },
+            h('button', { type: 'button', className: 'missions-btn', onClick: () => { load(); setAttempt((current) => current + 1) } }, 'Recharger'),
+            fallback
+              ? h('button', { type: 'button', className: 'missions-btn pb-primary', onClick: () => openPage(fallback) }, `Ouvrir « ${fallback.page} »`)
+              : null,
+          ),
+        )
+      }
+
+      return h('div', { className: 'pb-view' },
+        h('div', { className: 'pb-layout' },
+          h('nav', { className: 'pb-pages', 'aria-label': 'Playbook pages' },
+            view.pages.map((entry) => h('button', {
+              key: entry.page,
+              type: 'button',
+              className: 'pb-page',
+              'aria-current': entry.page === page.page ? 'true' : 'false',
+              onClick: () => openPage(entry),
+            },
+              h('span', { className: 'pb-page-title' }, entry.title ?? entry.page),
+              h('span', { className: 'pb-page-meta' },
+                h('span', { className: 'pb-page-step' }, stepLabel(entry)),
+                h('span', { className: 'pb-page-lines' }, `${entry.lines ?? 0} lignes`),
+              ),
+              entry.exists ? null : h('span', { className: 'pb-page-missing' }, 'fichier absent'),
+            )),
+          ),
+          h('div', { className: 'pb-editor' },
+            h('div', { className: 'pb-editor-head' },
+              h('div', null,
+                h('h3', { className: 'pb-title' }, page.title ?? page.page),
+                h('p', { className: 'pb-note' }, `${page.file} — ${page.lines ?? 0} lignes`),
+              ),
+              dirty ? h('span', { className: 'pb-dirty' }, 'brouillon non enregistré') : null,
+            ),
+            h('label', { className: 'pb-field' },
+              h('span', null, 'Markdown de la page'),
+              h('textarea', {
+                className: 'pb-text',
+                value: draft,
+                spellCheck: false,
+                onChange: (event) => { setDraft(event.target.value); setStatus(null) },
+              }),
+            ),
+            h('div', { className: 'pb-actions' },
+              h('button', { type: 'button', className: 'missions-btn', disabled: saving || !dirty, onClick: revert }, 'Cancel'),
+              h('button', { type: 'button', className: 'missions-btn pb-primary', disabled: saving || !dirty, onClick: save }, saving ? 'Saving…' : 'Save'),
+            ),
+            pending
+              ? h('div', { className: 'pb-confirm', role: 'alertdialog', 'aria-label': 'Unsaved changes' },
+                  h('p', { className: 'pb-confirm-text' },
+                    `« ${page.page} » a des modifications non enregistrées. Les abandonner pour ouvrir « ${(view.pages.find((entry) => entry.page === pending) ?? {}).page} » ?`),
+                  h('div', { className: 'pb-confirm-actions' },
+                    h('button', { type: 'button', className: 'missions-btn', onClick: keepEditing }, 'Keep editing'),
+                    h('button', { type: 'button', className: 'missions-btn pb-primary', onClick: discardDraft }, 'Discard'),
+                  ),
+                )
+              : null,
+            status ? h('div', { className: `pb-status pb-status--${status.kind}`, role: status.kind === 'error' ? 'alert' : 'status' },
+              h('p', { className: 'pb-status-text' }, status.message ?? ''),
+              (status.errors ?? []).length > 0
+                ? h('ul', { className: 'pb-errors' }, (status.errors ?? []).map((error) => h('li', { key: error }, error)))
+                : null,
+            ) : null,
+          ),
+        ),
+      )
+    }
+
+    /**
      * One row of the repositories view: the clone's name, its branch, the
      * state of its working tree, and the commit it last moved on. The whole
      * row is the button — the tab's job is to get a repository open, not to
@@ -4885,6 +5169,11 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           'M5.8 5.6a2.4 2.4 0 1 0 0 4.8a2.4 2.4 0 1 0 0-4.8z',
           'M10.2 5.6a2.4 2.4 0 1 0 0 4.8a2.4 2.4 0 1 0 0-4.8z',
         ],
+        playbook: [
+          'M8 4.1C7.3 3.4 6.2 3 5 3H2.6v9.4H5c1.2 0 2.3.4 3 1.1',
+          'M8 4.1c.7-.7 1.8-1.1 3-1.1h2.4v9.4H11c-1.2 0-2.3.4-3 1.1',
+          'M8 4.1v9.4',
+        ],
       },
       manga: {
         dashboard: [
@@ -4912,6 +5201,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           'M8 6.1a1.9 1.9 0 1 0 0 3.8a1.9 1.9 0 1 0 0-3.8z',
         ],
         workflows: ['M4.2 12.2V6.6a2.6 2.6 0 0 1 2.6-2.6h4.8', 'M11.6 4l-2.1-1.9', 'M11.6 4l-2.1 1.9'],
+        playbook: [
+          'M2.9 4.2 8 2.7l5.1 1.5v7.2L8 13l-5.1-1.6z',
+          'M8 2.7v10.3', 'M4.6 6.4l1.7.5', 'M11.4 6.4l-1.7.5',
+        ],
       },
     }
 
@@ -5546,7 +5839,9 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           },
             tab === 'settings'
               ? h(SettingsView, { theme, view: settingsView, onChange: changeSettingsView },
-                  settingsSection.id === 'usage' ? h(UsageTab, { theme }) : h(WorkflowsView, null),
+                  settingsSection.id === 'usage' ? h(UsageTab, { theme })
+                    : settingsSection.id === 'workflows' ? h(WorkflowsView, null)
+                    : h(PlaybookView, null),
                   settingsSection.id === 'usage'
                     ? h('aside', { className: 'missions-settings-note', 'aria-label': 'Usage details' },
                         h('p', { className: 'missions-settings-note-text' },
