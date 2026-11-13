@@ -17,8 +17,9 @@ Transformer un ticket vague en mission exécutable, et s'arrêter là.
 
 1. **Lire le ticket** et ses commentaires (`... --json comments`). Le corps cité
    doit suffire ; s'il manque une information, la demander, ne pas la deviner.
-2. **Décrire la mission** dans `missions/<dossier>/mission.yml` (clé, titre,
-   dépôt, branche proposée, base, jalon) à partir de `missions/gabarit-mission.md`.
+2. **Décrire la mission** dans `missions/<dossier>/mission.yml` — trois champs
+   seulement, `key`, `branch` et `base` ; le titre, le dépôt et le jalon sont
+   des métadonnées du ticket, décrites par `missions/gabarit-mission.md`.
 3. **Écrire la fiche** : proposition de valeur, périmètre, hors-périmètre,
    critères d'acceptation numérotés, risques. La publier sur le ticket avec
    `gh issue edit <n> -R <owner>/<repo> --body-file <chemin>`.
