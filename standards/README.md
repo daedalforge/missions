@@ -85,7 +85,7 @@ ce qui suppose cet orchestrateur ; l'écart est écrit à chaque fois.
 | `types.md` | — | retiré | Les trois types de mission, les gabarits et les clés de frontmatter de konoha ne sont pas ceux de `missions/projects.yml` ni du gabarit de mission. |
 | `bruno.md` | — | retiré | Les collections Bruno sont un artefact de l'ancien flux ; la mission de ce dépôt n'en décrit pas. |
 | `workspace.md` | — | retiré | Règles propres à konoha (`~/projects/worktrees`, squash à la clôture, archives locales) ; la branche et la base d'une mission sont déclarées dans `missions/<dossier>/mission.yml` et la PR part du clone. |
-| `repos/Manager.md` | `standards/repos/manager.md` | conservé | Fiche renommée en minuscules pour suivre le nom du dépôt (`~/projects/Manager` → `manager`). `base_branch` remplacé par « la base est déclarée dans `mission.yml` ». |
+| `repos/Manager.md` | `standards/repos/manager.md` | adapté | Fiche renommée en minuscules pour suivre le nom du dépôt (`~/projects/Manager` → `manager`). `base_branch` remplacé par « la base est déclarée dans `mission.yml` », renvoi `#10` corrigé en `#9`. |
 | `repos/Connect.md` | `standards/repos/connect.md` | conservé | Même renommage ; même remplacement de `base_branch`. |
 | `repos/backend.md` | `standards/repos/backend.md` | conservé | `base_branch` remplacé ; marquée « non déclaré » car le projet n'est pas dans `missions/projects.yml`. |
 | `repos/clienthub.md` | `standards/repos/clienthub.md` | adapté | `base_branch` remplacé, renvoi `#10` corrigé en `#9` ; marquée « non déclaré ». |
