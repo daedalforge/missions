@@ -924,7 +924,9 @@ test('le montage ne lit que l’ouvert ; Done paie sa lecture, le bouton et le t
   // l'ouverture de son onglet, et le compte se relit au tick quel que soit l'onglet.
   assert.match(SOURCE, /React\.useEffect\(\(\) => \{\n\s+load\(\)\n\s+loadRepositoryCount\(\)\n\s+\}, \[load, loadRepositoryCount\]\)/)
   assert.match(SOURCE, /if \(tab !== 'done'\) return undefined\n\s+loadDone\(\)/)
-  assert.match(SOURCE, /if \(tab === 'done'\) loadDone\(\{ silent: true, refresh: true \}\)\n\s+else load\(\{ silent: true, refresh: true \}\)/)
+  // Le tick suit le périmètre de la vue ouverte : Done relit le clos, les vues
+  // tracker lisent l'ouvert, et Settings n'en relit aucune.
+  assert.match(SOURCE, /if \(tab === 'done'\) loadDone\(\{ silent: true, refresh: true \}\)\n\s+else if \(trackerTab\) load\(\{ silent: true, refresh: true \}\)/)
   assert.match(SOURCE, /loadRepositoryCount\(\)\n\s+\}, REFRESH_MS\)/)
   assert.match(SOURCE, /doneTab \? loadDone\(\{ refresh: true \}\) : load\(\{ refresh: true \}\)/)
   // Aucun autre appel ne force : le seul refresh=1 est derrière `refresh`.
@@ -1079,7 +1081,9 @@ test('le bandeau d’erreurs suit la lecture, pas l’onglet', () => {
     assert.match(String(retry[0].props.onClick), /refresh: true/)
   }
 
-  const workflows = mount('workflows')
+  // Settings lit ce que sa section lit : Workflows n'a pas de bandeau tracker,
+  // et la section Usage non plus.
+  const workflows = monter([EMPTY_BAR, view], memorySession({ 'missions.tab': 'workflows' }))
   assert.equal(findAll(workflows, 'div').filter((node) => node.props.className === 'missions-errors').length, 0)
   assert.doesNotMatch(JSON.stringify(workflows), /missions-errors/)
   assert.doesNotMatch(JSON.stringify(workflows), /"title":"Refresh"/)
@@ -1134,8 +1138,17 @@ test('la source d’un onglet est déclarée dans TABS, pas recopiée', () => {
   // Repositories lit l'hôte et porte le compte de la racine : son badge est
   // nommé, pas un booléen, pour que chaque onglet dise quel compte il porte.
   assert.match(SOURCE, /\{ id: 'repositories', label: 'Repositories', source: 'host', badge: 'repositories' \},/)
+  // Settings ne déclare pas de périmètre : ses sections portent le leur.
+  assert.match(SOURCE, /\{ id: 'settings', label: 'Settings' \},/)
+  assert.match(SOURCE, /\{ id: 'usage', label: 'Usage', source: 'host' \},/)
   assert.match(SOURCE, /\{ id: 'workflows', label: 'Workflows', source: 'files' \},/)
-  assert.match(SOURCE, /const tabSource = TABS\.find/)
+  // La barre ne rend plus Usage ni Workflows : TABS n'en garde aucune trace.
+  const start = SOURCE.indexOf('const TABS = [')
+  const tabs = SOURCE.slice(start, SOURCE.indexOf(']', start))
+  assert.equal(tabs.includes("'usage'"), false)
+  assert.equal(tabs.includes("'workflows'"), false)
+  // Le périmètre de Settings se lit dans sa section, pas dans l'onglet.
+  assert.match(SOURCE, /const tabSource = tab === 'settings' \? settingsSection\.source : TABS\.find/)
   assert.match(SOURCE, /const activeErrors = doneTab \? doneView\.errors : errors/)
   assert.match(SOURCE, /const failed = activeErrors\.length > 0/)
   // Le bandeau et le bouton ne se décident plus sur un id d'onglet.
@@ -1217,9 +1230,9 @@ test("l'onglet rangé par la session est rouvert au montage", () => {
   assert.equal(findAll(tree, 'DashboardView').length, 0)
 })
 
-/** L'effet qui range l'onglet dans la session, retrouvé par ce qu'il appelle. */
+/** L'effet qui range la vue dans la session, retrouvé par ce qu'il appelle. */
 function tabEffect(effects) {
-  const found = effects.find(({ fn }) => String(fn).includes('writeTab('))
+  const found = effects.find(({ fn }) => String(fn).includes('writeStoredView('))
   assert.ok(found, "le panneau doit persister l'onglet, pas seulement le lire")
   return found
 }
@@ -1665,17 +1678,28 @@ test('la barre est restaurée au montage et réécrite à chaque changement', ()
 })
 
 
-test('la barre d’onglets propose Workflows, et l’onglet ouvre l’éditeur', () => {
+test('la barre ouvre Settings sur la section stockée, et Workflows y monte l’éditeur', () => {
   const session = memorySession({ 'missions.tab': 'workflows' })
   const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
 
-  assert.equal(findAll(tree, 'WorkflowsView').length, 1, 'l’onglet Workflows porte l’éditeur de parcours')
+  // La barre ne porte plus Workflows : un onglet Settings s'ouvre sur sa section.
+  assert.equal(findAll(tree, 'SettingsView').length, 1, 'l’onglet Settings porte la vue à deux volets')
+  assert.equal(findAll(tree, 'WorkflowsView').length, 1, 'la section Workflows porte l’éditeur de parcours')
   assert.equal(findAll(tree, 'MissionsView').length, 0)
-  assert.equal(findAll(tree, 'MissionDrawer').length, 0, 'aucune mission n’a de tiroir dans cet onglet')
-  assert.match(textOf(tree), /Workflows/)
+  assert.equal(findAll(tree, 'MissionDrawer').length, 0, 'aucune mission n’a de tiroir sous Settings')
+  assert.match(textOf(tree), /Settings/)
 
-  // L'onglet est bien une vue montée, pas un libellé : rendue pour de vrai, elle
-  // dit ce qu'elle attend avant la première réponse.
+  // La navigation nomme les deux sections, chacune devant son icône, et la
+  // section restaurée est la sélectionnée.
+  const settings = renderTree(findAll(tree, 'SettingsView')[0])
+  const nav = findAll(settings, 'button').filter((node) => node.props.className === 'missions-settings-tab')
+  assert.deepEqual(nav.map((node) => textOf(node)), ['Usage', 'Workflows'])
+  assert.equal(nav[1].props['aria-selected'], 'true', 'la section stockée est la sélectionnée')
+  assert.equal(nav[0].props['aria-selected'], 'false')
+  assert.equal(findAll(settings, 'svg').filter((node) => /missions-tab-icon-/.test(node.props.className ?? '')).length >= 2, true)
+
+  // Rendue pour de vrai, la section dit ce qu'elle attend avant la première
+  // réponse du serveur.
   const inner = renderTree(findAll(tree, 'WorkflowsView')[0])
   assert.match(textOf(inner), /Chargement du parcours…/)
   assert.equal(findAll(inner, 'svg').length, 0, 'aucun graphe tant que le modèle n’est pas là')
@@ -2112,6 +2136,8 @@ function repositoriesStates(view, repository = null, count = null) {
     { ...EMPTY_BAR.filters, state: ['done'] },
     null,
     count,
+    // La seizième état est la section de Settings, restaurée avec l'onglet.
+    'usage',
     view,
   ]
 }
@@ -2141,7 +2167,9 @@ test('la barre d’onglets place Done et Repositories entre Missions et Workflow
   const tabs = SOURCE.slice(start, SOURCE.indexOf(']', start))
   assert.ok(tabs.indexOf("'missions'") < tabs.indexOf("'done'"))
   assert.ok(tabs.indexOf("'done'") < tabs.indexOf("'repositories'"))
-  assert.ok(tabs.indexOf("'repositories'") < tabs.indexOf("'workflows'"))
+  assert.ok(tabs.indexOf("'repositories'") < tabs.indexOf("'settings'"))
+  assert.equal(tabs.includes("'usage'"), false, 'Usage ne vit plus dans la barre')
+  assert.equal(tabs.includes("'workflows'"), false, 'Workflows ne vit plus dans la barre')
 
   const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'repositories' }))
   assert.equal(findAll(tree, 'RepositoriesView').length, 1)
@@ -2149,6 +2177,175 @@ test('la barre d’onglets place Done et Repositories entre Missions et Workflow
   assert.equal(findAll(tree, 'MissionsView').length, 0)
   assert.equal(findAll(tree, 'MissionDrawer').length, 0, 'aucune mission n’a de tiroir dans cet onglet')
   assert.match(textOf(tree), /Select a repository to see its remote/)
+})
+
+test('la barre porte cinq onglets, chacun devant son icône et son libellé', () => {
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+  const bar = findAll(tree, 'div').find((node) => node.props.className === 'missions-tabs')
+  assert.ok(bar, 'la barre est rendue')
+
+  // Done et Repositories quittent la barre avec Usage et Workflows : il reste
+  // les quatre vues de travail, puis Settings qui range les deux dernières.
+  const onglets = findAll(bar, 'button').filter((node) => node.props.role === 'tab')
+  assert.deepEqual(onglets.map((node) => node.props.id), [
+    'missions-tab-dashboard', 'missions-tab-missions', 'missions-tab-done',
+    'missions-tab-repositories', 'missions-tab-settings',
+  ])
+
+  const labels = ['Dashboard', 'Missions', 'Done', 'Repositories', 'Settings']
+  for (const [index, label] of labels.entries()) {
+    const html = renderTree(onglets[index])
+    // L'icône n'enlève rien au nom : le libellé reste le nom accessible.
+    assert.match(textOf(html), new RegExp(`^${label}`))
+    const svg = findAll(html, 'svg')[0]
+    assert.ok(svg, `icône absente : ${label}`)
+    assert.equal(svg.props['aria-hidden'], 'true', 'le dessin est décoratif')
+    assert.equal(svg.props.width, 16)
+    assert.equal(svg.props.height, 16)
+    assert.equal(svg.props.stroke, 'currentColor')
+    assert.ok(findAll(svg, 'path').length > 0, `dessin vide : ${label}`)
+  }
+
+  // La pastille du compte reste sur Missions et Repositories.
+  const badges = findAll(bar, 'span').filter((node) => node.props.className === 'missions-tab-count')
+  assert.equal(badges.length >= 1, true, 'le compte des missions et des dépôts reste dans la barre')
+})
+
+test('l’icône d’un onglet se redessine quand le thème change', () => {
+  const dessins = (theme) => {
+    const { api, ctx, registered } = charger(
+      undefined,
+      [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', { ...EMPTY_BAR.filters }, null, null, theme],
+      memorySession(),
+    )
+    api.apply(ctx)
+    const tree = registered.main({})
+    const bar = findAll(tree, 'div').find((node) => node.props.className === 'missions-tabs')
+    const result = {}
+    for (const button of findAll(bar, 'button').filter((node) => node.props.role === 'tab')) {
+      const svg = findAll(renderTree(button), 'svg')[0]
+      result[button.props.id] = {
+        paths: findAll(svg, 'path').map((path) => path.props.d),
+        strokeWidth: svg.props.strokeWidth,
+      }
+    }
+    return result
+  }
+
+  const defaults = dessins('default')
+  const manga = dessins('manga')
+  // Le même onglet, deux dessins : le thème n'est pas un simple recoloriage.
+  for (const id of Object.keys(defaults)) {
+    assert.notDeepEqual(manga[id].paths, defaults[id].paths, `dessin identique dans les deux thèmes : ${id}`)
+    assert.ok(manga[id].paths.length > 0)
+    assert.ok(defaults[id].paths.length > 0)
+  }
+  // L'encre manga est plus épaisse, comme le reste de la barre.
+  assert.equal(defaults['missions-tab-dashboard'].strokeWidth, 1.3)
+  assert.equal(manga['missions-tab-dashboard'].strokeWidth, 1.7)
+})
+
+test('Settings montre ses deux sections dans une navigation verticale, et la section active seule', () => {
+  const { api, ctx, registered, setters } = charger(
+    undefined,
+    [EMPTY_BAR, dashboardView(DASH_MISSIONS)],
+    memorySession({ 'missions.tab': 'usage' }),
+  )
+  api.apply(ctx)
+  const tree = registered.main({})
+  const settings = findAll(tree, 'SettingsView')[0]
+  assert.ok(settings, "l'onglet Settings porte la vue à deux volets")
+
+  // La navigation est un onglet vertical, nommé autrement que la barre du haut.
+  const view = settings.fn({ ...settings.props, children: settings.children })
+  const nav = findAll(view, 'div').find((node) => node.props.className === 'missions-settings-nav')
+  assert.ok(nav, 'la navigation de Settings est rendue')
+  assert.equal(nav.props.role, 'tablist')
+  assert.equal(nav.props['aria-orientation'], 'vertical')
+  assert.equal(nav.props['aria-label'], 'Settings views')
+
+  const sections = findAll(nav, 'button').filter((node) => node.props.role === 'tab')
+  assert.deepEqual(sections.map((node) => textOf(node)), ['Usage', 'Workflows'])
+  assert.equal(sections[0].props['aria-selected'], 'true', 'Usage est la section par défaut')
+  assert.equal(sections[1].props['aria-selected'], 'false')
+  assert.equal(sections[0].props['aria-controls'], 'missions-settings-panel-usage')
+  assert.equal(sections[1].props['aria-controls'], 'missions-settings-panel-workflows')
+
+  // Le panneau est décrit par son onglet, et une seule section est montée.
+  const panel = findAll(view, 'section').find((node) => node.props.role === 'tabpanel')
+  assert.ok(panel, 'la section est un panneau')
+  assert.equal(panel.props.id, 'missions-settings-panel-usage')
+  assert.equal(panel.props['aria-labelledby'], 'missions-settings-tab-usage')
+  assert.equal(findAll(panel, 'UsageTab').length, 1, 'la section Usage porte sa vue')
+  assert.equal(findAll(panel, 'WorkflowsView').length, 0, 'la section Workflows ne se monte pas en double')
+
+  // Choisir Workflows bascule la section sans quitter l'onglet.
+  sections[1].props.onClick()
+  assert.deepEqual(setters.slice(-1), ['workflows'], 'la section change, pas l’onglet')
+
+  // Chaque section garde son nom accessible, son icône restant décorative.
+  for (const section of sections) {
+    const html = renderTree(section)
+    assert.equal(findAll(html, 'svg')[0].props['aria-hidden'], 'true')
+    assert.match(textOf(html), /Usage|Workflows/)
+  }
+})
+
+test('une session Usage ou Workflows rouvre la section, une valeur inconnue retombe sur le dashboard', () => {
+  const usage = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'usage' }))
+  assert.equal(findAll(usage, 'SettingsView').length, 1, 'usage rouvre Settings')
+  assert.equal(findAll(usage, 'UsageTab').length, 1, '... sur sa section Usage')
+  assert.equal(findAll(usage, 'WorkflowsView').length, 0)
+
+  const workflows = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'workflows' }))
+  assert.equal(findAll(workflows, 'SettingsView').length, 1, 'workflows rouvre Settings')
+  assert.equal(findAll(workflows, 'WorkflowsView').length, 1, '... sur sa section Workflows')
+  assert.equal(findAll(workflows, 'UsageTab').length, 0)
+
+  // Une valeur qui ne nomme plus rien ne ressuscite aucun onglet : dashboard.
+  const unknown = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'epics' }))
+  assert.equal(findAll(unknown, 'SettingsView').length, 0)
+  assert.equal(findAll(unknown, 'DashboardView').length, 1)
+})
+
+test('sous Settings, le tick ne relit pas la liste des missions ouvertes', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  const vraiSetInterval = globalThis.setInterval
+  let tick = null
+  globalThis.setInterval = (fn) => { tick = fn; return 0 }
+  globalThis.fetch = async (url, init = {}) => {
+    appels.push({ url: String(url), method: init.method ?? 'GET' })
+    return { ok: true, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  try {
+    const { api, ctx, registered, effects } = charger(
+      undefined,
+      [EMPTY_BAR, dashboardView(DASH_MISSIONS)],
+      memorySession({ 'missions.tab': 'usage' }),
+    )
+    api.apply(ctx)
+    registered.main({})
+    // Les effets joués comme React les jouerait au montage : la lecture monte,
+    // le tick s'arme.
+    for (const effect of effects) effect.fn()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.deepEqual(appels.map((appel) => appel.url), ['missions/api/list', 'missions/api/repositories/count'], 'le montage lit l’ouvert et la pastille')
+
+    // Le tick suit le périmètre de la section : ni tracker, ni liste ouverte.
+    const tickEffect = effects.find((effect) => String(effect.fn).includes('REFRESH_MS'))
+    assert.ok(tickEffect, 'le tick est armé')
+    assert.equal(tickEffect.deps[3], false, 'le tick dépend du périmètre lu, pas de l’onglet : ici Settings')
+
+    appels.length = 0
+    assert.ok(tick, 'le tick est un intervalle')
+    tick()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.deepEqual(appels.map((appel) => appel.url), ['missions/api/repositories/count'], 'Settings ne relit que la pastille')
+  } finally {
+    globalThis.fetch = vraiFetch
+    globalThis.setInterval = vraiSetInterval
+  }
 })
 
 test('ouvrir Done lit les closes une fois, sans toucher à la liste ouverte', async () => {
@@ -2194,7 +2391,7 @@ test('un clic sur l’onglet Repositories bascule le panneau et ferme le volet',
   const tree = registered.main({})
 
   const boutons = findAll(tree, 'button').filter((button) => button.props.role === 'tab')
-  assert.equal(boutons.length, 6, 'Dashboard, Missions, Done, Repositories, Usage, Workflows')
+  assert.equal(boutons.length, 5, 'Dashboard, Missions, Done, Repositories, Settings')
   const bouton = boutons.find((button) => button.props.id === 'missions-tab-repositories')
   assert.ok(bouton, 'l’onglet a un identifiant stable')
   assert.equal(bouton.props['aria-selected'], 'false')
@@ -3439,8 +3636,9 @@ const USAGE_LOADED = {
 }
 
 /**
- * Le panneau monté sur l'onglet Usage, avec le relevé déjà lu : les états de la
- * barre, l'onglet, puis celui que `UsageTab` consomme en se montant.
+ * Le panneau monté sur la section Usage de Settings, avec le relevé déjà lu :
+ * les états de la barre, l'onglet, la section, puis celui que `UsageTab`
+ * consomme en se montant.
  */
 function monterUsage(releve = USAGE_LOADED) {
   const { api, ctx, registered, setters, effects } = charger(
@@ -3448,7 +3646,7 @@ function monterUsage(releve = USAGE_LOADED) {
     [
       EMPTY_BAR,
       dashboardView(DASH_MISSIONS),
-      'usage',
+      'settings',
       '',
       { ...EMPTY_BAR.filters },
       null,
@@ -3462,7 +3660,9 @@ function monterUsage(releve = USAGE_LOADED) {
       null,
       // Le compte des dépôts de la pastille, lu au montage et gardé dans le panneau.
       null,
-      // Le seizième état est celui de `UsageTab`, consommé quand on la rend.
+      // Le seizième état est la section de Settings, restaurée avec l'onglet.
+      'usage',
+      // Le dix-septième est celui de `UsageTab`, consommé quand on la rend.
       { loading: false, usage: releve, error: null },
     ],
     memorySession({ 'missions.tab': 'usage' }),
@@ -3484,7 +3684,7 @@ test('chaque geste du registre est émis par un endroit du panneau, et rien d’
 
   // Les familles dynamiques : une seule écriture pour toutes leurs valeurs.
   const families = {
-    tab: /track\(`tab\.\$\{next\}`\)/,
+    tab: /track\(`tab\.\$\{viewed\}`\)/,
     filter: /track\(`filter\.\$\{key\}`/,
     'mission.tab': /track\(`mission\.tab\.\$\{entry\.id\}`\)/,
     'repository.tab': /track\(`repository\.tab\.\$\{entry\.id\}`\)/,
@@ -3592,11 +3792,12 @@ test('chaque geste compte une fois, et un relevé qui échoue ne casse aucun cli
     const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
     api.apply(ctx)
     const tree = registered.main({})
-    const bouton = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-usage')
-    assert.ok(bouton, 'la barre porte l’onglet Usage')
+    const bouton = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-settings')
+    assert.ok(bouton, 'la barre porte l’onglet Settings')
 
     bouton.props.onClick()
-    assert.deepEqual(setters.slice(-2), ['usage', null], 'le clic ouvre l’onglet')
+    // Settings ouvre sa section Usage : le geste reste `tab.usage` au registre.
+    assert.deepEqual(setters.slice(-2), ['settings', null], 'le clic ouvre Settings')
     assert.deepEqual(calls, [{ url: 'missions/api/usage', method: 'POST', body: { element: 'tab.usage' }, keepalive: true }])
   } finally {
     globalThis.fetch = vraiFetch
@@ -3608,9 +3809,9 @@ test('chaque geste compte une fois, et un relevé qui échoue ne casse aucun cli
     const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
     api.apply(ctx)
     const tree = registered.main({})
-    const bouton = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-usage')
+    const bouton = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-settings')
     assert.doesNotThrow(() => bouton.props.onClick())
-    assert.deepEqual(setters.slice(-2), ['usage', null])
+    assert.deepEqual(setters.slice(-2), ['settings', null])
   } finally {
     globalThis.fetch = vraiFetch
   }
@@ -3673,11 +3874,10 @@ test('le montage et le tick de rafraîchissement ne comptent rien', async () => 
   }
 })
 
-test('Usage se place entre Repositories et Workflows, et ses verdicts ont leurs deux thèmes', () => {
-  const start = SOURCE.indexOf('const TABS = [')
-  const tabs = SOURCE.slice(start, SOURCE.indexOf(']', start))
-  assert.ok(tabs.indexOf("'repositories'") < tabs.indexOf("'usage'"))
-  assert.ok(tabs.indexOf("'usage'") < tabs.indexOf("'workflows'"))
+test('Usage se place avant Workflows dans les sections de Settings, et ses verdicts ont leurs deux thèmes', () => {
+  const start = SOURCE.indexOf('const SETTINGS_VIEWS = [')
+  const sections = SOURCE.slice(start, SOURCE.indexOf(']', start))
+  assert.ok(sections.indexOf("'usage'") < sections.indexOf("'workflows'"))
 
   // Chaque verdict a sa règle, dans le thème par défaut comme dans le manga.
   for (const verdict of ['grow', 'keep', 'improve', 'remove', 'none']) {
@@ -3755,7 +3955,7 @@ test('chaque onglet de la barre compte son geste, sauf celui déjà ouvert', () 
     api.apply(ctx)
     const tree = registered.main({})
     const onglets = findAll(tree, 'button').filter((node) => node.props.className === 'missions-tab')
-    assert.equal(onglets.length, 6, 'six onglets : dashboard, missions, done, repositories, usage, workflows')
+    assert.equal(onglets.length, 5, 'cinq onglets : dashboard, missions, done, repositories, settings')
 
     // L'onglet où l'on est déjà ne compte rien : un geste, pas un état.
     const courant = onglets.find((node) => node.props.id === 'missions-tab-dashboard')
@@ -3766,7 +3966,8 @@ test('chaque onglet de la barre compte son geste, sauf celui déjà ouvert', () 
       const id = onglet.props.id.replace('missions-tab-', '')
       if (id === 'dashboard') continue
       onglet.props.onClick()
-      spy.geste(`tab.${id}`)
+      // Settings compte la section qu'il ouvre : le registre garde `tab.usage`.
+      spy.geste(id === 'settings' ? 'tab.usage' : `tab.${id}`)
     }
 
     // Depuis un autre onglet, le dashboard se compte aussi.
@@ -3926,10 +4127,10 @@ test('sans `fetch`, le panneau ne compte rien et le geste passe quand même', ()
     const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
     api.apply(ctx)
     const tree = registered.main({})
-    const onglet = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-usage')
-    assert.ok(onglet, 'la barre porte l’onglet Usage')
+    const onglet = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-settings')
+    assert.ok(onglet, 'la barre porte l’onglet Settings')
     assert.doesNotThrow(() => onglet.props.onClick(), 'un clic sans `fetch` ne lève pas')
-    assert.deepEqual(setters.slice(-2), ['usage', null], 'le clic ouvre quand même son onglet')
+    assert.deepEqual(setters.slice(-2), ['settings', null], 'le clic ouvre quand même sa section')
   } finally {
     globalThis.fetch = vraiFetch
   }
@@ -3942,6 +4143,8 @@ function monterVoletAvec(mission, etatsVolet = []) {
   const panneau = [
     EMPTY_BAR, view, 'missions', '', { ...EMPTY_BAR.filters }, null, mission,
     'default', null, EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, null,
+    // La section de Settings, restaurée avec l'onglet : le volet vient après.
+    'usage',
   ]
   const { api, ctx, registered, setters, queue } = charger(undefined, [...panneau, ...etatsVolet], memorySession())
   api.apply(ctx)
