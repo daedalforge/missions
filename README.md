@@ -142,14 +142,20 @@ scan. Quand aucune ligne ne répond, la liste le dit et un bouton efface la
 barre. Le choix ne vit que la session — `missions.repositories.filters` dans
 `sessionStorage` — et une barre vide n'y laisse aucune clé.
 
-**Settings** range les deux vues qui ne lisent ni le tracker ni la liste des
-missions ouvertes : **Usage** puis **Workflows**, dans une navigation verticale
-à gauche. La section ouverte est la seule montée ; Usage est le défaut. Aucune
-clé de stockage nouvelle : `missions.tab` range la section (`usage`,
-`workflows`) tant que Settings est ouvert, si bien qu'une session restée sur
-l'un de ces anciens onglets rouvre Settings sur cette section ; une valeur
-inconnue retombe sur le Dashboard. Sous Settings, pas de bandeau tracker, et le
-rafraîchissement périodique ne relit jamais la liste des missions ouvertes.
+**Settings** range les trois vues qui ne lisent ni le tracker ni la liste des
+missions ouvertes : **Usage**, puis **Workflows**, puis **Playbook**, dans une
+navigation verticale à gauche. La section ouverte est la seule montée ; Usage
+est le défaut. Aucune clé de stockage nouvelle : `missions.tab` range la section
+(`usage`, `workflows`, `playbook`) tant que Settings est ouvert, si bien qu'une
+session restée sur l'un de ces anciens onglets rouvre Settings sur cette
+section ; une valeur inconnue retombe sur le Dashboard. La section Playbook
+ouvre la page retenue par `missions.playbook-page` — la première tant que rien
+n'est rangé — et ne touche jamais l'index : elle liste les cinq pages, lit leur
+texte, l'édite et l'enregistre, le serveur refusant toute écriture que
+`node tools/check-playbook.mjs` ne valide pas. Quitter une page au brouillon
+demande confirmation, et un fichier changé sous l'éditeur est refusé plutôt
+qu'écrasé. Sous Settings, pas de bandeau tracker, et le rafraîchissement
+périodique ne relit jamais la liste des missions ouvertes.
 
 ## Le relevé d'usage
 

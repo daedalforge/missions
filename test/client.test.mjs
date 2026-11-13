@@ -2205,7 +2205,7 @@ test('la barre ouvre Settings sur la section stockée, et Workflows y monte l’
   // section restaurée est la sélectionnée.
   const settings = renderTree(findAll(tree, 'SettingsView')[0])
   const nav = findAll(settings, 'button').filter((node) => node.props.className === 'missions-settings-tab')
-  assert.deepEqual(nav.map((node) => textOf(node)), ['Usage', 'Workflows'])
+  assert.deepEqual(nav.map((node) => textOf(node)), ['Usage', 'Workflows', 'Playbook'])
   assert.equal(nav[1].props['aria-selected'], 'true', 'la section stockée est la sélectionnée')
   assert.equal(nav[0].props['aria-selected'], 'false')
   assert.equal(findAll(settings, 'svg').filter((node) => /missions-tab-icon-/.test(node.props.className ?? '')).length >= 2, true)
@@ -3123,7 +3123,7 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
   assert.equal(manga['missions-tab-dashboard'].strokeWidth, 1.7)
 })
 
-test('Settings montre ses deux sections dans une navigation verticale, et la section active seule', () => {
+test('Settings montre ses trois sections dans une navigation verticale, et la section active seule', () => {
   const { api, ctx, registered, setters } = charger(
     undefined,
     [EMPTY_BAR, dashboardView(DASH_MISSIONS)],
@@ -3143,11 +3143,13 @@ test('Settings montre ses deux sections dans une navigation verticale, et la sec
   assert.equal(nav.props['aria-label'], 'Settings views')
 
   const sections = findAll(nav, 'button').filter((node) => node.props.role === 'tab')
-  assert.deepEqual(sections.map((node) => textOf(node)), ['Usage', 'Workflows'])
+  assert.deepEqual(sections.map((node) => textOf(node)), ['Usage', 'Workflows', 'Playbook'])
   assert.equal(sections[0].props['aria-selected'], 'true', 'Usage est la section par défaut')
   assert.equal(sections[1].props['aria-selected'], 'false')
+  assert.equal(sections[2].props['aria-selected'], 'false')
   assert.equal(sections[0].props['aria-controls'], 'missions-settings-panel-usage')
   assert.equal(sections[1].props['aria-controls'], 'missions-settings-panel-workflows')
+  assert.equal(sections[2].props['aria-controls'], 'missions-settings-panel-playbook')
 
   // Le panneau est décrit par son onglet, et une seule section est montée.
   const panel = findAll(view, 'section').find((node) => node.props.role === 'tabpanel')
@@ -3156,6 +3158,7 @@ test('Settings montre ses deux sections dans une navigation verticale, et la sec
   assert.equal(panel.props['aria-labelledby'], 'missions-settings-tab-usage')
   assert.equal(findAll(panel, 'UsageTab').length, 1, 'la section Usage porte sa vue')
   assert.equal(findAll(panel, 'WorkflowsView').length, 0, 'la section Workflows ne se monte pas en double')
+  assert.equal(findAll(panel, 'PlaybookView').length, 0, 'la section Playbook ne se monte pas en double')
 
   // Choisir Workflows bascule la section sans quitter l'onglet.
   sections[1].props.onClick()
@@ -3165,7 +3168,7 @@ test('Settings montre ses deux sections dans une navigation verticale, et la sec
   for (const section of sections) {
     const html = renderTree(section)
     assert.equal(findAll(html, 'svg')[0].props['aria-hidden'], 'true')
-    assert.match(textOf(html), /Usage|Workflows/)
+    assert.match(textOf(html), /Usage|Workflows|Playbook/)
   }
 })
 
@@ -3184,6 +3187,273 @@ test('une session Usage ou Workflows rouvre la section, une valeur inconnue reto
   const unknown = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'epics' }))
   assert.equal(findAll(unknown, 'SettingsView').length, 0)
   assert.equal(findAll(unknown, 'DashboardView').length, 1)
+})
+
+
+/** Les cinq pages que le serveur liste, avec leurs titres et leurs étapes. */
+// La forme exacte de la route : `page`, `file`, `step`, `title`, `lines`,
+// `exists` — `name` n'en fait pas partie, le client ne doit pas en dépendre.
+const PLAYBOOK_VIEW_PAGES = [
+  { page: 'cadrage', file: 'playbook/cadrage.md', step: 'cadrage', title: 'Cadrage — la fiche du dépôt', lines: 12, exists: true },
+  { page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 40, exists: true },
+  { page: 'revue', file: 'playbook/revue.md', step: 'revue', title: 'Revue — la vérification', lines: 30, exists: true },
+  { page: 'cloture', file: 'playbook/cloture.md', step: 'clôture', title: 'Clôture — la sortie', lines: 20, exists: true },
+  { page: 'workspace', file: 'playbook/workspace.md', step: null, title: 'Workspace — la fiche du dépôt', lines: 18, exists: true },
+]
+
+/** Les dix hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
+const PLAYBOOK_HOOKS = ['view', 'chosen', 'draft', 'baseline', 'mtimeMs', 'status', 'pageError', 'saving', 'pending', 'attempt']
+
+/** L'état de `PlaybookView`, par défaut sur la page d'exécution, sans retouche. */
+function playbookStates(patch = {}) {
+  const base = {
+    view: { loading: false, error: null, pages: PLAYBOOK_VIEW_PAGES },
+    chosen: 'execution',
+    draft: '## Avant d’agir\n',
+    baseline: '## Avant d’agir\n',
+    mtimeMs: 1234,
+    status: null,
+    pageError: null,
+    saving: false,
+    pending: null,
+    attempt: 0,
+  }
+  return PLAYBOOK_HOOKS.map((name) => (name in patch ? patch[name] : base[name]))
+}
+
+/** Le panneau monté sur la section Playbook, puis la vue résolue. */
+function monterPlaybook(states, session = memorySession({ 'missions.tab': 'playbook' })) {
+  const { api, ctx, registered, setters, queue, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+  api.apply(ctx)
+  const panneau = registered.main({})
+  const node = findAll(panneau, 'PlaybookView')[0]
+  assert.ok(node, 'la section Playbook porte sa vue')
+  const avant = effects.length
+  queue.push(...states)
+  const tree = renderTree(node)
+  return { panneau, node, tree, setters, effects, session, propres: effects.slice(avant) }
+}
+
+/** Laisse filer une chaîne de promesses de `fetch`, sans minuterie. */
+const tick = () => new Promise((resolve) => setImmediate(resolve))
+
+test('la section Playbook liste les cinq pages et ouvre celle de la session', () => {
+  const { tree } = monterPlaybook(playbookStates())
+
+  // Cinq pages, dans l'ordre du parcours puis le workspace, chacune avec son
+  // nom d'étape lisible — le titre du fichier, puis l'étape.
+  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
+  assert.equal(pages.length, 5)
+  assert.match(textOf(pages[0]), /Cadrage — la fiche du dépôt/)
+  assert.match(textOf(pages[0]), /Étape cadrage/)
+  assert.match(textOf(pages[4]), /Workspace — la fiche du dépôt/)
+  assert.match(textOf(pages[4]), /Workspace/)
+  assert.match(textOf(pages[1]), /40 lignes/, 'chaque page dit son nombre de lignes')
+
+  // La page retenue est marquée, les autres non.
+  assert.equal(pages[1].props['aria-current'], 'true', 'la page de la session est ouverte')
+  assert.equal(pages[0].props['aria-current'], 'false')
+
+  // L'éditeur porte le texte de la page, son chemin et son compte de lignes.
+  const champ = findAll(tree, 'textarea').find((node) => node.props.className === 'pb-text')
+  assert.equal(champ.props.value, '## Avant d’agir\n')
+  assert.match(textOf(tree), /playbook\/execution\.md — 40 lignes/)
+  assert.match(textOf(tree), /exécution/)
+})
+
+test('une page inconnue retombe sur la première, jamais sur un éditeur vide', () => {
+  const { tree } = monterPlaybook(playbookStates({ chosen: 'archive' }))
+  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
+  assert.equal(pages[0].props['aria-current'], 'true')
+  assert.equal(findAll(tree, 'textarea').find((node) => node.props.className === 'pb-text').props.value, '## Avant d’agir\n')
+})
+
+test('la page ouverte se range dans la session sous missions.playbook-page', () => {
+  const { effects, session } = monterPlaybook(playbookStates())
+  const ecriture = effects.find(({ fn }) => String(fn).includes('writePlaybookPage('))
+  assert.ok(ecriture, 'la page ouverte est écrite dans la session, pas seulement lue')
+  ecriture.fn()
+  assert.equal(session.entries.get('missions.playbook-page'), 'execution')
+})
+
+test('l’éditeur demande les cinq pages, puis la page choisie, au serveur', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => ({ pages: PLAYBOOK_VIEW_PAGES }) }
+  }
+  try {
+    const { propres } = monterPlaybook(playbookStates({ chosen: null }))
+    // Le chargement de la liste, puis celui du texte : deux routes distinctes.
+    for (const effect of propres) effect.fn()
+    assert.equal(appels[0], 'missions/api/playbooks')
+    await tick()
+    await tick()
+    assert.match(appels[1], /^missions\/api\/playbooks\/page\?page=/)
+    assert.match(appels[1], /cadrage/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('une page illisible montre le refus du serveur et propose une page lisible', async () => {
+  const refus = 'playbook/execution.md is missing'
+  const vraiFetch = globalThis.fetch
+  // La liste dit la page absente, puis la lecture de cette page est refusée.
+  globalThis.fetch = async (url) => {
+    if (String(url) === 'missions/api/playbooks') {
+      return {
+        ok: true,
+        json: async () => ({ pages: PLAYBOOK_VIEW_PAGES.map((entry) => (entry.page === 'execution' ? { ...entry, exists: false, lines: 0 } : entry)) }),
+      }
+    }
+    return { ok: false, json: async () => ({ error: refus }) }
+  }
+  try {
+    // Le refus du serveur remonte à la vue, tel qu'il est écrit.
+    const lecture = monterPlaybook(playbookStates({ chosen: 'execution', draft: null, baseline: null, mtimeMs: null }))
+    for (const effect of lecture.propres) effect.fn()
+    await tick()
+    await tick()
+    assert.equal(lecture.setters.filter((value) => value === refus).at(-1), refus, 'le refus de lecture arrive à l’écran')
+
+    // Rendu, la page absente dit le refus et cesse d'attendre.
+    const rendu = monterPlaybook(playbookStates({ chosen: 'execution', draft: null, baseline: null, mtimeMs: null, pageError: refus }))
+    assert.match(textOf(rendu.tree), /playbook\/execution\.md is missing/)
+    assert.doesNotMatch(textOf(rendu.tree), /Chargement de la page…/)
+
+    // Et la première page lisible s'ouvre d'un clic.
+    const retour = findAll(rendu.tree, 'button').find((node) => textOf(node) === 'Ouvrir « cadrage »')
+    assert.ok(retour, 'une page illisible propose une page lisible')
+    retour.props.onClick()
+    assert.ok(rendu.setters.includes('cadrage'), 'le clic ouvre la page proposée')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Enregistrer envoie le texte et la version lues, puis affiche le fichier écrit', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, options = {}) => {
+    appels.push({ url: String(url), options })
+    return { ok: true, json: async () => ({ page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 41, exists: true, mtimeMs: 9999 }) }
+  }
+  try {
+    const { tree, setters } = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
+    const bouton = findAll(tree, 'button').find((node) => textOf(node) === 'Save')
+    bouton.props.onClick()
+    await tick()
+    await tick()
+
+    assert.equal(appels[0].url, 'missions/api/playbooks/page')
+    assert.equal(appels[0].options.method, 'POST')
+    assert.equal(appels[0].options.headers['content-type'], 'application/json')
+    assert.deepEqual(JSON.parse(appels[0].options.body), { page: 'execution', text: '## Avant d’agir\n\nretouche\n', mtimeMs: 1234 })
+
+    const statut = setters.filter((value) => value && typeof value === 'object' && value.kind === 'ok').at(-1)
+    assert.ok(statut, 'un enregistrement accepté se dit')
+    assert.match(statut.message, /Enregistré — playbook\/execution\.md/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un refus du serveur s’affiche avec sa cause et la liste des manques', async () => {
+  const manque = 'playbook/execution.md : section manquante « Les règles »'
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: 'page invalid', errors: [manque] }) })
+  try {
+    const { tree, setters } = monterPlaybook(playbookStates({ draft: 'court\n' }))
+    findAll(tree, 'button').find((node) => textOf(node) === 'Save').props.onClick()
+    await tick()
+    await tick()
+    const refus = setters.filter((value) => value && typeof value === 'object' && value.kind === 'error').at(-1)
+    assert.deepEqual(refus, { kind: 'error', message: 'page invalid', errors: [manque] })
+
+    // Rendue, la liste des manques est un vrai texte, pas un compteur.
+    const { tree: rendu } = monterPlaybook(playbookStates({ status: { kind: 'error', message: 'page invalid', errors: [manque] } }))
+    const alerte = findAll(rendu, 'div').find((node) => /pb-status pb-status--error/.test(node.props.className ?? ''))
+    assert.equal(alerte.props.role, 'alert')
+    assert.match(textOf(alerte), /page invalid/)
+    assert.equal(findAll(alerte, 'li')[0] && textOf(findAll(alerte, 'li')[0]), manque)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Save et Cancel restent fermés sans retouche, et s’ouvrent au premier caractère', () => {
+  const gestes = (tree) => findAll(tree, 'button').filter((node) => ['Save', 'Saving…', 'Cancel'].includes(textOf(node)))
+
+  // Sans retouche, enregistrer n'aurait rien à écrire et annuler rien à rendre.
+  const propre = monterPlaybook(playbookStates())
+  assert.deepEqual(gestes(propre.tree).map((node) => node.props.disabled), [true, true])
+
+  // Un caractère de plus réveille les deux gestes.
+  const retouche = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
+  assert.deepEqual(gestes(retouche.tree).map((node) => node.props.disabled), [false, false])
+
+  // Pendant l'envoi, les deux se referment — un second clic ne double pas l'écriture.
+  const envoi = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n', saving: true }))
+  assert.deepEqual(gestes(envoi.tree).map((node) => node.props.disabled), [true, true])
+})
+
+test('quitter une page au brouillon demande confirmation en ligne, et les deux issues tiennent', () => {
+  const { tree, setters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n' }))
+  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
+  setters.length = 0
+
+  // Un clic sur une autre page n'ouvre rien : il pose la question, et le
+  // brouillon reste où il est.
+  pages[4].props.onClick()
+  assert.deepEqual(setters, ['workspace'], 'la page demandée attend la réponse')
+  assert.equal(findAll(tree, 'textarea').length, 1, 'aucune boîte système, le panneau reste monté')
+
+  // « Keep editing » efface la question et laisse la page ouverte.
+  const { tree: question } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  const dialogue = findAll(question, 'div').find((node) => /pb-confirm\b/.test(node.props.className ?? ''))
+  assert.ok(dialogue, 'la confirmation vit dans la section')
+  assert.equal(dialogue.props.role, 'alertdialog')
+  assert.match(textOf(dialogue), /modifications non enregistrées/)
+  assert.match(textOf(dialogue), /« workspace »/)
+  const garder = findAll(dialogue, 'button').find((node) => textOf(node) === 'Keep editing')
+  const abandonner = findAll(dialogue, 'button').find((node) => textOf(node) === 'Discard')
+  assert.ok(garder && abandonner, 'les deux issues sont des boutons')
+
+  const { tree: garde, setters: gardeSetters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  findAll(garde, 'button').find((node) => textOf(node) === 'Keep editing').props.onClick()
+  assert.deepEqual(gardeSetters, [null], 'Keep editing ne change pas de page')
+
+  // « Discard » charge la page demandée, et le brouillon repart du fichier.
+  const { tree: abandon, setters: abandonSetters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  findAll(abandon, 'button').find((node) => textOf(node) === 'Discard').props.onClick()
+  // Discard ouvre la page, vide le brouillon le temps de la relecture (Save
+  // retombe désactivé), puis efface la question.
+  assert.deepEqual(abandonSetters, ['workspace', null, null, null, null])
+
+  // Jamais de boîte système : la question est du panneau.
+  const debut = SOURCE.indexOf('function PlaybookView')
+  const fin = SOURCE.indexOf('function RepositoriesView')
+  const source = SOURCE.slice(debut, fin)
+  assert.ok(debut > -1 && fin > debut)
+  assert.equal(/\bconfirm\(/.test(source), false)
+})
+
+test('Cancel rend le brouillon au dernier état enregistré', () => {
+  const { tree, setters } = monterPlaybook(playbookStates({ draft: 'retouche non enregistrée\n' }))
+  findAll(tree, 'button').find((node) => textOf(node) === 'Cancel').props.onClick()
+  assert.deepEqual(setters.slice(-2), ['## Avant d’agir\n', { kind: 'ok', message: 'Modifications annulées.' }])
+})
+
+test('la page Playbook a ses règles, l’onglet son glyphe dans les deux thèmes', () => {
+  assert.match(regle('.pb-layout'), /grid-template-columns: 240px minmax\(0, 1fr\)/)
+  assert.match(regle('.pb-page[aria-current="true"]'), /box-shadow/)
+  assert.match(regle('.pb-text'), /font-family: var\(--dsw-font-mono/)
+  assert.match(regle('.pb-errors'), /color: #a33a2a/)
+  // Un dessin par thème, et un seul : le glyphe suit le thème actif.
+  assert.equal((SOURCE.match(/playbook: \[/g) ?? []).length, 2)
+  assert.match(SOURCE, /missions-tab-icon-\$\{id\}/)
 })
 
 test('sous Settings, le tick ne relit pas la liste des missions ouvertes', async () => {
@@ -5941,7 +6211,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(47\)/)
+  assert.match(texte, /Never used \(48\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -5957,7 +6227,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(50\)/)
+  assert.match(textOf(zero.inner), /Never used \(51\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -7244,6 +7514,373 @@ test('changer de thème écrit missions.theme et compte le geste', () => {
     spy.restore()
   }
 })
+
+/*
+ * L'archivage en lot : la liste Done archive exactement les lignes affichées,
+ * en deux clics, et le refus d'une ligne ne défait pas les autres. Le harnais
+ * monte le panneau sur l'onglet Done ; le bouton et sa note vivent dans
+ * `MissionsView`, qui les tient d'un composant sans état propre au-dessus du
+ * panneau.
+ */
+const BATCH_DONE = [
+  { key: 'MIS-1', title: 'alpha one', state: 'done', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
+  { key: 'MIS-2', title: 'alpha two', state: 'done', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T11:00:00Z' },
+  { key: 'MIS-3', title: 'beta three', state: 'done', type: 'story', priority: 'low', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T10:00:00Z' },
+]
+
+/** Le panneau sur Done : la liste, le compte du badge et la sélection du volet. */
+function monterDoneBatch(missions, { count = missions.length, selected = null, query = '' } = {}) {
+  const view = { loading: false, missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const doneView = { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w', count }
+  const panneau = [
+    EMPTY_BAR, view, 'done', '', EMPTY_BAR.filters, null, selected, 'default', null,
+    EMPTY_BAR, doneView, '', { ...EMPTY_BAR.filters, state: ['done'] }, null,
+  ]
+  const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, [...panneau])
+  api.apply(ctx)
+  const rendu = ({ query: nextQuery = query, missions: nextMissions = missions } = {}) => {
+    resetHooks()
+    queue.length = 0
+    queue.push(...panneau)
+    // Done reads its own query and filters: index 11 is `doneQuery`, not the
+    // open list's query at index 3. A silent refresh only replaces the read.
+    queue[10] = { ...doneView, missions: nextMissions }
+    queue[11] = nextQuery
+    return findAll(registered.main({}), 'MissionsView')[0]
+  }
+  const arbre = (options) => renderTree(rendu(options))
+  return { setters, arbre, rendu }
+}
+
+/** Le bouton du lot, quel que soit son état, dans la barre de la liste. */
+function boutonLot(tree) {
+  return findAll(tree, 'button').find((node) => /missions-batch-btn/.test(node.props.className ?? '')) ?? null
+}
+
+/** La dernière note posée par le geste de lot : elle voyage dans l'état du composant. */
+function noteLot(setters) {
+  return setters
+    .filter((value) => value && typeof value === 'object' && 'note' in value)
+    .at(-1)?.note ?? null
+}
+
+/** Un faux `fetch` qui répond à la route de lot et note chaque requête. */
+function fauxFetchLot(reponse) {
+  const appels = []
+  const vrai = globalThis.fetch
+  globalThis.fetch = async (url, options = {}) => {
+    appels.push({ url: String(url), body: options.body ? JSON.parse(options.body) : null })
+    const donnee = typeof reponse === 'function' ? reponse(String(url), options) : reponse
+    if (donnee && donnee.reponse) {
+      return donnee.reponse
+    }
+    return { ok: true, status: 200, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  return { appels, rendre: () => { globalThis.fetch = vrai } }
+}
+
+test('le bouton de lot n’existe qu’en Done et compte les lignes affichées', () => {
+  // La liste ouverte ne reçoit pas la prop : aucun bouton de lot.
+  const ouvert = renderTree(monter([EMPTY_BAR, dashboardView(DASH_MISSIONS.filter((mission) => mission.state !== 'done')), 'missions']))
+  assert.equal(boutonLot(ouvert), null, 'la liste ouverte ne porte pas le geste de lot')
+
+  // Done le porte, compté sur `filtered` : trois done, la recherche en garde deux.
+  const { arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+  const bouton = boutonLot(arbre())
+  assert.ok(bouton, 'Done porte le bouton de lot')
+  assert.equal(bouton.props['aria-label'], 'Archive 2 missions')
+  assert.equal(bouton.props.title, 'Archive 2 missions')
+  assert.equal(bouton.props.disabled, false)
+
+  // Zéro ligne affichée : le bouton reste, désactivé, et ne nomme aucune ligne.
+  const vide = boutonLot(arbre({ query: 'zzz' }))
+  assert.ok(vide, 'le bouton reste dans la barre')
+  assert.equal(vide.props.disabled, true)
+  assert.equal(vide.props['aria-label'], 'Archive 0 missions')
+  assert.match(textOf(renderTree({ ...arbre({ query: 'zzz' }) })), /No mission matches these filters\./)
+})
+
+test('le lot confirmé n’envoie que les clés affichées', async () => {
+  const fetchLot = fauxFetchLot(null)
+  try {
+    const { arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    const envois = fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch')
+    assert.equal(envois.length, 1, 'un seul envoi pour le lot')
+    assert.deepEqual(envois[0].body, { keys: ['MIS-1', 'MIS-2'] }, 'les clés envoyées sont exactement les lignes visibles')
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('deux clics : le premier arme sans requête, le second envoie une fois', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [
+          { key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' },
+          { key: 'MIS-2', folder: 'MIS-2', archived: 'missions/archives/MIS-2' },
+        ],
+        refused: [],
+      }),
+    },
+  })
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    const bouton = boutonLot(arbre())
+
+    await bouton.props.onClick()
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 0, 'le premier clic n’envoie rien')
+    const arme = noteLot(setters)
+    assert.match(arme.text, /missions\/archives\//, 'la note dit où vont les dossiers')
+    assert.match(arme.text, /Click again to confirm/)
+
+    // Le rendu suivant porte l'état armé : le libellé et l'infobulle nomment la
+    // confirmation, et le bouton garde les deux clés.
+    const confirme = boutonLot(arbre())
+    assert.equal(confirme.props['aria-label'], 'Confirm — archive 2 missions')
+    assert.match(confirme.props.className, /missions-batch-btn--armed/)
+
+    // Le même nœud, pas un rendu neuf : un composant remonté repart d'un garde
+    // vierge, comme le fait un remontage React — c'est le même geste qui doit
+    // se souvenir du premier clic.
+    await bouton.props.onClick()
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 1, 'le second clic envoie une fois')
+    assert.match(noteLot(setters).text, /Archived 2 mission folders to missions\/archives\/\./)
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('un changement de liste entre les deux clics réarme au lieu d’envoyer', async () => {
+  const fetchLot = fauxFetchLot(null)
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    await boutonLot(arbre()).props.onClick()
+    assert.match(noteLot(setters).text, /This moves 2 mission folders/)
+
+    // La recherche est vidée : la liste affichée passe de deux à trois lignes.
+    const suivant = boutonLot(arbre({ query: '' }))
+    assert.doesNotMatch(suivant.props.className, /missions-batch-btn--armed/, 'le bouton n’est plus en état de confirmation')
+    await suivant.props.onClick()
+
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 0, 'aucune clé de l’ancienne liste n’est envoyée')
+    assert.match(noteLot(setters).text, /This moves 3 mission folders/, 'le clic a armé la nouvelle liste')
+
+    const arme = boutonLot(arbre({ query: '' }))
+    assert.match(arme.props.className, /missions-batch-btn--armed/)
+    assert.equal(arme.props['aria-label'], 'Confirm — archive 3 missions')
+
+    // La même garde vaut pour une relecture silencieuse : une ligne close de
+    // plus dans la lecture Done change la liste affichée sans toucher aux
+    // filtres, et le clic suivant arme la nouvelle liste.
+    const ferme = { ...BATCH_DONE[2], key: 'MIS-4', title: 'delta four' }
+    const rafraichi = boutonLot(arbre({ query: '', missions: [...BATCH_DONE, ferme] }))
+    assert.doesNotMatch(rafraichi.props.className, /missions-batch-btn--armed/)
+    await rafraichi.props.onClick()
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 0, 'un rafraîchissement silencieux n’est jamais confirmé à l’aveugle')
+    assert.match(noteLot(setters).text, /This moves 4 mission folders/)
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('le refus partiel se dit et laisse les refusées dans la liste', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [{ key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' }],
+        refused: [{ key: 'MIS-2', error: 'MIS-2 is not done' }],
+      }),
+    },
+  })
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE)
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    const note = noteLot(setters)
+    assert.equal(note.error, true)
+    assert.match(note.text, /Archived 1 of 2; 1 refused: MIS-2 \(MIS-2 is not done\)/)
+
+    // Seule la ligne archived quitte la liste : celle qui a refusé reste.
+    const restants = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [{ key: 'MIS-1' }, { key: 'MIS-2' }, { key: 'MIS-3' }], count: 3 }))
+      .filter((next) => next && Array.isArray(next.missions) && next.missions.length === 2)
+    assert.ok(restants.length >= 1, 'le retrait suit les seules archivées')
+    for (const restant of restants) {
+      assert.deepEqual(restant.missions.map((mission) => mission.key), ['MIS-2', 'MIS-3'])
+    }
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('un échec de la route ne retire aucune ligne et laisse le bouton réarmable', async () => {
+  const fetchLot = fauxFetchLot({ reponse: { ok: false, status: 502, json: async () => ({ error: 'done missions: token missing' }) } })
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE)
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    const note = noteLot(setters)
+    assert.equal(note.error, true)
+    assert.match(note.text, /Archive failed: done missions: token missing/)
+    const retire = setters.filter((value) => typeof value === 'function' && value({ missions: [{ key: 'MIS-1' }] }).missions.length === 0)
+    assert.equal(retire.length, 0, 'aucune ligne n’est retirée')
+
+    // Un échec réarme : le clic suivant redemande confirmation sans envoyer.
+    await boutonLot(arbre()).props.onClick()
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 1)
+    assert.match(noteLot(setters).text, /Click again to confirm/)
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('le lot retire les lignes, décrémente le compte et referme le volet', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [
+          { key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' },
+          { key: 'MIS-2', folder: 'MIS-2', archived: 'missions/archives/MIS-2' },
+        ],
+        refused: [],
+      }),
+    },
+  })
+  try {
+    // Le volet montre une mission du lot : il doit se refermer avec elle.
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { count: 4, selected: BATCH_DONE[0] })
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    const reduits = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: BATCH_DONE.map((mission) => ({ key: mission.key })), count: 4 }))
+    // Chaque reducer du retrait rend la même liste amputée : la vue et le volet
+    // lisent les mêmes clés archivées.
+    const retraits = reduits.filter((next) => next && Array.isArray(next.missions) && next.missions.length === 1)
+    assert.ok(retraits.length >= 2, 'la vue et le compte suivent les deux archivées')
+    for (const retrait of retraits) {
+      assert.deepEqual(retrait.missions.map((mission) => mission.key), ['MIS-3'], 'les lignes archivées quittent les deux copies')
+    }
+    assert.ok(reduits.some((next) => next.count === 2), 'le compte Done décroît du nombre archivé')
+
+    // Le volet ouvert sur une mission archivée est refermé ; un updater rend null.
+    const fermeture = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [], count: 4, key: 'MIS-1' }))
+      .some((next) => next === null)
+    assert.equal(fermeture, true, 'le volet se referme sur la mission archivée')
+
+    // Une seule relecture silencieuse de Done, sans attendre.
+    const relues = fetchLot.appels.filter((appel) => appel.url === 'missions/api/list?done=1&refresh=1')
+    assert.equal(relues.length, 1)
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('le lot se compte au clic confirmé seulement, avec son nombre de clés', async () => {
+  const fetchLot = fauxFetchLot(null)
+  try {
+    const { arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    const usageArme = fetchLot.appels.filter((appel) => appel.url === 'missions/api/usage')
+    assert.equal(usageArme.length, 0, 'l’armement ne compte rien')
+
+    await bouton.props.onClick()
+    const usage = fetchLot.appels.filter((appel) => appel.url === 'missions/api/usage')
+    assert.equal(usage.length, 1, 'un seul POST d’usage')
+    assert.deepEqual(usage[0].body, { element: 'mission.archive.batch', detail: '2' })
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('le bouton dit son état, sa note est une région de statut, et l’envoi le désactive', async () => {
+  let resoudre
+  const reponseLot = new Promise((resolve) => { resoudre = resolve })
+  const vrai = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (String(url) === 'missions/api/archive-batch') {
+      return reponseLot.then(() => ({ ok: true, status: 200, json: async () => ({ archived: [], refused: [] }) }))
+    }
+    return { ok: true, status: 200, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    const arme = boutonLot(arbre())
+    // La note est une région de statut, et le bouton armé reste actif.
+    const notes = findAll(arbre(), 'p').filter((node) => node.props.role === 'status')
+    assert.ok(notes.some((node) => /Click again to confirm/.test(textOf(node))))
+    assert.equal(arme.props.disabled, false)
+
+    // L'envoi en cours désactive le bouton et l'annonce.
+    const envoi = bouton.props.onClick()
+    const enCours = boutonLot(arbre())
+    assert.equal(enCours.props.disabled, true, 'le bouton est inactif pendant l’envoi')
+    assert.equal(enCours.props.title, 'Archiving…')
+    assert.equal(enCours.props['aria-label'], 'Archiving…')
+    assert.equal(enCours.props['aria-busy'], 'true')
+
+    resoudre()
+    await envoi
+    assert.match(noteLot(setters).text, /Archived 0 mission folders/)
+  } finally {
+    globalThis.fetch = vrai
+  }
+})
+
+test('un lot d’une seule archivée ne referme pas le volet d’une autre mission', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [{ key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' }],
+        refused: [],
+      }),
+    },
+  })
+  try {
+    // Given : le volet montre une mission que le lot n'archive pas.
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { count: 4, selected: BATCH_DONE[2] })
+    const bouton = boutonLot(arbre())
+
+    // When : les deux clics du lot archivent une seule ligne.
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    // Then : la sélection survit au geste de la liste.
+    const fermetures = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [], count: 4, key: 'MIS-3' }))
+      .filter((next) => next === null)
+    assert.equal(fermetures.length, 0, 'le volet garde une mission hors du lot')
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
 
 test('la carte et la tête du détail portent la pastille Local, et seulement pour un local', () => {
   const local = montrerWorkflows([workflowEntry({ local: true })], { tab: 'infos' })

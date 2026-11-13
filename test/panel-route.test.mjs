@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createServer, request } from 'node:http'
 import { join } from 'node:path'
@@ -11,6 +11,8 @@ import { MISSION_FILE } from '../lib/branches.js'
 import { apply } from '../lib/index.js'
 import { resetRepositorySummary } from '../lib/repositories.js'
 import { clearCache } from '../lib/trackers/index.js'
+
+const ROOT = fileURLToPath(new URL('../', import.meta.url))
 
 /**
  * La route de déclaration, de bout en bout côté hôte.
@@ -2148,6 +2150,115 @@ test('une panne du tracker répond 502 et ne déplace rien', async (t) => {
   }
 })
 
+/**
+ * L'archivage en lot : les clés rendues par l'onglet Done en une requête. Une
+ * ligne refusée ne défait pas les autres ; un dossier déplacé reste déplacé.
+ */
+test('POST /archive-batch archive les done et refuse les autres dans une réponse', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42, CLOSED_43] })
+  await mkdir(join(dir, 'missions', 'MIS-44'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-44', MISSION_FILE), 'key: MIS-44\nbranch: feat/mis-44\nbase: main\n')
+  await writeFile(join(dir, 'missions', 'MIS-44', 'journal.md'), '# Journal — MIS-44\n')
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive-batch',
+      body: { keys: ['MIS-42', 'MIS-43', 'MIS-44', 'MIS-99', 'ZZZ-1'] },
+    })
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(
+      response.body.archived.map((entry) => entry.archived),
+      ['missions/archives/MIS-42', 'missions/archives/MIS-43'],
+    )
+    assert.deepEqual(response.body.refused, [
+      { key: 'MIS-44', error: 'MIS-44 is not done' },
+      { key: 'MIS-99', error: 'no mission folder for MIS-99' },
+      { key: 'ZZZ-1', error: 'no project declares ZZZ-1' },
+    ])
+    assert.deepEqual((await readdir(join(dir, 'missions'))).sort(), ['MIS-44', 'archives', 'projects.yml'])
+    assert.equal(await readFile(join(dir, 'missions', 'MIS-44', 'journal.md'), 'utf8'), '# Journal — MIS-44\n')
+
+    const list = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.equal(list.status, 200)
+    assert.deepEqual(list.body.missions, [])
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('POST /archive-batch dit le refus d’une ligne sans défaire les autres', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42, CLOSED_43] })
+  await mkdir(join(dir, 'missions', 'archives', 'MIS-43'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'archives', 'MIS-43', 'journal.md'), 'ancien\n')
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive-batch',
+      body: { keys: ['MIS-42', 'MIS-43'] },
+    })
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(response.body.archived.map((entry) => entry.key), ['MIS-42'])
+    assert.deepEqual(response.body.refused, [{ key: 'MIS-43', error: 'missions/archives/MIS-43 already exists' }])
+    assert.equal(await readFile(join(dir, 'missions', 'archives', 'MIS-43', 'journal.md'), 'utf8'), 'ancien\n')
+    assert.equal(await readFile(join(dir, 'missions', 'archives', 'MIS-42', 'journal.md'), 'utf8'), '# Journal — MIS-42\n')
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('POST /archive-batch refuse une requête invalide avant tout déplacement', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42] })
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const wrongMethod = await call(handler, { path: '/missions/api/archive-batch' })
+    assert.equal(wrongMethod.status, 405)
+    assert.equal(wrongMethod.headers.allow, 'POST')
+
+    const broken = await call(handler, { method: 'POST', path: '/missions/api/archive-batch', raw: '{"keys":' })
+    assert.equal(broken.status, 400)
+
+    for (const body of [{}, { keys: 'MIS-42' }, { keys: [] }, { keys: ['  '] }]) {
+      const invalid = await call(handler, { method: 'POST', path: '/missions/api/archive-batch', body })
+      assert.equal(invalid.status, 400)
+    }
+
+    assert.deepEqual(await readdir(join(dir, 'missions')), ['MIS-42', 'projects.yml'])
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('POST /archive-batch : une panne du tracker répond 502 et ne déplace rien', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42, CLOSED_43], closedStatus: 401 })
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive-batch',
+      body: { keys: ['MIS-42', 'MIS-43'] },
+    })
+
+    assert.equal(response.status, 502)
+    assert.match(response.body.error, /done missions: GitHub token missing or invalid/)
+    assert.deepEqual((await readdir(join(dir, 'missions'))).sort(), ['MIS-42', 'MIS-43', 'projects.yml'])
+    await assert.rejects(readdir(join(dir, 'missions', 'archives')), { code: 'ENOENT' })
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
 test('POST repositories/adopt ne supprime pas des fichiers ignorés sans un second oui', async (t) => {
   const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }])
   const { run, calls } = fauxGitRun({
@@ -2477,6 +2588,130 @@ test('GET repositories/summary nomme une racine illisible', async (t) => {
   const response = await call(handler, { path: '/missions/api/repositories/summary' })
   assert.equal(response.status, 500)
   assert.match(response.body.error, /missions-absente-192/)
+})
+
+/** Le playbook du dépôt, copié dans le dossier temporaire que la route lit. */
+async function playbookFixture(dir) {
+  await cp(join(ROOT, 'playbook'), join(dir, 'playbook'), { recursive: true })
+}
+
+test('GET playbooks liste les cinq pages sans leur texte', async (t) => {
+  // Given
+  const { dir, handler } = await mount(t)
+  await playbookFixture(dir)
+
+  // When
+  const response = await call(handler, { path: '/missions/api/playbooks' })
+
+  // Then
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body.pages.map((page) => page.page), ['cadrage', 'execution', 'revue', 'cloture', 'workspace'])
+  assert.deepEqual(response.body.pages.map((page) => page.step), ['cadrage', 'exécution', 'revue', 'clôture', null])
+  for (const page of response.body.pages) {
+    assert.equal('text' in page, false)
+    assert.equal('mtimeMs' in page, false)
+    assert.equal(page.exists, true)
+    assert.match(page.file, /^playbook\/.+\.md$/)
+    assert.equal(typeof page.lines, 'number')
+    assert.equal(typeof page.title, 'string')
+  }
+  // L'index n'est pas une page, et la liste ne le sert pas.
+  assert.ok(response.body.pages.every((page) => !page.file.endsWith('README.md')))
+
+  // Les méthodes autres que GET sont refusées.
+  const post = await call(handler, { method: 'POST', path: '/missions/api/playbooks', body: {} })
+  assert.equal(post.status, 405)
+  assert.equal(post.headers.allow, 'GET')
+})
+
+test('GET playbooks/page rend le texte et sa version, 400 puis 404 sinon', async (t) => {
+  // Given
+  const { dir, handler } = await mount(t)
+  await playbookFixture(dir)
+  const expected = await readFile(join(ROOT, 'playbook', 'execution.md'), 'utf8')
+
+  // When
+  const response = await call(handler, { path: '/missions/api/playbooks/page?page=execution' })
+
+  // Then
+  assert.equal(response.status, 200)
+  assert.equal(response.body.text, expected)
+  assert.equal(response.body.file, 'playbook/execution.md')
+  assert.equal(response.body.step, 'exécution')
+  assert.match(response.body.title, /^Exécution/)
+  assert.equal(response.body.mtimeMs, (await stat(join(dir, 'playbook', 'execution.md'))).mtimeMs)
+
+  const unknown = await call(handler, { path: '/missions/api/playbooks/page?page=inconnue' })
+  assert.equal(unknown.status, 400)
+  assert.match(unknown.body.error, /unknown playbook page/)
+
+  const index = await call(handler, { path: '/missions/api/playbooks/page?page=README' })
+  assert.equal(index.status, 400)
+
+  await rm(join(dir, 'playbook', 'revue.md'))
+  const missing = await call(handler, { path: '/missions/api/playbooks/page?page=revue' })
+  assert.equal(missing.status, 404)
+
+  const put = await call(handler, { method: 'PUT', path: '/missions/api/playbooks/page?page=revue' })
+  assert.equal(put.status, 405)
+  assert.equal(put.headers.allow, 'GET, POST')
+})
+
+test('POST playbooks/page écrit une page valide et refuse une page fautive', async (t) => {
+  // Given
+  const { dir, handler } = await mount(t)
+  await playbookFixture(dir)
+  const read = await call(handler, { path: '/missions/api/playbooks/page?page=cadrage' })
+  const changed = `${read.body.text}\nUne ligne de plus.\n`
+
+  // When
+  const saved = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/playbooks/page',
+    body: { page: 'cadrage', text: changed, mtimeMs: read.body.mtimeMs },
+  })
+
+  // Then
+  assert.equal(saved.status, 200)
+  assert.equal(saved.body.file, 'playbook/cadrage.md')
+  assert.notEqual(saved.body.mtimeMs, read.body.mtimeMs)
+  assert.equal(saved.body.mtimeMs, (await stat(join(dir, 'playbook', 'cadrage.md'))).mtimeMs)
+  assert.equal(await readFile(join(dir, 'playbook', 'cadrage.md'), 'utf8'), changed)
+
+  // Une version périmée ne réécrit rien.
+  const stale = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/playbooks/page',
+    body: { page: 'cadrage', text: `${changed}Autre.\n`, mtimeMs: read.body.mtimeMs },
+  })
+  assert.equal(stale.status, 409)
+  assert.equal(await readFile(join(dir, 'playbook', 'cadrage.md'), 'utf8'), changed)
+
+  // Une page fautive revient avec les erreurs du CLI, sans toucher au fichier.
+  const broken = read.body.text.replace('## Pièges observés', '## Pièges')
+  const refused = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/playbooks/page',
+    body: { page: 'cadrage', text: broken, mtimeMs: saved.body.mtimeMs },
+  })
+  assert.equal(refused.status, 400)
+  assert.match(refused.body.error, /page invalid/)
+  assert.ok(refused.body.errors.some((error) => /section manquante/.test(error)))
+  assert.equal(await readFile(join(dir, 'playbook', 'cadrage.md'), 'utf8'), changed)
+
+  // L'index reste hors panneau, et aucune route ne crée de page.
+  const readme = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/playbooks/page',
+    body: { page: 'README', text: '# Index', mtimeMs: Date.now() },
+  })
+  assert.equal(readme.status, 400)
+  const traversal = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/playbooks/page',
+    body: { page: '../../etc/passwd', text: 'x', mtimeMs: Date.now() },
+  })
+  assert.equal(traversal.status, 400)
 })
 
 test('POST /workflows range la création locale sous workflows/local/ et la liste la marque', async (t) => {
