@@ -1847,8 +1847,9 @@ async function mountTolgee(t, {
   locales = { fr: { greet: 'Bonjour' }, en: {} },
   translations = true,
   run = async () => ({ stdout: 'src/a.js' }),
+  fetchImpl = undefined,
 } = {}) {
-  const mounted = await mount(t, { runGit: (...args) => run(...args) })
+  const mounted = await mount(t, { runGit: (...args) => run(...args), fetchImpl })
   const repo = join(mounted.dir, 'repo')
   await mkdir(join(repo, 'src'), { recursive: true })
   await mkdir(join(repo, 'locales'), { recursive: true })
@@ -1870,7 +1871,15 @@ function postTolgee(handler, key = 'MIS-171') {
 }
 
 test('POST tolgee écrit le XLIFF de la mission et rend le bilan', async (t) => {
-  const { dir, handler } = await mountTolgee(t)
+  const reseau = []
+  const { dir, handler } = await mountTolgee(t, {
+    // Aucun accès Tolgee, direct ou indirect : la route ne doit rien demander
+    // au réseau, pas même un jeton ou une observation.
+    fetchImpl: async (url) => {
+      reseau.push(String(url))
+      throw new Error('network must not be called')
+    },
+  })
 
   const response = await postTolgee(handler)
 
@@ -1889,6 +1898,7 @@ test('POST tolgee écrit le XLIFF de la mission et rend le bilan', async (t) => 
   assert.match(xliff, /<source>Bonjour<\/source>/)
   assert.match(xliff, /<target>Bonjour<\/target>/)
   assert.match(xliff, /<note>src\/a\.js:1<\/note>/)
+  assert.deepEqual(reseau, [], 'la route ne fait aucun appel réseau')
 })
 
 test('POST tolgee sans clé manquante n’écrit aucun fichier', async (t) => {
