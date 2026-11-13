@@ -170,6 +170,20 @@ missions/archives. ») au lieu de la phrase de blocage de session : sur une
 mission fermée, l'archive est la seule action possible, et la note doit dire
 laquelle. Le clic qui confirme se compte (`mission.archive` dans le relevé).
 
+**Archiver en lot.** La barre de la liste Done porte le même geste sur toutes
+les lignes affichées : « Archive N missions », N étant `filtered` — recherche
+et filtres compris, jamais une mission qu'un filtre écarte. Le premier clic
+arme et dit la destination (`missions/archives/`), le second envoie une seule
+requête `POST archive-batch` avec les clés rendues. L'armement porte la
+signature de ces clés : un filtre changé, une recherche vidée ou une relecture
+silencieuse entre les deux clics font du clic suivant un nouvel armement,
+jamais une confirmation à l'aveugle. L'hôte relit une fois la preuve `done` par
+projet, puis déplace les dossiers un à un ; un refus ne défait pas les autres
+et se dit (« Archived 2 of 3; 1 refused: MIS-… »), les lignes refusées restent
+en place, un échec de la route ne retire rien. Le lot se compte au clic
+confirmé (`mission.archive.batch`, détail = nombre de clés). Comme l'archive
+simple, il ne touche ni le tracker ni `main`.
+
 - **Ce qu'il déplace.** Le dossier entier, avec son nom, son `mission.yml`, son
   journal et sa checklist. Rien n'est supprimé, rien n'est réécrit.
 - **Ce qu'il vérifie.** L'hôte relit l'issue fermée dans le tracker et refuse
