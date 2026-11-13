@@ -1,0 +1,1418 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>MIS-186 — maquette du système de workflow</title>
+<!--
+  Maquette MIS-186 — copie datée du 2026-11-13, commit de référence d291894.
+
+  Sources copiées dans cette page, sans lecture ni réseau à l'ouverture :
+  - workflows/model/cadrage.yml, execution.yml, review.yml, cloture.yml
+  - missions/projects.yml (bloc canonical.states et map des statuts)
+  - workflows/README.md (libellés français des six états)
+  - src/client.template.js (classes .missions-* et .wf-*, jetons --dsw-alias-*)
+  - lib/view.js:956 (layoutWorkflow), recopié pour dessiner les graphes
+
+  Aucun fichier n'est lu ni écrit au chargement : les données sont inline et
+  les modifications restent en mémoire. La page s'ouvre par file://.
+-->
+<style>
+  /* Jetons du panneau, avec les fallbacks de la vue réelle. */
+  :root {
+    --dsw-alias-bg-base: #fbfaf8;
+    --dsw-alias-bg-layer-1: #ffffff;
+    --dsw-alias-label-primary: #1f1f1f;
+    --dsw-alias-label-secondary: #4a4a4a;
+    --dsw-alias-label-tertiary: #7a7168;
+    --dsw-alias-border-l1: rgba(0, 0, 0, .06);
+    --dsw-alias-border-l2: rgba(0, 0, 0, .12);
+    --dsw-alias-interactive-bg-hover: rgba(0, 0, 0, .05);
+    --dsw-alias-label-danger: #b42318;
+    --dsw-alias-button-primary-fill: #1f1f1f;
+    --dsw-alias-label-primary-foreground: #ffffff;
+    --dsw-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--dsw-alias-bg-base);
+    color: var(--dsw-alias-label-primary);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code { font-family: var(--dsw-font-mono); font-size: .92em; }
+  button { font-family: inherit; }
+
+  /* Bandeau de maquette, hors du panneau. */
+  .mock-banner {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    padding: 8px 16px; background: #f3eee7; border-bottom: 1px solid rgba(0, 0, 0, .08);
+    font-size: 12px; color: var(--dsw-alias-label-secondary);
+  }
+  .mock-banner strong { font-weight: 650; letter-spacing: .02em; color: var(--dsw-alias-label-primary); }
+  .mock-banner code { background: rgba(0, 0, 0, .05); padding: 1px 4px; border-radius: 4px; font-size: 11px; }
+
+  /* Panneau : la page défile, pas la zone de contenu. */
+  .missions-panel { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.5; }
+  .mock-panel { height: auto; min-height: calc(100vh - 36px); }
+  .mock-panel .missions-body { overflow: visible; }
+  .mock-chip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border: 1px dashed rgba(0, 0, 0, .22); border-radius: 999px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+
+  .missions-head { display: flex; align-items: center; gap: 12px; padding: 24px 28px 0; flex: none; }
+  .missions-title { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -.015em; }
+  .missions-scope { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+  .missions-actions { margin-left: auto; display: flex; gap: 8px; }
+  .missions-btn { height: 30px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+  .missions-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .missions-btn:disabled { opacity: .55; cursor: default; }
+  .missions-tabs { display: flex; gap: 24px; margin-top: 16px; padding: 0 28px; border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); flex: none; overflow-x: auto; scrollbar-width: none; }
+  .missions-tabs::-webkit-scrollbar { display: none; }
+  .missions-tab { height: 36px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: 12.5px; display: inline-flex; align-items: center; gap: 7px; cursor: default; }
+  .missions-tab[aria-current="page"] { color: var(--dsw-alias-label-primary); border-bottom-color: var(--dsw-alias-label-primary); font-weight: 600; }
+  .missions-settings { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 20px; align-items: start; padding-top: 8px; }
+  .missions-settings-nav { display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 10px; }
+  .missions-settings-tab { display: flex; align-items: center; gap: 8px; height: 31px; padding: 0 9px; border: 0; border-radius: 7px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; text-align: left; cursor: default; }
+  .missions-settings-tab[aria-current="page"] { background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent); color: var(--dsw-alias-label-primary); font-weight: 600; }
+  .missions-settings-panel { min-width: 0; }
+  .missions-content { display: flex; flex: 1; min-height: 0; align-items: stretch; }
+  .missions-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 6px 28px 32px; }
+
+  /* Vue Workflows : barre d'outils, liste, détail. */
+  .wf-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0 14px; }
+  .wf-toolbar-head { flex: 1 1 260px; min-width: 0; }
+  .wf-overview-title { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+  .wf-note { font-size: 12px; color: var(--dsw-alias-label-tertiary); margin: 0; }
+  .wf-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+  .wf-primary { background: var(--dsw-alias-button-primary-fill); border-color: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+  .wf-primary:hover { background: #333; border-color: #333; color: var(--dsw-alias-label-primary-foreground); }
+  .wf-status { min-height: 18px; margin: -4px 0 10px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary); }
+  .wf-status--ok { color: #3f7a4b; }
+
+  .wf-list { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); gap: 10px; }
+  .wf-list > li { min-width: 0; display: flex; }
+  .wf-card { border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 12px; padding: 12px; }
+  .wf-pick { display: flex; flex-direction: column; gap: 6px; align-items: stretch; width: 100%; text-align: left; background: var(--dsw-alias-bg-layer-1); font: inherit; color: inherit; cursor: pointer; transition: border-color .12s ease, box-shadow .12s ease; }
+  .wf-pick:hover { border-color: color-mix(in srgb, var(--dsw-alias-label-primary) 35%, transparent); }
+  .wf-pick:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary) 45%, transparent); outline-offset: 2px; }
+  .wf-pick[aria-pressed="true"] { border-color: var(--dsw-alias-label-primary); box-shadow: inset 0 0 0 1px var(--dsw-alias-label-primary); }
+  .wf-pick-top { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+  .wf-pick-title { font-size: 13.5px; font-weight: 620; line-height: 1.3; }
+  .wf-pick-kind { flex: none; font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary); border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; padding: 0 6px; line-height: 16px; }
+  .wf-pick-summary { font-size: 11.5px; color: var(--dsw-alias-label-secondary); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .wf-pick-meta { font-size: 10.5px; color: var(--dsw-alias-label-tertiary); }
+  .wf-pick-flow { font-size: 10.5px; color: var(--dsw-alias-label-tertiary); line-height: 1.45; overflow-wrap: anywhere; }
+  .wf-pick-flow code { font-size: 10px; }
+  @media (prefers-reduced-motion: reduce) { .wf-pick { transition: none; } }
+
+  .wf-detail-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin: 4px 0 10px; }
+  .wf-detail-titles { flex: 1 1 320px; min-width: 0; }
+  .wf-detail-title { margin: 0 0 2px; font-size: 15px; font-weight: 650; }
+  .wf-detail-meta { margin: 0; font-size: 11.5px; color: var(--dsw-alias-label-tertiary); }
+  .wf-detail-hint { margin: 10px 0 0; }
+  .wf-canvas-wrap { overflow: auto; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 12px; background: var(--dsw-alias-bg-base); padding: 4px; }
+  .wf-canvas { display: block; margin: 0 auto; }
+  .wf-empty { border: 1px dashed var(--dsw-alias-border-l2); border-radius: 12px; padding: 30px 20px; text-align: center; background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 60%, transparent); }
+  .wf-empty-title { margin: 0 0 4px; font-size: 13px; font-weight: 620; }
+
+  .wf-status-grid { display: grid; grid-template-columns: minmax(360px, 460px) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .wf-status-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .wf-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 0; font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+  .wf-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .wf-swatch { width: 14px; height: 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 3px; background: var(--dsw-alias-bg-base); display: inline-block; }
+  .wf-swatch--etat { background: var(--dsw-alias-interactive-bg-hover); }
+  .wf-swatch--decision { width: 9px; height: 9px; border-radius: 1px; transform: rotate(45deg); margin: 0 3px; }
+  .wf-swatch--retour { width: 20px; height: 0; border: 0; border-top: 1px dashed rgba(0,0,0,.45); border-radius: 0; background: none; }
+  .wf-legend-key { font-size: 9px; letter-spacing: .08em; color: var(--dsw-alias-label-tertiary); text-transform: uppercase; }
+  .wf-mapping { margin: 0; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 12px; padding: 10px 12px; }
+  .wf-section-title { margin: 0 0 6px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary); font-weight: 600; }
+  .wf-map-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .wf-map-table th { text-align: left; font-weight: 500; color: var(--dsw-alias-label-tertiary); padding: 0 6px 4px 0; font-size: 10.5px; }
+  .wf-map-table td { padding: 3px 6px 3px 0; border-top: 1px solid var(--dsw-alias-border-l1); vertical-align: top; }
+  .wf-map-table code { color: var(--dsw-alias-label-secondary); }
+
+  /* Graphe : mêmes classes que la vue réelle. */
+  .wf-node { fill: var(--dsw-alias-bg-base, #fbfaf8); stroke: var(--dsw-alias-border-l2, rgba(0,0,0,.18)); stroke-width: 1; }
+  .wf-node--geste { cursor: pointer; }
+  .wf-node--geste:hover { stroke: var(--dsw-alias-label-primary, #1f1f1f); }
+  .wf-node--etat { fill: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); cursor: pointer; }
+  .wf-node--etat:hover { stroke: var(--dsw-alias-label-primary, #1f1f1f); }
+  .wf-node--decision { cursor: pointer; stroke-width: 1.2; }
+  .wf-node--decision:hover { stroke: var(--dsw-alias-label-primary, #1f1f1f); }
+  .wf-node--selected { stroke: var(--dsw-alias-label-primary, #1f1f1f); stroke-width: 2; }
+  .wf-node-label { font-size: 11.5px; fill: var(--dsw-alias-label-primary, #1f1f1f); pointer-events: none; stroke: none; }
+  .wf-node-section { font-size: 10px; fill: var(--dsw-alias-label-tertiary, #7a7168); pointer-events: none; stroke: none; }
+  .wf-node-id { font-family: var(--dsw-font-mono); font-size: 9px; fill: var(--dsw-alias-label-tertiary, #7a7168); pointer-events: none; stroke: none; }
+  .wf-node-badge { font-size: 9px; letter-spacing: .03em; fill: var(--dsw-alias-label-tertiary, #7a7168); pointer-events: none; stroke: none; }
+  .wf-link-group { cursor: pointer; }
+  .wf-link-group:focus-visible { outline: none; }
+  .wf-link { fill: none; stroke: var(--dsw-alias-border-l2, rgba(0,0,0,.34)); stroke-width: 1.4; }
+  .wf-link--back { stroke-dasharray: 4 3; }
+  .wf-link--selected { stroke: var(--dsw-alias-label-primary); stroke-width: 2; }
+  .wf-link-hit { fill: none; stroke: transparent; stroke-width: 12; }
+  .wf-link-label { font-size: 9.5px; fill: var(--dsw-alias-label-tertiary, #7a7168); paint-order: stroke; stroke: var(--dsw-alias-bg-base, #fbfaf8); stroke-width: 3px; stroke-linejoin: round; }
+  .wf-link-label--selected { fill: var(--dsw-alias-label-primary); }
+  .wf-link-group:hover .wf-link:not(.wf-link--selected) { stroke: var(--dsw-alias-label-secondary); }
+
+  /* Volet de détail, voisin fixe du panneau. */
+  .missions-drawer { flex: none; width: 380px; max-width: 46%; display: flex; flex-direction: column; gap: 16px; padding: 16px 22px 24px; overflow: auto; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); animation: missions-slide .14s ease; }
+  @keyframes missions-slide { from { opacity: 0 } to { opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
+  .mock-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; background: var(--dsw-alias-bg-base); box-shadow: -18px 0 40px rgba(0, 0, 0, .08); }
+  .mock-panel { transition: padding-right .14s ease; }
+  body.drawer-open .mock-panel { padding-right: 380px; }
+  body.drawer-open .wf-modal { padding-right: 380px; }
+  @media (max-width: 720px) { body.drawer-open .mock-panel, body.drawer-open .wf-modal { padding-right: 0; } }
+  .mock-drawer[hidden] { display: none; }
+  .missions-drawer-head { display: flex; align-items: flex-start; gap: 12px; }
+  .missions-drawer-key { font-family: var(--dsw-font-mono); font-size: 11.5px; color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; }
+  .missions-drawer-title { margin: 6px 0 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .missions-drawer-close { margin-left: auto; width: 28px; height: 28px; flex: none; display: grid; place-items: center; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; font-size: 16px; line-height: 1; }
+  .missions-drawer-close:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .missions-drawer-foot { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+  .missions-drawer-actions { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .wf-drawer-section { display: flex; flex-direction: column; gap: 8px; }
+  .wf-drawer-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin: 0; }
+  .wf-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
+  .wf-field > span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary); }
+  .wf-field input, .wf-field select, .wf-field textarea { font: inherit; font-size: 12px; border-radius: 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); background: transparent; color: inherit; }
+  .wf-field input, .wf-field select { height: 28px; padding: 0 7px; }
+  .wf-field textarea { padding: 6px 7px; resize: vertical; min-height: 44px; }
+  .wf-field input:focus-visible, .wf-field select:focus-visible, .wf-field textarea:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary) 40%, transparent); outline-offset: 0; }
+  .wf-field input[aria-invalid="true"], .wf-field textarea[aria-invalid="true"] { border-color: #a33a2a; }
+  .wf-field-hint { font-size: 10.5px; color: var(--dsw-alias-label-tertiary); }
+  .wf-error { color: #a33a2a; font-size: 11.5px; margin: 2px 0 0; }
+  .wf-error:empty { display: none; }
+  .wf-arc { display: flex; align-items: center; gap: 6px; padding: 3px 4px; margin: 0 -4px; border: 0; background: none; border-radius: 6px; font: inherit; font-size: 12px; text-align: left; color: inherit; cursor: pointer; }
+  .wf-arc:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); }
+  .wf-arc-when { color: var(--dsw-alias-label-tertiary); }
+  .missions-props { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; margin: 0; font-size: 12px; }
+  .missions-props dt { color: var(--dsw-alias-label-tertiary); }
+  .missions-props dd { margin: 0; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+
+  /* Dialogue de création. */
+  .wf-modal { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .wf-modal[hidden] { display: none; }
+  .wf-modal-backdrop { position: absolute; inset: 0; background: rgba(15, 15, 15, .38); }
+  .wf-modal-card { position: relative; width: min(540px, 100%); max-height: 88vh; overflow: auto; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 14px; padding: 20px 22px 18px; box-shadow: 0 24px 60px rgba(0, 0, 0, .22); display: flex; flex-direction: column; gap: 10px; }
+  .wf-modal-head h2 { margin: 0 0 4px; font-size: 17px; font-weight: 650; }
+  .wf-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  .wf-form .wf-field--full { grid-column: 1 / -1; }
+  .wf-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+
+  @media (max-width: 900px) {
+    .wf-status-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .missions-head { padding: 16px 16px 0; gap: 8px; }
+    .missions-title { font-size: 17px; }
+    .missions-scope { display: none; }
+    .missions-tabs { padding: 0 16px; gap: 16px; margin-top: 12px; }
+    .missions-body { padding: 6px 16px 28px; }
+    .missions-settings { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .missions-settings-nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+    .missions-settings-nav::-webkit-scrollbar { display: none; }
+    .missions-settings-tab { flex: none; }
+    .mock-drawer { width: 100%; max-width: none; border-left: 0; }
+    .wf-actions { margin-left: 0; }
+    .wf-form { grid-template-columns: 1fr; }
+    .wf-list { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    .wf-pick-title { font-size: 12.5px; }
+  }
+</style>
+</head>
+<body>
+<div class="mock-banner">
+  <strong>Maquette</strong>
+  <span>MIS-186, copie datée du <time datetime="2026-11-13">2026-11-13</time> (commit <code>d291894</code>) — sources : <code>workflows/model/*.yml</code>, <code>missions/projects.yml</code>, <code>workflows/README.md</code>. Aucune lecture disque, aucun réseau : rien n'est écrit.</span>
+</div>
+
+<main class="missions-panel mock-panel">
+  <header class="missions-head">
+    <h1 class="missions-title">Missions</h1>
+    <span class="missions-scope">daedalforge/missions</span>
+    <div class="missions-actions"><span class="mock-chip">maquette locale</span></div>
+  </header>
+
+  <div class="missions-tabs" role="presentation">
+    <span class="missions-tab">Dashboard</span>
+    <span class="missions-tab">Missions</span>
+    <span class="missions-tab">Done</span>
+    <span class="missions-tab">Repositories</span>
+    <span class="missions-tab" aria-current="page">Settings</span>
+  </div>
+
+  <div class="missions-content">
+    <div class="missions-body" role="tabpanel" aria-label="Settings · Workflows">
+      <div class="missions-settings">
+        <nav class="missions-settings-nav" aria-label="Sections de Settings">
+          <span class="missions-settings-tab">Usage</span>
+          <span class="missions-settings-tab" aria-current="page">Workflows</span>
+        </nav>
+        <section class="missions-settings-panel" aria-labelledby="wf-overview-title">
+          <div class="wf-toolbar">
+            <div class="wf-toolbar-head">
+              <h2 class="wf-overview-title" id="wf-overview-title">Workflows</h2>
+              <p class="wf-note">Quatre étapes et les statuts — tout est en mémoire, rien n'est enregistré.</p>
+            </div>
+            <div class="wf-actions">
+              <button type="button" class="missions-btn" id="reload">Recharger</button>
+              <button type="button" class="missions-btn" id="save">Enregistrer</button>
+              <button type="button" class="missions-btn" id="cancel">Annuler</button>
+              <button type="button" class="missions-btn wf-primary" id="new-workflow">Nouveau workflow</button>
+            </div>
+          </div>
+          <p class="wf-status" id="status" role="status" aria-live="polite"></p>
+          <ul class="wf-list" id="workflow-list" aria-label="Workflows"></ul>
+          <div id="detail"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <aside class="missions-drawer mock-drawer" id="drawer" hidden aria-label="Détail du workflow"></aside>
+
+  <div class="wf-modal" id="modal" hidden>
+    <div class="wf-modal-backdrop" data-close="modal"></div>
+    <form class="wf-modal-card" id="new-form" role="dialog" aria-modal="true" aria-labelledby="new-title" novalidate>
+      <div class="wf-modal-head">
+        <h2 id="new-title">Nouveau workflow</h2>
+        <p class="wf-note">Maquette : le workflow reste en mémoire de cette page, rien n'est écrit sur le disque.</p>
+      </div>
+      <div class="wf-form">
+        <label class="wf-field">
+          <span>Clé</span>
+          <input id="new-key" name="key" type="text" autocomplete="off" spellcheck="false" placeholder="ex. incidents" aria-describedby="err-key">
+          <small class="wf-field-hint">minuscules, chiffres et tirets</small>
+          <p class="wf-error" id="err-key" role="alert"></p>
+        </label>
+        <label class="wf-field">
+          <span>Titre</span>
+          <input id="new-title-field" name="title" type="text" autocomplete="off" placeholder="ex. Incidents" aria-describedby="err-title">
+          <p class="wf-error" id="err-title" role="alert"></p>
+        </label>
+        <label class="wf-field">
+          <span>Type</span>
+          <select id="new-kind" name="kind">
+            <option value="etape">Étapes</option>
+            <option value="statuts">Statuts</option>
+          </select>
+        </label>
+        <label class="wf-field">
+          <span>Document</span>
+          <input id="new-document" name="document" type="text" autocomplete="off" spellcheck="false" placeholder="workflows/incidents.md" aria-describedby="err-document">
+          <p class="wf-error" id="err-document" role="alert"></p>
+        </label>
+        <label class="wf-field">
+          <span>Entrée</span>
+          <input id="new-entry" name="entry" type="text" list="state-options" autocomplete="off" spellcheck="false" placeholder="to-refine" aria-describedby="err-entry">
+          <p class="wf-error" id="err-entry" role="alert"></p>
+        </label>
+        <label class="wf-field">
+          <span>Sorties</span>
+          <input id="new-exit" name="exit" type="text" list="state-options" autocomplete="off" spellcheck="false" placeholder="ready, in-review" aria-describedby="err-exit">
+          <p class="wf-error" id="err-exit" role="alert"></p>
+        </label>
+      </div>
+      <div class="wf-modal-foot">
+        <button type="button" class="missions-btn" id="new-cancel">Annuler</button>
+        <button type="submit" class="missions-btn wf-primary" id="new-create">Créer</button>
+      </div>
+    </form>
+  </div>
+</main>
+
+<datalist id="state-options">
+  <option value="to-refine"></option>
+  <option value="ready"></option>
+  <option value="in-progress"></option>
+  <option value="in-review"></option>
+  <option value="ready-for-prod"></option>
+  <option value="done"></option>
+</datalist>
+
+<script type="application/json" id="source-models">{"cadrage":{"workflow":"cadrage","title":"Cadrage","document":"workflows/cadrage.md","entry":"to-refine","exit":["ready"],"nodes":[{"id":"lire-ticket","label":"Lire le ticket et son contexte","section":"Ce qu'on fait","writer":"session","condition":"le ticket est ouvert et lisible","artifact":"les faits du ticket"},{"id":"regarder-terrain","label":"Regarder le terrain","section":"Ce qu'on fait","writer":"session","artifact":"l'état du code, des données et des tickets voisins"},{"id":"traiter-signaux","label":"Traiter les signaux d'arrêt","section":"Signaux d'arrêt","writer":"session","condition":"un signal d'arrêt apparaît","gate":"objectif unique, périmètre tenable, critère vérifiable, dépendance disponible"},{"id":"ecrire-fiche","label":"Écrire la fiche","section":"Ce qu'on fait","writer":"session","artifact":"la fiche du ticket"},{"id":"decouper","label":"Découper si le travail dépasse une mission","section":"Ce qu'on fait","writer":"session","condition":"le travail dépasse une mission","gate":"un ticket par mission, chacun avec son objectif et sa sortie"},{"id":"proposer-plan","label":"Proposer un plan","section":"Ce qu'on fait","writer":"session","artifact":"le plan d'exécution, dans l'ordre"},{"id":"declarer-branche","label":"Déclarer la branche et sa base","section":"Ce qu'on fait","writer":"demandeur","artifact":"missions/<dossier>/mission.yml"},{"id":"ouvrir-journal","label":"Ouvrir le journal de mission","section":"Ce qu'on fait","writer":"session","artifact":"missions/<dossier>/journal.md"},{"id":"ouvrir-checklist","label":"Ouvrir la checklist de mission","section":"Ce qu'on fait","writer":"session","artifact":"missions/<dossier>/checklist.md"},{"id":"verifier-sortie","label":"Vérifier la condition de sortie","section":"Condition de sortie — la mission est « prête »","writer":"session","gate":"les neuf cases sont cochées"},{"id":"valider-cadrage","label":"Faire valider le cadrage","section":"Sur le tracker","writer":"demandeur","gate":"le demandeur a répondu explicitement"},{"id":"passer-ready","label":"Passer le ticket à prête","section":"Sur le tracker","writer":"session","artifact":"le libellé ready sur le ticket"}],"edges":[{"from":"to-refine","to":"lire-ticket"},{"from":"lire-ticket","to":"regarder-terrain"},{"from":"regarder-terrain","to":"traiter-signaux","when":"un signal d'arrêt apparaît"},{"from":"traiter-signaux","to":"ecrire-fiche","when":"le cadre tient, ou le ticket est reformulé"},{"from":"regarder-terrain","to":"ecrire-fiche"},{"from":"ecrire-fiche","to":"decouper","when":"le travail dépasse une mission"},{"from":"decouper","to":"ecrire-fiche","when":"chaque nouveau ticket repart au cadrage"},{"from":"ecrire-fiche","to":"proposer-plan"},{"from":"proposer-plan","to":"declarer-branche"},{"from":"declarer-branche","to":"ouvrir-journal"},{"from":"ouvrir-journal","to":"ouvrir-checklist"},{"from":"ouvrir-checklist","to":"verifier-sortie"},{"from":"verifier-sortie","to":"ecrire-fiche","when":"une case n'est pas cochée"},{"from":"verifier-sortie","to":"valider-cadrage","when":"les neuf cases sont cochées"},{"from":"valider-cadrage","to":"passer-ready","when":"le demandeur a validé"},{"from":"passer-ready","to":"ready"}]},"execution":{"workflow":"execution","title":"Exécution","document":"workflows/execution.md","entry":"ready","exit":["in-review","to-refine"],"nodes":[{"id":"ouvrir-branche","label":"Ouvrir la branche déclarée","section":"Ce qu'on fait","writer":"session","condition":"la branche et sa base sont déclarées","artifact":"la branche locale"},{"id":"passer-en-cours","label":"Passer le ticket en cours","section":"Sur le tracker","writer":"session","condition":"la branche est poussée","artifact":"le libellé in-progress"},{"id":"petits-commits","label":"Travailler par petits commits","section":"Ce qu'on fait","writer":"session","gate":"un sujet par commit, préfixé de la clé"},{"id":"verifier-travail","label":"Vérifier au fur et à mesure","section":"Ce qu'on fait","writer":"session","artifact":"les tests du projet au vert"},{"id":"ouvrir-pr","label":"Ouvrir la PR vers la base","section":"Ce qu'on fait","writer":"session","artifact":"la PR liée au ticket"},{"id":"tenir-journal","label":"Tenir le journal","section":"Ce qu'on fait","writer":"session"},{"id":"cocher-checklist","label":"Cocher la checklist","section":"Ce qu'on fait","writer":"session"},{"id":"renseigner-pr","label":"Renseigner la PR","section":"Renseigner la PR","writer":"session","gate":"assignée, typée, étiquetée in-review, liée au ticket, même milestone"},{"id":"retour-cadrage","label":"Renvoyer au cadrage","section":"Règles de conduite","writer":"demandeur","condition":"le périmètre change"},{"id":"verifier-sortie","label":"Vérifier la condition de sortie","section":"Condition de sortie — la mission est « en revue »","writer":"session","gate":"les huit cases sont cochées"},{"id":"passer-en-revue","label":"Passer le ticket en revue","section":"Sur le tracker","writer":"session","artifact":"le libellé in-review"}],"edges":[{"from":"ready","to":"ouvrir-branche"},{"from":"ouvrir-branche","to":"passer-en-cours"},{"from":"passer-en-cours","to":"petits-commits"},{"from":"petits-commits","to":"verifier-travail"},{"from":"verifier-travail","to":"petits-commits","when":"un test casse"},{"from":"verifier-travail","to":"ouvrir-pr","when":"le travail est prêt"},{"from":"ouvrir-pr","to":"tenir-journal"},{"from":"tenir-journal","to":"cocher-checklist"},{"from":"cocher-checklist","to":"renseigner-pr"},{"from":"renseigner-pr","to":"verifier-sortie"},{"from":"verifier-sortie","to":"tenir-journal","when":"une case n'est pas cochée"},{"from":"verifier-sortie","to":"passer-en-revue","when":"les huit cases sont cochées"},{"from":"passer-en-revue","to":"in-review"},{"from":"petits-commits","to":"retour-cadrage","when":"le périmètre change"},{"from":"retour-cadrage","to":"to-refine"}]},"review":{"workflow":"review","title":"Revue","document":"workflows/review.md","entry":"in-review","exit":["ready-for-prod","in-progress","to-refine"],"nodes":[{"id":"relire-criteres","label":"Relire les critères d'acceptation","section":"Ce qu'on relit","writer":"demandeur","artifact":"un verdict par critère"},{"id":"relire-diff","label":"Relire le diff","section":"Ce qu'on relit","writer":"demandeur","condition":"le diff fait ce qu'il annonce"},{"id":"verifier-perimetre","label":"Vérifier le périmètre","section":"Ce qu'on relit","writer":"demandeur","gate":"ce qui est dans la PR était dans le cadrage"},{"id":"verifier-tests","label":"Vérifier les tests","section":"Ce qu'on relit","writer":"demandeur","gate":"les tests passent et couvrent le comportement ajouté"},{"id":"relire-journal","label":"Relire le journal","section":"Ce qu'on relit","writer":"demandeur","gate":"le journal dit la même chose que la PR"},{"id":"relire-checklist","label":"Relire la checklist de la session","section":"Ce qu'on relit","writer":"demandeur"},{"id":"ecarter-motifs","label":"Écarter ce qui n'est pas un motif de refus","section":"Ce qui n'est pas un motif de refus","writer":"demandeur","gate":"style, amélioration hors périmètre et préférence non écrite ne fondent pas un refus"},{"id":"decider","label":"Trancher","section":"Décisions possibles","writer":"demandeur"},{"id":"approuver","label":"Approuver la PR","section":"Sur le tracker","writer":"demandeur","artifact":"la revue approuvée"},{"id":"reprendre","label":"Demander des changements","section":"Sur le tracker","writer":"demandeur","artifact":"une revue en request changes"},{"id":"renvoyer-cadrage","label":"Renvoyer au cadrage","section":"Sur le tracker","writer":"demandeur","artifact":"le libellé to-refine"},{"id":"verifier-sortie","label":"Vérifier la condition de sortie","section":"Condition de sortie","writer":"demandeur","gate":"les cinq cases sont cochées"},{"id":"passer-prete-a-partir","label":"Passer le ticket à prête à partir","section":"Sur le tracker","writer":"session","artifact":"le libellé ready-for-prod"}],"edges":[{"from":"in-review","to":"relire-criteres"},{"from":"relire-criteres","to":"relire-diff"},{"from":"relire-diff","to":"verifier-perimetre"},{"from":"verifier-perimetre","to":"renvoyer-cadrage","when":"la PR sort du périmètre"},{"from":"verifier-perimetre","to":"verifier-tests"},{"from":"verifier-tests","to":"relire-journal"},{"from":"relire-journal","to":"relire-checklist"},{"from":"relire-checklist","to":"ecarter-motifs"},{"from":"ecarter-motifs","to":"decider"},{"from":"decider","to":"approuver","when":"tout est conforme"},{"from":"decider","to":"reprendre","when":"un critère ou une preuve manque"},{"from":"approuver","to":"verifier-sortie"},{"from":"verifier-sortie","to":"passer-prete-a-partir","when":"les cinq cases sont cochées"},{"from":"passer-prete-a-partir","to":"ready-for-prod"},{"from":"reprendre","to":"in-progress"},{"from":"renvoyer-cadrage","to":"to-refine"}]},"cloture":{"workflow":"cloture","title":"Clôture","document":"workflows/cloture.md","entry":"ready-for-prod","exit":["done"],"nodes":[{"id":"preparer-livraison","label":"Préparer la livraison","section":"Ce qu'on fait","writer":"session","gate":"la PR est approuvée et chaque critère porte sa preuve","artifact":"le ticket prêt à partir"},{"id":"rendre-la-main","label":"Rendre la main au demandeur","section":"Garde-fous","writer":"session","gate":"aucun merge, aucune écriture sur main, aucun force — même sur demande explicite"},{"id":"merger","label":"Merger la PR","section":"Ce qu'on fait","writer":"demandeur","gate":"la méthode du projet est suivie","artifact":"le commit de merge"},{"id":"fermer-ticket","label":"Fermer le ticket avec les preuves","section":"Sur le tracker","writer":"demandeur","artifact":"l'issue fermée avec le lien du merge"},{"id":"supprimer-branche","label":"Supprimer la branche","section":"Ce qu'on fait","writer":"demandeur"},{"id":"fermer-epic","label":"Fermer l'epic s'il est complet","section":"Ce qu'on fait","writer":"demandeur","condition":"c'était la dernière mission de l'epic"},{"id":"constater","label":"Constater la livraison","section":"Ce qu'on fait","writer":"session","condition":"le demandeur a dit explicitement que c'est mergé","gate":"la PR est mergée, le ticket fermé, la branche absente"},{"id":"clore-journal","label":"Clore le journal","section":"Ce qu'on fait","writer":"session","artifact":"la section de clôture du journal"},{"id":"solder-checklist","label":"Solder la checklist","section":"Ce qu'on fait","writer":"session","gate":"toutes les cases cochées, ou nommées comme suite"},{"id":"noter-suites","label":"Noter les suites","section":"Ce qu'on fait","writer":"session"},{"id":"verifier-sortie","label":"Vérifier la condition de sortie","section":"Condition de sortie — la mission est « terminée »","writer":"session","gate":"les sept cases sont cochées"},{"id":"laisser-ouverte","label":"Laisser la mission ouverte","section":"Cas particuliers","writer":"demandeur","condition":"la mission est abandonnée ou partielle","gate":"le motif est écrit dans le ticket"}],"edges":[{"from":"ready-for-prod","to":"preparer-livraison"},{"from":"preparer-livraison","to":"rendre-la-main"},{"from":"rendre-la-main","to":"merger"},{"from":"merger","to":"fermer-ticket"},{"from":"fermer-ticket","to":"supprimer-branche"},{"from":"supprimer-branche","to":"fermer-epic"},{"from":"fermer-epic","to":"constater"},{"from":"constater","to":"clore-journal"},{"from":"clore-journal","to":"solder-checklist"},{"from":"solder-checklist","to":"noter-suites"},{"from":"noter-suites","to":"verifier-sortie"},{"from":"verifier-sortie","to":"done","when":"les sept cases sont cochées"},{"from":"verifier-sortie","to":"clore-journal","when":"une case n'est pas cochée"},{"from":"rendre-la-main","to":"laisser-ouverte","when":"la mission est abandonnée ou partielle"},{"from":"laisser-ouverte","to":"done","when":"le motif est écrit dans le ticket"}]}}</script>
+<script>
+'use strict'
+
+/* ------------------------------------------------------------------------- *
+ * Données : copie datée des modèles, plus le modèle de statuts proposé.
+ * ------------------------------------------------------------------------- */
+
+const SOURCE = JSON.parse(document.getElementById('source-models').textContent)
+const COPIED_AT = '2026-11-13'
+const SOURCE_COMMIT = 'd291894'
+
+const WRITERS = ['demandeur', 'session', 'outil']
+const WRITER_LABELS = { demandeur: 'Demandeur', session: 'Session', outil: 'Outil' }
+const WORKFLOW_KIND_LABEL = { etape: 'étapes', statuts: 'statuts' }
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+const STATE_DEFS = [
+  { id: 'to-refine', label: 'À cadrer', description: "Le ticket est ouvert ; rien n'est encore décidé.", tracker: 'label to-refine' },
+  { id: 'ready', label: 'Prête', description: 'Le cadrage est validé : périmètre, critères et plan.', tracker: 'label ready' },
+  { id: 'in-progress', label: 'En cours', description: "La branche est poussée ; l'exécution travaille.", tracker: 'label in-progress' },
+  { id: 'in-review', label: 'En revue', description: 'La PR est ouverte ; une relecture tranche.', tracker: 'label in-review' },
+  { id: 'ready-for-prod', label: 'Prête à partir', description: 'La PR est approuvée ; le demandeur livre.', tracker: 'label ready-for-prod' },
+  { id: 'done', label: 'Terminée', description: 'Merge fait, ticket fermé, branche supprimée.', tracker: 'issue fermée (map: null)' },
+]
+const STATE_BY_ID = new Map(STATE_DEFS.map((state) => [state.id, state]))
+const STATE_IDS = STATE_DEFS.map((state) => state.id)
+
+/* Les huit transitions dérivées des entry/exit des quatre modèles. */
+const STATUS_EVENTS = [
+  { from: 'to-refine', to: 'ready', when: 'cadrage validé', writer: 'session', artifact: 'label ready', gate: 'neuf cases du cadrage cochées et accord du demandeur' },
+  { from: 'ready', to: 'in-progress', when: 'branche poussée', writer: 'session', artifact: 'label in-progress', gate: 'la branche est poussée vers la base' },
+  { from: 'in-progress', to: 'in-review', when: 'PR ouverte et complète', writer: 'session', artifact: 'label in-review', gate: 'PR assignée, étiquetée, milestone posée, Closes #N' },
+  { from: 'in-progress', to: 'to-refine', when: 'cadrage faux', writer: 'demandeur', artifact: 'label to-refine', gate: 'le cadrage ou le périmètre change' },
+  { from: 'in-review', to: 'ready-for-prod', when: 'revue approuvée', writer: 'session', artifact: 'label ready-for-prod', gate: 'cinq cases de sortie de revue cochées' },
+  { from: 'in-review', to: 'in-progress', when: 'changements demandés', writer: 'demandeur', artifact: 'label in-progress', gate: 'un critère ou une preuve manque' },
+  { from: 'in-review', to: 'to-refine', when: 'diff hors périmètre', writer: 'demandeur', artifact: 'label to-refine', gate: 'le diff sort du cadrage' },
+  { from: 'ready-for-prod', to: 'done', when: 'merge et ticket fermé', writer: 'demandeur', artifact: 'issue fermée', gate: 'PR mergée et ticket fermé' },
+]
+
+const SUMMARIES = {
+  cadrage: 'Comprendre le ticket, décider le cadre et préparer le plan.',
+  execution: 'Construire la branche, la PR et ses preuves.',
+  review: 'Relire le diff et trancher : approuver ou renvoyer.',
+  cloture: 'Livrer, constater et solder la mission.',
+  statuts: 'Les six états canoniques et les huit transitions qui les relient.',
+}
+
+const clone = (value) => JSON.parse(JSON.stringify(value))
+
+function initialWorkflows() {
+  const steps = Object.entries(SOURCE).map(([id, model]) => ({
+    ...model,
+    kind: 'etape',
+    summary: SUMMARIES[id],
+    nodes: model.nodes.map((node) => ({ ...node })),
+    edges: model.edges.map((edge) => ({ ...edge })),
+  }))
+  const statuts = {
+    workflow: 'statuts',
+    kind: 'statuts',
+    title: 'Statuts des missions',
+    document: 'workflows/statuts.md',
+    summary: SUMMARIES.statuts,
+    entry: 'to-refine',
+    exit: ['done'],
+    nodes: STATE_DEFS.map((state) => ({ ...state })),
+    edges: STATUS_EVENTS.map((edge) => ({ ...edge })),
+  }
+  return [...steps, statuts]
+}
+
+const state = {
+  workflows: initialWorkflows(),
+  saved: new Map(),
+  workflowId: 'statuts',
+  selection: null,
+}
+
+function refreshSaved() {
+  state.saved = new Map(state.workflows.map((workflow) => [workflow.workflow, clone(workflow)]))
+}
+refreshSaved()
+
+const currentWorkflow = () => state.workflows.find((workflow) => workflow.workflow === state.workflowId)
+
+/* ------------------------------------------------------------------------- *
+ * Disposition : recopie de layoutWorkflow (lib/view.js:956), adaptée au kind.
+ * ------------------------------------------------------------------------- */
+
+const GRAPH_ROW = 96
+const GRAPH_GAP = 26
+const GRAPH_PAD = 28
+const GRAPH_ARC_MARGIN = 24
+const GRAPH_ARC_STEP = 16
+const GRAPH_LABEL_ROOM = 152
+const GRAPH_GESTURE = { width: 220, height: 48 }
+const GRAPH_STATE = { width: 160, height: 34 }
+const GRAPH_DECISION = { width: 26, height: 18 }
+const GRAPH_DECISION_GAP = 8
+const GRAPH_LABEL_LINE = 12
+const GRAPH_LABEL_CHAR = 5.4
+const GRAPH_ROW_GAP = 12
+
+const labelWidthOf = (text) => String(text ?? '').length * GRAPH_LABEL_CHAR
+
+function layoutWorkflow(model = {}) {
+  const states = model.kind === 'statuts'
+  const nodes = Array.isArray(model.nodes) ? model.nodes.filter((node) => node && node.id) : []
+  const edges = Array.isArray(model.edges) ? model.edges.filter((edge) => edge && edge.from && edge.to) : []
+  const entry = typeof model.entry === 'string' ? model.entry : null
+  const exits = Array.isArray(model.exit) ? model.exit.filter((value) => typeof value === 'string') : []
+
+  const shape = new Map()
+  if (entry) shape.set(entry, { kind: 'etat', label: entry, size: GRAPH_STATE, rank: -1 })
+  nodes.forEach((node, index) => shape.set(node.id, {
+    kind: states ? 'etat' : 'geste',
+    label: node.label ?? node.id,
+    size: states ? GRAPH_STATE : GRAPH_GESTURE,
+    rank: index,
+  }))
+  exits.forEach((value, index) => {
+    if (!shape.has(value)) shape.set(value, { kind: 'etat', label: value, size: GRAPH_STATE, rank: 1000 + index })
+  })
+
+  const adjacency = new Map()
+  for (const edge of edges) {
+    if (!shape.has(edge.from) || !shape.has(edge.to)) continue
+    if (!adjacency.has(edge.from)) adjacency.set(edge.from, [])
+    adjacency.get(edge.from).push(edge.to)
+  }
+
+  const color = new Map()
+  const back = new Set()
+  const walk = (id) => {
+    color.set(id, 1)
+    for (const next of adjacency.get(id) ?? []) {
+      const seen = color.get(next) ?? 0
+      if (seen === 1) back.add(`${id}\u0000${next}`)
+      else if (seen === 0) walk(next)
+    }
+    color.set(id, 2)
+  }
+  for (const id of shape.keys()) if ((color.get(id) ?? 0) === 0) walk(id)
+
+  const forward = edges.filter((edge) => shape.has(edge.from) && shape.has(edge.to) && !back.has(`${edge.from}\u0000${edge.to}`))
+  const level = new Map()
+  if (entry) level.set(entry, 0)
+  for (let pass = 0; pass <= forward.length; pass += 1) {
+    let changed = false
+    for (const edge of forward) {
+      if (!level.has(edge.from)) continue
+      const next = level.get(edge.from) + 1
+      if ((level.get(edge.to) ?? -1) < next) {
+        level.set(edge.to, next)
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+
+  // Un workflow neuf n'a pas encore d'arc : ses points se lisent dans l'ordre
+  // du fichier, une rangée chacun, au lieu de s'empiler sur la rangée zéro.
+  if (!edges.length) {
+    nodes.forEach((node, index) => level.set(node.id, index))
+    if (entry && !nodes.some((node) => node.id === entry)) level.set(entry, 0)
+    exits.forEach((value, index) => {
+      if (!nodes.some((node) => node.id === value)) level.set(value, nodes.length + index)
+    })
+  }
+
+  const maxLevel = Math.max(0, ...level.values())
+  for (const [id, value] of shape) {
+    if (!level.has(id)) level.set(id, value.kind === 'geste' ? maxLevel + 1 : 0)
+  }
+
+  const rows = new Map()
+  for (const [id, value] of shape) {
+    const row = level.get(id) ?? 0
+    if (!rows.has(row)) rows.set(row, [])
+    rows.get(row).push({ id, ...value })
+  }
+  const rowWidth = (members) => members.reduce((sum, member) => sum + member.size.width, 0) + Math.max(0, members.length - 1) * GRAPH_GAP
+  const widest = Math.max(0, ...[...rows.values()].map(rowWidth))
+
+  const outGoing = new Map()
+  const conditionalForward = new Map()
+  for (const edge of edges) {
+    if (!shape.has(edge.from) || !shape.has(edge.to)) continue
+    outGoing.set(edge.from, (outGoing.get(edge.from) ?? 0) + 1)
+    if (edge.when && !back.has(`${edge.from}\u0000${edge.to}`)) {
+      conditionalForward.set(edge.from, (conditionalForward.get(edge.from) ?? 0) + 1)
+    }
+  }
+  const deciding = new Set(
+    [...outGoing].filter(([id, count]) => count >= 2 && shape.get(id)?.kind === 'geste').map(([id]) => id),
+  )
+
+  const rowTops = new Map()
+  const rowPitch = new Map()
+  for (const [row, members] of rows) {
+    let pitch = GRAPH_ROW
+    for (const member of members) {
+      if (!deciding.has(member.id)) continue
+      const lines = conditionalForward.get(member.id) ?? 0
+      const diamond = GRAPH_GESTURE.height + GRAPH_DECISION_GAP + GRAPH_DECISION.height
+      const labels = GRAPH_GESTURE.height + GRAPH_DECISION_GAP + GRAPH_LABEL_LINE + Math.max(0, lines - 1) * GRAPH_LABEL_LINE + 3
+      pitch = Math.max(pitch, Math.max(diamond, labels) + GRAPH_ROW_GAP)
+    }
+    rowPitch.set(row, pitch)
+  }
+  let cursor = GRAPH_PAD
+  for (let row = 0; row <= Math.max(0, ...rows.keys()); row += 1) {
+    rowTops.set(row, cursor)
+    cursor += rowPitch.get(row) ?? GRAPH_ROW
+  }
+
+  const boxes = []
+  for (const row of [...rows.keys()].sort((a, b) => a - b)) {
+    const members = rows.get(row).sort((a, b) => a.rank - b.rank)
+    let x = GRAPH_PAD + (widest - rowWidth(members)) / 2
+    const y = rowTops.get(row)
+    for (const member of members) {
+      boxes.push({ id: member.id, kind: member.kind, label: member.label, level: row, x, y, width: member.size.width, height: member.size.height })
+      x += member.size.width + GRAPH_GAP
+    }
+  }
+  const byId = new Map(boxes.map((box) => [box.id, box]))
+
+  const decisions = []
+  const decisionOf = new Map()
+  for (const box of boxes) {
+    if (!deciding.has(box.id)) continue
+    const decision = {
+      id: box.id,
+      level: box.level,
+      x: box.x + box.width / 2 - GRAPH_DECISION.width / 2,
+      y: box.y + box.height + GRAPH_DECISION_GAP,
+      width: GRAPH_DECISION.width,
+      height: GRAPH_DECISION.height,
+    }
+    decisionOf.set(box.id, decision)
+    decisions.push(decision)
+  }
+
+  const stack = new Map()
+  for (const id of decisionOf.keys()) {
+    const arcs = edges
+      .filter((edge) => edge.from === id && byId.has(edge.to) && !back.has(`${edge.from}\u0000${edge.to}`) && edge.when)
+      .sort((a, b) => byId.get(a.to).x - byId.get(b.to).x || String(a.to).localeCompare(String(b.to)))
+    arcs.forEach((edge, index) => stack.set(`${edge.from}\u0000${edge.to}`, index))
+  }
+
+  const links = []
+  let backIndex = 0
+  const backRowY = new Map()
+  for (const edge of edges) {
+    const source = byId.get(edge.from)
+    const target = byId.get(edge.to)
+    if (!source || !target) continue
+    const goingBack = back.has(`${edge.from}\u0000${edge.to}`) || target.level <= source.level
+    const decision = goingBack ? null : decisionOf.get(edge.from)
+    const width = labelWidthOf(edge.when)
+    let path
+    let labelX
+    let labelY
+    let labelAnchor = 'middle'
+    if (goingBack) {
+      const start = { x: source.x + source.width, y: source.y + source.height / 2 }
+      const end = { x: target.x + target.width, y: target.y + target.height / 2 }
+      const bulge = GRAPH_PAD + widest + GRAPH_ARC_MARGIN + backIndex * GRAPH_ARC_STEP
+      backIndex += 1
+      path = `M ${start.x} ${start.y} C ${bulge} ${start.y}, ${bulge} ${end.y}, ${end.x} ${end.y}`
+      labelX = bulge + 8
+      const previousY = edge.when ? backRowY.get(target.level) : undefined
+      labelY = previousY === undefined ? end.y + 4 : Math.max(end.y + 4, previousY + GRAPH_LABEL_LINE)
+      if (edge.when) backRowY.set(target.level, labelY)
+      labelAnchor = 'start'
+    } else {
+      const start = decision
+        ? { x: decision.x + decision.width / 2, y: decision.y + decision.height }
+        : { x: source.x + source.width / 2, y: source.y + source.height }
+      const end = { x: target.x + target.width / 2, y: target.y }
+      const bend = Math.max(22, (end.y - start.y) / 3)
+      path = `M ${start.x} ${start.y} C ${start.x} ${start.y + bend}, ${end.x} ${end.y - bend}, ${end.x} ${end.y}`
+      if (decision) {
+        labelX = decision.x + decision.width + 6
+        labelY = decision.y + GRAPH_LABEL_LINE + (stack.get(`${edge.from}\u0000${edge.to}`) ?? 0) * GRAPH_LABEL_LINE
+        labelAnchor = 'start'
+      } else {
+        labelX = Math.max(GRAPH_PAD + width / 2, (start.x + end.x) / 2)
+        labelY = (start.y + end.y) / 2
+      }
+    }
+    links.push({ from: edge.from, to: edge.to, when: edge.when ?? '', back: goingBack, path, labelX, labelY, labelWidth: width, labelAnchor })
+  }
+
+  const right = Math.max(
+    GRAPH_PAD,
+    ...boxes.map((box) => box.x + box.width),
+    ...links.filter((link) => link.when).map((link) => {
+      if (link.back) return link.labelX + Math.max(GRAPH_LABEL_ROOM, link.labelWidth)
+      if (link.labelAnchor === 'start') return link.labelX + link.labelWidth
+      return link.labelX + link.labelWidth / 2
+    }),
+  )
+  const bottom = Math.max(
+    GRAPH_PAD,
+    ...boxes.map((box) => box.y + box.height),
+    ...decisions.map((decision) => decision.y + decision.height),
+    ...links.filter((link) => link.when).map((link) => link.labelY + 4),
+  )
+  return { boxes, links, decisions, width: right + GRAPH_PAD, height: bottom + GRAPH_PAD }
+}
+
+/* ------------------------------------------------------------------------- *
+ * Rendu du panneau.
+ * ------------------------------------------------------------------------- */
+
+const h = (tag, attrs = {}, ...children) => {
+  const node = document.createElement(tag)
+  for (const [key, value] of Object.entries(attrs ?? {})) {
+    if (value === null || value === undefined || value === false) continue
+    if (key === 'class') node.className = value
+    else if (key.startsWith('on') && typeof value === 'function') node.addEventListener(key.slice(2).toLowerCase(), value)
+    else if (value === true) node.setAttribute(key, '')
+    else node.setAttribute(key, String(value))
+  }
+  for (const child of children.flat(Infinity)) {
+    if (child === null || child === undefined || child === false) continue
+    node.append(child.nodeType ? child : document.createTextNode(String(child)))
+  }
+  return node
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const s = (tag, attrs = {}, ...children) => {
+  const node = document.createElementNS(SVG_NS, tag)
+  for (const [key, value] of Object.entries(attrs ?? {})) {
+    if (value === null || value === undefined || value === false) continue
+    node.setAttribute(key, String(value))
+  }
+  for (const child of children.flat(Infinity)) {
+    if (child === null || child === undefined || child === false) continue
+    node.append(child.nodeType ? child : document.createTextNode(String(child)))
+  }
+  return node
+}
+
+function stateLabel(id) {
+  return STATE_BY_ID.get(id)?.label ?? id
+}
+
+function stateLabelOf(workflow, id) {
+  return workflow?.stateNotes?.[id]?.label ?? stateLabel(id)
+}
+
+function stateNote(workflow, id) {
+  if (!workflow.stateNotes) workflow.stateNotes = {}
+  if (!workflow.stateNotes[id]) {
+    const def = STATE_BY_ID.get(id)
+    workflow.stateNotes[id] = {
+      label: def?.label ?? id,
+      description: def?.description ?? '',
+    }
+  }
+  return workflow.stateNotes[id]
+}
+
+function roleOf(workflow, id) {
+  if (workflow.entry === id) return 'initial'
+  if ((workflow.exit ?? []).includes(id)) return 'terminal'
+  return 'intermédiaire'
+}
+
+function countText(workflow) {
+  if (workflow.kind === 'statuts') return `${workflow.nodes.length} états · ${workflow.edges.length} événements`
+  return `${workflow.nodes.length} gestes · ${workflow.edges.length} arcs`
+}
+
+function wrapLabel(text, width) {
+  const maxChars = Math.max(6, Math.floor(width / (11.5 * 0.5)))
+  const words = String(text ?? '').split(/\s+/).filter(Boolean)
+  const lines = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (candidate.length > maxChars && current) {
+      lines.push(current)
+      current = word
+    } else {
+      current = candidate
+    }
+  }
+  if (current) lines.push(current)
+  if (lines.length > 2) return [lines[0], `${lines[1].replace(/\s+\S*$/, '')}…`]
+  return lines
+}
+
+function setStatus(text, tone = '') {
+  const status = document.getElementById('status')
+  status.textContent = text
+  status.className = `wf-status${tone === 'ok' ? ' wf-status--ok' : ''}`
+}
+
+function renderList() {
+  const list = document.getElementById('workflow-list')
+  list.replaceChildren()
+  for (const workflow of state.workflows) {
+    const selected = workflow.workflow === state.workflowId
+    const flow = h('span', { class: 'wf-pick-flow' }, h('code', null, workflow.entry), ' → ')
+    workflow.exit.forEach((id, index) => {
+      if (index) flow.append(' / ')
+      flow.append(h('code', null, id))
+    })
+    const card = h('button', {
+      type: 'button',
+      class: 'wf-card wf-pick',
+      'data-workflow': workflow.workflow,
+      'data-kind': workflow.kind,
+      'aria-pressed': selected ? 'true' : 'false',
+      onclick: () => selectWorkflow(workflow.workflow),
+    },
+      h('span', { class: 'wf-pick-top' },
+        h('span', { class: 'wf-pick-title' }, workflow.title),
+        h('span', { class: 'wf-pick-kind' }, WORKFLOW_KIND_LABEL[workflow.kind] ?? workflow.kind)),
+      h('span', { class: 'wf-pick-summary' }, workflow.summary ?? ''),
+      h('span', { class: 'wf-pick-meta' }, countText(workflow)),
+      flow,
+    )
+    list.append(h('li', null, card))
+  }
+}
+
+function buildGraph(workflow) {
+  const layout = layoutWorkflow(workflow)
+  const svg = s('svg', {
+    class: 'wf-canvas',
+    viewBox: `0 0 ${layout.width} ${layout.height}`,
+    width: layout.width,
+    height: layout.height,
+    role: 'img',
+    'aria-label': `Graphe du workflow ${workflow.title}`,
+  })
+  svg.append(s('defs', null,
+    s('marker', { id: 'wf-arrow', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' },
+      s('path', { d: 'M0 0 L8 4 L0 8 Z', fill: 'rgba(0,0,0,.42)' })),
+    s('marker', { id: 'wf-arrow-selected', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' },
+      s('path', { d: 'M0 0 L8 4 L0 8 Z', fill: '#1f1f1f' })),
+  ))
+
+  const selection = state.selection
+  for (const link of layout.links) {
+    const selected = Boolean(selection && selection.kind === 'edge' && selection.from === link.from && selection.to === link.to)
+    const group = s('g', {
+      class: 'wf-link-group',
+      'data-from': link.from,
+      'data-to': link.to,
+      tabindex: '0',
+      role: 'button',
+      'aria-label': `Événement de ${link.from} vers ${link.to}${link.when ? ` — ${link.when}` : ''}`,
+    })
+    group.append(s('path', {
+      d: link.path,
+      class: `wf-link${link.back ? ' wf-link--back' : ''}${selected ? ' wf-link--selected' : ''}`,
+      'marker-end': selected ? 'url(#wf-arrow-selected)' : 'url(#wf-arrow)',
+    }))
+    group.append(s('path', { d: link.path, class: 'wf-link-hit' }))
+    if (link.when) {
+      group.append(s('text', {
+        x: link.labelX,
+        y: link.labelY,
+        'text-anchor': link.labelAnchor,
+        class: `wf-link-label${selected ? ' wf-link-label--selected' : ''}`,
+      }, link.when))
+    }
+    svg.append(group)
+  }
+
+  for (const decision of layout.decisions) {
+    const group = s('g', { class: 'wf-node--decision-wrap', 'data-decision': decision.id, transform: `translate(${decision.x} ${decision.y})` })
+    group.append(s('path', {
+      d: `M ${decision.width / 2} 0 L ${decision.width} ${decision.height / 2} L ${decision.width / 2} ${decision.height} L 0 ${decision.height / 2} Z`,
+      class: `wf-node wf-node--decision${selection && selection.kind === 'geste' && selection.id === decision.id ? ' wf-node--selected' : ''}`,
+    }))
+    svg.append(group)
+  }
+
+  for (const box of layout.boxes) {
+    const selected = Boolean(selection && selection.kind !== 'edge' && selection.id === box.id)
+    const group = s('g', {
+      class: `wf-node wf-node--${box.kind}${selected ? ' wf-node--selected' : ''}`,
+      'data-node': box.id,
+      'data-kind': box.kind,
+      transform: `translate(${box.x} ${box.y})`,
+      tabindex: '0',
+      role: 'button',
+      'aria-label': `${box.kind === 'etat' ? 'État' : 'Geste'} ${stateLabelOf(workflow, box.id)}`,
+    })
+    group.append(s('rect', { width: box.width, height: box.height, rx: 8 }))
+
+    if (box.kind === 'etat') {
+      group.append(s('text', { class: 'wf-node-label', x: box.width / 2, y: 15, 'text-anchor': 'middle' }, stateLabelOf(workflow, box.id)))
+      group.append(s('text', { class: 'wf-node-id', x: box.width / 2, y: 26, 'text-anchor': 'middle' }, box.id))
+    } else {
+      const lines = wrapLabel(box.label, box.width - 24)
+      if (lines.length > 1) {
+        group.append(s('text', { class: 'wf-node-label', x: box.width / 2, y: 21, 'text-anchor': 'middle' }, lines[0]))
+        group.append(s('text', { class: 'wf-node-label', x: box.width / 2, y: 35, 'text-anchor': 'middle' }, lines[1]))
+      } else {
+        const node = workflow.nodes.find((item) => item.id === box.id)
+        group.append(s('text', { class: 'wf-node-label', x: box.width / 2, y: node?.section ? 22 : 28, 'text-anchor': 'middle' }, lines[0]))
+        if (node?.section) {
+          group.append(s('text', { class: 'wf-node-section', x: box.width / 2, y: 37, 'text-anchor': 'middle' }, node.section))
+        }
+      }
+    }
+
+    if (box.kind === 'etat' && (workflow.entry === box.id || (workflow.exit ?? []).includes(box.id))) {
+      group.append(s('text', { class: 'wf-node-badge', x: box.width / 2, y: -8, 'text-anchor': 'middle' }, roleOf(workflow, box.id)))
+    }
+    svg.append(group)
+  }
+
+  svg.addEventListener('click', (event) => {
+    const edge = event.target.closest('[data-from]')
+    if (edge) {
+      openEdge(edge.getAttribute('data-from'), edge.getAttribute('data-to'))
+      return
+    }
+    const node = event.target.closest('[data-node]')
+    if (node) {
+      openNode(node.getAttribute('data-node'))
+      return
+    }
+    const decision = event.target.closest('[data-decision]')
+    if (decision) openNode(decision.getAttribute('data-decision'))
+  })
+  svg.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    const edge = event.target.closest('[data-from]')
+    if (edge) {
+      event.preventDefault()
+      openEdge(edge.getAttribute('data-from'), edge.getAttribute('data-to'))
+      return
+    }
+    const node = event.target.closest('[data-node]')
+    if (node) {
+      event.preventDefault()
+      openNode(node.getAttribute('data-node'))
+      return
+    }
+    const decision = event.target.closest('[data-decision]')
+    if (decision) {
+      event.preventDefault()
+      openNode(decision.getAttribute('data-decision'))
+    }
+  })
+
+  return svg
+}
+
+function renderLegend() {
+  return h('div', { class: 'wf-legend', 'aria-label': 'Légende des formes' },
+    h('span', { class: 'wf-legend-item' }, h('span', { class: 'wf-swatch wf-swatch--etat' }), 'État canonique'),
+    h('span', { class: 'wf-legend-item' }, h('span', { class: 'wf-swatch' }), 'Geste'),
+    h('span', { class: 'wf-legend-item' }, h('span', { class: 'wf-swatch wf-swatch--decision' }), 'Décision'),
+    h('span', { class: 'wf-legend-item' }, h('span', { class: 'wf-swatch wf-swatch--retour' }), 'Arc retour'),
+    h('span', { class: 'wf-legend-item' }, h('span', { class: 'wf-legend-key' }, 'initial'), 'Entrée'),
+    h('span', { class: 'wf-legend-item' }, h('span', { class: 'wf-legend-key' }, 'terminal'), 'Sortie'),
+  )
+}
+
+function renderMapping() {
+  const rows = STATE_DEFS.map((stateDef) => h('tr', null,
+    h('td', null, stateDef.label, ' ', h('code', null, stateDef.id)),
+    h('td', null, stateDef.tracker),
+  ))
+  return h('section', { class: 'wf-mapping', 'aria-label': 'Mapping tracker, lecture seule' },
+    h('h3', { class: 'wf-section-title' }, 'Mapping tracker (lecture seule)'),
+    h('table', { class: 'wf-map-table' },
+      h('thead', null, h('tr', null, h('th', null, 'État'), h('th', null, 'GitHub, projet missions'))),
+      h('tbody', null, rows),
+    ),
+  )
+}
+
+function renderProposal() {
+  return h('section', { class: 'wf-mapping', 'aria-label': 'Modèle proposé' },
+    h('h3', { class: 'wf-section-title' }, 'Modèle proposé'),
+    h('p', { class: 'wf-note' },
+      'Workflow ', h('code', null, 'kind: statuts'), ' — six états (', h('code', null, 'id, label, description, tracker'),
+      ') et huit événements (', h('code', null, 'from, to, when, writer, artifact, gate'), '). Les graphes d\'étape gardent le même moteur de disposition.'),
+  )
+}
+
+function renderDetail() {
+  const workflow = currentWorkflow()
+  const detail = document.getElementById('detail')
+  detail.replaceChildren()
+  if (!workflow) return
+
+  const exitText = workflow.exit.length > 1 ? 'sorties ' : 'sortie '
+  const head = h('div', { class: 'wf-detail-head' },
+    h('div', { class: 'wf-detail-titles' },
+      h('h2', { class: 'wf-detail-title' }, workflow.title),
+      h('p', { class: 'wf-detail-meta' },
+        h('code', null, workflow.document), ' · entrée ', h('code', null, workflow.entry), ' · ', exitText,
+        workflow.exit.map((id, index) => [index ? ' / ' : '', h('code', null, id)])),
+    ),
+    workflow.kind === 'etape'
+      ? h('button', { type: 'button', class: 'missions-btn', onclick: addGesture }, 'Ajouter un geste')
+      : null,
+  )
+  detail.append(head)
+
+  if (!workflow.nodes.length) {
+    detail.append(h('div', { class: 'wf-empty' },
+      h('p', { class: 'wf-empty-title' }, 'Graphe vide'),
+      h('p', { class: 'wf-note' }, 'Ce workflow n\'a encore aucun geste. « Ajouter un geste » crée le premier point, entre l\'entrée et la sortie.'),
+    ))
+  } else if (workflow.kind === 'statuts') {
+    const wrap = h('div', { class: 'wf-canvas-wrap' }, buildGraph(workflow))
+    const side = h('div', { class: 'wf-status-side' }, renderLegend(), renderMapping(), renderProposal())
+    detail.append(h('div', { class: 'wf-status-grid' }, wrap, side))
+  } else {
+    detail.append(h('div', { class: 'wf-canvas-wrap' }, buildGraph(workflow)))
+    detail.append(renderLegend())
+  }
+
+  if (workflow.kind === 'statuts' && !workflow.edges.length) {
+    detail.append(h('p', { class: 'wf-note' }, 'Aucun événement pour ce workflow de statuts : les six états attendent leurs transitions.'))
+  }
+  detail.append(h('p', { class: 'wf-note wf-detail-hint' }, 'Clique un état, un geste ou un arc pour ouvrir son détail. Rien n\'est écrit.'))
+}
+
+/* ------------------------------------------------------------------------- *
+ * Volet de détail et édition en mémoire.
+ * ------------------------------------------------------------------------- */
+
+function field(label, control) {
+  return h('label', { class: 'wf-field' }, h('span', null, label), control)
+}
+
+function textInput(value, onInput) {
+  const input = h('input', { type: 'text', value: value ?? '', autocomplete: 'off', spellcheck: 'false' })
+  input.addEventListener('input', () => onInput(input.value))
+  return input
+}
+
+function textArea(value, onInput) {
+  const area = h('textarea', { rows: '2' })
+  area.value = value ?? ''
+  area.addEventListener('input', () => onInput(area.value))
+  return area
+}
+
+function writerSelect(value, onChange) {
+  const select = h('select')
+  const options = [['', '— non renseigné'], ...WRITERS.map((id) => [id, WRITER_LABELS[id]])]
+  for (const [id, label] of options) {
+    const option = h('option', { value: id }, label)
+    if ((value ?? '') === id) option.selected = true
+    select.append(option)
+  }
+  select.addEventListener('change', () => onChange(select.value))
+  return select
+}
+
+function props(entries) {
+  const list = h('dl', { class: 'missions-props' })
+  for (const [key, value] of entries) list.append(h('dt', null, key), h('dd', null, value))
+  return list
+}
+
+function arcsFor(workflow, nodeId) {
+  const incoming = workflow.edges.filter((edge) => edge.to === nodeId)
+  const outgoing = workflow.edges.filter((edge) => edge.from === nodeId)
+  const section = (title, edges, fromKey, toKey) => {
+    if (!edges.length) return h('p', { class: 'wf-drawer-note' }, `${title} : aucun.`)
+    return h('div', { class: 'wf-drawer-section' },
+      h('h3', { class: 'wf-section-title' }, title),
+      ...edges.map((edge) => h('button', {
+        type: 'button',
+        class: 'wf-arc',
+        onclick: () => openEdge(edge.from, edge.to),
+      },
+        h('code', null, edge[fromKey]), ' → ', h('code', null, edge[toKey]),
+        edge.when ? h('span', { class: 'wf-arc-when' }, edge.when) : null,
+      )),
+    )
+  }
+  return h('div', { class: 'wf-drawer-section' },
+    h('h3', { class: 'wf-section-title' }, 'Arcs'),
+    section('Entrants', incoming, 'from', 'to'),
+    section('Sortants', outgoing, 'from', 'to'),
+  )
+}
+
+function openNode(id) {
+  const workflow = currentWorkflow()
+  if (!workflow) return
+  const node = workflow.nodes.find((item) => item.id === id)
+  if (node) {
+    state.selection = { kind: workflow.kind === 'statuts' ? 'state' : 'geste', id }
+  } else if ((workflow.exit ?? []).includes(id) || workflow.entry === id) {
+    state.selection = { kind: 'state', id, ref: true }
+  } else {
+    return
+  }
+  renderDetail()
+  renderDrawer()
+}
+
+function openEdge(from, to) {
+  const workflow = currentWorkflow()
+  if (!workflow || !workflow.edges.some((edge) => edge.from === from && edge.to === to)) return
+  state.selection = { kind: 'edge', from, to }
+  renderDetail()
+  renderDrawer()
+}
+
+function closeDrawer() {
+  state.selection = null
+  renderDetail()
+  renderDrawer()
+}
+
+function buildDrawer() {
+  const workflow = currentWorkflow()
+  const selection = state.selection
+  const close = h('button', { type: 'button', class: 'missions-drawer-close', 'aria-label': 'Fermer', onclick: closeDrawer }, '×')
+  const foot = h('div', { class: 'missions-drawer-foot' },
+    h('div', { class: 'missions-drawer-actions' },
+      h('button', { type: 'button', class: 'missions-btn', onclick: closeDrawer }, 'Fermer'),
+      h('button', { type: 'button', class: 'missions-btn', onclick: revertCurrent }, 'Annuler'),
+      h('button', { type: 'button', class: 'missions-btn wf-primary', onclick: saveCurrent }, 'Enregistrer'),
+    ),
+  )
+
+  if (selection.kind === 'edge') {
+    const edge = workflow.edges.find((item) => item.from === selection.from && item.to === selection.to)
+    if (!edge) return [close]
+    const edit = (key) => (value) => { edge[key] = value; renderDetail() }
+    return [
+      h('div', { class: 'missions-drawer-head' },
+        h('div', null,
+          h('div', { class: 'missions-drawer-key' }, `${edge.from} → ${edge.to}`),
+          h('h2', { class: 'missions-drawer-title' }, 'Événement')),
+        close),
+      h('div', { class: 'wf-drawer-section' },
+        h('h3', { class: 'wf-section-title' }, 'Champs de l\'événement'),
+        field('Condition', textInput(edge.when ?? '', edit('when'))),
+        field('Écrivain', writerSelect(edge.writer, edit('writer'))),
+        field('Artefact', textInput(edge.artifact ?? '', edit('artifact'))),
+        field('Porte', textInput(edge.gate ?? '', edit('gate'))),
+        ...(workflow.kind === 'etape'
+          ? [h('p', { class: 'wf-drawer-note' }, 'Champs proposés : le modèle actuel ne connaît que ', h('code', null, 'from, to, when'), ' (', h('code', null, 'lib/workflows.js:29'), ').')]
+          : []),
+      ),
+      h('div', { class: 'wf-drawer-section' },
+        h('h3', { class: 'wf-section-title' }, 'Lecture seule'),
+        props([
+          ['De', h('code', null, edge.from)],
+          ['Vers', h('code', null, edge.to)],
+          ['Type', workflow.kind === 'statuts' ? 'transition d\'état' : 'arc de geste'],
+        ]),
+      ),
+      foot,
+    ]
+  }
+
+  const node = workflow.nodes.find((item) => item.id === selection.id)
+  if (selection.kind === 'state' && (selection.ref || !node)) {
+    const def = STATE_BY_ID.get(selection.id)
+    const note = stateNote(workflow, selection.id)
+    return [
+      h('div', { class: 'missions-drawer-head' },
+        h('div', null,
+          h('div', { class: 'missions-drawer-key' }, `état · ${selection.id}`),
+          h('h2', { class: 'missions-drawer-title' }, 'État')),
+        close),
+      h('div', { class: 'wf-drawer-section' },
+        h('h3', { class: 'wf-section-title' }, 'Champs'),
+        field('Libellé', textInput(note.label, (value) => { note.label = value; renderDetail() })),
+        field('Description', textArea(note.description, (value) => { note.description = value; renderDetail() })),
+      ),
+      h('div', { class: 'wf-drawer-section' },
+        h('h3', { class: 'wf-section-title' }, 'Lecture seule'),
+        props([
+          ['Identifiant', h('code', null, selection.id)],
+          ['Rôle', roleOf(workflow, selection.id)],
+          ['Tracker', def?.tracker ?? '—'],
+        ]),
+        h('p', { class: 'wf-drawer-note' }, 'État d\'entrée ou de sortie : son rôle se règle par les champs ', h('code', null, 'entry'), ' et ', h('code', null, 'exit'), ' du workflow, non éditables dans cette maquette.'),
+      ),
+      foot,
+    ]
+  }
+
+  if (selection.kind === 'state' && node) {
+    const edit = (key) => (value) => { node[key] = value; renderDetail() }
+    return [
+      h('div', { class: 'missions-drawer-head' },
+        h('div', null,
+          h('div', { class: 'missions-drawer-key' }, `état · ${node.id}`),
+          h('h2', { class: 'missions-drawer-title' }, 'État')),
+        close),
+      h('div', { class: 'wf-drawer-section' },
+        h('h3', { class: 'wf-section-title' }, 'Champs'),
+        field('Libellé', textInput(node.label, edit('label'))),
+        field('Description', textArea(node.description, edit('description'))),
+      ),
+      h('div', { class: 'wf-drawer-section' },
+        h('h3', { class: 'wf-section-title' }, 'Lecture seule'),
+        props([
+          ['Identifiant', h('code', null, node.id)],
+          ['Rôle', roleOf(workflow, node.id)],
+          ['Tracker', node.tracker ?? STATE_BY_ID.get(node.id)?.tracker ?? '—'],
+        ]),
+      ),
+      foot,
+    ]
+  }
+
+  if (!node) return [close]
+  const edit = (key) => (value) => { node[key] = value; renderDetail() }
+  return [
+    h('div', { class: 'missions-drawer-head' },
+      h('div', null,
+        h('div', { class: 'missions-drawer-key' }, `geste · ${node.id}`),
+        h('h2', { class: 'missions-drawer-title' }, 'Geste')),
+      close),
+    h('div', { class: 'wf-drawer-section' },
+      h('h3', { class: 'wf-section-title' }, 'Champs'),
+      field('Libellé', textInput(node.label, edit('label'))),
+      field('Section', textInput(node.section ?? '', edit('section'))),
+      field('Écrivain', writerSelect(node.writer, edit('writer'))),
+      field('Condition', textInput(node.condition ?? '', edit('condition'))),
+      field('Artefact', textInput(node.artifact ?? '', edit('artifact'))),
+      field('Porte', textInput(node.gate ?? '', edit('gate'))),
+    ),
+    h('div', { class: 'wf-drawer-section' },
+      h('h3', { class: 'wf-section-title' }, 'Lecture seule'),
+      props([['Identifiant', h('code', null, node.id)], ['Type', 'geste du workflow']]),
+    ),
+    arcsFor(workflow, node.id),
+    foot,
+  ]
+}
+
+function renderDrawer() {
+  const drawer = document.getElementById('drawer')
+  if (!state.selection) {
+    drawer.hidden = true
+    document.body.classList.remove('drawer-open')
+    drawer.replaceChildren()
+    return
+  }
+  drawer.hidden = false
+  document.body.classList.add('drawer-open')
+  const banner = document.querySelector('.mock-banner')
+  drawer.style.top = `${banner ? banner.getBoundingClientRect().height : 0}px`
+  drawer.replaceChildren(...buildDrawer())
+  const focusable = drawer.querySelector('input, textarea, select')
+  if (focusable) focusable.focus({ preventScroll: true })
+}
+
+/* ------------------------------------------------------------------------- *
+ * Actions.
+ * ------------------------------------------------------------------------- */
+
+function selectWorkflow(id) {
+  state.workflowId = id
+  state.selection = null
+  renderList()
+  renderDetail()
+  renderDrawer()
+}
+
+function saveCurrent() {
+  const workflow = currentWorkflow()
+  if (!workflow) return
+  state.saved.set(workflow.workflow, clone(workflow))
+  setStatus('Maquette : rien n\'est écrit. L\'enregistrement ne garde l\'état que dans cette page.', 'ok')
+  renderDrawer()
+}
+
+function revertCurrent() {
+  const workflow = currentWorkflow()
+  if (!workflow) return
+  const snapshot = state.saved.get(workflow.workflow)
+  if (!snapshot) return
+  const index = state.workflows.findIndex((item) => item.workflow === workflow.workflow)
+  state.workflows[index] = clone(snapshot)
+  setStatus('Modifications annulées : retour au dernier enregistrement de cette page.')
+  renderAll()
+}
+
+function reloadAll() {
+  state.workflows = initialWorkflows()
+  refreshSaved()
+  state.workflowId = 'statuts'
+  state.selection = null
+  setStatus('Données de source restaurées (copie du 2026-11-13) ; les workflows créés sont oubliés.')
+  renderAll()
+}
+
+function nextGestureId(workflow) {
+  const taken = new Set(workflow.nodes.map((node) => node.id))
+  let index = 1
+  while (taken.has(`geste-${index}`)) index += 1
+  return `geste-${index}`
+}
+
+function addGesture() {
+  const workflow = currentWorkflow()
+  if (!workflow || workflow.kind !== 'etape') return
+  const id = nextGestureId(workflow)
+  const exit = workflow.exit[0]
+  const previous = workflow.nodes.length ? workflow.nodes[workflow.nodes.length - 1].id : workflow.entry
+  if (exit) workflow.edges = workflow.edges.filter((edge) => !(edge.from === previous && edge.to === exit))
+  workflow.nodes.push({ id, label: 'Nouveau geste', section: 'Ce qu\'on fait', writer: 'session' })
+  workflow.edges.push({ from: previous, to: id })
+  if (exit) workflow.edges.push({ from: id, to: exit })
+  state.selection = { kind: 'geste', id }
+  setStatus(`Geste « ${id} » ajouté (maquette, non enregistré).`)
+  renderList()
+  renderDetail()
+  renderDrawer()
+}
+
+function renderAll() {
+  renderList()
+  renderDetail()
+  renderDrawer()
+}
+
+/* --- Création ------------------------------------------------------------ */
+
+const modal = document.getElementById('modal')
+const form = document.getElementById('new-form')
+const keyInput = document.getElementById('new-key')
+const titleInput = document.getElementById('new-title-field')
+const kindInput = document.getElementById('new-kind')
+const documentInput = document.getElementById('new-document')
+const entryInput = document.getElementById('new-entry')
+const exitInput = document.getElementById('new-exit')
+const ERRORS = {
+  key: document.getElementById('err-key'),
+  title: document.getElementById('err-title'),
+  document: document.getElementById('err-document'),
+  entry: document.getElementById('err-entry'),
+  exit: document.getElementById('err-exit'),
+}
+const CONTROL_OF = { key: keyInput, title: titleInput, document: documentInput, entry: entryInput, exit: exitInput }
+
+function clearErrors() {
+  for (const [key, node] of Object.entries(ERRORS)) {
+    node.textContent = ''
+    CONTROL_OF[key].removeAttribute('aria-invalid')
+  }
+}
+
+function showErrors(errors) {
+  clearErrors()
+  for (const [key, message] of Object.entries(errors)) {
+    ERRORS[key].textContent = message
+    CONTROL_OF[key].setAttribute('aria-invalid', 'true')
+  }
+  const first = Object.keys(errors)[0]
+  if (first) CONTROL_OF[first].focus()
+}
+
+function openModal() {
+  clearErrors()
+  form.reset()
+  documentInput.dataset.touched = ''
+  modal.hidden = false
+  keyInput.focus()
+}
+
+function closeModal() {
+  modal.hidden = true
+  document.getElementById('new-workflow').focus()
+}
+
+function readDraft() {
+  return {
+    key: keyInput.value.trim(),
+    title: titleInput.value.trim(),
+    kind: kindInput.value,
+    document: documentInput.value.trim(),
+    entry: entryInput.value.trim(),
+    exits: exitInput.value.split(',').map((value) => value.trim()).filter(Boolean),
+  }
+}
+
+function validateDraft(draft) {
+  const errors = {}
+  if (!draft.key) errors.key = 'La clé est obligatoire.'
+  else if (!SLUG.test(draft.key)) errors.key = 'Clé invalide : minuscules, chiffres et tirets (ex. mon-workflow).'
+  else if (state.workflows.some((workflow) => workflow.workflow === draft.key)) errors.key = `La clé « ${draft.key} » est déjà utilisée.`
+  if (!draft.title) errors.title = 'Le titre est obligatoire.'
+  if (!draft.document) errors.document = 'Le document est obligatoire (ex. workflows/incidents.md).'
+  if (!draft.entry) errors.entry = 'L\'entrée est obligatoire.'
+  else if (!STATE_BY_ID.has(draft.entry)) errors.entry = `État inconnu : « ${draft.entry} ». États : ${STATE_IDS.join(', ')}.`
+  if (!draft.exits.length) errors.exit = 'Au moins une sortie est obligatoire.'
+  else {
+    const unknown = draft.exits.filter((id) => !STATE_BY_ID.has(id))
+    if (unknown.length) errors.exit = `Sortie inconnue : « ${unknown.join(', ')} ». États : ${STATE_IDS.join(', ')}.`
+  }
+  return errors
+}
+
+function createWorkflow(draft) {
+  const workflow = {
+    workflow: draft.key,
+    kind: draft.kind,
+    title: draft.title,
+    document: draft.document,
+    summary: 'Nouveau workflow (maquette), graphe à construire.',
+    entry: draft.entry,
+    exit: draft.exits,
+    nodes: draft.kind === 'statuts' ? STATE_DEFS.map((stateDef) => ({ ...stateDef })) : [],
+    edges: [],
+    created: true,
+  }
+  state.workflows.push(workflow)
+  state.saved.set(workflow.workflow, clone(workflow))
+  state.workflowId = workflow.workflow
+  state.selection = null
+  closeModal()
+  setStatus(`Workflow « ${draft.key} » ajouté (maquette : rien n\'est écrit).`, 'ok')
+  renderAll()
+}
+
+/* ------------------------------------------------------------------------- *
+ * Branchements.
+ * ------------------------------------------------------------------------- */
+
+document.getElementById('reload').addEventListener('click', reloadAll)
+document.getElementById('save').addEventListener('click', saveCurrent)
+document.getElementById('cancel').addEventListener('click', revertCurrent)
+document.getElementById('new-workflow').addEventListener('click', openModal)
+document.getElementById('new-cancel').addEventListener('click', closeModal)
+modal.querySelector('[data-close="modal"]').addEventListener('click', closeModal)
+
+keyInput.addEventListener('input', () => {
+  if (documentInput.dataset.touched === '1') return
+  const key = keyInput.value.trim()
+  documentInput.value = key ? `workflows/${key}.md` : ''
+})
+documentInput.addEventListener('input', () => { documentInput.dataset.touched = '1' })
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault()
+  const draft = readDraft()
+  const errors = validateDraft(draft)
+  showErrors(errors)
+  if (Object.keys(errors).length) return
+  createWorkflow(draft)
+})
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return
+  if (!modal.hidden) {
+    closeModal()
+    return
+  }
+  if (!document.getElementById('drawer').hidden) closeDrawer()
+})
+
+window.addEventListener('resize', () => {
+  const drawer = document.getElementById('drawer')
+  if (drawer.hidden) return
+  const banner = document.querySelector('.mock-banner')
+  drawer.style.top = `${banner ? banner.getBoundingClientRect().height : 0}px`
+})
+
+renderAll()
+</script>
+</body>
+</html>
