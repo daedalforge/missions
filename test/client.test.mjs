@@ -2928,10 +2928,13 @@ test('l’onglet demande le scan au serveur, une fois, à son montage', async ()
     findAll(caseDirty, 'input')[0].props.onChange()
     const filtre = rerendre()
     findAll(filtre, 'input').find((node) => node.props['aria-label'] === 'Filter repositories')
+      .props.onChange({ target: { value: 'fe' } })
+    const seconde = rerendre()
+    findAll(seconde, 'input').find((node) => node.props['aria-label'] === 'Filter repositories')
       .props.onChange({ target: { value: 'feat' } })
 
-    // Then ni l'état ni la frappe ne relisent la racine : le scan est le seul
-    // appel, le geste se contente d'écrire la session.
+    // Then ni l'état ni les deux frappes ne relisent la racine : le scan est le
+    // seul appel, le geste se contente d'écrire la session.
     assert.equal(appels.length, 1, 'un scan au montage, aucune lecture pour un filtre')
     assert.equal(session.entries.get('missions.repositories.filters'), '{"query":"feat","state":["dirty"]}')
   } finally {
