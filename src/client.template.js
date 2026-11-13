@@ -820,7 +820,7 @@ window.__ModuleLoader__.load({
 .missions-priority-note { margin: 0 0 10px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-priority-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 13%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 46%, transparent); }
-.missions-card[data-blocked="true"]:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 14%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 52%, transparent); }
+.missions-card[data-interactive="true"][data-blocked="true"]:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 14%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 52%, transparent); }
 .missions-lock { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: auto; border-radius: 999px; background: var(--dsw-alias-label-danger, #b42318); color: #ffffff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 15%, transparent); }
 .missions-lock svg { display: block; width: 11px; height: 11px; }
 .missions-lock + .missions-sp { margin-left: 0; }
