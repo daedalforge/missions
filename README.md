@@ -81,9 +81,15 @@ La barre porte cinq onglets — **Dashboard**, **Missions**, **Done**,
 dans le thème par défaut, un motif manga dans le thème manga. Le libellé reste
 le nom accessible ; l'icône n'est qu'un repère (16 px, `currentColor`). Les
 pastilles de compte restent sur Missions, Done et Repositories. Tant qu'un
-compte n'est pas connu — celui de Done et celui de Repositories au montage — la
-pastille porte l'icône de refresh du thème, animée, à la place du nombre ; le
-chiffre la remplace à la première réponse, sans requête de plus.
+compte n'est pas prouvé, la pastille porte l'icône de refresh du thème, animée,
+à la place du nombre ; le chiffre la remplace à la première réponse entière,
+sans requête de plus.
+
+La pastille de **Missions** se comporte de même : elle attend la première
+réponse de la liste ouverte pour publier son compte. Un zéro n'est donc publié
+que si la liste a répondu — un échec ou une réponse partielle laisse la
+pastille en attente, et une relecture ultérieure garde le chiffre déjà prouvé
+au lieu de ramener le loader ou de repasser par zéro.
 
 **Repositories** ne montre par défaut que les clones de la racine du workspace :
 un worktree est un second checkout d'un dépôt déjà listé, et l'en-tête continue

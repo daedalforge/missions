@@ -1187,7 +1187,15 @@ const DASH_MISSIONS = [
 ]
 
 function dashboardView(missions, loading = false) {
-  return { loading, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  return { loading, proven: true, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+}
+
+/**
+ * La liste ouverte avant sa première réponse : rien n'est encore prouvé, donc
+ * la pastille de Missions attend son compte comme les deux autres.
+ */
+function vueSansReponse() {
+  return { loading: true, proven: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null }
 }
 
 /**
@@ -2222,7 +2230,7 @@ test('la barre d’onglets place Done et Repositories entre Missions et Workflow
 })
 
 test('la barre porte cinq onglets, chacun devant son icône et son libellé', () => {
-  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+  const tree = monter([EMPTY_BAR, vueSansReponse()], memorySession())
   const bar = findAll(tree, 'div').find((node) => node.props.className === 'missions-tabs')
   assert.ok(bar, 'la barre est rendue')
 
@@ -2248,23 +2256,30 @@ test('la barre porte cinq onglets, chacun devant son icône et son libellé', ()
     assert.ok(findAll(svg, 'path').length > 0, `dessin vide : ${label}`)
   }
 
-  // Trois comptes dans la barre : Missions le sien, Done et Repositories le leur
-  // en attente — la pastille existe déjà, elle porte le loader et aucun chiffre.
   const badges = findAll(bar, 'span').filter((node) => String(node.props.className ?? '').split(' ').includes('missions-tab-count'))
   assert.equal(badges.length, 3, 'chaque compte de la barre garde sa pastille')
   const attendues = badges.filter((node) => node.props.className === 'missions-tab-count missions-tab-count-loader')
-  assert.equal(attendues.length, 2, 'Done et Repositories attendent leur compte')
+  assert.equal(attendues.length, 3, 'les trois onglets attendent leur compte')
   for (const pill of attendues) {
     assert.equal(pill.props.title, 'Loading…')
     assert.equal(textOf(pill), '', 'une pastille en attente ne porte aucun chiffre')
   }
+
+  const missionsTab = onglets.find((node) => node.props.id === 'missions-tab-missions')
+  const rendu = renderTree(missionsTab)
+  const dessin = findAll(pastilleEnAttente(rendu), 'svg')
+  assert.equal(dessin.length, 1, 'la pastille de Missions porte le dessin du thème')
+  assert.equal(dessin[0].props['aria-hidden'], 'true', 'le dessin ne double pas le nom')
+  assert.equal(textOf(rendu), 'Missions', 'le loader n’ajoute aucun mot au nom')
+  assert.equal(missionsTab.props.role, 'tab')
+  assert.equal(missionsTab.props['aria-selected'], 'false')
 })
 
 test('l’icône d’un onglet se redessine quand le thème change', () => {
   const dessins = (theme) => {
     const { api, ctx, registered } = charger(
       undefined,
-      [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', { ...EMPTY_BAR.filters }, null, null, theme],
+      [EMPTY_BAR, vueSansReponse(), 'missions', '', { ...EMPTY_BAR.filters }, null, null, theme],
       memorySession(),
     )
     api.apply(ctx)
@@ -2296,7 +2311,7 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
   }
   // La pastille en attente suit le même thème : la flèche du thème par défaut
   // devient le shuriken en manga, sans remonter la barre.
-  for (const id of ['missions-tab-done', 'missions-tab-repositories']) {
+  for (const id of ['missions-tab-missions', 'missions-tab-done', 'missions-tab-repositories']) {
     assert.equal(defaults[id].badge.length, 1, `pastille en attente absente : ${id}`)
     assert.equal(manga[id].badge.length, 1, `pastille en attente absente en manga : ${id}`)
     assert.notDeepEqual(manga[id].badge, defaults[id].badge, `pastille identique dans les deux thèmes : ${id}`)
@@ -2513,7 +2528,7 @@ test('l’onglet Repositories porte son compte, et une pastille en attente avant
   // Aucune réponse encore : la pastille est là, à sa place dans le gabarit du
   // chiffre, et porte le dessin de rafraîchissement du thème au lieu d'un 0 que
   // rien ne prouve.
-  const avant = panneau([EMPTY_BAR, dashboardView(DASH_MISSIONS)])
+  const avant = panneau([EMPTY_BAR, vueSansReponse()])
   const attente = pastilleDe(onglet(avant, 'repositories'))
   assert.equal(attente.props.className, 'missions-tab-count missions-tab-count-loader')
   assert.equal(attente.props.title, 'Loading…', 'la pastille en attente se nomme')
@@ -2529,9 +2544,219 @@ test('l’onglet Repositories porte son compte, et une pastille en attente avant
   assert.equal(onglet(avant, 'repositories').props.role, 'tab')
   assert.equal(onglet(avant, 'repositories').props['aria-selected'], 'false')
 
-  // Le compte des missions, lui, est connu dès la liste : sa pastille reste.
-  assert.equal(textOf(pastilleDe(onglet(avant, 'missions'))), String(ouvertes))
-  assert.equal(pastilleEnAttente(onglet(avant, 'missions')), undefined)
+  const missionsAttente = pastilleDe(onglet(avant, 'missions'))
+  assert.equal(missionsAttente.props.className, 'missions-tab-count missions-tab-count-loader')
+  assert.equal(missionsAttente.props.title, 'Loading…')
+  assert.equal(textOf(onglet(avant, 'missions')), 'Missions', 'aucun chiffre avant la première réponse')
+})
+
+/** L'onglet d'une barre de test, par identifiant. */
+function ongletDe(tree, id) {
+  return findAll(tree, 'button').find((button) => button.props.id === `missions-tab-${id}`)
+}
+
+test('le montage sans réponse laisse la pastille de Missions en attente', () => {
+  // Given un panneau monté avant la première réponse de la liste ouverte
+  const tree = monter([EMPTY_BAR, vueSansReponse()], memorySession())
+  // When la barre est rendue
+  const bouton = ongletDe(tree, 'missions')
+  // Then la pastille attend le compte, sans porter de chiffre
+  const pill = pastilleDe(bouton)
+  assert.equal(pill.props.className, 'missions-tab-count missions-tab-count-loader')
+  assert.equal(pill.props.title, 'Loading…')
+  assert.equal(textOf(pill), '')
+  const rendu = renderTree(bouton)
+  assert.equal(findAll(pastilleEnAttente(rendu), 'svg').length, 1, 'la pastille en attente porte le dessin du thème')
+  assert.equal(textOf(rendu), 'Missions', 'le loader n’ajoute aucun mot au nom')
+  assert.equal(bouton.props.role, 'tab')
+  assert.equal(bouton.props['aria-selected'], 'false')
+})
+
+test('une première réponse entière et vide prouve le zéro de Missions', async () => {
+  const vraiFetch = globalThis.fetch
+  const repondre = (payload) => async (url) => {
+    const cible = String(url)
+    if (cible === 'missions/api/done/count') return { ok: true, json: async () => ({ count: 0, errors: [] }) }
+    if (cible === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 0 }) }
+    return { ok: true, json: async () => payload }
+  }
+  try {
+    // Given un panneau monté avant la première réponse, et une réponse vide et entière
+    globalThis.fetch = repondre({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' })
+    const { api, ctx, registered, effects, setters } = charger(undefined, [EMPTY_BAR, vueSansReponse()], memorySession())
+    api.apply(ctx)
+    registered.main({})
+    // When le montage lit la liste
+    await effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()')).fn()
+    await new Promise((done) => setTimeout(done, 0))
+    // Then la réponse entière publie un compte prouvé, vide, et la pastille affiche 0
+    const publie = setters.find((next) => next?.proven === true && Array.isArray(next.missions))
+    assert.ok(publie, 'la réponse entière prouve le compte')
+    assert.deepEqual(publie.missions, [])
+    const rendu = monter([EMPTY_BAR, publie], memorySession())
+    assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), '0')
+    assert.equal(pastilleEnAttente(ongletDe(rendu, 'missions')), undefined)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('une première réponse entière publie le compte de la liste ouverte', async () => {
+  const vraiFetch = globalThis.fetch
+  const repondre = (payload) => async (url) => {
+    const cible = String(url)
+    if (cible === 'missions/api/done/count') return { ok: true, json: async () => ({ count: 0, errors: [] }) }
+    if (cible === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 0 }) }
+    return { ok: true, json: async () => payload }
+  }
+  try {
+    // Given un panneau monté avant la première réponse, et la liste ouverte entière
+    globalThis.fetch = repondre({ missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' })
+    const { api, ctx, registered, effects, setters } = charger(undefined, [EMPTY_BAR, vueSansReponse()], memorySession())
+    api.apply(ctx)
+    registered.main({})
+    // When le montage lit la liste
+    await effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()')).fn()
+    await new Promise((done) => setTimeout(done, 0))
+    // Then la pastille publie le compte des missions ouvertes, sans loader
+    const publie = setters.find((next) => next?.proven === true && Array.isArray(next.missions))
+    assert.ok(publie, 'la réponse entière prouve le compte')
+    const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
+    const rendu = monter([EMPTY_BAR, publie], memorySession())
+    assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), String(ouvertes))
+    assert.equal(pastilleEnAttente(ongletDe(rendu, 'missions')), undefined)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un premier échec de la liste laisse la pastille de Missions en attente, sans zéro', async () => {
+  const vraiFetch = globalThis.fetch
+  // Given un panneau monté avant la première réponse, et une lecture qui échoue
+  const { api, ctx, registered, effects, setters } = charger(undefined, [EMPTY_BAR, vueSansReponse(), 'missions'], memorySession())
+  api.apply(ctx)
+  registered.main({})
+  try {
+    globalThis.fetch = async () => { throw new Error('offline') }
+    // When le montage lit la liste
+    await effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()')).fn()
+    await new Promise((done) => setTimeout(done, 0))
+    // Then l'échec est publié sans prouver de compte, et la pastille attend toujours
+    const echec = setters.filter((next) => typeof next === 'function').map((update) => update(vueSansReponse())).find((next) => next.errors.length > 0)
+    assert.ok(echec, 'l’échec de la liste est publié')
+    assert.equal(echec.proven, false)
+    assert.deepEqual(echec.missions, [])
+    const enEchec = monter([EMPTY_BAR, echec, 'missions'], memorySession())
+    assert.equal(textOf(ongletDe(enEchec, 'missions')), 'Missions', 'aucun chiffre, pas même 0')
+    assert.equal(pastilleEnAttente(ongletDe(enEchec, 'missions')).props.className, 'missions-tab-count missions-tab-count-loader')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('le bandeau d’erreur d’une liste en échec reste celui de la vue', () => {
+  // Given une vue en échec, jamais prouvée
+  const vue = { ...vueSansReponse(), loading: false, errors: [{ project: 'panel', message: 'read failed' }] }
+  // When le panneau est rendu sur l'onglet Missions
+  const tree = monter([EMPTY_BAR, vue, 'missions'], memorySession())
+  // Then le bandeau vient de la vue, et la pastille attend sans le doubler
+  assert.equal(findAll(tree, 'div').filter((node) => node.props.className === 'missions-errors').length, 1)
+  assert.equal(pastilleEnAttente(ongletDe(tree, 'missions')).props.className, 'missions-tab-count missions-tab-count-loader')
+})
+
+test('le tick de 60 s retente la liste après un premier échec et publie le compte', async () => {
+  const vraiFetch = globalThis.fetch
+  const vraiSetInterval = globalThis.setInterval
+  let tick = null
+  globalThis.setInterval = (fn) => { tick = fn; return 1 }
+  const { api, ctx, registered, effects, setters } = charger(undefined, [EMPTY_BAR, vueSansReponse(), 'missions'], memorySession())
+  api.apply(ctx)
+  registered.main({})
+  // Given un panneau dont la première lecture a échoué, et le tick armé
+  effects.find((effect) => String(effect.fn).includes('REFRESH_MS')).fn()
+  try {
+    globalThis.fetch = async () => { throw new Error('offline') }
+    await effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()')).fn()
+    await new Promise((done) => setTimeout(done, 0))
+    // When le tick relit la liste
+    globalThis.fetch = async (url) => {
+      const cible = String(url)
+      if (cible === 'missions/api/done/count') return { ok: true, json: async () => ({ count: 0, errors: [] }) }
+      if (cible === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 0 }) }
+      return { ok: true, json: async () => ({ missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+    }
+    setters.length = 0
+    tick()
+    await new Promise((done) => setTimeout(done, 0))
+    // Then la réponse entière prouve le compte des missions ouvertes
+    const prouve = setters.find((next) => next?.proven === true && Array.isArray(next.missions))
+    assert.ok(prouve, 'le tick publie le compte prouvé')
+    const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
+    const rendu = monter([EMPTY_BAR, prouve], memorySession())
+    assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), String(ouvertes))
+  } finally {
+    globalThis.fetch = vraiFetch
+    globalThis.setInterval = vraiSetInterval
+  }
+})
+
+test('le Refresh explicite garde le chiffre de Missions pendant la relecture', async () => {
+  const vraiFetch = globalThis.fetch
+  const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
+  const prouve = { loading: false, proven: true, missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  // Given une liste déjà prouvée, son chiffre affiché, et le Refresh de la vue
+  const avant = monter([EMPTY_BAR, prouve, 'missions'], memorySession())
+  assert.equal(textOf(pastilleDe(ongletDe(avant, 'missions'))), String(ouvertes))
+  const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, prouve, 'missions'], memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+  try {
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }) })
+    setters.length = 0
+    // When le Refresh explicite relit la liste
+    await findAll(tree, 'MissionsView')[0].props.onRefresh()
+    // Then l'état de chargement reste prouvé, et la pastille ne repasse pas par le loader
+    const pendant = setters.filter((next) => typeof next === 'function').map((update) => update(prouve)).find((next) => next.loading === true)
+    assert.ok(pendant, 'la relecture passe par l’état chargement')
+    assert.equal(pendant.proven, true)
+    const enCours = monter([EMPTY_BAR, pendant, 'missions'], memorySession())
+    assert.equal(textOf(pastilleDe(ongletDe(enCours, 'missions'))), String(ouvertes))
+    assert.equal(pastilleEnAttente(ongletDe(enCours, 'missions')), undefined)
+    assert.ok(setters.some((next) => next?.proven === true && next.missions.length === DASH_MISSIONS.length))
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('le tick silencieux relit la liste sans dé-prouver le compte de Missions', async () => {
+  const vraiFetch = globalThis.fetch
+  const vraiSetInterval = globalThis.setInterval
+  let tick = null
+  globalThis.setInterval = (fn) => { tick = fn; return 1 }
+  const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
+  const prouve = { loading: false, proven: true, missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered, effects, setters } = charger(undefined, [EMPTY_BAR, prouve, 'missions'], memorySession())
+  api.apply(ctx)
+  registered.main({})
+  // Given une liste déjà prouvée et le tick armé
+  effects.find((effect) => String(effect.fn).includes('REFRESH_MS')).fn()
+  try {
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }) })
+    setters.length = 0
+    // When le tick relit la liste en silence
+    tick()
+    // Then aucun état de chargement n'est publié, et la réponse prolonge le compte prouvé
+    assert.equal(setters.length, 0)
+    await new Promise((done) => setTimeout(done, 0))
+    const apres = setters.find((next) => next?.proven === true && Array.isArray(next.missions))
+    assert.ok(apres, 'la réponse entière prolonge le compte prouvé')
+    const rendu = monter([EMPTY_BAR, apres], memorySession())
+    assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), String(ouvertes))
+    assert.equal(pastilleEnAttente(ongletDe(rendu, 'missions')), undefined)
+  } finally {
+    globalThis.fetch = vraiFetch
+    globalThis.setInterval = vraiSetInterval
+  }
 })
 
 /**
