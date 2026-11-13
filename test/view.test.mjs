@@ -1180,8 +1180,7 @@ const TEMOIN = {
 }
 
 test('le prompt de session est la chaîne d’hier, au caractère près', () => {
-  // Cette chaîne est celle que le volet construisait en ligne : l'extraction en
-  // helper ne doit pas la réécrire, les tests du bundle la pincent déjà.
+  // Given
   const attendu =
     'Travaille sur la mission MIS-42 — Reload onglet mission.\n\n' +
     "Lis d'abord le ticket avec le CLI, jamais sa page HTML (tronquée) :\n" +
@@ -1194,15 +1193,16 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
     'Checklist de mission : missions/MIS-42/checklist.md — coche chaque point avec sa preuve.\n\n' +
     "Garde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande."
 
-  assert.equal(missionSessionPrompt(TEMOIN), attendu)
-  // Le prompt de session ne porte pas le clone : c'est le prompt des remontées
-  // qui a besoin de savoir où lire la PR.
-  assert.doesNotMatch(missionSessionPrompt(TEMOIN), /Dépôt du projet/)
+  // When
+  const prompt = missionSessionPrompt(TEMOIN)
+
+  // Then
+  assert.equal(prompt, attendu)
+  assert.doesNotMatch(prompt, /Dépôt du projet/)
 })
 
 test('le prompt de chaque étape nomme ses standards et la fiche du dépôt', () => {
-  // La fiche suit le projet de la mission : le dernier segment du clone, en
-  // minuscules — `~/projects/Manager` lit `standards/repos/manager.md`.
+  // Given
   const cas = [
     ['to-refine', '~/projects/missions', [
       'standards/README.md',
@@ -1225,46 +1225,63 @@ test('le prompt de chaque étape nomme ses standards et la fiche du dépôt', ()
     ]],
   ]
 
-  for (const [state, repo, files] of cas) {
-    const prompt = missionSessionPrompt({ ...TEMOIN, state, repo })
-    const ligne = `Standards à lire : ${files.join(', ')}.`
+  // When
+  const prompts = cas.map(([state, repo, files]) => [
+    state,
+    missionSessionPrompt({ ...TEMOIN, state, repo }),
+    `Standards à lire : ${files.join(', ')}.`,
+  ])
+
+  // Then
+  for (const [state, prompt, ligne] of prompts) {
     assert.ok(prompt.includes(ligne), `${state} lit « ${ligne} »`)
   }
 })
 
 test('sans dépôt déclaré, le prompt d’étape omet la fiche du dépôt', () => {
-  const prompt = missionSessionPrompt({ ...TEMOIN, repo: null })
+  // Given
+  const mission = { ...TEMOIN, repo: null }
 
+  // When
+  const prompt = missionSessionPrompt(mission)
+
+  // Then
   assert.ok(prompt.includes('Standards à lire : standards/code.md, standards/interdits.md.'))
   assert.doesNotMatch(prompt, /<projet>/)
 })
 
 test('la fiche d’un dépôt se déduit de son clone', () => {
-  assert.equal(standardsProject('~/projects/Manager'), 'manager')
-  assert.equal(standardsProject('~/projects/Connect/'), 'connect')
-  assert.equal(standardsProject('~/projects/missions'), 'missions')
-  assert.equal(standardsProject('missions'), 'missions')
-  assert.equal(standardsProject(null), null)
-  assert.equal(standardsProject('  '), null)
+  // Given
+  const cas = [
+    ['~/projects/Manager', 'manager'],
+    ['~/projects/Connect/', 'connect'],
+    ['~/projects/missions', 'missions'],
+    ['missions', 'missions'],
+    [null, null],
+    ['  ', null],
+  ]
+
+  // When
+  const fiches = cas.map(([repo]) => standardsProject(repo))
+
+  // Then
+  assert.deepEqual(fiches, cas.map(([, attendu]) => attendu))
 })
 
 test('les fichiers d’une étape sont des chemins de standards, dans l’ordre', () => {
-  assert.deepEqual(standardsFiles('cadrage', 'missions'), [
-    'standards/README.md',
-    'standards/repos/missions.md',
-  ])
-  assert.deepEqual(standardsFiles('clôture', 'manager'), [
-    'standards/interdits.md',
-    'standards/revue.md',
-  ])
-  // Sans projet, la fiche s'efface au lieu de nommer un fichier qui n'existe pas.
-  assert.deepEqual(standardsFiles('revue', null), [
-    'standards/revue.md',
-    'standards/code.md',
-    'standards/interdits.md',
-  ])
-  // Une étape inconnue ne lit rien.
-  assert.equal(standardsFiles('inconnue', 'missions'), null)
+  // Given
+  const cas = [
+    ['cadrage', 'missions', ['standards/README.md', 'standards/repos/missions.md']],
+    ['clôture', 'manager', ['standards/interdits.md', 'standards/revue.md']],
+    ['revue', null, ['standards/revue.md', 'standards/code.md', 'standards/interdits.md']],
+    ['inconnue', 'missions', null],
+  ]
+
+  // When
+  const fichiers = cas.map(([step, project]) => standardsFiles(step, project))
+
+  // Then
+  assert.deepEqual(fichiers, cas.map(([, , attendu]) => attendu))
   assert.equal(standardsReadLine('inconnue', 'missions'), null)
   assert.equal(STANDARDS_DIR, 'standards')
   assert.deepEqual(Object.keys(STANDARDS_STEP_FILES).sort(), [

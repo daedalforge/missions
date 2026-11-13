@@ -50,21 +50,29 @@ function contractRows(readme) {
 }
 
 test('le dépôt laisse le contrôle des standards au vert', async () => {
+  // Given
+
+  // When
   const result = await runChecker(ROOT)
 
+  // Then
   assert.equal(result.code, 0, result.stderr)
   assert.match(result.stdout, /^OK — /)
 })
 
 test('l’index et le prompt de chaque étape nomment les mêmes fichiers', async () => {
+  // Given
   const readme = await readFile(join(ROOT, STANDARDS_DIR, 'README.md'), 'utf8')
   const indexed = new Set(
     [...readme.matchAll(/^\|\s*`(standards\/[^`]+\.md)`\s*\|/gm)].map((match) => match[1]),
   )
   const rows = contractRows(readme)
 
-  for (const step of STEPS) {
-    const row = rows.get(step)
+  // When
+  const declarations = STEPS.map((step) => [step, rows.get(step)])
+
+  // Then
+  for (const [step, row] of declarations) {
     assert.ok(row, `l'index porte la ligne de l'étape ${step}`)
     for (const project of PROJECTS) {
       const declared = row.map((file) => file.replace('<projet>', project))
@@ -77,11 +85,15 @@ test('l’index et le prompt de chaque étape nomment les mêmes fichiers', asyn
 })
 
 test('les 13 interdits ont chacun une décision écrite dans la reprise', async () => {
+  // Given
   const readme = await readFile(join(ROOT, STANDARDS_DIR, 'README.md'), 'utf8')
+
+  // When
   const rows = readme
     .split('\n')
     .filter((line) => /^\|\s*(?:[1-9]|1[0-3])\s*\|/.test(line))
 
+  // Then
   assert.equal(rows.length, 13)
   for (const row of rows) {
     assert.match(row, /\|\s*(?:conservé|adapté|retiré)\s*\|/, row)
@@ -89,6 +101,7 @@ test('les 13 interdits ont chacun une décision écrite dans la reprise', async 
 })
 
 test('aucun fichier de règle ne renvoie à l’ancien système', async () => {
+  // Given
   const repoSheets = (await readdir(join(ROOT, STANDARDS_DIR, 'repos')))
     .filter((name) => name.endsWith('.md'))
     .map((name) => join(ROOT, STANDARDS_DIR, 'repos', name))
@@ -100,23 +113,30 @@ test('aucun fichier de règle ne renvoie à l’ancien système', async () => {
   ]
   const forbidden = /~\/projects\/konoha|orchestrator|branch_name/
 
-  for (const file of files) {
-    const text = await readFile(file, 'utf8')
+  // When
+  const texts = await Promise.all(files.map(async (file) => [file, await readFile(file, 'utf8')]))
+
+  // Then
+  for (const [file, text] of texts) {
     assert.doesNotMatch(text, forbidden, file)
   }
 })
 
 test('un fichier indexé absent fait échouer le contrôle en le nommant', async (t) => {
+  // Given
   const root = await fixture(t)
   await rm(join(root, STANDARDS_DIR, 'code.md'))
 
+  // When
   const result = await runChecker(root)
 
+  // Then
   assert.notEqual(result.code, 0)
   assert.match(result.stderr, /standards\/code\.md/)
 })
 
 test('un fichier du dossier absent de l’index fait échouer le contrôle en le nommant', async (t) => {
+  // Given
   const root = await fixture(t)
   await writeFile(
     join(root, STANDARDS_DIR, 'repos', 'sans-projet.md'),
@@ -124,23 +144,29 @@ test('un fichier du dossier absent de l’index fait échouer le contrôle en le
     'utf8',
   )
 
+  // When
   const result = await runChecker(root)
 
+  // Then
   assert.notEqual(result.code, 0)
   assert.match(result.stderr, /standards\/repos\/sans-projet\.md/)
 })
 
 test('un projet déclaré sans fiche fait échouer le contrôle en la nommant', async (t) => {
+  // Given
   const root = await fixture(t)
   await rm(join(root, STANDARDS_DIR, 'repos', 'manager.md'))
 
+  // When
   const result = await runChecker(root)
 
+  // Then
   assert.notEqual(result.code, 0)
   assert.match(result.stderr, /standards\/repos\/manager\.md/)
 })
 
 test('un contrat de lecture divergent fait échouer le contrôle', async (t) => {
+  // Given
   const root = await fixture(t)
   const path = join(root, STANDARDS_DIR, 'README.md')
   const readme = await readFile(path, 'utf8')
@@ -149,21 +175,29 @@ test('un contrat de lecture divergent fait échouer le contrôle', async (t) => 
     '| revue | `standards/revue.md`, `standards/interdits.md`, `standards/repos/<projet>.md` |',
   )
   assert.notEqual(modifie, readme)
-  await writeFile(path, modifie, 'utf8')
 
+  // When
+  await writeFile(path, modifie, 'utf8')
   const result = await runChecker(root)
 
+  // Then
   assert.notEqual(result.code, 0)
   assert.match(result.stderr, /étape revue/)
 })
 
 test('sans projet, le prompt efface la fiche du dépôt et nomme le reste', async () => {
+  // Given
   const readme = await readFile(join(ROOT, STANDARDS_DIR, 'README.md'), 'utf8')
   const rows = contractRows(readme)
 
-  for (const step of STEPS) {
-    const expected = standardsFiles(step, null)
-    const declared = rows.get(step).filter((file) => !file.includes('<projet>'))
-    assert.deepEqual(declared, expected, step)
+  // When
+  const declarations = STEPS.map((step) => [
+    step,
+    rows.get(step).filter((file) => !file.includes('<projet>')),
+  ])
+
+  // Then
+  for (const [step, declared] of declarations) {
+    assert.deepEqual(declared, standardsFiles(step, null), step)
   }
 })
