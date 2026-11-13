@@ -79,6 +79,22 @@ playbook et nulle part ailleurs.
    l'index, un contrat qui diverge du prompt, une section manquante ou une fiche
    incomplète échouent.
 
+## Éditer depuis le panneau
+
+Settings → **Playbook** liste les cinq pages dans l'ordre du parcours, puis le
+workspace. L'éditeur ouvre la page retenue par la session
+(`missions.playbook-page`), montre son chemin et son compte de lignes, et garde
+le soin de l'index : une page neuve s'ajoute à la main, jamais depuis le
+panneau.
+
+Enregistrer envoie le texte et la version lue à `POST
+missions/api/playbooks/page`. Le serveur ne fait confiance à rien : il revalide
+les règles de `tools/check-playbook.mjs` (sections, contrat, fiche du dépôt,
+interdits) avant d'écrire, refuse une page que l'index ne porte pas, n'écrit
+jamais un index ni ne crée de page. L'écriture est atomique, et la version lue
+sert de garde : si le fichier a changé sous l'éditeur, la réponse est
+`page changed` et rien n'est écrit.
+
 ## La reprise de l'ancien système (retiré)
 
 Les règles venaient de l'ancien système konoha, où elles étaient maintenues pour
