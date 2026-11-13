@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { join, relative } from 'node:path'
 
 import { loadProjects } from '../lib/projects.js'
-import { MODEL_DIR, WORKFLOWS, loadWorkflows } from '../lib/workflows.js'
+import { LOCAL_MODEL_DIR, MODEL_DIR, WORKFLOWS, loadWorkflows } from '../lib/workflows.js'
 
 /**
  * Check every workflow model against its document and the workspace
@@ -26,12 +26,16 @@ try {
   process.exit(1)
 }
 
+// The versioned directory is the method: its four steps and `statuts` are
+// required. The local directory is whatever the workstation keeps out of git;
+// an absent one is a fresh clone, not a failure.
 const { workflows } = await loadWorkflows(join(root, MODEL_DIR), { states })
+const { workflows: local } = await loadWorkflows(join(root, LOCAL_MODEL_DIR), { states })
 let failures = 0
 
-console.log(`workflows · ${workflows.length} modèles · vocabulaire ${states.join(', ')}`)
+console.log(`workflows · ${workflows.length} modèles versionnés · ${local.length} locaux · vocabulaire ${states.join(', ')}`)
 
-for (const entry of workflows) {
+for (const entry of [...workflows, ...local]) {
   const broken = entry.errors.length > 0
   if (broken) failures += 1
   const exit = entry.exit.length ? entry.exit.join(', ') : '(aucune sortie)'

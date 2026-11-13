@@ -88,7 +88,9 @@ périmètre retourne en cadrage — mais jamais sauter une étape.
 ## Le modèle éditable
 
 Chaque étape a son modèle dans `workflows/model/<étape>.yml` : les gestes de ses
-sections, les arcs qui les enchaînent, l'état d'entrée et les états de sortie. Le
+sections, les arcs qui les enchaînent, l'état d'entrée et les états de sortie.
+Les workflows gardés hors du dépôt vivent dans `workflows/local/model/`, que git
+ignore ; le format et les règles de rangement sont les mêmes. Le
 parcours des statuts a le sien, `workflows/model/statuts.yml` : les six états
 canoniques et les huit événements qui les relient, avec leur libellé, leur
 description et leur projection de tracker. Le panneau liste tous les modèles du
