@@ -95,6 +95,17 @@ sur l'onglet le retrouve et que fermer la fenêtre l'oublie. Une racine qui ne
 porte que des worktrees le dit, au lieu de paraître vide ; activé sans worktree,
 l'interrupteur le dit aussi et reste à portée pour rendre les clones.
 
+Entre l'en-tête et la liste, quand le genre affiché a des lignes, la barre de
+**Repositories** cherche dans le nom, la branche affichée et le sujet du dernier
+commit — jamais dans le chemin — et son filtre **State** garde les lignes qui
+répondent à l'un des quatre états : **Clean**, **Dirty**, **Detached**,
+**Unreadable**. Les états se recouvrent (un dépôt détaché et sale répond aux
+deux), la recherche et les états se combinent, et le tout s'applique au genre
+que le switch montre : l'en-tête et les pastilles, eux, restent les comptes du
+scan. Quand aucune ligne ne répond, la liste le dit et un bouton efface la
+barre. Le choix ne vit que la session — `missions.repositories.filters` dans
+`sessionStorage` — et une barre vide n'y laisse aucune clé.
+
 **Settings** range les deux vues qui ne lisent ni le tracker ni la liste des
 missions ouvertes : **Usage** puis **Workflows**, dans une navigation verticale
 à gauche. La section ouverte est la seule montée ; Usage est le défaut. Aucune
