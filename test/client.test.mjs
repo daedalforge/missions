@@ -5868,7 +5868,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(47\)/)
+  assert.match(texte, /Never used \(48\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -5884,7 +5884,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(50\)/)
+  assert.match(textOf(zero.inner), /Never used \(51\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -7171,6 +7171,373 @@ test('changer de thème écrit missions.theme et compte le geste', () => {
     spy.restore()
   }
 })
+
+/*
+ * L'archivage en lot : la liste Done archive exactement les lignes affichées,
+ * en deux clics, et le refus d'une ligne ne défait pas les autres. Le harnais
+ * monte le panneau sur l'onglet Done ; le bouton et sa note vivent dans
+ * `MissionsView`, qui les tient d'un composant sans état propre au-dessus du
+ * panneau.
+ */
+const BATCH_DONE = [
+  { key: 'MIS-1', title: 'alpha one', state: 'done', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
+  { key: 'MIS-2', title: 'alpha two', state: 'done', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T11:00:00Z' },
+  { key: 'MIS-3', title: 'beta three', state: 'done', type: 'story', priority: 'low', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T10:00:00Z' },
+]
+
+/** Le panneau sur Done : la liste, le compte du badge et la sélection du volet. */
+function monterDoneBatch(missions, { count = missions.length, selected = null, query = '' } = {}) {
+  const view = { loading: false, missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const doneView = { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w', count }
+  const panneau = [
+    EMPTY_BAR, view, 'done', '', EMPTY_BAR.filters, null, selected, 'default', null,
+    EMPTY_BAR, doneView, '', { ...EMPTY_BAR.filters, state: ['done'] }, null,
+  ]
+  const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, [...panneau])
+  api.apply(ctx)
+  const rendu = ({ query: nextQuery = query, missions: nextMissions = missions } = {}) => {
+    resetHooks()
+    queue.length = 0
+    queue.push(...panneau)
+    // Done reads its own query and filters: index 11 is `doneQuery`, not the
+    // open list's query at index 3. A silent refresh only replaces the read.
+    queue[10] = { ...doneView, missions: nextMissions }
+    queue[11] = nextQuery
+    return findAll(registered.main({}), 'MissionsView')[0]
+  }
+  const arbre = (options) => renderTree(rendu(options))
+  return { setters, arbre, rendu }
+}
+
+/** Le bouton du lot, quel que soit son état, dans la barre de la liste. */
+function boutonLot(tree) {
+  return findAll(tree, 'button').find((node) => /missions-batch-btn/.test(node.props.className ?? '')) ?? null
+}
+
+/** La dernière note posée par le geste de lot : elle voyage dans l'état du composant. */
+function noteLot(setters) {
+  return setters
+    .filter((value) => value && typeof value === 'object' && 'note' in value)
+    .at(-1)?.note ?? null
+}
+
+/** Un faux `fetch` qui répond à la route de lot et note chaque requête. */
+function fauxFetchLot(reponse) {
+  const appels = []
+  const vrai = globalThis.fetch
+  globalThis.fetch = async (url, options = {}) => {
+    appels.push({ url: String(url), body: options.body ? JSON.parse(options.body) : null })
+    const donnee = typeof reponse === 'function' ? reponse(String(url), options) : reponse
+    if (donnee && donnee.reponse) {
+      return donnee.reponse
+    }
+    return { ok: true, status: 200, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  return { appels, rendre: () => { globalThis.fetch = vrai } }
+}
+
+test('le bouton de lot n’existe qu’en Done et compte les lignes affichées', () => {
+  // La liste ouverte ne reçoit pas la prop : aucun bouton de lot.
+  const ouvert = renderTree(monter([EMPTY_BAR, dashboardView(DASH_MISSIONS.filter((mission) => mission.state !== 'done')), 'missions']))
+  assert.equal(boutonLot(ouvert), null, 'la liste ouverte ne porte pas le geste de lot')
+
+  // Done le porte, compté sur `filtered` : trois done, la recherche en garde deux.
+  const { arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+  const bouton = boutonLot(arbre())
+  assert.ok(bouton, 'Done porte le bouton de lot')
+  assert.equal(bouton.props['aria-label'], 'Archive 2 missions')
+  assert.equal(bouton.props.title, 'Archive 2 missions')
+  assert.equal(bouton.props.disabled, false)
+
+  // Zéro ligne affichée : le bouton reste, désactivé, et ne nomme aucune ligne.
+  const vide = boutonLot(arbre({ query: 'zzz' }))
+  assert.ok(vide, 'le bouton reste dans la barre')
+  assert.equal(vide.props.disabled, true)
+  assert.equal(vide.props['aria-label'], 'Archive 0 missions')
+  assert.match(textOf(renderTree({ ...arbre({ query: 'zzz' }) })), /No mission matches these filters\./)
+})
+
+test('le lot confirmé n’envoie que les clés affichées', async () => {
+  const fetchLot = fauxFetchLot(null)
+  try {
+    const { arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    const envois = fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch')
+    assert.equal(envois.length, 1, 'un seul envoi pour le lot')
+    assert.deepEqual(envois[0].body, { keys: ['MIS-1', 'MIS-2'] }, 'les clés envoyées sont exactement les lignes visibles')
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('deux clics : le premier arme sans requête, le second envoie une fois', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [
+          { key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' },
+          { key: 'MIS-2', folder: 'MIS-2', archived: 'missions/archives/MIS-2' },
+        ],
+        refused: [],
+      }),
+    },
+  })
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    const bouton = boutonLot(arbre())
+
+    await bouton.props.onClick()
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 0, 'le premier clic n’envoie rien')
+    const arme = noteLot(setters)
+    assert.match(arme.text, /missions\/archives\//, 'la note dit où vont les dossiers')
+    assert.match(arme.text, /Click again to confirm/)
+
+    // Le rendu suivant porte l'état armé : le libellé et l'infobulle nomment la
+    // confirmation, et le bouton garde les deux clés.
+    const confirme = boutonLot(arbre())
+    assert.equal(confirme.props['aria-label'], 'Confirm — archive 2 missions')
+    assert.match(confirme.props.className, /missions-batch-btn--armed/)
+
+    // Le même nœud, pas un rendu neuf : un composant remonté repart d'un garde
+    // vierge, comme le fait un remontage React — c'est le même geste qui doit
+    // se souvenir du premier clic.
+    await bouton.props.onClick()
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 1, 'le second clic envoie une fois')
+    assert.match(noteLot(setters).text, /Archived 2 mission folders to missions\/archives\/\./)
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('un changement de liste entre les deux clics réarme au lieu d’envoyer', async () => {
+  const fetchLot = fauxFetchLot(null)
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    await boutonLot(arbre()).props.onClick()
+    assert.match(noteLot(setters).text, /This moves 2 mission folders/)
+
+    // La recherche est vidée : la liste affichée passe de deux à trois lignes.
+    const suivant = boutonLot(arbre({ query: '' }))
+    assert.doesNotMatch(suivant.props.className, /missions-batch-btn--armed/, 'le bouton n’est plus en état de confirmation')
+    await suivant.props.onClick()
+
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 0, 'aucune clé de l’ancienne liste n’est envoyée')
+    assert.match(noteLot(setters).text, /This moves 3 mission folders/, 'le clic a armé la nouvelle liste')
+
+    const arme = boutonLot(arbre({ query: '' }))
+    assert.match(arme.props.className, /missions-batch-btn--armed/)
+    assert.equal(arme.props['aria-label'], 'Confirm — archive 3 missions')
+
+    // La même garde vaut pour une relecture silencieuse : une ligne close de
+    // plus dans la lecture Done change la liste affichée sans toucher aux
+    // filtres, et le clic suivant arme la nouvelle liste.
+    const ferme = { ...BATCH_DONE[2], key: 'MIS-4', title: 'delta four' }
+    const rafraichi = boutonLot(arbre({ query: '', missions: [...BATCH_DONE, ferme] }))
+    assert.doesNotMatch(rafraichi.props.className, /missions-batch-btn--armed/)
+    await rafraichi.props.onClick()
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 0, 'un rafraîchissement silencieux n’est jamais confirmé à l’aveugle')
+    assert.match(noteLot(setters).text, /This moves 4 mission folders/)
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('le refus partiel se dit et laisse les refusées dans la liste', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [{ key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' }],
+        refused: [{ key: 'MIS-2', error: 'MIS-2 is not done' }],
+      }),
+    },
+  })
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE)
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    const note = noteLot(setters)
+    assert.equal(note.error, true)
+    assert.match(note.text, /Archived 1 of 2; 1 refused: MIS-2 \(MIS-2 is not done\)/)
+
+    // Seule la ligne archived quitte la liste : celle qui a refusé reste.
+    const restants = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [{ key: 'MIS-1' }, { key: 'MIS-2' }, { key: 'MIS-3' }], count: 3 }))
+      .filter((next) => next && Array.isArray(next.missions) && next.missions.length === 2)
+    assert.ok(restants.length >= 1, 'le retrait suit les seules archivées')
+    for (const restant of restants) {
+      assert.deepEqual(restant.missions.map((mission) => mission.key), ['MIS-2', 'MIS-3'])
+    }
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('un échec de la route ne retire aucune ligne et laisse le bouton réarmable', async () => {
+  const fetchLot = fauxFetchLot({ reponse: { ok: false, status: 502, json: async () => ({ error: 'done missions: token missing' }) } })
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE)
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    const note = noteLot(setters)
+    assert.equal(note.error, true)
+    assert.match(note.text, /Archive failed: done missions: token missing/)
+    const retire = setters.filter((value) => typeof value === 'function' && value({ missions: [{ key: 'MIS-1' }] }).missions.length === 0)
+    assert.equal(retire.length, 0, 'aucune ligne n’est retirée')
+
+    // Un échec réarme : le clic suivant redemande confirmation sans envoyer.
+    await boutonLot(arbre()).props.onClick()
+    assert.equal(fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch').length, 1)
+    assert.match(noteLot(setters).text, /Click again to confirm/)
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('le lot retire les lignes, décrémente le compte et referme le volet', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [
+          { key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' },
+          { key: 'MIS-2', folder: 'MIS-2', archived: 'missions/archives/MIS-2' },
+        ],
+        refused: [],
+      }),
+    },
+  })
+  try {
+    // Le volet montre une mission du lot : il doit se refermer avec elle.
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { count: 4, selected: BATCH_DONE[0] })
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    const reduits = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: BATCH_DONE.map((mission) => ({ key: mission.key })), count: 4 }))
+    // Chaque reducer du retrait rend la même liste amputée : la vue et le volet
+    // lisent les mêmes clés archivées.
+    const retraits = reduits.filter((next) => next && Array.isArray(next.missions) && next.missions.length === 1)
+    assert.ok(retraits.length >= 2, 'la vue et le compte suivent les deux archivées')
+    for (const retrait of retraits) {
+      assert.deepEqual(retrait.missions.map((mission) => mission.key), ['MIS-3'], 'les lignes archivées quittent les deux copies')
+    }
+    assert.ok(reduits.some((next) => next.count === 2), 'le compte Done décroît du nombre archivé')
+
+    // Le volet ouvert sur une mission archivée est refermé ; un updater rend null.
+    const fermeture = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [], count: 4, key: 'MIS-1' }))
+      .some((next) => next === null)
+    assert.equal(fermeture, true, 'le volet se referme sur la mission archivée')
+
+    // Une seule relecture silencieuse de Done, sans attendre.
+    const relues = fetchLot.appels.filter((appel) => appel.url === 'missions/api/list?done=1&refresh=1')
+    assert.equal(relues.length, 1)
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('le lot se compte au clic confirmé seulement, avec son nombre de clés', async () => {
+  const fetchLot = fauxFetchLot(null)
+  try {
+    const { arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    const usageArme = fetchLot.appels.filter((appel) => appel.url === 'missions/api/usage')
+    assert.equal(usageArme.length, 0, 'l’armement ne compte rien')
+
+    await bouton.props.onClick()
+    const usage = fetchLot.appels.filter((appel) => appel.url === 'missions/api/usage')
+    assert.equal(usage.length, 1, 'un seul POST d’usage')
+    assert.deepEqual(usage[0].body, { element: 'mission.archive.batch', detail: '2' })
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
+test('le bouton dit son état, sa note est une région de statut, et l’envoi le désactive', async () => {
+  let resoudre
+  const reponseLot = new Promise((resolve) => { resoudre = resolve })
+  const vrai = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (String(url) === 'missions/api/archive-batch') {
+      return reponseLot.then(() => ({ ok: true, status: 200, json: async () => ({ archived: [], refused: [] }) }))
+    }
+    return { ok: true, status: 200, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  try {
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
+    const bouton = boutonLot(arbre())
+    await bouton.props.onClick()
+    const arme = boutonLot(arbre())
+    // La note est une région de statut, et le bouton armé reste actif.
+    const notes = findAll(arbre(), 'p').filter((node) => node.props.role === 'status')
+    assert.ok(notes.some((node) => /Click again to confirm/.test(textOf(node))))
+    assert.equal(arme.props.disabled, false)
+
+    // L'envoi en cours désactive le bouton et l'annonce.
+    const envoi = bouton.props.onClick()
+    const enCours = boutonLot(arbre())
+    assert.equal(enCours.props.disabled, true, 'le bouton est inactif pendant l’envoi')
+    assert.equal(enCours.props.title, 'Archiving…')
+    assert.equal(enCours.props['aria-label'], 'Archiving…')
+    assert.equal(enCours.props['aria-busy'], 'true')
+
+    resoudre()
+    await envoi
+    assert.match(noteLot(setters).text, /Archived 0 mission folders/)
+  } finally {
+    globalThis.fetch = vrai
+  }
+})
+
+test('un lot d’une seule archivée ne referme pas le volet d’une autre mission', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [{ key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' }],
+        refused: [],
+      }),
+    },
+  })
+  try {
+    // Given : le volet montre une mission que le lot n'archive pas.
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { count: 4, selected: BATCH_DONE[2] })
+    const bouton = boutonLot(arbre())
+
+    // When : les deux clics du lot archivent une seule ligne.
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    // Then : la sélection survit au geste de la liste.
+    const fermetures = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [], count: 4, key: 'MIS-3' }))
+      .filter((next) => next === null)
+    assert.equal(fermetures.length, 0, 'le volet garde une mission hors du lot')
+  } finally {
+    fetchLot.rendre()
+  }
+})
+
 
 test('la carte et la tête du détail portent la pastille Local, et seulement pour un local', () => {
   const local = montrerWorkflows([workflowEntry({ local: true })], { tab: 'infos' })
