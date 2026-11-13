@@ -3014,23 +3014,39 @@ test('le menu State compte les lignes de la liste affichée', () => {
   assert.deepEqual(comptes, { clean: '1', dirty: '2', detached: '1', unreadable: '1' })
 })
 
-test('une barre restaurée rouvre la recherche et les états, et le switch garde son genre', () => {
+test('une barre restaurée rouvre la recherche et l’état', () => {
   // Given la session qui a laissé une recherche et un état
   const session = memorySession({ 'missions.repositories.filters': '{"query":"116","state":["dirty"]}' })
   const { inner } = montrerRepositories(scanReady(REPO_SCAN), null, session)
+
+  // Then la barre retrouve sa recherche et son état, et la liste ses deux filtres
   const lignes = findAll(inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
   assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions'], 'la recherche et l’état se cumulent')
   assert.equal(findAll(inner, 'input').find((node) => node.props['aria-label'] === 'Filter repositories').props.value, '116')
   assert.ok(findAll(inner, 'button').some((button) => /^Filter by state \(Dirty\)$/.test(button.props['aria-label'])))
-  // L'en-tête des clones reste celui du scan entier, pas celui des lignes gardées
+  // L'en-tête reste celui du scan entier, pas celui des lignes gardées
   assert.match(textOf(inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
+})
 
-  // When le switch passe aux worktrees, le même état s'applique à leur liste
-  const ouverts = memorySession({ ...session.entries, 'missions.repositories.worktrees': '1' })
+test('le même état filtre les clones puis les worktrees, sans que l’en-tête bouge', () => {
+  // Given la session qui garde l'état Dirty, le switch fermé sur les clones
+  const session = memorySession({ 'missions.repositories.filters': '{"query":"","state":["dirty"]}' })
+  const clones = montrerRepositories(scanReady(REPO_SCAN), null, session)
+  const clone = findAll(clones.inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(clone.map((ligne) => ligne.props['data-repository']), ['missions'], 'l’état écarte le clone propre')
+  assert.match(textOf(clones.inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
+
+  // When le switch ouvre les worktrees, la même session porte le même état
+  const ouverts = memorySession({ ...Object.fromEntries(session.entries), 'missions.repositories.worktrees': '1' })
   const worktrees = montrerRepositories(scanReady(REPO_SCAN), null, ouverts)
   const worktree = findAll(worktrees.inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+
+  // Then l'état a suivi le switch, sa liste est filtrée, et l'en-tête reste celui du scan
+  assert.ok(
+    findAll(worktrees.inner, 'button').some((button) => /^Filter by state \(Dirty\)$/.test(button.props['aria-label'])),
+    'le même état est restauré sur les worktrees',
+  )
   assert.deepEqual(worktree.map((ligne) => ligne.props['data-repository']), ['missions-gh20'])
-  // L'en-tête reste celui du scan, pas celui des lignes gardées
   assert.match(textOf(worktrees.inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
 })
 
