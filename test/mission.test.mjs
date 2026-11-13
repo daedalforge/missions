@@ -114,6 +114,22 @@ test('a mission carries the project’s clone, or null when none is declared', (
   assert.equal(withoutRepo.repo, null)
 })
 
+test('le bloc translations du projet suit la mission, ou reste null', () => {
+  const inverse = invertMap(PROJECT.map)
+  const translations = { locales: ['fr', 'en'], languageFile: 'locales/{locale}.json', reference: 'fr' }
+  const declared = normalizeIssue({
+    project: { ...PROJECT, translations },
+    key: 'SO-1',
+    title: 'translated',
+    rawState: 'in-review',
+    inverse,
+  })
+  const plain = normalizeIssue({ project: PROJECT, key: 'MIS-8', title: 'not translated', inverse })
+
+  assert.deepEqual(declared.translations, translations)
+  assert.equal(plain.translations, null)
+})
+
 test('an unknown state stays null instead of being guessed', () => {
   const inverse = invertMap(PROJECT.map)
   const mission = normalizeIssue({

@@ -72,6 +72,47 @@ test('the workspace file declares its projects, complete', async () => {
   assert.deepEqual(connect.map.types.story, ['Story', 'Task'])
 })
 
+test('le bloc translations est rendu pour manager, absent ailleurs', async () => {
+  const { projects } = await loadProjects()
+  const [missions, manager, connect] = projects
+
+  assert.equal(missions.translations, null)
+  assert.equal(connect.translations, null)
+  assert.deepEqual(manager.translations, {
+    locales: ['ar', 'de', 'en', 'es', 'fil', 'fr', 'hi', 'pt', 'ru', 'zh'],
+    languageFile: 'src/locales/{locale}/translations.json',
+    reference: 'fr',
+  })
+})
+
+test('un bloc translations incomplet est refusé', async () => {
+  const project = (translations) => [
+    '  - id: so',
+    '    reference: SO',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    translations:',
+    ...(translations.length > 0 ? translations.map((line) => `      ${line}`) : ['      {}']),
+    '    map:',
+    '      states: { to-refine: to-refine }',
+    '      types: { bug: bug }',
+  ]
+
+  const cases = [
+    [[], /translations\.locales is missing/],
+    [['locales: [fr, fr]', 'languageFile: x/{locale}.json', 'reference: fr'], /translations\.locales is declared twice/],
+    [['locales: [fr]', 'reference: fr'], /translations\.languageFile is missing/],
+    [['locales: [fr]', 'languageFile: x/fr.json', 'reference: fr'], /needs a \{locale\} placeholder/],
+    [['locales: [fr]', 'languageFile: x/{locale}.json'], /translations\.reference is missing/],
+    [['locales: [fr]', 'languageFile: x/{locale}.json', 'reference: en'], /is not one of its locales/],
+  ]
+
+  for (const [lines, expected] of cases) {
+    const url = await writeProjects(project(lines))
+    await assert.rejects(() => loadProjects(url), expected)
+  }
+})
+
 test('the connect map covers the statuses of the SOC workflow', async () => {
   const { projects } = await loadProjects()
   const connect = projects.find((project) => project.id === 'connect')
