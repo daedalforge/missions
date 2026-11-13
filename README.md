@@ -56,7 +56,8 @@ même lue ; l'onglet affiche « No done mission declared on this machine. ».
 Sa **pastille** affiche le nombre de ces missions closes déclarées : ce compte
 se lit au montage, sur sa propre route, sans ouvrir l'onglet ni transporter les
 lignes — la lecture close qu'il paie est celle de Done, partagée quand l'onglet
-s'ouvre, et les lignes restent demandées à l'ouverture.
+s'ouvre, et les lignes restent demandées à l'ouverture. Avant cette première
+réponse, la pastille porte l'icône de refresh animée du thème, pas un zéro.
 
 Depuis cet onglet, une mission close peut être **archivée** : son dossier passe
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
@@ -79,7 +80,10 @@ La barre porte cinq onglets — **Dashboard**, **Missions**, **Done**,
 **Repositories**, **Settings** — chacun devant son icône : un trait géométrique
 dans le thème par défaut, un motif manga dans le thème manga. Le libellé reste
 le nom accessible ; l'icône n'est qu'un repère (16 px, `currentColor`). Les
-pastilles de compte restent sur Missions, Done et Repositories.
+pastilles de compte restent sur Missions, Done et Repositories. Tant qu'un
+compte n'est pas connu — celui de Done et celui de Repositories au montage — la
+pastille porte l'icône de refresh du thème, animée, à la place du nombre ; le
+chiffre la remplace à la première réponse, sans requête de plus.
 
 **Repositories** ne montre par défaut que les clones de la racine du workspace :
 un worktree est un second checkout d'un dépôt déjà listé, et l'en-tête continue

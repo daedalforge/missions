@@ -2248,9 +2248,16 @@ test('la barre porte cinq onglets, chacun devant son icône et son libellé', ()
     assert.ok(findAll(svg, 'path').length > 0, `dessin vide : ${label}`)
   }
 
-  // La pastille du compte reste sur Missions et Repositories.
-  const badges = findAll(bar, 'span').filter((node) => node.props.className === 'missions-tab-count')
-  assert.equal(badges.length >= 1, true, 'le compte des missions et des dépôts reste dans la barre')
+  // Trois comptes dans la barre : Missions le sien, Done et Repositories le leur
+  // en attente — la pastille existe déjà, elle porte le loader et aucun chiffre.
+  const badges = findAll(bar, 'span').filter((node) => String(node.props.className ?? '').split(' ').includes('missions-tab-count'))
+  assert.equal(badges.length, 3, 'chaque compte de la barre garde sa pastille')
+  const attendues = badges.filter((node) => node.props.className === 'missions-tab-count missions-tab-count-loader')
+  assert.equal(attendues.length, 2, 'Done et Repositories attendent leur compte')
+  for (const pill of attendues) {
+    assert.equal(pill.props.title, 'Loading…')
+    assert.equal(textOf(pill), '', 'une pastille en attente ne porte aucun chiffre')
+  }
 })
 
 test('l’icône d’un onglet se redessine quand le thème change', () => {
@@ -2265,10 +2272,15 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
     const bar = findAll(tree, 'div').find((node) => node.props.className === 'missions-tabs')
     const result = {}
     for (const button of findAll(bar, 'button').filter((node) => node.props.role === 'tab')) {
-      const svg = findAll(renderTree(button), 'svg')[0]
+      const icon = findAll(renderTree(button), 'svg')[0]
       result[button.props.id] = {
-        paths: findAll(svg, 'path').map((path) => path.props.d),
-        strokeWidth: svg.props.strokeWidth,
+        paths: findAll(icon, 'path').map((path) => path.props.d),
+        strokeWidth: icon.props.strokeWidth,
+        // La pastille en attente dessine le thème, elle aussi : un onglet sans
+        // compte prouvé en porte une.
+        badge: findAll(button, 'span')
+          .filter((span) => String(span.props.className ?? '').split(' ').includes('missions-tab-count-loader'))
+          .flatMap((span) => findAll(renderTree(span), 'svg').map((svg) => findAll(svg, 'path').map((path) => path.props.d))),
       }
     }
     return result
@@ -2281,6 +2293,13 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
     assert.notDeepEqual(manga[id].paths, defaults[id].paths, `dessin identique dans les deux thèmes : ${id}`)
     assert.ok(manga[id].paths.length > 0)
     assert.ok(defaults[id].paths.length > 0)
+  }
+  // La pastille en attente suit le même thème : la flèche du thème par défaut
+  // devient le shuriken en manga, sans remonter la barre.
+  for (const id of ['missions-tab-done', 'missions-tab-repositories']) {
+    assert.equal(defaults[id].badge.length, 1, `pastille en attente absente : ${id}`)
+    assert.equal(manga[id].badge.length, 1, `pastille en attente absente en manga : ${id}`)
+    assert.notDeepEqual(manga[id].badge, defaults[id].badge, `pastille identique dans les deux thèmes : ${id}`)
   }
   // L'encre manga est plus épaisse, comme le reste de la barre.
   assert.equal(defaults['missions-tab-dashboard'].strokeWidth, 1.3)
@@ -2461,31 +2480,58 @@ test('un clic sur l’onglet Repositories bascule le panneau et ferme le volet',
   }
 })
 
-test('l’onglet Repositories porte son compte, et pas de pastille avant de le connaître', () => {
+/** La pastille d'un onglet, quelle qu'en soit la forme : le chiffre ou le loader. */
+function pastilleDe(bouton) {
+  return findAll(bouton, 'span').find((span) => String(span.props.className ?? '').split(' ').includes('missions-tab-count'))
+}
+
+/** La pastille d'un onglet encore en attente de son compte. */
+function pastilleEnAttente(bouton) {
+  return findAll(bouton, 'span').find((span) => String(span.props.className ?? '').split(' ').includes('missions-tab-count-loader'))
+}
+
+test('l’onglet Repositories porte son compte, et une pastille en attente avant de le connaître', () => {
   const panneau = (states) => {
     const { api, ctx, registered } = charger(undefined, states, memorySession())
     api.apply(ctx)
     return registered.main({})
   }
   const onglet = (tree, id) => findAll(tree, 'button').find((button) => button.props.id === `missions-tab-${id}`)
-  const pastille = (button) => findAll(button, 'span').find((span) => span.props.className === 'missions-tab-count')
 
   // Compte lu : la pastille est celle de Missions — même classe, même style —
   // et elle porte les dépôts de la racine, pas le total du scan (30 clones,
   // 39 entrées sur ce poste).
   const avec = panneau(repositoriesStates(scanReady(REPO_SCAN), null, 30))
-  assert.equal(textOf(pastille(onglet(avec, 'repositories'))), '30')
+  assert.equal(textOf(pastilleDe(onglet(avec, 'repositories'))), '30')
   assert.equal(SOURCE.includes("const REPOSITORIES_COUNT_URL = 'missions/api/repositories/count'"), true)
   // Missions garde la sienne, sur la liste ouverte : deux comptes, deux sources.
   const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
-  assert.equal(textOf(pastille(onglet(avec, 'missions'))), String(ouvertes))
+  assert.equal(textOf(pastilleDe(onglet(avec, 'missions'))), String(ouvertes))
+  // Un compte prouvé ne porte pas de loader.
+  assert.equal(pastilleEnAttente(onglet(avec, 'repositories')), undefined)
 
-  // Aucune réponse encore : l'onglet ne montre rien plutôt qu'un 0 non prouvé.
+  // Aucune réponse encore : la pastille est là, à sa place dans le gabarit du
+  // chiffre, et porte le dessin de rafraîchissement du thème au lieu d'un 0 que
+  // rien ne prouve.
   const avant = panneau([EMPTY_BAR, dashboardView(DASH_MISSIONS)])
-  assert.equal(pastille(onglet(avant, 'repositories')), undefined)
-  assert.match(textOf(onglet(avant, 'repositories')), /Repositories/)
+  const attente = pastilleDe(onglet(avant, 'repositories'))
+  assert.equal(attente.props.className, 'missions-tab-count missions-tab-count-loader')
+  assert.equal(attente.props.title, 'Loading…', 'la pastille en attente se nomme')
+  assert.equal(textOf(attente), '', 'aucun chiffre avant la première réponse')
+
+  // Le dessin est décoratif : le loader ne change ni le nom de l'onglet ni son
+  // rôle de tabulation.
+  const rendu = renderTree(onglet(avant, 'repositories'))
+  const dessin = findAll(pastilleEnAttente(rendu), 'svg')
+  assert.equal(dessin.length, 1, 'la pastille en attente porte le dessin du thème')
+  assert.equal(dessin[0].props['aria-hidden'], 'true', 'le dessin ne double pas le nom')
+  assert.equal(textOf(rendu), 'Repositories', 'le loader n’ajoute aucun mot au nom')
+  assert.equal(onglet(avant, 'repositories').props.role, 'tab')
+  assert.equal(onglet(avant, 'repositories').props['aria-selected'], 'false')
+
   // Le compte des missions, lui, est connu dès la liste : sa pastille reste.
-  assert.equal(textOf(pastille(onglet(avant, 'missions'))), String(ouvertes))
+  assert.equal(textOf(pastilleDe(onglet(avant, 'missions'))), String(ouvertes))
+  assert.equal(pastilleEnAttente(onglet(avant, 'missions')), undefined)
 })
 
 /**
@@ -2516,7 +2562,7 @@ function doneCountStates(count, { tab = 'dashboard', missions = [], errors = [] 
 /** La pastille de l'onglet Done, telle que la barre la rend. */
 function pastilleDone(tree) {
   const bouton = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-done')
-  const span = findAll(bouton, 'span').find((node) => node.props.className === 'missions-tab-count')
+  const span = pastilleDe(bouton)
   return span === undefined ? undefined : textOf(span)
 }
 
@@ -2538,11 +2584,19 @@ test('l’onglet Done porte le compte lu au montage, sans ouvrir ses lignes', ()
   // Zéro est un compte prouvé : il s'affiche, il ne s'efface pas.
   assert.equal(pastilleDone(monter(doneCountStates(0), memorySession())), '0')
 
-  // Aucun nombre encore : aucune pastille, plutôt qu'un 0 que rien ne prouve.
-  assert.equal(pastilleDone(monter(doneCountStates(null), memorySession())), undefined)
+  // Aucun nombre encore : la pastille en attente porte le loader du thème,
+  // jamais un 0 que rien ne prouve.
+  const attente = monter(doneCountStates(null), memorySession())
+  assert.equal(pastilleDone(attente), '', 'aucun chiffre avant la première réponse')
+  const bouton = findAll(attente, 'button').find((node) => node.props.id === 'missions-tab-done')
+  const loader = pastilleEnAttente(bouton)
+  assert.equal(loader.props.className, 'missions-tab-count missions-tab-count-loader')
+  assert.equal(loader.props.title, 'Loading…')
+  assert.equal(findAll(pastilleEnAttente(renderTree(bouton)), 'svg').length, 1, 'la pastille en attente porte le dessin du thème')
 
-  // La pastille ne s'invente pas un compte : la vue close seule le porte.
-  assert.match(SOURCE, /if \(entry\.badge === 'done'\) return typeof doneView\.count === 'number' \? doneView\.count : null/)
+  // La pastille ne s'invente pas un compte : la vue close seule le porte, et le
+  // loader ne se dessine que tant que ce compte vaut `null`.
+  assert.match(SOURCE, /if \(entry\.badge === 'done'\) return typeof doneView\.count === 'number' \? \{ count: doneView\.count \} : \{ loading: true \}/)
 })
 
 test('le compte de Done est lu au montage, sur sa route, sans payer les lignes closes', async () => {
@@ -2770,6 +2824,64 @@ test('un échec du compte garde la pastille, sans bandeau, et le tick retente', 
   apres.api.apply(apres.ctx)
   const arbre = apres.registered.main({})
   assert.equal(pastille(arbre), '31')
+})
+
+test('un premier échec du compte laisse la pastille en attente, sans zéro ni bandeau', async () => {
+  const vraiFetch = globalThis.fetch
+  const ongletRepositories = (tree) => findAll(tree, 'button').find((button) => button.props.id === 'missions-tab-repositories')
+  const bandeaux = (tree) => findAll(tree, 'div').filter((node) => node.props.className === 'missions-errors')
+
+  // Aucun compte prouvé : la pastille porte le loader dès le montage.
+  const { api, ctx, registered, effects, setters } = charger(undefined, repositoriesStates(scanReady(REPO_SCAN), null, null), memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+  assert.equal(pastilleEnAttente(ongletRepositories(tree)).props.className, 'missions-tab-count missions-tab-count-loader')
+  const lecture = lecteurDeCompte(effects)
+  assert.ok(lecture, 'le compte est une dépendance de l’effet de montage')
+
+  try {
+    // Le premier échec ne pousse aucun nombre : la pastille reste en attente,
+    // sans 0 et sans bandeau, jusqu'au tick suivant.
+    globalThis.fetch = async () => { throw new Error('offline') }
+    const avant = setters.length
+    await lecture()
+    assert.equal(setters.length, avant, 'un premier échec ne pousse aucun compte')
+    const attente = pastilleEnAttente(ongletRepositories(tree))
+    assert.equal(attente.props.className, 'missions-tab-count missions-tab-count-loader', 'le loader reste jusqu’au tick')
+    assert.equal(textOf(attente), '', 'aucun zéro n’est affiché')
+    assert.equal(textOf(ongletRepositories(tree)).includes('0'), false, 'aucun 0 ne prend la place du loader')
+    assert.equal(bandeaux(tree).length, 0, 'une pastille n’allume pas de bandeau')
+
+    // Le zéro prouvé, lui, se publie : la barre le rend en chiffre et le loader
+    // quitte la pastille.
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ count: 0 }) })
+    await lecture()
+    assert.ok(setters.includes(0), 'un zéro prouvé se publie')
+    const rendu = charger(undefined, repositoriesStates(scanReady(REPO_SCAN), null, 0), memorySession())
+    rendu.api.apply(rendu.ctx)
+    const arbre = rendu.registered.main({})
+    assert.equal(textOf(pastilleDe(ongletRepositories(arbre))), '0', 'le chiffre remplace le loader')
+    assert.equal(pastilleEnAttente(ongletRepositories(arbre)), undefined)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('la pastille en attente prend le gabarit du chiffre et tourne', () => {
+  // Même pastille que le chiffre — la classe du compte — et la hauteur de son
+  // interligne : la barre ne saute pas quand le nombre arrive.
+  assert.match(regle('.missions-tab-count'), /min-width: 18px/)
+  const attente = regle('.missions-tab-count-loader')
+  assert.match(attente, /display: inline-flex/)
+  assert.match(attente, /height: 1lh/)
+  // Elle tourne, et le dessin reste visible quand on demande moins de mouvement.
+  assert.match(regle('.missions-tab-count-loader svg'), /animation: missions-tab-count-spin 1\.1s linear infinite/)
+  assert.match(SOURCE, /@keyframes missions-tab-count-spin \{ to \{ transform: rotate\(360deg\); \} \}/)
+  assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{ \.missions-tab-count-loader svg \{ animation: none; \} \}/)
+  // L'anneau manga garde ses 24 px : la pastille en attente est la même pastille.
+  const ring = regle('.missions-panel[data-theme="manga"] .missions-tab-count')
+  assert.match(ring, /width: 24px/)
+  assert.match(ring, /height: 24px/)
 })
 
 test('la rangée d’onglets défile plutôt que de couper un libellé', () => {
