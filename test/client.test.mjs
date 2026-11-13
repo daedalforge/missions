@@ -2397,6 +2397,9 @@ test('les onglets Informations et Graphe ont leurs règles', () => {
   assert.match(regle('.wf-tab--active'), /font-weight: 600/)
   assert.match(regle('.wf-panel'), /border-radius: 12px/)
   assert.match(regle('.wf-panel-head'), /justify-content: space-between/)
+  // La règle doit commencer une ligne : un préfixe de concaténation la rendait
+  // invalide pour le navigateur, qui la jetait silencieusement.
+  assert.match(SOURCE, /\n\.wf-detail-head \{ display: flex/, 'la règle de la tête de détail est intacte')
 })
 
 test('les deux onglets se lisent et se choisissent', () => {

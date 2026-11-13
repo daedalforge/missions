@@ -757,7 +757,7 @@ test('POST /workflows ne reçoit que le titre, la description et le type', async
   assert.equal(created.body.entry.kind, 'etape')
   assert.equal(created.body.entry.description, 'Les incidents du workspace.')
   assert.deepEqual(created.body.entry.nodes, [])
-  assert.equal(await readFile(join(dir, 'workflows', 'incidents.md'), 'utf8'), '# Incidents\n\n## Ce qu’on fait\n')
+  assert.equal(await readFile(join(dir, 'workflows', 'incidents.md'), 'utf8'), '# Incidents\n\n## Ce qu\'on fait\n')
   const modele = await readFile(join(dir, 'workflows', 'model', 'incidents.yml'), 'utf8')
   assert.match(modele, /document: workflows\/incidents\.md/)
   assert.match(modele, /description: Les incidents du workspace\./)

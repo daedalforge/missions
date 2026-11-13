@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -222,6 +222,63 @@ test('saveWorkflow écrit un YAML relisible et n’écrit rien quand le modèle 
   assert.equal(await readFile(file, 'utf8'), written, 'le fichier refusé reste intact')
 })
 
+test('saveWorkflow refuse chaque édition illisible, sans toucher au modèle ni au document', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-refus-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+  await mkdir(models, { recursive: true })
+  const document = join(dir, 'workflows', 'cadrage.md')
+  await writeFile(document, '# Cadrage\n\n## Ce qu\'on fait\n', 'utf8')
+
+  // Given : un modèle valide écrit une première fois, et son document en place.
+  assert.deepEqual((await saveWorkflow(models, 'cadrage', modele(), { states: STATES })).errors, [])
+  const fichier = join(models, 'cadrage.yml')
+  const yamlEcrit = await readFile(fichier, 'utf8')
+  const documentEcrit = await readFile(document, 'utf8')
+
+  // When : chaque édition illisible est enregistrée, une par une.
+  const refus = [
+    ['un titre vide', modele({ title: '   ' }), 'title', 'titre-manquant'],
+    ['une entrée inconnue', modele({ entry: 'shipped' }), 'entry', 'etat-inconnu'],
+    ['une sortie inconnue', modele({ exit: ['shipped'] }), 'exit', 'etat-inconnu'],
+    ['une sortie en double', modele({ exit: ['ready', 'ready'] }), 'exit', 'etat-double'],
+    ['une entrée aussi sortie', modele({ exit: ['to-refine'] }), 'exit', 'sortie-confondue'],
+    ['une description de 281 caractères', modele({ description: 'x'.repeat(281) }), 'description', 'description-invalide'],
+    ['une description sur deux lignes', modele({ description: 'deux\nlignes' }), 'description', 'description-invalide'],
+  ]
+
+  // Then : chaque refus nomme son champ et son motif, et rien n’a bougé sur disque.
+  for (const [cas, doc, field, code] of refus) {
+    const result = await saveWorkflow(models, 'cadrage', doc, { states: STATES })
+    assert.deepEqual(codes(result), [code], cas)
+    assert.equal(result.errors[0].field, field, cas)
+  }
+  assert.equal(await readFile(fichier, 'utf8'), yamlEcrit, 'le modèle refusé reste intact')
+  assert.equal(await readFile(document, 'utf8'), documentEcrit, 'le document refusé reste intact')
+})
+
+test('saveWorkflow ne réécrit pas le document quand le titre ne change pas', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-conserve-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+  await mkdir(models, { recursive: true })
+  const document = join(dir, 'workflows', 'cadrage.md')
+  await writeFile(document, '# Cadrage\n\n## Ce qu\'on fait\n', 'utf8')
+
+  // Given : un document daté d’hier, que seule une écriture ferait bouger.
+  const date = new Date('2026-11-12T08:00:00Z')
+  await utimes(document, date, date)
+  const avant = await stat(document)
+
+  // When : le modèle est enregistré sans changer de titre.
+  assert.deepEqual((await saveWorkflow(models, 'cadrage', modele(), { states: STATES })).errors, [])
+
+  // Then : le document garde son contenu et sa date de modification.
+  const apres = await stat(document)
+  assert.equal(await readFile(document, 'utf8'), '# Cadrage\n\n## Ce qu\'on fait\n')
+  assert.equal(apres.mtimeMs, avant.mtimeMs, 'le document n’est pas réécrit quand le titre ne change pas')
+})
+
 test('un fichier absent et un document absent sont signalés, sans lever', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'workflows-read-'))
   t.after(() => rm(dir, { recursive: true, force: true }))
@@ -375,7 +432,7 @@ test('la description tient sur une ligne, en 280 caractères', () => {
 })
 
 test('le squelette du document ouvre la section d’un parcours d’étapes', () => {
-  assert.equal(documentStub('Incidents', 'etape'), '# Incidents\n\n## Ce qu’on fait\n')
+  assert.equal(documentStub('Incidents', 'etape'), '# Incidents\n\n## Ce qu\'on fait\n')
   assert.equal(documentStub('Statuts', 'statuts'), '# Statuts\n', 'un vocabulaire de statuts ne cite aucune section')
   assert.equal(retitleDocument('# Ancien\n\n## Ce qu’on fait\n', 'Nouveau'), '# Nouveau\n\n## Ce qu’on fait\n')
   assert.equal(retitleDocument('## Sans titre\n', 'Nouveau'), '# Nouveau\n\n## Sans titre\n', 'le titre manquant s’ajoute, rien ne se perd')
@@ -433,7 +490,7 @@ test('createWorkflow ne prend que le titre, la description et le type', async (t
   assert.deepEqual(written.edges, [])
   assert.equal(
     await readFile(join(dir, 'workflows', 'incidents-ouverts.md'), 'utf8'),
-    '# Incidents ouverts\n\n## Ce qu’on fait\n',
+    '# Incidents ouverts\n\n## Ce qu\'on fait\n',
     'le squelette ouvre la section que le premier geste citera',
   )
 
@@ -525,15 +582,23 @@ test('une collision de clé ou de document refuse la création, sans rien écrir
   // Le modèle existe, le document non : le refus nomme la clé.
   await mkdir(models, { recursive: true })
   await writeFile(join(models, 'incidents.yml'), 'workflow: incidents\n', 'utf8')
+  // Une date figée : une écriture, même identique, la ferait bouger.
+  const date = new Date('2026-11-12T08:00:00Z')
+  await utimes(join(models, 'incidents.yml'), date, date)
+  const modeleAvant = await stat(join(models, 'incidents.yml'))
   const parModele = await createWorkflow(models, { title: 'Incidents', kind: 'etape' }, { states: STATES })
   assert.deepEqual(codes(parModele), ['cle-double'])
   assert.equal(await readFile(join(dir, 'workflows', 'incidents.md'), 'utf8').catch(() => null), null)
+  assert.equal((await stat(join(models, 'incidents.yml'))).mtimeMs, modeleAvant.mtimeMs, 'le modèle existant n’est pas réécrit')
 
   // Le document existe seul : le refus nomme le document, le modèle reste absent.
   await writeFile(join(dir, 'workflows', 'revues.md'), '# Revues\n', 'utf8')
+  await utimes(join(dir, 'workflows', 'revues.md'), date, date)
+  const documentAvant = await stat(join(dir, 'workflows', 'revues.md'))
   const parDocument = await createWorkflow(models, { title: 'Revues', kind: 'etape' }, { states: STATES })
   assert.deepEqual(codes(parDocument), ['document-double'])
   assert.equal(await readFile(join(dir, 'workflows', 'revues.md'), 'utf8'), '# Revues\n', 'le document existant reste intact')
+  assert.equal((await stat(join(dir, 'workflows', 'revues.md'))).mtimeMs, documentAvant.mtimeMs, 'le document existant n’est pas réécrit')
   assert.equal(await readFile(join(models, 'revues.yml'), 'utf8').catch(() => null), null, 'aucun modèle partiel')
 })
 test('un fichier ajouté au dossier apparaît dans la liste, même cassé', async (t) => {
