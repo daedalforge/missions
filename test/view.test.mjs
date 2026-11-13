@@ -1311,16 +1311,18 @@ test('une barre enregistrée ne revient qu’avec les états que le panneau prop
 })
 
 test('les quatre états comptent des lignes qui se recouvrent', () => {
-  // Given a displayed list of one row per state, one row in two states at once
+  // Given a displayed list of one row per state, one row in two states at once,
+  // and a detached row git then refused
   const rows = [
     { name: 'propre', dirty: 0 },
     { name: 'sale', dirty: 2 },
     { name: 'detache-et-sale', detached: true, dirty: 1 },
     { name: 'casse', error: 'not a git repository' },
+    { name: 'detache-casse', detached: true, head: 'abc1234', error: 'git log failed' },
   ]
 
-  // Then each count asks the row itself: Clean 1, Dirty 2, Detached 1, Unreadable 1
-  assert.deepEqual(repositoryFilterCounts(rows), { clean: 1, dirty: 2, detached: 1, unreadable: 1 })
+  // Then each count asks the row itself: Clean 1, Dirty 2, Detached 2, Unreadable 2
+  assert.deepEqual(repositoryFilterCounts(rows), { clean: 1, dirty: 2, detached: 2, unreadable: 2 })
   assert.deepEqual(repositoryFilterCounts([]), { clean: 0, dirty: 0, detached: 0, unreadable: 0 })
   assert.deepEqual(repositoryFilterCounts(undefined), { clean: 0, dirty: 0, detached: 0, unreadable: 0 })
 })
@@ -1333,6 +1335,7 @@ test('le filtre des dépôts cherche le nom, la branche affichée et le dernier 
     { name: 'missions-gh20', branch: 'gh-20-hover', dirty: 1, lastCommit: { subject: 'gh-20: le survol' } },
     { name: 'socle', detached: true, head: 'abc1234' },
     { name: 'casse', error: 'not a git repository' },
+    { name: 'detache-casse', detached: true, head: 'abc1234', error: 'git log failed' },
   ]
   const names = (list) => list.map((row) => row.name)
 
@@ -1349,9 +1352,11 @@ test('le filtre des dépôts cherche le nom, la branche affichée et le dernier 
   // Then a state keeps the rows that answer it, the same way the counts do
   assert.deepEqual(names(filterRepositories(rows, { state: ['dirty'] })), ['missions', 'missions-gh20'])
   assert.deepEqual(names(filterRepositories(rows, { state: ['clean'] })), ['zeta', 'socle'])
-  assert.deepEqual(names(filterRepositories(rows, { state: ['detached'] })), ['socle'])
-  assert.deepEqual(names(filterRepositories(rows, { state: ['unreadable'] })), ['casse'])
-  assert.deepEqual(names(filterRepositories(rows, { state: ['clean', 'unreadable'] })), ['zeta', 'socle', 'casse'])
+  // A detached row stays Detached even when git then refused to read it, and
+  // it answers Unreadable too: the two states are read one by one.
+  assert.deepEqual(names(filterRepositories(rows, { state: ['detached'] })), ['socle', 'detache-casse'])
+  assert.deepEqual(names(filterRepositories(rows, { state: ['unreadable'] })), ['casse', 'detache-casse'])
+  assert.deepEqual(names(filterRepositories(rows, { state: ['clean', 'unreadable'] })), ['zeta', 'socle', 'casse', 'detache-casse'])
 
   // Then the search and the states combine with AND, and the order survives
   assert.deepEqual(names(filterRepositories(rows, { query: 'missions', state: ['dirty'] })), ['missions', 'missions-gh20'])
