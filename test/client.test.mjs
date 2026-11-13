@@ -106,7 +106,8 @@ function charger(storage, initialStates = [], session = undefined) {
     throw new Error(`unexpected require: ${name}`)
   })
   const resetHooks = () => { hookIndex = 0 }
-  return { api, ctx, registered, id: captured.id, setters, effects, queue, resetHooks }
+  const reset = () => { hookIndex = 0; updates.clear() }
+  return { api, ctx, registered, id: captured.id, setters, effects, queue, resetHooks, reset }
 }
 
 /** Aplatit les listes d'enfants que `Array#map` imbrique. */
@@ -1259,6 +1260,28 @@ function workflowStates(draft, chosen = null) {
   ]
 }
 
+/** Les quatorze hooks du panneau, pour les tests qui rouvrent le dialogue. */
+function workflowPanelStates(draft, patch = {}) {
+  const values = [
+    { loading: false, error: null, workflows: [draft], writers: ['demandeur', 'session', 'outil'], states: ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'] },
+    draft.workflow,
+    draft,
+    null,
+    null,
+    false,
+    { from: '', to: '', when: '' },
+    0,
+    draft,
+    null,
+    false,
+    { key: '', title: '', kind: 'etape', document: '', entry: '', exit: '' },
+    {},
+    false,
+  ]
+  for (const [index, value] of Object.entries(patch)) values[Number(index)] = value
+  return values
+}
+
 test('sans onglet retenu, le panneau ouvre sur le dashboard', () => {
   const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
 
@@ -2134,6 +2157,188 @@ test('le losange du choix se dessine, montre les conditions entières et ouvre l
   assert.equal(textOf(titles[0]), 'Geste')
   const marked = findAll(chosen, 'polygon').filter((node) => /wf-node--decision/.test(node.props.className ?? '') && /wf-node--selected/.test(node.props.className ?? ''))
   assert.equal(marked.length, 1, 'le losange du geste choisi se marque')
+})
+
+test('Enregistrer envoie le modèle, et la réponse du serveur remplace le brouillon', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url, options })
+    return {
+      ok: true,
+      json: async () => ({ workflow: 'review', file: 'workflows/model/review.yml', entry: review, errors: [], orphanSections: [], headings: review.headings }),
+    }
+  }
+  try {
+    const session = memorySession({ 'missions.tab': 'workflows' })
+    const { api, ctx, registered, queue, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+    api.apply(ctx)
+    const tree = registered.main({})
+    queue.push(...workflowPanelStates(review))
+    const inner = renderTree(findAll(tree, 'WorkflowsView')[0])
+    appels.length = 0
+
+    const enregistrer = findAll(inner, 'button').find((node) => textOf(node) === 'Enregistrer')
+    enregistrer.props.onClick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    // Le fichier est écrit par la route d'hôte : le panneau envoie le modèle
+    // entier et ne juge rien lui-même.
+    const envoi = appels.find((appel) => appel.url === 'missions/api/workflows/model')
+    assert.equal(envoi?.options?.method, 'POST')
+    const corps = JSON.parse(envoi.options.body)
+    assert.equal(corps.workflow, 'review')
+    assert.equal(corps.model.nodes.length, review.nodes.length)
+    assert.equal(setters.some((value) => value?.kind === 'ok' && value.message === 'Enregistré — workflows/model/review.yml'), true)
+    assert.equal(setters.some((value) => value?.workflow === 'review' && value?.title === review.title), true, 'la réponse du serveur redevient la liste')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Annuler rend le brouillon au dernier état lu, sans rien envoyer', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  const vraiFetch = globalThis.fetch
+  const appels = []
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url, options })
+    return { ok: true, json: async () => ({ workflows: [review], writers: ['session'], states: [] }) }
+  }
+  try {
+    const session = memorySession({ 'missions.tab': 'workflows' })
+    const { api, ctx, registered, queue, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+    api.apply(ctx)
+    const tree = registered.main({})
+    queue.push(...workflowPanelStates(review))
+    const inner = renderTree(findAll(tree, 'WorkflowsView')[0])
+
+    const annuler = findAll(inner, 'button').find((node) => textOf(node) === 'Annuler')
+    annuler.props.onClick()
+
+    const rendu = setters.filter((value) => value && value.workflow === 'review').at(-1)
+    assert.equal(rendu?.nodes.length, review.nodes.length, 'le brouillon revient à la lecture du serveur')
+    assert.equal(setters.some((value) => value?.kind === 'ok' && value.message === 'Modifications annulées.'), true)
+    assert.equal(appels.length, 0, 'Annuler n’écrit rien')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Recharger redemande la liste au serveur', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  const vraiFetch = globalThis.fetch
+  const appels = []
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url, options })
+    return { ok: true, json: async () => ({ workflows: [review], writers: ['session'], states: [] }) }
+  }
+  try {
+    const session = memorySession({ 'missions.tab': 'workflows' })
+    const { api, ctx, registered, queue } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+    api.apply(ctx)
+    const tree = registered.main({})
+    queue.push(...workflowPanelStates(review))
+    const inner = renderTree(findAll(tree, 'WorkflowsView')[0])
+    appels.length = 0
+
+    findAll(inner, 'button').find((node) => textOf(node) === 'Recharger').props.onClick()
+    await Promise.resolve()
+
+    assert.equal(appels.filter((appel) => appel.url === 'missions/api/workflows').length, 1)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('la création valide écrit par la route et sélectionne le workflow né', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  const neuf = { ...review, workflow: 'incidents', title: 'Incidents', document: 'workflows/incidents.md', kind: 'etape', nodes: [], edges: [], counts: { nodes: 0, edges: 0 }, summary: '' }
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url, options })
+    if (options?.method === 'POST') return { ok: true, json: async () => ({ workflow: 'incidents', document: 'workflows/incidents.md', entry: neuf }) }
+    return { ok: true, json: async () => ({ workflows: [review], writers: ['session'], states: [] }) }
+  }
+  try {
+    const session = memorySession({ 'missions.tab': 'workflows' })
+    const { api, ctx, registered, queue, reset } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+    api.apply(ctx)
+    const tree = registered.main({})
+    const vue = findAll(tree, 'WorkflowsView')[0]
+    queue.push(...workflowPanelStates(review))
+    let inner = renderTree(vue)
+    appels.length = 0
+
+    findAll(inner, 'button').find((node) => textOf(node) === 'Nouveau workflow').props.onClick()
+    reset()
+    queue.push(...workflowPanelStates(review, { 10: true }))
+    inner = renderTree(vue)
+
+    // La clé remplit le document tant que la personne ne l'a pas touché.
+    findAll(inner, 'input')[0].props.onChange({ target: { value: 'incidents' } })
+    reset()
+    queue.push(...workflowPanelStates(review, {
+      10: true,
+      11: { key: 'incidents', title: '', kind: 'etape', document: 'workflows/incidents.md', entry: 'in-review', exit: '' },
+    }))
+    inner = renderTree(vue)
+    const document = findAll(inner, 'input').find((node) => node.props.value === 'workflows/incidents.md')
+    assert.ok(document, 'le document suit la clé')
+
+    reset()
+    queue.push(...workflowPanelStates(review, {
+      10: true,
+      11: { key: 'incidents', title: 'Incidents', kind: 'etape', document: 'workflows/incidents.md', entry: 'in-review', exit: 'done' },
+    }))
+    inner = renderTree(vue)
+    findAll(inner, 'form')[0].props.onSubmit({ preventDefault() {} })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const envoi = appels.find((appel) => appel.options?.method === 'POST')
+    assert.ok(envoi, 'la création part vers la route')
+    const corps = JSON.parse(envoi.options.body)
+    assert.deepEqual(corps, { workflow: 'incidents', title: 'Incidents', kind: 'etape', document: 'workflows/incidents.md', entry: 'in-review', exit: ['done'] })
+    assert.equal(envoi.url, 'missions/api/workflows')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('la création refuse une clé ou un titre vide avant tout envoi', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  const vraiFetch = globalThis.fetch
+  const appels = []
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url, options })
+    return { ok: true, json: async () => ({ workflows: [review], writers: ['session'], states: [] }) }
+  }
+  try {
+    const session = memorySession({ 'missions.tab': 'workflows' })
+    const { api, ctx, registered, queue, setters, reset } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+    api.apply(ctx)
+    const tree = registered.main({})
+    const vue = findAll(tree, 'WorkflowsView')[0]
+    queue.push(...workflowPanelStates(review))
+    let inner = renderTree(vue)
+    appels.length = 0
+
+    findAll(inner, 'button').find((node) => textOf(node) === 'Nouveau workflow').props.onClick()
+    reset()
+    queue.push(...workflowPanelStates(review, { 10: true }))
+    inner = renderTree(vue)
+    findAll(inner, 'form')[0].props.onSubmit({ preventDefault() {} })
+
+    const erreurs = setters.find((value) => value && typeof value === 'object' && value.key === 'La clé est obligatoire.')
+    assert.ok(erreurs, 'l’erreur se pose sous la clé')
+    assert.equal(erreurs.title, 'Le titre est obligatoire.')
+    assert.equal(appels.filter((appel) => appel.options?.method === 'POST').length, 0, 'rien ne part au serveur')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
 })
 
 test('l’éditeur attend le modèle au lieu de lire un brouillon absent', () => {
