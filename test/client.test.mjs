@@ -2155,6 +2155,8 @@ function repositoriesStates(view, repository = null, count = null) {
     count,
     // La seizième état est la section de Settings, restaurée avec l'onglet.
     'usage',
+    // Le compteur de relecture de la liste Repositories, après une suppression.
+    0,
     view,
   ]
 }
@@ -3077,9 +3079,9 @@ test('Worktrees dessine le layout, ses commits, ses marques et ses worktrees', (
       { name: 'old/x', depth: 1, parent: 'main', annotation: null, worktree: null, commits: [], truncated: false, missing: true },
     ],
     worktrees: [
-      { path: '/Users/moi/projects/myapp', branch: 'main', head: 'abc1234', current: true },
-      { path: '/Users/moi/projects/myapp-12', branch: 'feat/a', head: 'def5678', current: false },
-      { path: '/Users/moi/projects/myapp-hot', branch: 'hotfix/24', head: 'fff9012', current: false },
+      { path: '/Users/moi/projects/myapp', branch: 'main', head: 'abc1234', current: true, main: true, name: 'myapp' },
+      { path: '/Users/moi/projects/myapp-12', branch: 'feat/a', head: 'def5678', current: false, main: false, name: 'myapp-12' },
+      { path: '/Users/moi/projects/myapp-hot', branch: 'hotfix/24', head: 'fff9012', current: false, main: false, name: 'myapp-hot' },
     ],
   }
   const { inner } = volet([
@@ -3099,14 +3101,18 @@ test('Worktrees dessine le layout, ses commits, ses marques et ses worktrees', (
   assert.match(textOf(lignes[1]), /\+/, 'au-delà de dix commits, la marque dit qu’il y en a d’autres')
   assert.match(textOf(lignes[2]), /not local/, 'une branche absente est marquée, pas cachée')
 
-  // Le worktree d'une branche hors du layout n'est pas perdu : il est nommé
-  // dans sa propre section, avec son chemin entier.
-  assert.match(textOf(inner), /Not in the layout/)
-  assert.match(textOf(inner), /\/Users\/moi\/projects\/myapp-hot/, 'le chemin entier se lit')
-  assert.match(textOf(inner), /hotfix\/24/, 'une branche hors du layout garde son worktree')
+  // L'onglet liste tous les worktrees sous la même section, layout ou pas :
+  // celui d'une branche qu'il ne déclare pas n'est pas perdu, et le chemin
+  // entier s'y lit.
+  const section = findAll(inner, 'h3').filter((node) => node.props.className === 'missions-drawer-section-title')
+  assert.deepEqual(section.map((node) => textOf(node)), ['Worktrees'])
+  const flat = findAll(inner, 'ul').filter((ul) => ul.props['aria-label'] === 'Worktrees')
+  assert.equal(flat.length, 1, 'une seule liste de worktrees')
+  assert.match(textOf(flat[0]), /\/Users\/moi\/projects\/myapp-hot/, 'le chemin entier se lit')
+  assert.match(textOf(flat[0]), /hotfix\/24/, 'une branche hors du layout garde son worktree')
 })
 
-test('quand toutes les branches sont dans le layout, aucune section hors layout', () => {
+test('un layout complet liste quand même ses worktrees, sans bouton sur le principal', () => {
   const repository = REPO_SCAN.repositories[1]
   const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
   const arbre = {
@@ -3115,14 +3121,23 @@ test('quand toutes les branches sont dans le layout, aucune section hors layout'
       { name: 'main', depth: 0, parent: null, annotation: null, worktree: 'myapp', commits: [], truncated: false, missing: false },
     ],
     worktrees: [
-      { path: '/Users/moi/projects/myapp', branch: 'main', head: 'abc1234', current: true },
+      { path: '/Users/moi/projects/myapp', branch: 'main', head: 'abc1234', current: true, main: true, name: 'myapp' },
     ],
   }
   const { inner } = volet([
     ...repositoriesStates(scanReady(detail), repository),
     'worktrees', { loading: false, more: false, data: null, error: null }, { loading: false, data: arbre, error: null },
   ])
-  assert.doesNotMatch(textOf(inner), /Not in the layout/)
+
+  // Le layout ne remplace pas la liste : le worktree s'y lit, marqué « main ».
+  const flat = findAll(inner, 'ul').filter((ul) => ul.props['aria-label'] === 'Worktrees')
+  assert.equal(flat.length, 1)
+  assert.match(textOf(flat[0]), /\/Users\/moi\/projects\/myapp/)
+  assert.match(textOf(flat[0]), /main/)
+
+  // Le principal n'a pas de bouton : git ne retire pas la souche des autres.
+  const gestes = findAll(inner, 'button').filter((node) => /^Remove the worktree /.test(node.props['aria-label'] ?? ''))
+  assert.deepEqual(gestes, [])
 })
 
 test('sans layout, Worktrees liste à plat et le dit', () => {
@@ -3132,8 +3147,9 @@ test('sans layout, Worktrees liste à plat et le dit', () => {
     layout: false,
     branches: [],
     worktrees: [
-      { path: '/Users/moi/projects/alpha', branch: 'main', head: 'abc', current: true },
-      { path: '/Users/moi/projects/beta', branch: null, head: 'def', current: false },
+      { path: '/Users/moi/projects/alpha', branch: 'main', head: 'abc', current: true, main: true, name: 'alpha' },
+      { path: '/Users/moi/projects/beta', branch: null, head: 'def', current: false, main: false, name: 'beta' },
+      { path: '/private/tmp/beta-away', branch: null, head: 'def', current: false, main: false, name: null },
     ],
   }
   const { inner } = volet([
@@ -3145,6 +3161,245 @@ test('sans layout, Worktrees liste à plat et le dit', () => {
   assert.match(textOf(inner), /alpha/)
   assert.match(textOf(inner), /beta/)
   assert.match(textOf(inner), /detached/, 'un worktree détaché le dit, il ne disparaît pas')
+
+  // Sans layout, le geste s'offre au même endroit : chaque worktree non
+  // principal enfant direct de la racine, et seulement ceux-là.
+  const gestes = findAll(inner, 'button').filter((node) => /^Remove the worktree /.test(node.props['aria-label'] ?? ''))
+  assert.deepEqual(gestes.map((node) => node.props['aria-label']), ['Remove the worktree beta'])
+  assert.match(textOf(inner), /\/private\/tmp\/beta-away/, 'un dossier hors racine se lit, sans bouton')
+})
+
+/**
+ * Le volet du dépôt ouvert, sur l'onglet Worktrees, avec l'arbre que le test
+ * lui donne. `repositoriesStates` fournit les états du panneau ; les trois
+ * états de l'onglet viennent après, dans l'ordre des hooks du volet.
+ */
+function voletWorktrees(arbre, repository = REPO_SCAN.repositories[1]) {
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git', ahead: 1, behind: 0 }
+  return volet([
+    ...repositoriesStates(scanReady(detail), repository),
+    'worktrees', { loading: false, more: false, data: null, error: null },
+    { loading: false, data: arbre, error: null },
+  ])
+}
+
+/** L'arbre d'un dépôt et de son worktree, tous deux enfants de la racine. */
+const ARBRE_DUO = {
+  layout: true,
+  branches: [
+    { name: 'main', depth: 0, parent: null, annotation: null, worktree: 'missions', commits: [], truncated: false, missing: false },
+  ],
+  worktrees: [
+    { path: '/Users/moi/projects/missions', branch: 'feat/mis-116', head: 'a1b2c3d', current: true, main: true, name: 'missions' },
+    { path: '/Users/moi/projects/missions-gh20', branch: 'gh-20-hover', head: 'd4e5f6a', current: false, main: false, name: 'missions-gh20' },
+  ],
+}
+
+/** Le bouton du geste, tel que `RepositoryWorktree` le nomme. */
+function boutonRemove(inner, name) {
+  return findAll(inner, 'button').find((node) => node.props['aria-label'] === `Remove the worktree ${name}`) ?? null
+}
+
+/**
+ * Un serveur de test : la suppression répond par la file donnée, le relevé
+ * d'usage par un succès vide. Les appels sont gardés avec leur corps.
+ */
+function fauxServeur(reponses = []) {
+  const vraiFetch = globalThis.fetch
+  const appels = []
+  globalThis.fetch = async (url, init = {}) => {
+    appels.push({
+      url: String(url),
+      method: init.method ?? 'GET',
+      body: init.body === undefined ? undefined : JSON.parse(init.body),
+    })
+    if (String(url) === 'missions/api/repositories/remove') {
+      const reponse = reponses.shift() ?? { ok: true, status: 200, body: { name: 'missions-gh20', removed: true } }
+      return { ok: reponse.ok !== false, status: reponse.status ?? 200, json: async () => reponse.body ?? {} }
+    }
+    return { ok: true, status: 200, json: async () => ({}) }
+  }
+  return { appels, restore: () => { globalThis.fetch = vraiFetch } }
+}
+
+/** Un `confirm` qui répond la file donnée et garde les questions posées. */
+function fauxConfirm(reponses) {
+  const vraiConfirm = globalThis.confirm
+  const questions = []
+  globalThis.confirm = (question) => {
+    questions.push(question)
+    return reponses.length > 0 ? reponses.shift() : false
+  }
+  return { questions, restore: () => { globalThis.confirm = vraiConfirm } }
+}
+
+test('la confirmation nomme le worktree, son chemin et la branche gardée', async () => {
+  const serveur = fauxServeur()
+  const confirmation = fauxConfirm([false])
+  try {
+    const { inner } = voletWorktrees(ARBRE_DUO)
+    const bouton = boutonRemove(inner, 'missions-gh20')
+    assert.ok(bouton, 'le worktree non principal porte le geste')
+    await bouton.props.onClick()
+
+    assert.equal(confirmation.questions.length, 1, 'une question, pas deux')
+    assert.match(confirmation.questions[0], /missions-gh20/)
+    assert.match(confirmation.questions[0], /\/Users\/moi\/projects\/missions-gh20/)
+    assert.match(confirmation.questions[0], /gh-20-hover/)
+    assert.match(confirmation.questions[0], /is kept/, 'la branche survit au dossier')
+    assert.deepEqual(serveur.appels, [], 'un refus n’envoie aucune requête')
+  } finally {
+    confirmation.restore()
+    serveur.restore()
+  }
+})
+
+test('un refus de la question n’envoie rien, ne compte rien et ne relit rien', async () => {
+  const serveur = fauxServeur()
+  const confirmation = fauxConfirm([false])
+  try {
+    const { inner, setters } = voletWorktrees(ARBRE_DUO)
+    await boutonRemove(inner, 'missions-gh20').props.onClick()
+
+    assert.deepEqual(serveur.appels, [], 'aucune requête, pas même le relevé')
+    assert.deepEqual(setters, [], 'aucun état touché')
+  } finally {
+    confirmation.restore()
+    serveur.restore()
+  }
+})
+
+test('un clic confirmé supprime le worktree, compte le geste et relit l’onglet', async () => {
+  const serveur = fauxServeur()
+  const confirmation = fauxConfirm([true])
+  try {
+    const { inner, setters } = voletWorktrees(ARBRE_DUO)
+    await boutonRemove(inner, 'missions-gh20').props.onClick()
+
+    // L'écriture est un seul POST, nommé, sur la route de l'onglet.
+    const suppressions = serveur.appels.filter((appel) => appel.url === 'missions/api/repositories/remove')
+    assert.equal(suppressions.length, 1)
+    assert.equal(suppressions[0].method, 'POST')
+    assert.deepEqual(suppressions[0].body, { name: 'missions-gh20' })
+
+    // Le relevé compte le geste une fois, avec le nom du worktree.
+    const gestes = serveur.appels.filter((appel) => appel.url === 'missions/api/usage')
+    assert.equal(gestes.length, 1)
+    assert.deepEqual(gestes[0].body, { element: 'repository.remove', detail: 'missions-gh20' })
+
+    // Le volet reste — l'autre dépôt le décrit encore —, dit que le dossier
+    // est parti et que la branche reste, et remet l'arbre en lecture.
+    assert.ok(setters.includes('The worktree missions-gh20 is gone; the branch gh-20-hover is kept.'))
+    assert.ok(setters.some((value) => value?.loading === true && value?.data === null), 'l’arbre se relit')
+    const compteur = setters.find((value) => typeof value === 'function')
+    assert.ok(compteur, 'le compteur de lecture avance')
+    assert.equal(compteur(0), 1)
+    assert.equal(confirmation.questions.length, 1, 'aucune seconde question sans fichiers ignorés')
+  } finally {
+    confirmation.restore()
+    serveur.restore()
+  }
+})
+
+test('un refus de l’hôte est la note du volet, mot pour mot, sans relecture', async () => {
+  const serveur = fauxServeur([{
+    ok: false,
+    status: 409,
+    body: {
+      error: 'the worktree missions-gh20 has uncommitted changes (one file: README.md) — commit or stash them first',
+      side: 'worktree',
+      files: ['README.md'],
+    },
+  }])
+  const confirmation = fauxConfirm([true])
+  try {
+    const { inner, setters } = voletWorktrees(ARBRE_DUO)
+    await boutonRemove(inner, 'missions-gh20').props.onClick()
+
+    assert.ok(setters.includes('Not removed: the worktree missions-gh20 has uncommitted changes (one file: README.md) — commit or stash them first'))
+    assert.equal(setters.some((value) => value?.loading === true), false, 'rien n’a été supprimé : pas de relecture')
+  } finally {
+    confirmation.restore()
+    serveur.restore()
+  }
+})
+
+test('des fichiers ignorés demandent un second oui, puis partent avec le dossier', async () => {
+  const serveur = fauxServeur([
+    {
+      ok: false,
+      status: 409,
+      body: {
+        error: 'the worktree missions-gh20 holds 1 ignored entry (node_modules) that git deletes with the folder — send acceptIgnored to remove them with it',
+        side: 'worktree',
+        ignored: true,
+        files: ['node_modules'],
+      },
+    },
+    { ok: true, status: 200, body: { name: 'missions-gh20', removed: true } },
+  ])
+  const confirmation = fauxConfirm([true, true])
+  try {
+    const { inner, setters } = voletWorktrees(ARBRE_DUO)
+    await boutonRemove(inner, 'missions-gh20').props.onClick()
+
+    assert.equal(confirmation.questions.length, 2, 'la seconde question nomme les ignorés')
+    assert.match(confirmation.questions[1], /node_modules/)
+
+    const suppressions = serveur.appels.filter((appel) => appel.url === 'missions/api/repositories/remove')
+    assert.deepEqual(suppressions.map((appel) => appel.body), [
+      { name: 'missions-gh20' },
+      { name: 'missions-gh20', acceptIgnored: true },
+    ])
+    assert.ok(setters.includes('The worktree missions-gh20 is gone; the branch gh-20-hover is kept.'))
+  } finally {
+    confirmation.restore()
+    serveur.restore()
+  }
+})
+
+test('dire non aux fichiers ignorés laisse le dossier et le dit', async () => {
+  const serveur = fauxServeur([{
+    ok: false,
+    status: 409,
+    body: {
+      error: 'the worktree missions-gh20 holds 1 ignored entry (node_modules) that git deletes with the folder — send acceptIgnored to remove them with it',
+      side: 'worktree',
+      ignored: true,
+      files: ['node_modules'],
+    },
+  }])
+  const confirmation = fauxConfirm([true, false])
+  try {
+    const { inner, setters } = voletWorktrees(ARBRE_DUO)
+    await boutonRemove(inner, 'missions-gh20').props.onClick()
+
+    assert.equal(serveur.appels.filter((appel) => appel.url === 'missions/api/repositories/remove').length, 1)
+    assert.ok(setters.includes('Nothing was removed: missions-gh20 still holds ignored entry.'))
+  } finally {
+    confirmation.restore()
+    serveur.restore()
+  }
+})
+
+test('le volet ferme le dépôt supprimé et le panneau relit la liste', async () => {
+  const repository = REPO_SCAN.repositories[2]
+  const arbre = {
+    layout: false,
+    branches: [],
+    worktrees: [
+      { path: '/Users/moi/projects/missions-gh20', branch: 'gh-20-hover', head: 'd4e5f6a', current: true, main: true, name: 'missions-gh20' },
+    ],
+  }
+  const { node, setters } = voletWorktrees(arbre, repository)
+  node.props.onRemoved({ name: 'missions-gh20' })
+
+  // Le dépôt ouvert n'existe plus : le volet se ferme (`null`) et le compteur
+  // de relecture avance pour que l'onglet Repositories ne montre pas la ligne.
+  assert.deepEqual(setters.slice(0, 1), [null], 'le volet se ferme')
+  const relecture = setters[1]
+  assert.equal(typeof relecture, 'function', 'la liste relit')
+  assert.equal(relecture(0), 1)
 })
 
 test('un layout illisible est un bandeau dans Worktrees', () => {
@@ -3224,7 +3479,7 @@ function voletDepot(repository, { services = undefined, note = null } = {}) {
   const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git' }
   const { api, ctx, registered, setters } = charger(
     undefined,
-    [...repositoriesStates(scanReady(detail), repository), 'details', null, null, note],
+    [...repositoriesStates(scanReady(detail), repository), 'details', null, null, null, 0, note],
     memorySession(),
   )
   api.apply(ctx)
@@ -3247,7 +3502,7 @@ function voletSquash(repository, { detail, services = undefined, note = null } =
   const detailState = detail ?? scanReady({ ...repository, remote: 'https://github.com/daedalforge/missions.git' })
   const { api, ctx, registered, setters } = charger(
     undefined,
-    [...repositoriesStates(detailState, repository), 'details', null, null, note],
+    [...repositoriesStates(detailState, repository), 'details', null, null, null, 0, note],
     memorySession(),
   )
   api.apply(ctx)
@@ -3861,7 +4116,9 @@ function monterUsage(releve = USAGE_LOADED) {
       null,
       // Le seizième état est la section de Settings, restaurée avec l'onglet.
       'usage',
-      // Le dix-septième est celui de `UsageTab`, consommé quand on la rend.
+      // Le dix-septième est le compteur de relecture de la liste Repositories.
+      0,
+      // Le dix-huitième est celui de `UsageTab`, consommé quand on la rend.
       { loading: false, usage: releve, error: null },
     ],
     memorySession({ 'missions.tab': 'usage' }),
@@ -3956,7 +4213,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(46\)/)
+  assert.match(texte, /Never used \(47\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -3972,7 +4229,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(49\)/)
+  assert.match(textOf(zero.inner), /Never used \(50\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -4344,6 +4601,8 @@ function monterVoletAvec(mission, etatsVolet = []) {
     'default', null, EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, null,
     // La section de Settings, restaurée avec l'onglet : le volet vient après.
     'usage',
+    // Le compteur de relecture de la liste Repositories.
+    0,
   ]
   const { api, ctx, registered, setters, queue } = charger(undefined, [...panneau, ...etatsVolet], memorySession())
   api.apply(ctx)
