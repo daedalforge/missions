@@ -8,6 +8,13 @@ Une session joue une seule étape : elle s'arrête à sa sortie, et l'étape sui
 se joue dans une nouvelle session. Le prompt du panneau nomme l'étape du statut
 courant, et le bouton qui l'ouvre la nomme aussi.
 
+Une session ne porte pas les règles dans son prompt : elle lit les standards de
+son étape, que le prompt nomme (le [contrat de
+lecture](../standards/README.md#le-contrat-de-lecture) dit lesquels, étape par
+étape, et la fiche du dépôt suit le projet de la mission).
+`node tools/check-standards.mjs` vérifie que l'index, les fichiers présents et
+les prompts disent la même chose.
+
 ```
   à cadrer ──▶ prête ──▶ en cours ──▶ en revue ──▶ prête à partir ──▶ terminée
       │           │          │            │              │
@@ -84,6 +91,9 @@ périmètre retourne en cadrage — mais jamais sauter une étape.
 7. **Un seul état par mission.** Une issue porte exactement un libellé d'état.
    Plusieurs laissent l'état indéterminé et bloquent le passage à l'étape
    suivante : on retire l'ancien libellé en posant le nouveau.
+8. **La session lit les standards de son étape.** Le prompt les nomme par
+   chemin ; une règle qu'elle doit suivre vit dans `standards/`, jamais dans un
+   document local ou hors du dépôt.
 
 ## Le modèle éditable
 

@@ -29,6 +29,11 @@ import {
   FEEDBACK_BRIEF,
   FREE_BRIEF,
   ticketReadLine,
+  standardsFiles,
+  standardsProject,
+  standardsReadLine,
+  STANDARDS_DIR,
+  STANDARDS_STEP_FILES,
   treeIndent,
   STEP_BRIEFS,
   STEP_BY_STATE,
@@ -1184,6 +1189,7 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
     'Étape en cours : exécution (statut in-progress). Tu ne fais que l’exécution : la branche depuis la base, les commits, la PR vers la base avec `Closes #N`, le journal et la checklist à jour ; à la fin, le ticket passe en in-review et tu t’arrêtes.\n\n' +
     "Chaque étape se joue dans une nouvelle session : à la fin de celle-ci, arrête-toi ; l'étape suivante sera une nouvelle session.\n\n" +
     'Branche : fix/mis-42 ; base : main.\n\n' +
+    'Standards à lire : standards/code.md, standards/interdits.md, standards/repos/missions.md.\n\n' +
     'Journal de mission : missions/MIS-42/journal.md — tiens-le à jour à chaque étape.\n\n' +
     'Checklist de mission : missions/MIS-42/checklist.md — coche chaque point avec sa preuve.\n\n' +
     "Garde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande."
@@ -1192,6 +1198,81 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
   // Le prompt de session ne porte pas le clone : c'est le prompt des remontées
   // qui a besoin de savoir où lire la PR.
   assert.doesNotMatch(missionSessionPrompt(TEMOIN), /Dépôt du projet/)
+})
+
+test('le prompt de chaque étape nomme ses standards et la fiche du dépôt', () => {
+  // La fiche suit le projet de la mission : le dernier segment du clone, en
+  // minuscules — `~/projects/Manager` lit `standards/repos/manager.md`.
+  const cas = [
+    ['to-refine', '~/projects/missions', [
+      'standards/README.md',
+      'standards/repos/missions.md',
+    ]],
+    ['ready', '~/projects/Manager', [
+      'standards/code.md',
+      'standards/interdits.md',
+      'standards/repos/manager.md',
+    ]],
+    ['in-review', '~/projects/Connect', [
+      'standards/revue.md',
+      'standards/code.md',
+      'standards/interdits.md',
+      'standards/repos/connect.md',
+    ]],
+    ['ready-for-prod', '~/projects/missions', [
+      'standards/interdits.md',
+      'standards/revue.md',
+    ]],
+  ]
+
+  for (const [state, repo, files] of cas) {
+    const prompt = missionSessionPrompt({ ...TEMOIN, state, repo })
+    const ligne = `Standards à lire : ${files.join(', ')}.`
+    assert.ok(prompt.includes(ligne), `${state} lit « ${ligne} »`)
+  }
+})
+
+test('sans dépôt déclaré, le prompt d’étape omet la fiche du dépôt', () => {
+  const prompt = missionSessionPrompt({ ...TEMOIN, repo: null })
+
+  assert.ok(prompt.includes('Standards à lire : standards/code.md, standards/interdits.md.'))
+  assert.doesNotMatch(prompt, /<projet>/)
+})
+
+test('la fiche d’un dépôt se déduit de son clone', () => {
+  assert.equal(standardsProject('~/projects/Manager'), 'manager')
+  assert.equal(standardsProject('~/projects/Connect/'), 'connect')
+  assert.equal(standardsProject('~/projects/missions'), 'missions')
+  assert.equal(standardsProject('missions'), 'missions')
+  assert.equal(standardsProject(null), null)
+  assert.equal(standardsProject('  '), null)
+})
+
+test('les fichiers d’une étape sont des chemins de standards, dans l’ordre', () => {
+  assert.deepEqual(standardsFiles('cadrage', 'missions'), [
+    'standards/README.md',
+    'standards/repos/missions.md',
+  ])
+  assert.deepEqual(standardsFiles('clôture', 'manager'), [
+    'standards/interdits.md',
+    'standards/revue.md',
+  ])
+  // Sans projet, la fiche s'efface au lieu de nommer un fichier qui n'existe pas.
+  assert.deepEqual(standardsFiles('revue', null), [
+    'standards/revue.md',
+    'standards/code.md',
+    'standards/interdits.md',
+  ])
+  // Une étape inconnue ne lit rien.
+  assert.equal(standardsFiles('inconnue', 'missions'), null)
+  assert.equal(standardsReadLine('inconnue', 'missions'), null)
+  assert.equal(STANDARDS_DIR, 'standards')
+  assert.deepEqual(Object.keys(STANDARDS_STEP_FILES).sort(), [
+    'cadrage',
+    'clôture',
+    'exécution',
+    'revue',
+  ])
 })
 
 test('le prompt des remontées demande la PR, le tri, le push et le garde-fou', () => {
