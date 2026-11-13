@@ -6,20 +6,6 @@ import { fileURLToPath } from 'node:url'
 import { loadProjects } from '../lib/projects.js'
 import { STANDARDS_DIR, STANDARDS_STEP_FILES, standardsFiles, standardsProject } from '../lib/view.js'
 
-/**
- * Check the standards index against the files on disk and the session prompts.
- *
- * Three things can drift apart: the files under `standards/`, the index table of
- * `standards/README.md`, and the files the panel names for a step
- * (`STANDARDS_STEP_FILES` in `lib/view.js`). This command fails when they do,
- * and when a project declared in `missions/projects.yml` has no repository
- * sheet. Every error names the file or the step so it can be fixed without
- * guessing.
- *
- * Usage: `node tools/check-standards.mjs [--root <dir>]`; the root defaults to
- * the package root, which is what the test copies into a temporary folder to
- * prove a missing or extra file fails.
- */
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url))
 
 function rootFromArgs(argv) {
@@ -34,7 +20,6 @@ function rootFromArgs(argv) {
   return resolve(process.cwd(), value)
 }
 
-/** Every markdown file under `standards/`, as repository-relative paths. */
 async function listStandards(root) {
   const files = []
   async function walk(folder) {
@@ -53,7 +38,6 @@ async function listStandards(root) {
   return files.sort()
 }
 
-/** The files the README indexes: a table row whose first cell is a path. */
 function indexedFiles(readme) {
   const files = new Set()
   for (const line of readme.split('\n')) {
@@ -65,7 +49,6 @@ function indexedFiles(readme) {
   return files
 }
 
-/** The files each step reads, from the README's reading-contract table. */
 function contractRows(readme) {
   const rows = new Map()
   for (const line of readme.split('\n')) {
@@ -82,8 +65,11 @@ function contractRows(readme) {
   return rows
 }
 
-function expand(files, project) {
-  return files.map((file) => file.replace('<projet>', project))
+function expand(files, sheet) {
+  const name = String(sheet ?? '')
+  return files
+    .filter((file) => name !== '' || !file.includes('<projet>'))
+    .map((file) => file.replace('<projet>', name))
 }
 
 async function main() {
@@ -114,7 +100,7 @@ async function main() {
       continue
     }
     for (const project of projects) {
-      const sheet = standardsProject(project.repo) ?? project.id
+      const sheet = standardsProject(project.repo)
       const expected = standardsFiles(step, sheet)
       const declared = expand(row, sheet)
       if (declared.join(', ') !== expected.join(', ')) {
@@ -126,7 +112,10 @@ async function main() {
   }
 
   for (const project of projects) {
-    const sheet = standardsProject(project.repo) ?? project.id
+    const sheet = standardsProject(project.repo)
+    if (sheet === null) {
+      continue
+    }
     const path = `${STANDARDS_DIR}/repos/${sheet}.md`
     if (!present.includes(path)) {
       errors.push(`projet ${project.id} déclaré sans fiche : ${path}`)

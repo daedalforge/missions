@@ -1179,7 +1179,7 @@ const TEMOIN = {
   repo: '~/projects/missions',
 }
 
-test('le prompt de session est la chaîne d’hier, au caractère près', () => {
+test('le prompt de session est la chaîne attendue, au caractère près', () => {
   // Given
   const attendu =
     'Travaille sur la mission MIS-42 — Reload onglet mission.\n\n' +

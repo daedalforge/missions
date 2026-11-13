@@ -32,8 +32,10 @@
 
 ### Le code est en anglais, la documentation en français
 
-Identifiants, commentaires de code, noms de tests techniques: anglais. Fiches,
-journaux, checklists, procédures et messages destinés au demandeur: français.
+Identifiants et noms de tests techniques: anglais. Aucun commentaire de code,
+hors les marqueurs `// Given` / `// When` / `// Then` des tests
+(`standards/code.md`). Fiches, journaux, checklists, procédures et messages
+destinés au demandeur: français.
 Les chaînes que le panneau affiche à l'utilisateur suivent la langue de
 l'interface, pas cette règle.
 

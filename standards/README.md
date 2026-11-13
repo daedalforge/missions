@@ -37,9 +37,10 @@ projets déclarés.
 
 ## L'index
 
-Le dossier ne contient que ces fichiers. Un fichier présent mais absent de cette
-table, un fichier de cette table absent du disque, ou une fiche de dépôt manquante
-pour un projet déclaré font échouer `node tools/check-standards.mjs`.
+Le dossier ne contient que ces fichiers, tous en `.md`. Un fichier présent mais
+absent de cette table, un fichier de cette table absent du disque, ou une fiche de
+dépôt manquante pour un projet déclaré *avec un dépôt* font échouer
+`node tools/check-standards.mjs`.
 
 | Fichier | Ce qu'il porte |
 | --- | --- |

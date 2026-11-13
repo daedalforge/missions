@@ -22,7 +22,6 @@ function runChecker(root) {
   })
 }
 
-/** A copy of the standards and the project declarations, in a temporary root. */
 async function fixture(t) {
   const dir = await mkdtemp(join(tmpdir(), 'standards-'))
   t.after(() => rm(dir, { recursive: true, force: true }))
@@ -32,7 +31,6 @@ async function fixture(t) {
   return dir
 }
 
-/** The reading contract of the README, step by step. */
 function contractRows(readme) {
   const rows = new Map()
   for (const line of readme.split('\n')) {
@@ -163,6 +161,25 @@ test('un projet déclaré sans fiche fait échouer le contrôle en la nommant', 
   // Then
   assert.notEqual(result.code, 0)
   assert.match(result.stderr, /standards\/repos\/manager\.md/)
+})
+
+test('un projet déclaré sans dépôt ne réclame pas de fiche', async (t) => {
+  // Given
+  const root = await fixture(t)
+  const path = join(root, 'missions', 'projects.yml')
+  const declaration = await readFile(path, 'utf8')
+  const sansDepot = declaration
+    .replace('  - id: connect', '  - id: phpconnect')
+    .replace('    repo: ~/projects/Connect', '    repo: null')
+  assert.notEqual(sansDepot, declaration)
+
+  // When
+  await writeFile(path, sansDepot, 'utf8')
+  const result = await runChecker(root)
+
+  // Then
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stdout, /3 projets déclarés/)
 })
 
 test('un contrat de lecture divergent fait échouer le contrôle', async (t) => {
