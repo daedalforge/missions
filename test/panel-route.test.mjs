@@ -2148,6 +2148,114 @@ test('une panne du tracker répond 502 et ne déplace rien', async (t) => {
   }
 })
 
+/**
+ * L'archivage en lot : les clés rendues par l'onglet Done en une requête. Une
+ * ligne refusée ne défait pas les autres ; un dossier déplacé reste déplacé.
+ */
+test('POST /archive-batch archive les done et refuse les autres dans une réponse', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42, CLOSED_43] })
+  await mkdir(join(dir, 'missions', 'MIS-44'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-44', MISSION_FILE), 'key: MIS-44\nbranch: feat/mis-44\nbase: main\n')
+  await writeFile(join(dir, 'missions', 'MIS-44', 'journal.md'), '# Journal — MIS-44\n')
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive-batch',
+      body: { keys: ['MIS-42', 'MIS-43', 'MIS-44', 'MIS-99'] },
+    })
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(
+      response.body.archived.map((entry) => entry.archived),
+      ['missions/archives/MIS-42', 'missions/archives/MIS-43'],
+    )
+    assert.deepEqual(response.body.refused, [
+      { key: 'MIS-44', error: 'MIS-44 is not done' },
+      { key: 'MIS-99', error: 'no mission folder for MIS-99' },
+    ])
+    assert.deepEqual((await readdir(join(dir, 'missions'))).sort(), ['MIS-44', 'archives', 'projects.yml'])
+    assert.equal(await readFile(join(dir, 'missions', 'MIS-44', 'journal.md'), 'utf8'), '# Journal — MIS-44\n')
+
+    const list = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.equal(list.status, 200)
+    assert.deepEqual(list.body.missions, [])
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('POST /archive-batch dit le refus d’une ligne sans défaire les autres', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42, CLOSED_43] })
+  await mkdir(join(dir, 'missions', 'archives', 'MIS-43'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'archives', 'MIS-43', 'journal.md'), 'ancien\n')
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive-batch',
+      body: { keys: ['MIS-42', 'MIS-43'] },
+    })
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(response.body.archived.map((entry) => entry.key), ['MIS-42'])
+    assert.deepEqual(response.body.refused, [{ key: 'MIS-43', error: 'missions/archives/MIS-43 already exists' }])
+    assert.equal(await readFile(join(dir, 'missions', 'archives', 'MIS-43', 'journal.md'), 'utf8'), 'ancien\n')
+    assert.equal(await readFile(join(dir, 'missions', 'archives', 'MIS-42', 'journal.md'), 'utf8'), '# Journal — MIS-42\n')
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('POST /archive-batch refuse une requête invalide avant tout déplacement', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42] })
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const wrongMethod = await call(handler, { path: '/missions/api/archive-batch' })
+    assert.equal(wrongMethod.status, 405)
+    assert.equal(wrongMethod.headers.allow, 'POST')
+
+    const broken = await call(handler, { method: 'POST', path: '/missions/api/archive-batch', raw: '{"keys":' })
+    assert.equal(broken.status, 400)
+
+    for (const body of [{}, { keys: 'MIS-42' }, { keys: [] }, { keys: ['  '] }]) {
+      const invalid = await call(handler, { method: 'POST', path: '/missions/api/archive-batch', body })
+      assert.equal(invalid.status, 400)
+    }
+
+    assert.deepEqual(await readdir(join(dir, 'missions')), ['MIS-42', 'projects.yml'])
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('POST /archive-batch : une panne du tracker répond 502 et ne déplace rien', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42, CLOSED_43], closedStatus: 401 })
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive-batch',
+      body: { keys: ['MIS-42', 'MIS-43'] },
+    })
+
+    assert.equal(response.status, 502)
+    assert.match(response.body.error, /done missions: GitHub token missing or invalid/)
+    assert.deepEqual((await readdir(join(dir, 'missions'))).sort(), ['MIS-42', 'MIS-43', 'projects.yml'])
+    await assert.rejects(readdir(join(dir, 'missions', 'archives')), { code: 'ENOENT' })
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
 test('POST repositories/adopt ne supprime pas des fichiers ignorés sans un second oui', async (t) => {
   const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }])
   const { run, calls } = fauxGitRun({

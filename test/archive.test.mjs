@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 
-import { ArchiveError, archiveMission, ARCHIVES_FOLDER } from '../lib/archive.js'
+import { ArchiveError, archiveMany, archiveMission, ARCHIVES_FOLDER } from '../lib/archive.js'
 
 /**
  * L'archivage d'une mission done : le dossier quitte le chemin de lecture.
@@ -143,4 +143,55 @@ test('deux archivages concurrents : un seul déplace la mission', async (t) => {
   const refused = results.find((result) => result.status === 'rejected')
   assert.equal(refused.reason.status, 409)
   assert.deepEqual(await readdir(join(dir, ARCHIVES_FOLDER)), ['MIS-42'])
+})
+
+/*
+ * L'archivage en lot : une liste de dossiers, une réponse par dossier. Un refus
+ * ne doit cacher ni les autres refus ni les archivages réussis — l'archivage
+ * d'une mission est indépendant de celui de sa voisine.
+ */
+test('archiveMany archive les done et refuse les autres sans s’arrêter', async (t) => {
+  const dir = await fixtures(t, {
+    'MIS-42/mission.yml': 'key: MIS-42\n',
+    'MIS-43/mission.yml': 'key: MIS-43\n',
+  })
+
+  const result = await archiveMany({
+    root: dir,
+    entries: [
+      { key: 'MIS-42', folder: 'MIS-42', mission: DONE },
+      { key: 'MIS-43', folder: 'MIS-43', mission: { key: 'MIS-43', state: 'open' } },
+      { key: 'MIS-44', folder: 'MIS-44', mission: { key: 'MIS-44', state: 'done' } },
+      { key: 'MIS-45', folder: 'archives', mission: { key: 'MIS-45', state: 'done' } },
+    ],
+  })
+
+  assert.deepEqual(result.archived.map((entry) => entry.key), ['MIS-42'])
+  assert.deepEqual(result.refused, [
+    { key: 'MIS-43', error: 'MIS-43 is not done' },
+    { key: 'MIS-44', error: 'mission folder MIS-44 is missing' },
+    { key: 'MIS-45', error: 'the archives folder cannot be archived' },
+  ])
+  assert.deepEqual((await readdir(join(dir, ARCHIVES_FOLDER))).sort(), ['MIS-42'])
+})
+
+test('archiveMany d’une liste vide ne touche à rien', async (t) => {
+  const dir = await fixtures(t, { 'MIS-42/mission.yml': 'key: MIS-42\n' })
+
+  const result = await archiveMany({ root: dir, entries: [] })
+
+  assert.deepEqual(result, { archived: [], refused: [] })
+  assert.deepEqual(await readdir(dir), ['MIS-42'])
+})
+
+test('archiveMany propage une panne de la machine, pas un refus', async (t) => {
+  const dir = await fixtures(t, {})
+  // Un fichier à la place de missions/ : la création d'archives/ échoue en
+  // ENOTDIR — une panne du disque, pas un verdict sur une mission.
+  await writeFile(join(dir, 'file'), '')
+
+  await assert.rejects(
+    archiveMany({ root: join(dir, 'file'), entries: [{ key: 'MIS-42', folder: 'MIS-42', mission: DONE }] }),
+    (error) => error.code === 'ENOTDIR' || error.code === 'EEXIST',
+  )
 })
