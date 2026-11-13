@@ -734,7 +734,8 @@ window.__ModuleLoader__.load({
 .missions-repo-state[data-error="true"] { color: #cf222e; font-weight: 600; }
 .missions-repo-commit { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .missions-repo-age { justify-self: end; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.missions-repos-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.missions-repos-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.missions-repos-headtools { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .missions-repos-total { color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 12px; font-weight: 600; }
 .missions-repos-root { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; }
 .missions-repos-adopt { margin: 0 0 10px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 14%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 4%, transparent); color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 12px; line-height: 1.45; }
@@ -3095,7 +3096,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
     }
 
     /**
-     * The repositories tab: every clone of the workspace root.
+     * The repositories tab: the clones and worktrees of the workspace root.
+     *
+     * The list rests on the clones: a worktree is a second checkout of a
+     * repository already there, so it stays hidden until the session's switch
+     * reveals it. The head keeps counting the scan's worktrees — the filter is
+     * about what the rows show, not about what git found. The switch lives in
+     * session storage: a view switch brings the choice back, the window
+     * closing drops it.
      *
      * It is the one tab that writes, and only through a worktree row's arrow:
      * a confirmed gesture, one POST, then the workspace read again. Reading it
@@ -3114,6 +3122,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // checkouts it listed before the click are not the ones git now has.
       const [adoption, setAdoption] = React.useState(null)
       const [reload, setReload] = React.useState(0)
+      // The worktrees are hidden until the session asks: the switch reads its
+      // default from the session, never from a setting that outlives the app.
+      const [worktreesShown, setWorktreesShown] = React.useState(() => readWorktreesShown(filterStorage()))
 
       React.useEffect(() => {
         let alive = true
@@ -3146,7 +3157,18 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       if (!scan.data) return h(PanelLoader, { theme })
 
       const data = scan.data
-      const repositories = sortRepositories(data.repositories)
+      const rows = sortRepositories(data.repositories)
+      const worktrees = rows.filter((repository) => repository.kind === 'worktree')
+      // The sort runs once on the whole scan; hiding the worktrees afterwards
+      // keeps the clones in the same order whether the switch is on or off.
+      const repositories = worktreesShown ? rows : rows.filter((repository) => repository.kind !== 'worktree')
+      const hiddenWorktrees = !worktreesShown && worktrees.length > 0
+      const hiddenLabel = `${worktrees.length === 1 ? 'The only worktree' : `All ${worktrees.length} worktrees`} of the workspace root ${worktrees.length === 1 ? 'is' : 'are'} hidden.`
+      const revealHint = `Show worktrees lists ${worktrees.length === 1 ? 'it' : 'them'}.`
+      const toggleWorktrees = (shown) => {
+        setWorktreesShown(shown)
+        writeWorktreesShown(filterStorage(), shown)
+      }
       const now = Date.now()
       const missing = Array.isArray(data.errors) ? data.errors : []
       // Bringing a worktree back is the tab's one write: it asks first, then
@@ -3219,13 +3241,22 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           : null,
         h('div', { className: 'missions-repos-head' },
           h('span', { className: 'missions-repos-total' }, scanLabel(data)),
-          data.root ? h('span', { className: 'missions-repos-root', title: data.root }, data.root) : null,
+          data.root || worktrees.length > 0
+            ? h('div', { className: 'missions-repos-headtools' },
+                data.root ? h('span', { className: 'missions-repos-root', title: data.root }, data.root) : null,
+                worktrees.length > 0
+                  ? h(Switch, { label: 'Show worktrees', checked: worktreesShown, onChange: toggleWorktrees })
+                  : null,
+              )
+            : null,
         ),
         repositories.length === 0
           ? h('div', { className: 'missions-dash-empty' },
-              h('p', null, 'No repository in the workspace root.'),
+              h('p', null, hiddenWorktrees ? hiddenLabel : 'No repository in the workspace root.'),
               h('p', { className: 'missions-dash-empty-hint' },
-                data.root ? `Scanned ${data.root}.` : 'The host did not name the root it scanned.'),
+                hiddenWorktrees
+                  ? `${revealHint}${data.root ? ` Scanned ${data.root}.` : ''}`
+                  : data.root ? `Scanned ${data.root}.` : 'The host did not name the root it scanned.'),
             )
           : h(React.Fragment, null,
               h('div', { className: 'missions-repo-head', 'aria-hidden': 'true' },

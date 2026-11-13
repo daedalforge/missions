@@ -56,7 +56,9 @@ import {
   QUIET_AFTER_DAYS,
   readFilterSnapshot,
   readTab,
+  readWorktreesShown,
   relativeAge,
+  REPOSITORIES_WORKTREES_KEY,
   repositoryBranch,
   repositoryCommit,
   repositoryState,
@@ -84,6 +86,7 @@ import {
   writeFilterSnapshot,
   worktreeLabel,
   writeTab,
+  writeWorktreesShown,
 } from '../lib/view.js'
 import { loadWorkflows, MODELS_DIR, readWorkflow } from '../lib/workflows.js'
 
@@ -1145,6 +1148,45 @@ test('endPoints énumère entrée, gestes et sorties, et tolère un modèle abse
     { id: 'ready', kind: 'etat' },
   ], 'l’entrée d’abord, les gestes dans l’ordre du fichier, les sorties ensuite')
   assert.deepEqual(endPoints({ entry: 'a', nodes: [] }), [{ id: 'a', kind: 'etat' }], 'une étape sans sortie déclarée')
+})
+
+test('la session garde le switch des worktrees, et rien quand il est fermé', () => {
+  const storage = memoryStorage()
+
+  // Le défaut est fermé : une session vierge ne range aucune clé.
+  assert.equal(readWorktreesShown(storage), false)
+  assert.equal(storage.entries.has(REPOSITORIES_WORKTREES_KEY), false)
+
+  writeWorktreesShown(storage, true)
+  assert.deepEqual([...storage.entries], [[REPOSITORIES_WORKTREES_KEY, '1']])
+  assert.equal(readWorktreesShown(storage), true)
+
+  // Fermer le switch revient au défaut sans laisser de valeur « 0 ».
+  writeWorktreesShown(storage, false)
+  assert.equal(storage.entries.has(REPOSITORIES_WORKTREES_KEY), false)
+  assert.equal(readWorktreesShown(storage), false)
+})
+
+test('une valeur étrangère ou un stockage en panne garde les worktrees cachés', () => {
+  const storage = memoryStorage()
+  for (const value of ['0', 'true', 'oui', '']) {
+    storage.setItem(REPOSITORIES_WORKTREES_KEY, value)
+    assert.equal(readWorktreesShown(storage), false, `« ${value} » ne vaut pas « 1 »`)
+  }
+  storage.setItem(REPOSITORIES_WORKTREES_KEY, '1')
+  assert.equal(readWorktreesShown(storage), true)
+
+  assert.equal(readWorktreesShown(undefined), false)
+  assert.equal(readWorktreesShown({}), false)
+  const throwing = {
+    getItem: () => { throw new Error('blocked') },
+    setItem: () => { throw new Error('quota') },
+    removeItem: () => { throw new Error('blocked') },
+  }
+  assert.equal(readWorktreesShown(throwing), false)
+  assert.doesNotThrow(() => writeWorktreesShown(throwing, true))
+  assert.doesNotThrow(() => writeWorktreesShown(throwing, false))
+  assert.doesNotThrow(() => writeWorktreesShown(null, true))
 })
 
 test('les dépôts se lisent du plus récent au plus ancien, et à nom égal par nom', () => {
