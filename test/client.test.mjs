@@ -2975,6 +2975,8 @@ test('une barre restaurée rouvre la recherche et les états, et le switch garde
   assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions'], 'la recherche et l’état se cumulent')
   assert.equal(findAll(inner, 'input').find((node) => node.props['aria-label'] === 'Filter repositories').props.value, '116')
   assert.ok(findAll(inner, 'button').some((button) => /^Filter by state \(Dirty\)$/.test(button.props['aria-label'])))
+  // L'en-tête des clones reste celui du scan entier, pas celui des lignes gardées
+  assert.match(textOf(inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
 
   // When le switch passe aux worktrees, le même état s'applique à leur liste
   const ouverts = memorySession({ ...session.entries, 'missions.repositories.worktrees': '1' })
