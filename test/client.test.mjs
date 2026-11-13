@@ -2451,20 +2451,13 @@ test('les formulaires empilent leurs champs sur une colonne', () => {
   assert.match(regle('.wf-form'), /grid-template-columns: minmax\(0, 1fr\)/)
   assert.match(regle('.wf-form-actions'), /grid-column: 1 \/ -1/)
   assert.doesNotMatch(SOURCE, /@media \(max-width: 640px\) \{[\s\S]*?\.wf-form \{/, 'le média ne répète plus la grille')
+})
 
+test('la liste, le volet et le canevas gardent leurs règles de repli', () => {
   assert.match(regle('.wf-list'), /grid-template-columns: repeat\(auto-fill, minmax\(240px, 1fr\)\)/)
   assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\.wf-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
   assert.match(regle('.wf-canvas-wrap'), /overflow: auto/)
   assert.match(regle('.missions-body'), /overflow: auto/)
-})
-
-test('les anciennes règles de repli de la liste, du volet et du formulaire', () => {
-  // Le rendu ne se mesure pas ici : jsdom ne calcule aucune mise en page. Ce
-  // test prouve les déclarations CSS ; la mesure réelle du panneau à 1280 px et
-  // 640 px est consignée dans le journal de MIS-195, avec ses captures.
-  // La grille des cartes se replie d'elle-même ; sous 900 px le volet passe
-  // sous le graphe ; sous 640 px le formulaire passe sur une seule colonne. Le
-  // canevas garde son propre défilement : jamais la page entière.
 })
 
 test('le losange du choix se dessine, montre les conditions entières et ouvre le geste', async () => {
