@@ -1800,3 +1800,185 @@ test('deux POST repositories/adopt ne se chevauchent pas', async (t) => {
   assert.equal(second.status, 200)
   assert.equal(peak, 1, 'le second geste attend que le premier ait fini')
 })
+
+/* Tolgee: le diff de la mission devient un fichier XLIFF dans son dossier. */
+
+function tolgeeProjects(repo, translations = true) {
+  const block = translations
+    ? `    translations:
+      locales: [fr, en]
+      languageFile: locales/{locale}.json
+      reference: fr
+`
+    : ''
+  return `canonical:
+  states: [to-refine, ready, in-progress, in-review, ready-for-prod]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    repo: ${repo}
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+        ready-for-prod: ready-for-prod
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+${block}`
+}
+
+async function mountTolgee(t, {
+  source = "const greet = t('greet')\n",
+  locales = { fr: { greet: 'Bonjour' }, en: {} },
+  translations = true,
+  run = null,
+  fetchImpl = undefined,
+} = {}) {
+  const mounted = await mount(t, {
+    runGit: async (command, args) => {
+      if (args.includes('show')) {
+        const spec = args.at(-1)
+        const file = spec.slice(spec.indexOf(':') + 1)
+        return { stdout: await readFile(join(mounted.dir, 'repo', file), 'utf8'), stderr: '' }
+      }
+      return run ? run(command, args) : { stdout: 'src/a.js', stderr: '' }
+    },
+    fetchImpl,
+  })
+  const repo = join(mounted.dir, 'repo')
+  await mkdir(join(repo, 'src'), { recursive: true })
+  await mkdir(join(repo, 'locales'), { recursive: true })
+  await writeFile(join(repo, 'src', 'a.js'), source)
+  for (const [locale, table] of Object.entries(locales)) {
+    await writeFile(join(repo, 'locales', `${locale}.json`), JSON.stringify(table))
+  }
+  await writeFile(join(mounted.dir, 'missions', 'projects.yml'), tolgeeProjects(repo, translations))
+  await mkdir(join(mounted.dir, 'missions', 'MIS-171'), { recursive: true })
+  await writeFile(
+    join(mounted.dir, 'missions', 'MIS-171', MISSION_FILE),
+    'key: MIS-171\nbranch: feat/mis-171\nbase: main\n',
+  )
+  return { ...mounted, repo }
+}
+
+function postTolgee(handler, key = 'MIS-171') {
+  return call(handler, { method: 'POST', path: '/missions/api/tolgee', body: { key } })
+}
+
+test('POST tolgee écrit le XLIFF de la mission et rend le bilan', async (t) => {
+  const reseau = []
+  const { dir, handler } = await mountTolgee(t, {
+    // Aucun accès Tolgee, direct ou indirect : la route ne doit rien demander
+    // au réseau, pas même un jeton ou une observation.
+    fetchImpl: async (url) => {
+      reseau.push(String(url))
+      throw new Error('network must not be called')
+    },
+  })
+
+  const response = await postTolgee(handler)
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body.project, 'missions')
+  assert.equal(response.body.file, 'missions/MIS-171/import-tolgee.xliff')
+  assert.deepEqual(response.body.keys.map((entry) => entry.key), ['greet'])
+  assert.deepEqual(response.body.keys[0].missing, ['en'])
+  assert.deepEqual(response.body.untranslated, [])
+  assert.deepEqual(response.body.warnings, [])
+
+  const xliff = await readFile(join(dir, 'missions', 'MIS-171', 'import-tolgee.xliff'), 'utf8')
+  assert.match(xliff, /<xliff xmlns="urn:oasis:names:tc:xliff:document:1\.2" version="1\.2">/)
+  assert.match(xliff, /<file source-language="fr" target-language="fr" original="MIS-171"/)
+  assert.match(xliff, /<trans-unit id="greet" resname="greet">/)
+  assert.match(xliff, /<source>Bonjour<\/source>/)
+  assert.match(xliff, /<target>Bonjour<\/target>/)
+  assert.match(xliff, /<note>src\/a\.js:1<\/note>/)
+  assert.deepEqual(reseau, [], 'la route ne fait aucun appel réseau')
+})
+
+test('POST tolgee sans clé manquante n’écrit aucun fichier', async (t) => {
+  const { dir, handler } = await mountTolgee(t, { locales: { fr: { greet: 'Bonjour' }, en: { greet: 'Hello' } } })
+
+  const response = await postTolgee(handler)
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body.file, null)
+  assert.deepEqual(response.body.keys, [])
+  await assert.rejects(access(join(dir, 'missions', 'MIS-171', 'import-tolgee.xliff')))
+})
+
+test('POST tolgee liste à part une clé sans valeur fr, hors XLIFF', async (t) => {
+  const { dir, handler } = await mountTolgee(t, { source: "t('newKey')\n", locales: { fr: {}, en: {} } })
+
+  const response = await postTolgee(handler)
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body.file, null)
+  assert.deepEqual(response.body.keys, [])
+  assert.deepEqual(response.body.untranslated, [{ key: 'newKey', occurrences: ['src/a.js:1'] }])
+  await assert.rejects(access(join(dir, 'missions', 'MIS-171', 'import-tolgee.xliff')))
+})
+
+test('POST tolgee refuse un diff vide avec une phrase', async (t) => {
+  const { dir, handler } = await mountTolgee(t, { run: async () => ({ stdout: '' }) })
+
+  const response = await postTolgee(handler)
+
+  assert.equal(response.status, 409)
+  assert.equal(response.body.error, 'no changed source file on feat/mis-171 against main')
+  await assert.rejects(access(join(dir, 'missions', 'MIS-171', 'import-tolgee.xliff')))
+})
+
+test('POST tolgee refuse une branche absente sans écrire', async (t) => {
+  const { dir, handler } = await mountTolgee(t, {
+    run: async () => {
+      throw Object.assign(new Error('git failed'), { stderr: "fatal: ambiguous argument 'main...feat/mis-171'" })
+    },
+  })
+
+  const response = await postTolgee(handler)
+
+  assert.equal(response.status, 409)
+  assert.match(response.body.error, /^cannot read the diff of feat\/mis-171 against main: fatal: ambiguous argument/)
+  await assert.rejects(access(join(dir, 'missions', 'MIS-171', 'import-tolgee.xliff')))
+})
+
+test('POST tolgee refuse un projet qui ne déclare pas de traductions', async (t) => {
+  const { handler } = await mountTolgee(t, { translations: false })
+
+  const response = await postTolgee(handler)
+
+  assert.equal(response.status, 409)
+  assert.equal(response.body.error, 'missions declares no translations')
+})
+
+test('la route tolgee est un POST qui demande une clé', async (t) => {
+  const { handler } = await mountTolgee(t)
+
+  const read = await call(handler, { method: 'GET', path: '/missions/api/tolgee?key=MIS-171' })
+  assert.equal(read.status, 405)
+  assert.equal(read.headers.allow, 'POST')
+
+  const empty = await call(handler, { method: 'POST', path: '/missions/api/tolgee', body: {} })
+  assert.equal(empty.status, 400)
+  assert.match(empty.body.error, /key is missing/)
+
+  const unknown = await postTolgee(handler, 'OTHER-1')
+  assert.equal(unknown.status, 404)
+  assert.match(unknown.body.error, /no project declares OTHER-1/)
+})

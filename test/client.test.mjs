@@ -64,13 +64,21 @@ function charger(storage, initialStates = [], session = undefined) {
   // lancer la requête ni armer le timer de 60 s. Un test qui vise une écriture
   // de session appelle l'effet lui-même.
   const effects = []
+  // Les valeurs posées par les setters, par hook : un second rendu les rejoue
+  // au lieu de repartir des états de montage. C'est ce qui prouve qu'un clic
+  // change bien ce que le panneau affiche.
+  const updates = new Map()
+  let hookIndex = 0
   const React = {
     createElement: h,
     Fragment: 'fragment',
-    useState: (initial) => [
-      queue.length > 0 ? queue.shift() : (typeof initial === 'function' ? initial() : initial),
-      (next) => { setters.push(next) },
-    ],
+    useState: (initial) => {
+      const index = hookIndex++
+      return [
+        updates.has(index) ? updates.get(index) : (queue.length > 0 ? queue.shift() : (typeof initial === 'function' ? initial() : initial)),
+        (next) => { updates.set(index, next); setters.push(next) },
+      ]
+    },
     useCallback: (fn) => fn,
     useEffect: (fn, deps) => { effects.push({ fn, deps }) },
     // Un `ref` n'a pas de nœud DOM à recevoir ici : le conteneur reste vide, ce
@@ -97,7 +105,8 @@ function charger(storage, initialStates = [], session = undefined) {
     if (name === 'react') return React
     throw new Error(`unexpected require: ${name}`)
   })
-  return { api, ctx, registered, id: captured.id, setters, effects, queue }
+  const resetHooks = () => { hookIndex = 0 }
+  return { api, ctx, registered, id: captured.id, setters, effects, queue, resetHooks }
 }
 
 /** Aplatit les listes d'enfants que `Array#map` imbrique. */
@@ -1951,15 +1960,23 @@ test('un blocage Jira ouvre la carte sur le ticket, jamais sur l’API', async (
 /** Le volet monté sur une mission choisie : le panneau le crée, on le rend seul. */
 function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overrides = {}) {
   const view = { loading: false, missions: [mission], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const { api, ctx, registered, setters } = charger(undefined, [
-    EMPTY_BAR, view, 'missions', '', EMPTY_BAR.filters, null, mission,
-  ])
+  const panneau = [EMPTY_BAR, view, 'missions', '', EMPTY_BAR.filters, null, mission]
+  const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, [...panneau])
   api.apply(ctx)
 
   const drawer = findAll(registered.main({}), 'MissionDrawer')[0]
   assert.ok(drawer, 'le panneau doit monter le volet quand une mission est choisie')
   const tree = renderTree({ ...drawer, props: { ...drawer.props, ...overrides } })
-  return { tree, drawer, setters }
+
+  // Le même volet, un tour plus tard : les setters du clic alimentent les états.
+  const rerendre = () => {
+    resetHooks()
+    queue.length = 0
+    queue.push(...panneau)
+    const noeud = findAll(registered.main({}), 'MissionDrawer')[0]
+    return renderTree({ ...noeud, props: { ...noeud.props, ...overrides } })
+  }
+  return { tree, drawer, setters, rerendre }
 }
 
 test('le volet rend la priorité comme un select natif, plus comme une ligne morte', () => {
@@ -3608,6 +3625,188 @@ test('une mission sans branche garde le bouton de clôture, mais désarmé', () 
   assert.equal(bouton.props['aria-describedby'], 'missions-session-blocked')
 })
 
+/* Tolgee: le geste n'apparaît que pour un projet qui déclare ses locales. */
+
+const TRANSLATIONS = {
+  locales: ['fr', 'en'],
+  languageFile: 'locales/{locale}.json',
+  reference: 'fr',
+}
+
+/** Le bouton de l'import Tolgee, nommé par son libellé accessible. */
+function boutonTolgee(tree) {
+  return boutonGeste(tree, 'Tolgee import')
+}
+
+test('le volet ne rend l’import Tolgee que pour un projet qui déclare ses locales', () => {
+  for (const state of ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done', null]) {
+    const { tree } = monterVolet({ ...MISSION, state, translations: null, updatedAt: MISSION.updated })
+    assert.equal(boutonTolgee(tree), null, `aucun import Tolgee pour ${state} sans translations`)
+  }
+
+  const { tree } = monterVolet({ ...MISSION, translations: TRANSLATIONS, updatedAt: MISSION.updated })
+  const bouton = boutonTolgee(tree)
+  assert.ok(bouton, 'le bouton est rendu pour un projet traduit')
+  assert.equal(bouton.props.className, 'missions-action missions-action--icon')
+  assert.equal(bouton.props.title, 'Tolgee import')
+  assert.equal(bouton.props['aria-label'], 'Tolgee import')
+  assert.equal(bouton.props.disabled, false)
+  assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans title et aria-label')
+  assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte son dessin')
+  assert.equal('aria-describedby' in bouton.props, false, 'le geste ne dépend pas du verrou de session')
+  assert.equal(typeof bouton.props.onClick, 'function')
+})
+
+test('l’import Tolgee se place entre le ticket et les remontées', () => {
+  const { tree } = monterVolet({ ...MISSION, state: 'in-review', translations: TRANSLATIONS, updatedAt: MISSION.updated })
+  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+  assert.ok(actions, 'la rangée du pied est rendue')
+  const noms = actions.children
+    .filter((child) => child && (child.type === 'button' || child.type === 'a'))
+    .map(nomDuGeste)
+  const iTolgee = noms.indexOf('Tolgee import')
+  const iFeedback = noms.indexOf('Check the PR feedback')
+  const iSession = noms.findIndex((name) => /^Start a session/.test(name))
+  assert.ok(iTolgee > 0, 'l’import suit le ticket')
+  assert.ok(iTolgee < iFeedback, 'l’import précède les remontées')
+  assert.equal(iSession, noms.length - 1, 'la session reste le dernier geste')
+})
+
+test('à l’ouverture du volet, ni bilan ni rapport Tolgee ne sont rendus', () => {
+  // Given: une mission traduite, sans clic sur l'import.
+  const { tree } = monterVolet({ ...MISSION, translations: TRANSLATIONS, updatedAt: MISSION.updated })
+
+  // Then: le geste est là, son résultat n'existe pas encore.
+  assert.ok(boutonTolgee(tree), 'le bouton reste rendu')
+  assert.equal(
+    findAll(tree, 'p').some((node) => node.props.className === 'missions-tolgee-note'),
+    false,
+    'aucun bilan avant le clic',
+  )
+  assert.equal(
+    findAll(tree, 'div').some((node) => node.props.className === 'missions-tolgee'),
+    false,
+    'aucun rapport avant le clic',
+  )
+})
+
+test('un clic sur l’import Tolgee envoie la clé et rend le bilan', async () => {
+  const calls = []
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) })
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        file: 'missions/MIS-42/import-tolgee.xliff',
+        keys: [
+          { key: 'greet', value: 'Bonjour', missing: ['en'], occurrences: ['src/a.js:1'] },
+          { key: 'bye', value: 'Au revoir', missing: ['en', 'de'], occurrences: ['src/b.js:2'] },
+        ],
+        untranslated: [],
+        warnings: [],
+      }),
+    }
+  }
+
+  const { tree, setters, rerendre } = monterVolet({ ...MISSION, translations: TRANSLATIONS, updatedAt: MISSION.updated })
+  await boutonTolgee(tree).props.onClick()
+
+  const imports = calls.filter((entry) => entry.url === 'missions/api/tolgee')
+  assert.deepEqual(imports, [{ url: 'missions/api/tolgee', method: 'POST', body: { key: 'MIS-42' } }])
+  assert.ok(calls.some((entry) => entry.url === 'missions/api/usage'), 'le geste se compte')
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, false)
+  assert.match(note.text, /2 clé\(s\) manquante\(s\) en en, de/)
+  assert.match(note.text, /fichier écrit dans missions\/MIS-42\/import-tolgee\.xliff/)
+  const rapport = setters.filter((value) => Array.isArray(value) && value.length === 2).at(-1)
+  assert.deepEqual(rapport.map((entry) => entry.key), ['greet', 'bye'])
+  assert.equal(setters.at(-1), false, 'le bouton se réarme après le rapport')
+
+  // Then: le bilan et les clés sont bien rendus, pas seulement posés.
+  const apres = rerendre()
+  const bilan = findAll(apres, 'p').find((node) => node.props.className === 'missions-tolgee-note')
+  assert.ok(bilan, 'le bilan du clic se lit dans les détails')
+  assert.equal(bilan.props.role, 'status')
+  assert.match(textOf(bilan), /2 clé\(s\) manquante\(s\) en en, de — fichier écrit dans missions\/MIS-42\/import-tolgee\.xliff/)
+  const liste = findAll(apres, 'div').find((node) => node.props.className === 'missions-tolgee')
+  assert.ok(liste, 'le rapport du clic est rendu')
+  assert.match(textOf(liste), /greet/)
+  assert.match(textOf(liste), /manque en en/)
+})
+
+test('sans clé manquante, l’import Tolgee le dit sans fichier', async () => {
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      file: null,
+      keys: [],
+      untranslated: [{ key: 'newKey', occurrences: ['src/a.js:3'] }],
+      warnings: [],
+    }),
+  })
+
+  const { tree, setters, rerendre } = monterVolet({ ...MISSION, translations: TRANSLATIONS, updatedAt: MISSION.updated })
+  await boutonTolgee(tree).props.onClick()
+
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, false)
+  assert.match(note.text, /1 clé\(s\) sans valeur fr à écrire d’abord — aucun fichier écrit\./)
+  assert.ok(
+    setters.some((value) => Array.isArray(value) && value[0]?.key === 'newKey'),
+    'la clé sans fr est gardée pour la liste à part',
+  )
+
+  // Then: la liste à part est rendue, le fichier n'est pas annoncé.
+  const apres = rerendre()
+  const liste = findAll(apres, 'div').find((node) => node.props.className === 'missions-tolgee')
+  assert.ok(liste, 'le rapport du clic est rendu')
+  assert.match(textOf(liste), /À écrire en fr d’abord/)
+  assert.match(textOf(liste), /newKey/)
+  assert.match(textOf(liste), /src\/a\.js:3/)
+  assert.doesNotMatch(textOf(liste), /fichier écrit/)
+})
+
+test('un refus de l’import Tolgee se dit et rend le bouton', async () => {
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 409,
+    json: async () => ({ error: 'no changed source file on feat/mis-42 against main' }),
+  })
+
+  const { tree, setters, rerendre } = monterVolet({ ...MISSION, translations: TRANSLATIONS, updatedAt: MISSION.updated })
+  await boutonTolgee(tree).props.onClick()
+
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, true)
+  assert.match(note.text, /^Import Tolgee : no changed source file on feat\/mis-42 against main/)
+  assert.equal(setters.at(-1), false, 'le bouton se réarme après le refus')
+
+  // Then: l'échec est lu à l'écran, en alerte, sans rapport vide à côté.
+  const apres = rerendre()
+  const alerte = findAll(apres, 'p').find((node) => node.props.role === 'alert')
+  assert.ok(alerte, 'l’échec est rendu en alerte')
+  assert.match(textOf(alerte), /^Import Tolgee : no changed source file on feat\/mis-42 against main/)
+  assert.equal(findAll(apres, 'div').some((node) => node.props.className === 'missions-tolgee'), false)
+})
+
+test('le bundle câble l’URL, le dessin et le rapport Tolgee', () => {
+  assert.match(SOURCE, /const TOLGEE_URL = 'missions\/api\/tolgee'/)
+  assert.match(SOURCE, /h\(ActionIcon, \{ name: 'tolgee' \}\)/)
+  assert.match(SOURCE, /if \(name === 'tolgee'\)/)
+  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key \}\)/)
+  // Le rapport nomme les deux listes, chacune avec sa raison d'être.
+  assert.match(SOURCE, /Clés de traduction du diff/)
+  assert.match(SOURCE, /À écrire en fr d’abord/)
+  assert.match(SOURCE, /manque en \$\{entry\.missing\.join\(', '\)\}/)
+  assert.match(SOURCE, /entry\.occurrences \?\? \[\]\)\.join/)
+  assert.match(SOURCE, /className: 'missions-tolgee'/)
+  // Le style existe dans le bundle généré, pas seulement dans le template.
+  assert.match(regle('.missions-tolgee'), /display: grid/)
+  assert.match(SOURCE, /mission\.translations\s*\n\s*\?/)
+})
+
 /* Usage: le relevé se lit dans un onglet, et chaque geste s'y compte. */
 
 const DAY = 86_400_000
@@ -3757,7 +3956,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(44\)/)
+  assert.match(texte, /Never used \(45\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -3773,7 +3972,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(47\)/)
+  assert.match(textOf(zero.inner), /Never used \(48\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.

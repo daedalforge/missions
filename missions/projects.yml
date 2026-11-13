@@ -102,6 +102,13 @@ projects:
       cloud_id: 1e424f0c-65f2-4aab-aa05-ba0d359fa1f0
       email: stephane.lucien-vauthier@saas-office.com
       story_points_field: customfield_10032
+    # Les locales de Tolgee, relevées sur le clone : `yarn tolgee:pull` écrit
+    # `src/locales/<langue>/translations.json` pour les dix langues ci-dessous.
+    # `reference` est la langue où le panneau lit la valeur du XLIFF d'import.
+    translations:
+      locales: [ar, de, en, es, fil, fr, hi, pt, ru, zh]
+      languageFile: src/locales/{locale}/translations.json
+      reference: fr
     map:
       states:
         to-refine: [To Refine, Inbox, To Qualify, Analysis done]
