@@ -3956,7 +3956,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(45\)/)
+  assert.match(texte, /Never used \(46\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -3972,7 +3972,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(48\)/)
+  assert.match(textOf(zero.inner), /Never used \(49\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -4619,6 +4619,29 @@ test('le volet ne propose l’archive qu’en done', () => {
   assert.match(SOURCE, /const applyArchive = \(archived\) => \{/)
 })
 
+test('en done, la note du volet nomme l’archive au lieu du blocage de session', () => {
+  const { tree } = monterVoletArchive()
+  const texte = textOf(tree)
+  // La phrase du ticket #174 ne doit plus être la réponse du volet : elle parlait
+  // de session et se lisait comme un refus du clic d'archive.
+  assert.doesNotMatch(texte, /Session blocked: mission is done/)
+  assert.match(texte, /This mission is done: no session\. Archive moves the folder to missions\/archives\./)
+
+  // La session reste désarmée et décrite par la note, via son identifiant.
+  const session = findAll(tree, 'button').find((node) => /^Start a session/.test(nomDuGeste(node)))
+  assert.equal(session.props.disabled, true)
+  assert.equal(session.props['aria-describedby'], 'missions-session-blocked')
+  const note = findAll(tree, 'p').find((node) => node.props.id === 'missions-session-blocked')
+  assert.ok(note, 'la note garde son identifiant pour l’infobulle')
+  assert.equal(note.props.className, 'missions-drawer-note', 'une indication, pas une alerte')
+
+  // Les autres blocages gardent leur phrase et leur couleur d'alerte.
+  const { tree: bloque } = monterVolet({ ...MISSION, state: 'in-progress', branch: null, updatedAt: MISSION.updated })
+  assert.match(textOf(bloque), /Session blocked: branch is not declared/)
+  const alerte = findAll(bloque, 'p').find((node) => node.props.id === 'missions-session-blocked')
+  assert.equal(alerte.props.className, 'missions-drawer-note missions-drawer-note--blocked')
+})
+
 test('le premier clic arme l’archive, le second envoie la clé et ferme le volet', async () => {
   const calls = []
   const vraiFetch = globalThis.fetch
@@ -4645,7 +4668,10 @@ test('le premier clic arme l’archive, le second envoie la clé et ferme le vol
     assert.match(armeNote.text, /missions\/archives\/. Click again to confirm/)
 
     await bouton.props.onClick()
+    // Le geste se compte au clic qui confirme, avant la demande d'archive : sans
+    // cette trace, un clic d'archive ne laissait aucune preuve (MIS-174).
     assert.deepEqual(calls, [
+      { url: 'missions/api/usage', method: 'POST', body: { element: 'mission.archive' } },
       { url: 'missions/api/archive', method: 'POST', body: { key: 'MIS-42' } },
     ])
     const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
@@ -4671,7 +4697,7 @@ test('un refus d’archive se dit avec sa cause, et le bouton se réarme', async
     await bouton.props.onClick()
     await bouton.props.onClick()
 
-    assert.equal(calls.length, 1)
+    assert.equal(calls.filter((url) => url === 'missions/api/archive').length, 1)
     const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
     assert.equal(note.error, true)
     assert.match(note.text, /Archive refused: missions\/archives\/MIS-42 already exists/)
@@ -4685,7 +4711,7 @@ test('un refus d’archive se dit avec sa cause, et le bouton se réarme', async
 
     // Un refus réarme le geste : le clic suivant redemande confirmation.
     await bouton.props.onClick()
-    assert.equal(calls.length, 1, 'le clic après refus réarme sans écrire')
+    assert.equal(calls.filter((url) => url === 'missions/api/archive').length, 1, 'le clic après refus réarme sans écrire')
     const rearme = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
     assert.match(rearme.text, /Click again to confirm/)
   } finally {

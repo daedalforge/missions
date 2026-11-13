@@ -1565,15 +1565,16 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     assert.equal(usageElement(element.id)?.label, element.label)
   }
 
-  // Les ids sont ceux des Notes techniques du ticket, dans l'ordre du ticket :
-  // le registre ne prend pas de liberté avec le contrat.
+  // Les ids sont ceux des Notes techniques du ticket MIS-147, dans leur ordre ;
+  // le geste d'archive, livré après par MIS-150, s'ajoute à sa place dans le
+  // volet. Le registre ne prend pas d'autre liberté avec le contrat.
   assert.deepEqual(ids, [
     'tab.dashboard', 'tab.missions', 'tab.done', 'tab.repositories', 'tab.workflows', 'tab.usage',
     'filter.search', 'filter.state', 'filter.type', 'filter.epic', 'filter.project', 'filter.priority',
     'filter.sort', 'filter.missing', 'filter.clear', 'list.refresh', 'list.retry', 'mission.open',
     'dashboard.view-all',
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
-    'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.tolgee',
+    'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
     'mission.session', 'mission.feedback-session',
     'repository.open', 'repository.adopt', 'repository.tab.details', 'repository.tab.history', 'repository.tab.worktrees',
     'repository.branch', 'repository.more', 'repository.resolve', 'repository.squash',
