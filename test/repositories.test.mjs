@@ -7,6 +7,7 @@ import test from 'node:test'
 import {
   GIT_TIMEOUT_MS,
   SCAN_CONCURRENCY,
+  SUMMARY_TTL_MS,
   adoptWorktree,
   countRepositories,
   flattenLayout,
@@ -22,6 +23,8 @@ import {
   readRepository,
   readRepositoryNames,
   readTree,
+  resetRepositorySummary,
+  summarizeRepositories,
 } from '../lib/repositories.js'
 
 /**
@@ -1002,4 +1005,93 @@ test('un principal atteint par un lien symbolique hors racine est refusé', asyn
   assert.deepEqual(calls.map((call) => `${call.name} ${call.command}`), [
     'wt worktree list --porcelain',
   ], 'le refus tombe avant la moindre lecture d’état, et avant toute écriture')
+})
+
+/** Les réponses du scan pour une entrée propre, nommée. */
+function scanAnswers(name, { status = STATUS_CLEAN, commitLine = commit('a1b2c3d', 1794468058, 'MIS-192: le résumé') } = {}) {
+  return {
+    [`${name} status --porcelain=v2 --branch`]: status,
+    [`${name} log -1 --no-decorate --format=%h%x1f%ct%x1f%s`]: log(commitLine),
+  }
+}
+
+test('le résumé d’une racine paie le scan une fois, puis le tient five minutes', async (t) => {
+  resetRepositorySummary()
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }, { name: 'beta', git: 'dir' }])
+  const git = fauxGit({ ...scanAnswers('alpha'), ...scanAnswers('beta') })
+
+  const first = await summarizeRepositories(dir, { run: git.run })
+  // Une entrée, un `status`, un `log` : le résumé ne paie rien de plus que la
+  // liste, il ajoute la date de lecture.
+  assert.equal(git.calls.length, 4)
+  assert.deepEqual(Object.keys(first).sort(), ['count', 'durationMs', 'errors', 'repositories', 'root', 'scannedAt'])
+  assert.equal(first.count, 2)
+  assert.deepEqual(first.errors, [])
+  assert.deepEqual(first.repositories.map((row) => row.name), ['alpha', 'beta'])
+  assert.equal(Number.isFinite(Date.parse(first.scannedAt)), true)
+
+  // Deux appels rapprochés, un seul scan : le second rend le premier, tel quel.
+  const second = await summarizeRepositories(dir, { run: git.run })
+  assert.equal(second, first)
+  assert.equal(git.calls.length, 4)
+
+  // `refresh` force la relecture, et le résumé est nouveau.
+  const forced = await summarizeRepositories(dir, { run: git.run, refresh: true })
+  assert.equal(git.calls.length, 8)
+  assert.notEqual(forced, first)
+  assert.equal(SUMMARY_TTL_MS, 5 * 60_000)
+})
+
+test('deux lectures simultanées partagent le même scan', async (t) => {
+  resetRepositorySummary()
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
+  const git = fauxGit(scanAnswers('alpha'), { delay: 20 })
+
+  const [one, two] = await Promise.all([
+    summarizeRepositories(dir, { run: git.run }),
+    summarizeRepositories(dir, { run: git.run }),
+  ])
+  // La promesse en vol est rendue aux deux appelants : une seule paire de
+  // commandes, un seul `log`.
+  assert.equal(one, two)
+  assert.equal(git.calls.length, 2)
+
+  // Une lecture qui force ne s'invite pas dans la promesse en vol : elle paie
+  // la sienne, et le cache garde la plus récente réponse.
+  const forced = await summarizeRepositories(dir, { run: git.run, refresh: true })
+  assert.equal(git.calls.length, 4)
+  assert.notEqual(forced, one)
+})
+
+test('une entrée illisible laisse son erreur, le reste du résumé tient', async (t) => {
+  resetRepositorySummary()
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }, { name: 'beta', git: 'dir' }])
+  const git = fauxGit({
+    ...scanAnswers('alpha'),
+    ...scanAnswers('beta', { status: Object.assign(new Error('fatal: not a git repository'), { stderr: 'fatal: not a git repository' }) }),
+  })
+
+  const summary = await summarizeRepositories(dir, { run: git.run })
+  // La ligne fautive reste dans le scan, avec son erreur : un zéro serait un
+  // mensonge, le résumé dit ce qu'il n'a pas pu lire.
+  const beta = summary.repositories.find((row) => row.name === 'beta')
+  assert.ok(beta)
+  assert.match(beta.error, /not a git repository/)
+  assert.deepEqual(summary.errors, [{ name: 'beta', message: 'not a git repository' }])
+  assert.equal(summary.count, 2)
+})
+
+test('le cache se vide : la racine suivante se relit', async (t) => {
+  resetRepositorySummary()
+  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
+  const git = fauxGit(scanAnswers('alpha'))
+
+  await summarizeRepositories(dir, { run: git.run })
+  assert.equal(git.calls.length, 2)
+  await summarizeRepositories(dir, { run: git.run })
+  assert.equal(git.calls.length, 2)
+
+  resetRepositorySummary()
+  await summarizeRepositories(dir, { run: git.run })
+  assert.equal(git.calls.length, 4)
 })
