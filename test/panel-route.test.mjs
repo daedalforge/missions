@@ -682,6 +682,28 @@ test('GET /workflows rend les quatre étapes et le vocabulaire', async (t) => {
   assert.equal(response.body.workflows[0].text, undefined, 'le texte reste dans la route du modèle')
 })
 
+test('sans projetsFile, GET /workflows liste les cinq modèles du paquet, marqués versionnés', async (t) => {
+  // Given : l'hôte monté sans fichier de projets, comme le déploiement par défaut.
+  const { handler } = await mount(t, { projectsFile: null })
+
+  // When
+  const response = await call(handler, { path: '/missions/api/workflows' })
+
+  // Then : les cinq modèles versionnés du paquet sont là, et rien d'autre ne l'est.
+  assert.equal(response.status, 200)
+  const versioned = response.body.workflows.filter((entry) => entry.local !== true)
+  assert.deepEqual(versioned.map((entry) => entry.workflow), ['cadrage', 'execution', 'review', 'cloture', 'statuts'])
+  for (const entry of versioned) {
+    assert.equal(entry.local, false)
+    assert.match(entry.file, /^workflows\/model\/[a-z-]+\.yml$/)
+    assert.doesNotMatch(entry.file, /undefined/)
+  }
+  // Les workflows locaux réels du poste, quand il y en a, restent locaux et dans leur dossier.
+  for (const entry of response.body.workflows.filter((entry) => entry.local === true)) {
+    assert.match(entry.file, /^workflows\/local\/model\/[a-z-]+\.yml$/)
+  }
+})
+
 test('POST /workflows/model écrit un modèle valide', async (t) => {
   const { dir, handler } = await mount(t)
   await copyWorkflows(dir)
