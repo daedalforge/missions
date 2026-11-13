@@ -2163,7 +2163,7 @@ test('POST /archive-batch archive les done et refuse les autres dans une répons
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive-batch',
-      body: { keys: ['MIS-42', 'MIS-43', 'MIS-44', 'MIS-99'] },
+      body: { keys: ['MIS-42', 'MIS-43', 'MIS-44', 'MIS-99', 'ZZZ-1'] },
     })
 
     assert.equal(response.status, 200)
@@ -2174,6 +2174,7 @@ test('POST /archive-batch archive les done et refuse les autres dans une répons
     assert.deepEqual(response.body.refused, [
       { key: 'MIS-44', error: 'MIS-44 is not done' },
       { key: 'MIS-99', error: 'no mission folder for MIS-99' },
+      { key: 'ZZZ-1', error: 'no project declares ZZZ-1' },
     ])
     assert.deepEqual((await readdir(join(dir, 'missions'))).sort(), ['MIS-44', 'archives', 'projects.yml'])
     assert.equal(await readFile(join(dir, 'missions', 'MIS-44', 'journal.md'), 'utf8'), '# Journal — MIS-44\n')
