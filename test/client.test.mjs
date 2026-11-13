@@ -3118,12 +3118,14 @@ test('une session Usage ou Workflows rouvre la section, une valeur inconnue reto
 
 
 /** Les cinq pages que le serveur liste, avec leurs titres et leurs étapes. */
+// La forme exacte de la route : `page`, `file`, `step`, `title`, `lines`,
+// `exists` — `name` n'en fait pas partie, le client ne doit pas en dépendre.
 const PLAYBOOK_VIEW_PAGES = [
-  { page: 'cadrage', name: 'cadrage.md', file: 'playbook/cadrage.md', step: 'cadrage', title: 'Cadrage — la fiche du dépôt', lines: 12, exists: true },
-  { page: 'execution', name: 'execution.md', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 40, exists: true },
-  { page: 'review', name: 'review.md', file: 'playbook/review.md', step: 'revue', title: 'Revue — la vérification', lines: 30, exists: true },
-  { page: 'cloture', name: 'cloture.md', file: 'playbook/cloture.md', step: 'clôture', title: 'Clôture — la sortie', lines: 20, exists: true },
-  { page: 'workspace', name: 'workspace.md', file: 'playbook/workspace.md', step: null, title: 'Workspace — la fiche du dépôt', lines: 18, exists: true },
+  { page: 'cadrage', file: 'playbook/cadrage.md', step: 'cadrage', title: 'Cadrage — la fiche du dépôt', lines: 12, exists: true },
+  { page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 40, exists: true },
+  { page: 'revue', file: 'playbook/revue.md', step: 'revue', title: 'Revue — la vérification', lines: 30, exists: true },
+  { page: 'cloture', file: 'playbook/cloture.md', step: 'clôture', title: 'Clôture — la sortie', lines: 20, exists: true },
+  { page: 'workspace', file: 'playbook/workspace.md', step: null, title: 'Workspace — la fiche du dépôt', lines: 18, exists: true },
 ]
 
 /** Les dix hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
@@ -3263,7 +3265,7 @@ test('Enregistrer envoie le texte et la version lues, puis affiche le fichier é
   const vraiFetch = globalThis.fetch
   globalThis.fetch = async (url, options = {}) => {
     appels.push({ url: String(url), options })
-    return { ok: true, json: async () => ({ page: 'execution', name: 'execution.md', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 41, exists: true, mtimeMs: 9999 }) }
+    return { ok: true, json: async () => ({ page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 41, exists: true, mtimeMs: 9999 }) }
   }
   try {
     const { tree, setters } = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
@@ -3325,7 +3327,7 @@ test('quitter une page au brouillon demande confirmation en ligne, et les deux i
   assert.ok(dialogue, 'la confirmation vit dans la section')
   assert.equal(dialogue.props.role, 'alertdialog')
   assert.match(textOf(dialogue), /modifications non enregistrées/)
-  assert.match(textOf(dialogue), /workspace\.md/)
+  assert.match(textOf(dialogue), /« workspace »/)
   const garder = findAll(dialogue, 'button').find((node) => textOf(node) === 'Keep editing')
   const abandonner = findAll(dialogue, 'button').find((node) => textOf(node) === 'Discard')
   assert.ok(garder && abandonner, 'les deux issues sont des boutons')
