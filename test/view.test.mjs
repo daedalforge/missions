@@ -7,7 +7,10 @@ import {
   layoutWorkflow,
   modelOf,
   readStep,
+  readStoredView,
+  storedView,
   writeStep,
+  writeStoredView,
   nextGestureId,
   withoutEdge,
   upsertEdge,
@@ -610,6 +613,66 @@ test('un stockage absent ou en panne ne casse pas l’onglet', () => {
   assert.doesNotThrow(() => writeTab(throwing, 'missions', tabs))
   assert.doesNotThrow(() => writeTab(throwing, 'dashboard', tabs))
   assert.doesNotThrow(() => writeTab(null, 'missions', tabs))
+})
+
+test('la session range l’onglet et la section de Settings sous la même clé', () => {
+  const tabs = ['dashboard', 'missions', 'settings']
+  const sections = ['usage', 'workflows']
+  const storage = memoryStorage()
+
+  // Rien de rangé : le dashboard, et la première section de Settings.
+  assert.deepEqual(readStoredView(storage, tabs, sections), { tab: 'dashboard', settingsView: 'usage' })
+  assert.equal(storage.entries.has(TAB_KEY), false)
+
+  writeStoredView(storage, { tab: 'settings', settingsView: 'workflows' }, tabs, sections)
+  assert.deepEqual([...storage.entries.keys()], [TAB_KEY])
+  // Une seule clé : la section tient lieu d�onglet tant que Settings est ouvert.
+  assert.equal(storage.entries.get(TAB_KEY), 'workflows')
+  assert.deepEqual(readStoredView(storage, tabs, sections), { tab: 'settings', settingsView: 'workflows' })
+
+  // Revenir au dashboard retire la clé, comme l'onglet au repos.
+  writeStoredView(storage, { tab: 'dashboard', settingsView: 'workflows' }, tabs, sections)
+  assert.equal(storage.entries.has(TAB_KEY), false)
+})
+
+test('une session stockée sur usage ou workflows rouvre la section, pas le dashboard', () => {
+  const tabs = ['dashboard', 'missions', 'settings']
+  const sections = ['usage', 'workflows']
+  const storage = memoryStorage()
+
+  // `usage` et `workflows` étaient des onglets : leur valeur rangée nomme
+  // désormais la section de Settings, sans second passage de migration.
+  for (const section of sections) {
+    storage.setItem(TAB_KEY, section)
+    assert.deepEqual(readStoredView(storage, tabs, sections), { tab: 'settings', settingsView: section })
+    assert.equal(storedView('settings', section, sections), section)
+  }
+
+  // Une section illisible retombe sur la première, jamais sur un onglet absent.
+  assert.equal(storedView('settings', 'epics', sections), 'usage')
+  storage.setItem(TAB_KEY, 'epics')
+  assert.deepEqual(readStoredView(storage, tabs, sections), { tab: 'dashboard', settingsView: 'usage' })
+
+  // Un onglet inconnu ne remplace pas la vue courante par une vue absente.
+  writeStoredView(storage, { tab: 'epics', settingsView: 'usage' }, tabs, sections)
+  assert.equal(storage.entries.has(TAB_KEY), false)
+})
+
+test('un stockage absent ou en panne ne casse pas la section', () => {
+  const tabs = ['dashboard', 'missions', 'settings']
+  const sections = ['usage', 'workflows']
+
+  assert.deepEqual(readStoredView(undefined, tabs, sections), { tab: 'dashboard', settingsView: 'usage' })
+  assert.deepEqual(readStoredView({}, tabs, sections), { tab: 'dashboard', settingsView: 'usage' })
+
+  const throwing = {
+    getItem: () => { throw new Error('blocked') },
+    setItem: () => { throw new Error('quota') },
+    removeItem: () => { throw new Error('blocked') },
+  }
+  assert.deepEqual(readStoredView(throwing, tabs, sections), { tab: 'dashboard', settingsView: 'usage' })
+  assert.doesNotThrow(() => writeStoredView(throwing, { tab: 'settings', settingsView: 'workflows' }, tabs, sections))
+  assert.doesNotThrow(() => writeStoredView(null, { tab: 'settings', settingsView: 'usage' }, tabs, sections))
 })
 
 test('la file du dashboard suit l’urgence, puis la plus ancienne, sans l’en-cours', () => {
