@@ -2544,6 +2544,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           h('circle', { cx: 8, cy: 11.5, r: 0.8, fill: 'currentColor', stroke: 'none' }),
         )
       }
+      if (name === 'resolve') {
+        // Two paths meeting at one point: the conflict resolved in place.
+        return h('svg', common,
+          h('path', { d: 'M3 3.4 8 8l4.9-4.6' }),
+          h('path', { d: 'M3 12.6 8 8l4.9 4.6' }),
+        )
+      }
       // A play triangle: the step that moves the ticket.
       return h('svg', common, h('path', { d: 'M5.2 3.3 12.6 8l-7.4 4.7Z' }))
     }
@@ -3065,11 +3072,15 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * history page one, and a layout one log per branch. Reading all three at
      * mount would spend them on tabs nobody opened.
      */
-    function RepositoryDrawer({ repository, onClose, theme }) {
+    function RepositoryDrawer({ repository, services, workspaceId, onClose, theme }) {
       const [detail, setDetail] = React.useState({ loading: true, data: null, error: null })
       const [section, setSection] = React.useState('details')
       const [history, setHistory] = React.useState({ loading: false, more: false, data: null, error: null })
       const [tree, setTree] = React.useState({ loading: false, data: null, error: null })
+      // The drawer's one session: the last gesture's failure, said in one
+      // short line — a successful open tears the panel down before a note
+      // could be read, so the happy path says nothing.
+      const [note, setNote] = React.useState(null)
 
       // Another repository is another drawer: its sections start over.
       React.useEffect(() => {
@@ -3157,6 +3168,24 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const behind = Number(shown.behind ?? 0)
       const upstreamLine = shown.upstream ? `${ahead} ahead · ${behind} behind` : 'no upstream'
 
+      // The drawer's one gesture: open a session in the workspace whose path
+      // is this checkout, so the session runs where the conflicts are. The
+      // panel writes no git: the prompt asks, the session resolves.
+      const prompt = repositoryConflictPrompt(repository)
+      const openConflictSession = async () => {
+        track('repository.resolve')
+        try {
+          const { prefilledBy, openedBy, uiError } = await openMissionSession(services, prompt, workspaceId, repository.path)
+          if (uiError) {
+            setNote(`Session not opened: ${uiError}`)
+          } else if (!openedBy && !prefilledBy) {
+            setNote('Session created — pick it in the sidebar.')
+          }
+        } catch (error) {
+          setNote(`Session not opened: ${error?.message ?? error}`)
+        }
+      }
+
       return h('aside', {
         className: 'missions-drawer',
         role: 'complementary',
@@ -3217,6 +3246,22 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                         h(DrawerRow, { label: 'Against upstream', value: upstreamLine }),
                       ),
                     ),
+        ),
+        // The footer is the mission drawer's: the same classes, the same icon
+        // family, so the gesture reads as one of the panel's actions. The
+        // button stays visible without a known conflict — the scan does not
+        // read one, and the prompt says what to do when there is none.
+        h('div', { className: 'missions-drawer-foot' },
+          note ? h('p', { className: 'missions-drawer-note' }, note) : null,
+          h('div', { className: 'missions-drawer-actions' },
+            h('button', {
+              type: 'button',
+              className: 'missions-action missions-action--icon',
+              onClick: openConflictSession,
+              title: 'Resolve conflicts',
+              'aria-label': 'Resolve conflicts',
+            }, h(ActionIcon, { name: 'resolve' })),
+          ),
         ),
       )
     }
@@ -3903,7 +3948,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             ? null
             : tab === 'repositories'
             ? repository
-              ? h(RepositoryDrawer, { key: repository.name, repository, onClose: () => setRepository(null), theme })
+              ? h(RepositoryDrawer, { key: repository.name, repository, services, workspaceId, onClose: () => setRepository(null), theme })
               : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Repository details' },
                   h('p', { className: 'missions-drawer-hint' }, 'Select a repository to see its remote, its upstream and its last commits.'),
                 )
