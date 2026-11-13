@@ -2164,14 +2164,32 @@ function scanReady(data) {
   return { loading: false, data, error: null }
 }
 
+/** La session qui a ouvert les worktrees : la clé que le switch écrit. */
+const WORKTREES_SHOWN = { 'missions.repositories.worktrees': '1' }
+
 /** Le panneau monté sur l'onglet Repositories, et la vue résolue. */
-function montrerRepositories(view, repository = null) {
-  const { api, ctx, registered, effects, setters } = charger(undefined, repositoriesStates(view, repository), memorySession())
+function montrerRepositories(view, repository = null, session = memorySession(), storage = undefined) {
+  const states = repositoriesStates(view, repository)
+  const { api, ctx, registered, effects, setters, queue, resetHooks } = charger(storage, [...states], session)
   api.apply(ctx)
-  const tree = registered.main({})
-  const node = findAll(tree, 'RepositoriesView')[0]
-  assert.ok(node, 'l’onglet Repositories porte sa vue')
-  return { tree, node, inner: renderTree(node), effects, setters }
+  let tree = null
+  const monter = () => {
+    tree = registered.main({})
+    const node = findAll(tree, 'RepositoriesView')[0]
+    assert.ok(node, 'l’onglet Repositories porte sa vue')
+    return node
+  }
+  const node = monter()
+  const inner = renderTree(node)
+  // Le même onglet, un tour plus tard : les setters du clic alimentent les
+  // états, et la session garde ce que la vue y a écrit.
+  const rerendre = () => {
+    resetHooks()
+    queue.length = 0
+    queue.push(...states)
+    return renderTree(monter())
+  }
+  return { tree, node, inner, effects, setters, session, rerendre }
 }
 
 test('la barre d’onglets place Done et Repositories entre Missions et Workflows', () => {
@@ -2611,7 +2629,7 @@ test('l’onglet demande le scan au serveur, une fois, à son montage', async ()
 })
 
 test('chaque dépôt est une ligne : nom, branche, état, dernier commit, âge', () => {
-  const { inner } = montrerRepositories(scanReady(REPO_SCAN))
+  const { inner } = montrerRepositories(scanReady(REPO_SCAN), null, memorySession(WORKTREES_SHOWN))
 
   // L'en-tête dit ce que le scan a lu : les clones d'un côté, les worktrees de
   // l'autre, le tout sans gonfler le compte des dépôts.
@@ -2642,8 +2660,110 @@ test('chaque dépôt est une ligne : nom, branche, état, dernier commit, âge',
   assert.equal(vide.props['aria-label'], 'zeta, main, clean, no commit yet')
 })
 
+test('par défaut, les worktrees restent hors de la liste et l’en-tête les compte', () => {
+  const session = memorySession()
+  const { inner } = montrerRepositories(scanReady(REPO_SCAN), null, session)
+
+  // Le scan a bien lu trois checkouts : l'en-tête le dit, les lignes n'en
+  // montrent que les clones.
+  assert.match(textOf(inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
+  const lignes = findAll(inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions', 'zeta'])
+  assert.equal(findAll(inner, 'li').filter((li) => li.props.className === 'missions-repo-rowitem').length, 2)
+
+  // Le switch est là, fermé, et se nomme d'un nom lisible.
+  const interrupteur = findAll(inner, 'button').find((button) => button.props.role === 'switch')
+  assert.ok(interrupteur, 'la liste porte son switch')
+  assert.equal(interrupteur.props['aria-checked'], 'false')
+  assert.equal(textOf(interrupteur), 'Show worktrees')
+  assert.equal(session.entries.size, 0, 'un montage ne range aucune clé')
+})
+
+test('le switch révèle les worktrees dans l’ordre du scan, et un second clic les cache', () => {
+  const session = memorySession()
+  const premier = montrerRepositories(scanReady(REPO_SCAN), null, session)
+  findAll(premier.inner, 'button').find((button) => button.props.role === 'switch').props.onClick()
+
+  assert.deepEqual(premier.setters, [true], 'un clic arme le switch')
+  assert.equal(session.entries.get('missions.repositories.worktrees'), '1', 'la session retient le choix')
+
+  const ouvert = premier.rerendre()
+  const lignes = findAll(ouvert, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions', 'missions-gh20', 'zeta'])
+  assert.equal(findAll(ouvert, 'button').find((button) => button.props.role === 'switch').props['aria-checked'], 'true')
+  assert.ok(
+    findAll(ouvert, 'button').some((button) => button.props['aria-label'] === 'Bring missions-gh20 into missions'),
+    'le worktree révélé porte sa bascule',
+  )
+
+  // Le second clic retire la clé : fermer le switch, c'est revenir au défaut.
+  findAll(ouvert, 'button').find((button) => button.props.role === 'switch').props.onClick()
+  assert.deepEqual(premier.setters, [true, false])
+  assert.equal(session.entries.has('missions.repositories.worktrees'), false)
+  const ferme = premier.rerendre()
+  assert.deepEqual(
+    findAll(ferme, 'button').filter((button) => button.props['data-repository'] !== undefined).map((ligne) => ligne.props['data-repository']),
+    ['missions', 'zeta'],
+  )
+})
+
+test('la session rouvre les worktrees, et le choix ne touche pas localStorage', () => {
+  const local = {
+    entries: new Map(),
+    getItem(key) { return this.entries.has(key) ? this.entries.get(key) : null },
+    setItem(key, value) { this.entries.set(key, String(value)) },
+    removeItem(key) { this.entries.delete(key) },
+  }
+
+  // Une session qui a déjà ouvert le switch rend les lignes complètes dès le
+  // montage : c'est le retour sur l'onglet après une visite.
+  const rouverte = montrerRepositories(scanReady(REPO_SCAN), null, memorySession(WORKTREES_SHOWN), local)
+  const ouvertes = findAll(rouverte.inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(ouvertes.map((ligne) => ligne.props['data-repository']), ['missions', 'missions-gh20', 'zeta'])
+  assert.equal(findAll(rouverte.inner, 'button').find((button) => button.props.role === 'switch').props['aria-checked'], 'true')
+  assert.equal(local.entries.size, 0, 'aucune clé de worktree dans localStorage')
+
+  // Une valeur qui n'est pas « 1 » garde le défaut fermé.
+  for (const value of ['0', 'true', 'oui']) {
+    const ferme = montrerRepositories(scanReady(REPO_SCAN), null, memorySession({ 'missions.repositories.worktrees': value }))
+    assert.deepEqual(
+      findAll(ferme.inner, 'button').filter((button) => button.props['data-repository'] !== undefined).map((ligne) => ligne.props['data-repository']),
+      ['missions', 'zeta'],
+      `« ${value} » ne vaut pas « 1 »`,
+    )
+  }
+})
+
+test('une racine qui ne porte que des worktrees le dit, au lieu de paraître vide', () => {
+  const unSeul = { ...REPO_SCAN, count: 1, repositories: [REPO_SCAN.repositories[2]] }
+  const ferme = montrerRepositories(scanReady(unSeul))
+
+  assert.doesNotMatch(textOf(ferme.inner), /No repository in the workspace root\./)
+  assert.match(textOf(ferme.inner), /0 repositories · 1 worktree · scanned in 1\.9 s/)
+  assert.match(textOf(ferme.inner), /The only worktree of the workspace root is hidden\./)
+  assert.match(textOf(ferme.inner), /Show worktrees lists it\. Scanned \/Users\/moi\/projects\./)
+
+  const interrupteur = findAll(ferme.inner, 'button').find((button) => button.props.role === 'switch')
+  assert.ok(interrupteur, 'le switch reste à portée pour révéler les lignes')
+  interrupteur.props.onClick()
+  const ouvertes = findAll(ferme.rerendre(), 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(ouvertes.map((ligne) => ligne.props['data-repository']), ['missions-gh20'])
+
+  // Deux worktrees se comptent : le texte change de nombre, pas de nature.
+  const deux = {
+    ...REPO_SCAN,
+    count: 2,
+    repositories: [
+      REPO_SCAN.repositories[2],
+      { ...REPO_SCAN.repositories[2], name: 'missions-gh21', path: '/Users/moi/projects/missions-gh21' },
+    ],
+  }
+  assert.match(textOf(montrerRepositories(scanReady(deux)).inner), /All 2 worktrees of the workspace root are hidden\./)
+  assert.match(textOf(montrerRepositories(scanReady(deux)).inner), /Show worktrees lists them\./)
+})
+
 test('un worktree porte la bascule vers son principal, un clone n’en a pas', () => {
-  const { inner } = montrerRepositories(scanReady(REPO_SCAN))
+  const { inner } = montrerRepositories(scanReady(REPO_SCAN), null, memorySession(WORKTREES_SHOWN))
   const lignes = findAll(inner, 'li').filter((li) => li.props.className === 'missions-repo-rowitem')
   assert.equal(lignes.length, 3)
   const bascule = (li) => findAll(li, 'button').find((button) => button.props.className === 'missions-repo-main')
@@ -2687,7 +2807,7 @@ test('une bascule sans cible reste là, désarmée, et dit pourquoi', () => {
       { ...worktree, name: 'inconnu', main: null },
     ],
   }
-  const { inner } = montrerRepositories(scanReady(scan))
+  const { inner } = montrerRepositories(scanReady(scan), null, memorySession(WORKTREES_SHOWN))
   const bascules = findAll(inner, 'button').filter((button) => button.props.className === 'missions-repo-main')
   assert.equal(bascules.length, 2)
   for (const bouton of bascules) {
@@ -2705,7 +2825,7 @@ test('la bascule ramène le worktree dans le principal, après confirmation, et 
   let question = ''
   globalThis.confirm = (asked) => { question = String(asked); return true }
   try {
-    const rendu = montrerRepositories(scanReady(REPO_SCAN))
+    const rendu = montrerRepositories(scanReady(REPO_SCAN), null, memorySession(WORKTREES_SHOWN))
     const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
     assert.ok(bouton)
     await bouton.props.onClick()
@@ -2747,7 +2867,7 @@ test('une confirmation refusée n’écrit rien et ne compte rien', async () => 
   const vraiConfirm = globalThis.confirm
   globalThis.confirm = () => false
   try {
-    const rendu = montrerRepositories(scanReady(REPO_SCAN))
+    const rendu = montrerRepositories(scanReady(REPO_SCAN), null, memorySession(WORKTREES_SHOWN))
     const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
     await bouton.props.onClick()
     assert.deepEqual(spy.appels, [], 'aucune requête sans confirmation')
@@ -2775,7 +2895,7 @@ test('un refus de l’hôte est le bandeau, mot pour mot, et la liste est relue'
     return { ok: true, json: async () => ({}) }
   }
   try {
-    const rendu = montrerRepositories(scanReady(REPO_SCAN))
+    const rendu = montrerRepositories(scanReady(REPO_SCAN), null, memorySession(WORKTREES_SHOWN))
     const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
     await bouton.props.onClick()
     const erreur = rendu.setters.filter((value) => value && value.state === 'error').at(-1)
@@ -2803,7 +2923,7 @@ test('un worktree que git garde est un résultat partiel, pas un échec', async 
     return { ok: true, json: async () => ({}) }
   }
   try {
-    const rendu = montrerRepositories(scanReady(REPO_SCAN))
+    const rendu = montrerRepositories(scanReady(REPO_SCAN), null, memorySession(WORKTREES_SHOWN))
     const bouton = findAll(rendu.inner, 'button').find((button) => button.props.className === 'missions-repo-main')
     await bouton.props.onClick()
     const fin = rendu.setters.filter((value) => value && value.name === 'missions-gh20').at(-1)
@@ -3163,7 +3283,7 @@ test('un layout illisible est un bandeau dans Worktrees', () => {
 
 test('un clic de ligne ouvre le volet, la croix et Échap le ferment', () => {
   const repository = REPO_SCAN.repositories[1]
-  const { tree, inner, effects, setters } = montrerRepositories(scanReady(REPO_SCAN), repository)
+  const { tree, inner, effects, setters } = montrerRepositories(scanReady(REPO_SCAN), repository, memorySession(WORKTREES_SHOWN))
 
   // La ligne est un bouton, pas un dessin de bouton : son gestionnaire remet le
   // dépôt au sélecteur du panneau, et le changement d'onglet le remet à `null`.
