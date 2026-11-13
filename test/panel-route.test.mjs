@@ -2513,6 +2513,28 @@ test('POST /workflows range la création locale sous workflows/local/ et la list
   assert.match(read.body.text, /document: workflows\/local\/brouillon-local\.md/)
 })
 
+test('POST /workflows refuse une description de 281 caractères sans rien écrire', async (t) => {
+  // Given : un dépôt temporaire dont seuls les cinq modèles versionnés existent.
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  // When : la création poste une description d'un caractère de trop.
+  const refused = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows',
+    body: { title: 'Description trop longue', description: 'x'.repeat(281), kind: 'etape', local: true },
+  })
+
+  // Then : le refus nomme la description, et rien n'est écrit dans les deux dossiers.
+  assert.equal(refused.status, 400)
+  assert.equal(refused.body.error, 'workflow invalid')
+  assert.equal(refused.body.errors[0].field, 'description')
+  assert.equal(refused.body.errors[0].code, 'description-invalide')
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'model', 'description-trop-longue.yml'), 'utf8').catch(() => null), null)
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'description-trop-longue.md'), 'utf8').catch(() => null), null)
+  assert.equal(await readFile(join(dir, 'workflows', 'model', 'description-trop-longue.yml'), 'utf8').catch(() => null), null)
+})
+
 test('POST /workflows/model bascule un workflow local puis le ramène, en un geste', async (t) => {
   const { dir, handler } = await mount(t)
   await copyWorkflows(dir)
