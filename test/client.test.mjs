@@ -3110,14 +3110,10 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
 
   const defaults = dessins('default')
   const manga = dessins('manga')
-  const noel = dessins('noel')
-  // Le même onglet, trois dessins : le thème n'est pas un simple recoloriage.
+  // Le même onglet, deux dessins : le thème n'est pas un simple recoloriage.
   for (const id of Object.keys(defaults)) {
     assert.notDeepEqual(manga[id].paths, defaults[id].paths, `dessin identique dans les deux thèmes : ${id}`)
-    assert.notDeepEqual(noel[id].paths, defaults[id].paths, `dessin identique en Noël : ${id}`)
-    assert.notDeepEqual(noel[id].paths, manga[id].paths, `dessin identique entre Naruto et Noël : ${id}`)
     assert.ok(manga[id].paths.length > 0)
-    assert.ok(noel[id].paths.length > 0)
     assert.ok(defaults[id].paths.length > 0)
   }
   // La pastille en attente suit le même thème : la flèche du thème par défaut
@@ -3125,15 +3121,11 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
   for (const id of ['missions-tab-missions', 'missions-tab-done', 'missions-tab-repositories']) {
     assert.equal(defaults[id].badge.length, 1, `pastille en attente absente : ${id}`)
     assert.equal(manga[id].badge.length, 1, `pastille en attente absente en manga : ${id}`)
-    assert.equal(noel[id].badge.length, 1, `pastille en attente absente en Noël : ${id}`)
     assert.notDeepEqual(manga[id].badge, defaults[id].badge, `pastille identique dans les deux thèmes : ${id}`)
-    assert.notDeepEqual(noel[id].badge, defaults[id].badge, `pastille identique en Noël : ${id}`)
-    assert.notDeepEqual(noel[id].badge, manga[id].badge, `pastille identique entre Naruto et Noël : ${id}`)
   }
   // L'encre manga est plus épaisse, comme le reste de la barre.
   assert.equal(defaults['missions-tab-dashboard'].strokeWidth, 1.3)
   assert.equal(manga['missions-tab-dashboard'].strokeWidth, 1.7)
-  assert.equal(noel['missions-tab-dashboard'].strokeWidth, 1.5)
 })
 
 test('Settings montre ses deux sections dans une navigation verticale, et la section active seule', () => {
@@ -6999,18 +6991,12 @@ test('le dialogue de création valide chaque champ avant d’écrire', async () 
   }
 })
 
-// --- Thème Noël (MIS-194) -------------------------------------------------
-// La même peau illustrée porte les deux thèmes : la structure est partagée,
-// chaque thème n'apporte que ses tokens et ses rares variantes de décor.
+// --- Peau illustrée (MIS-170) ---------------------------------------------
+// Un seul thème illustré : la structure vit une fois sous data-skin="paper",
+// le thème n'apporte que ses tokens et ses rares variantes de décor.
 
-/** Le corps d'une règle dont le sélecteur tient sur une ligne. */
-function corpsDe(selector) {
-  const at = SOURCE.indexOf(`${selector} {`)
-  assert.ok(at >= 0, `règle absente : ${selector}`)
-  return SOURCE.slice(at + selector.length + 2, SOURCE.indexOf('}', at))
-}
+const SANS_IMAGES = SOURCE.replace(/[A-Za-z0-9+/=]{200,}/g, '')
 
-/** Les tokens de couleur littérale d'un bloc de palette. */
 function paletteDe(debut) {
   const at = SOURCE.indexOf(debut)
   assert.ok(at >= 0, `palette absente : ${debut}`)
@@ -7021,7 +7007,6 @@ function paletteDe(debut) {
   return tokens
 }
 
-/** Contraste WCAG d'un texte sur son fond. */
 function contraste(texte, fond) {
   const luminance = (hex) => {
     const n = parseInt(hex.slice(1), 16)
@@ -7035,7 +7020,6 @@ function contraste(texte, fond) {
   return (haut + 0.05) / (bas + 0.05)
 }
 
-/** Toutes les règles du bloc de thème, sélecteur et corps. */
 function reglesDeTheme() {
   const start = SOURCE.indexOf('const THEME_CSS = `')
   assert.ok(start >= 0)
@@ -7048,10 +7032,10 @@ function reglesDeTheme() {
   return regles
 }
 
-const NOEL_CLAIR = '.missions-panel[data-skin="paper"][data-theme="noel"]'
-const NOEL_SOMBRE = ':root[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="noel"]'
 const MANGA_CLAIR = '.missions-panel[data-skin="paper"][data-theme="manga"]'
 const MANGA_SOMBRE = ':root[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="manga"]'
+const CLASSES_PARTAGEES = ['missions-card', 'missions-row', 'missions-group', 'missions-toolbar', 'missions-tabs', 'missions-tab-count', 'missions-drawer-tabs', 'missions-empty-state']
+const SEUILS_CONTRASTE = [7, 4.5, 4.5]
 
 function arbreTheme(theme, session = {}, vue = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }, initial = [EMPTY_BAR, vue]) {
   const { api, ctx, registered } = charger({ getItem: () => theme, setItem: () => {} }, initial, memorySession(session))
@@ -7059,12 +7043,10 @@ function arbreTheme(theme, session = {}, vue = { loading: false, missions: [MISS
   return registered.main({})
 }
 
-/** L'arbre rendu, comme React le ferait : les composants deviennent leurs nœuds. */
 function renduTheme(theme, session = {}, vue) {
   return renderTree(arbreTheme(theme, session, vue))
 }
 
-/** Le thème que le panneau lit dans un stockage donné, avant tout choix. */
 function themeDuStockage(storage) {
   const { api, ctx, registered } = charger(storage, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
   api.apply(ctx)
@@ -7073,116 +7055,97 @@ function themeDuStockage(storage) {
   return panneau.props['data-theme']
 }
 
-test('Noël et Naruto partagent une seule peau illustrée', () => {
-  // Les deux thèmes demandent la peau ; le thème par défaut n'en porte pas.
+test('le thème illustré est unique et sa peau reste partagée', () => {
+  // Given les deux thèmes rendus
   const manga = JSON.stringify(renduTheme('manga', { 'missions.tab': 'missions' }))
-  const noel = JSON.stringify(renduTheme('noel', { 'missions.tab': 'missions' }))
   const defaut = JSON.stringify(renduTheme('default'))
+
+  // When la peau sombre surcharge la peau claire
+  const clairs = new Set([...paletteDe(MANGA_CLAIR).keys()])
+  const sombres = [...paletteDe(MANGA_SOMBRE).keys()]
+
+  // Then la peau n'est demandée que par Naruto
   assert.match(manga, /"data-skin":"paper"/)
-  assert.match(noel, /"data-skin":"paper"/)
   assert.doesNotMatch(defaut, /"data-skin"/)
 
-  // Mêmes tokens de couleur des deux côtés : aucun thème n'en possède un en
-  // propre, sinon la structure cesserait d'être commune. Le bloc sombre n'est
-  // qu'une surcharge : il ne peut nommer que des tokens déjà définis.
-  assert.deepEqual([...paletteDe(MANGA_CLAIR).keys()].sort(), [...paletteDe(NOEL_CLAIR).keys()].sort(), 'tokens clairs différents')
-  const clairs = new Set([...paletteDe(NOEL_CLAIR).keys()])
-  for (const nom of paletteDe(NOEL_SOMBRE).keys()) assert.ok(clairs.has(nom), `token sombre inconnu : ${nom}`)
-  for (const nom of paletteDe(MANGA_SOMBRE).keys()) assert.ok(clairs.has(nom), `token sombre inconnu : ${nom}`)
+  // Then le bloc sombre ne nomme que des tokens déjà définis en clair
+  assert.ok(clairs.size > 0, 'la palette claire porte ses tokens')
+  for (const nom of sombres) assert.ok(clairs.has(nom), `token sombre inconnu : ${nom}`)
 
-  // La structure vit une fois, sous data-skin, et aucune règle par thème ne la
-  // recopie : pas de carte, de rangée ni de barre propre à Naruto ou à Noël.
-  // Le bandeau est le seul décor admis à surcharger son propre fond.
-  for (const classe of ['missions-card', 'missions-row', 'missions-group', 'missions-toolbar', 'missions-tabs', 'missions-tab-count', 'missions-drawer-tabs', 'missions-empty-state']) {
+  // Then la structure vit sous data-skin et aucune règle de thème ne la recopie
+  for (const classe of CLASSES_PARTAGEES) {
     assert.match(SOURCE, new RegExp(`\\.missions-panel\\[data-skin="paper"\\] \\.${classe}[ ,{]`), `${classe} absente de la peau`)
-    assert.doesNotMatch(SOURCE, new RegExp(`\\[data-theme="(manga|noel)"\\] \\.${classe}\\b`), `${classe} dupliquée par thème`)
+    assert.doesNotMatch(SOURCE, new RegExp(`\\[data-theme="manga"\\] \\.${classe}\\b`), `${classe} dupliquée par thème`)
   }
+  assert.doesNotMatch(SOURCE, /\[data-skin="paper"\]\[data-theme="manga"\] \.missions-(card|row|group|toolbar|tabs|tab-count|drawer-tabs)\b/)
 })
 
-test('les palettes Noël gardent les textes lisibles, clair comme sombre', () => {
-  for (const [nom, debut, seuils, base] of [
-    ['clair', NOEL_CLAIR, [7, 4.5, 4.5], NOEL_CLAIR],
-    ['sombre', NOEL_SOMBRE, [7, 4.5, 4.5], NOEL_CLAIR],
-  ]) {
-    const tokens = new Map([...paletteDe(base), ...paletteDe(debut)])
-    const paires = [
-      ['ink sur page', tokens.get('ink'), tokens.get('page')],
-      ['ink-2 sur page-2', tokens.get('ink-2'), tokens.get('page-2')],
-      ['ink-3 sur page', tokens.get('ink-3'), tokens.get('page')],
-    ]
-    for (const [index, [label, texte, fond]] of paires.entries()) {
-      assert.ok(texte && fond, `${nom} : token manquant pour ${label}`)
-      assert.ok(contraste(texte, fond) >= seuils[index], `${nom} : ${label} sous le seuil (${contraste(texte, fond).toFixed(2)})`)
+test('la palette Naruto garde les textes lisibles, clair comme sombre', () => {
+  // Given la palette claire et sa surcharge sombre
+  const claire = paletteDe(MANGA_CLAIR)
+  const sombre = new Map([...claire, ...paletteDe(MANGA_SOMBRE)])
+
+  // When chaque couple texte / fond est mesuré
+  const paires = ['ink|page', 'ink-2|page-2', 'ink-3|page']
+
+  // Then les textes restent au-dessus des seuils, dans les deux variantes
+  for (const [nom, tokens] of [['clair', claire], ['sombre', sombre]]) {
+    for (const [index, paire] of paires.entries()) {
+      const [encre, fond] = paire.split('|')
+      assert.ok(tokens.get(encre) && tokens.get(fond), `${nom} : token manquant pour ${encre} sur ${fond}`)
+      const ratio = contraste(tokens.get(encre), tokens.get(fond))
+      assert.ok(ratio >= SEUILS_CONTRASTE[index], `${nom} : ${encre} sur ${fond} sous le seuil (${ratio.toFixed(2)})`)
     }
   }
-  // Le thème sombre suit les deux attributs que le host pose : root et body.
-  assert.ok(SOURCE.includes(':root[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="noel"]'))
-  assert.ok(SOURCE.includes('body[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="noel"]'))
+
+  // Then le thème sombre suit les deux attributs que le host pose
+  assert.ok(SOURCE.includes(MANGA_SOMBRE), 'la variante sombre vise root')
+  assert.ok(SOURCE.includes(`body[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="manga"]`), 'la variante sombre vise body')
 })
 
 test('la peau partagée ne porte aucun constant de Konoha', () => {
+  // Given les règles de la peau, sans aucune variante de thème
   const partagees = reglesDeTheme().filter(({ selector }) => selector.includes('[data-skin="paper"]') && !selector.includes('[data-theme='))
-  assert.ok(partagees.length > 50, 'la peau partagée est bien le gros du bloc de thème')
   const texte = partagees.map(({ selector, body }) => `${selector} {${body}}`).join('\n')
+
+  // When la part de la peau dans le bloc de thème est mesurée
+  assert.ok(partagees.length > 50, 'la peau partagée est bien le gros du bloc de thème')
+
+  // Then elle ne contient ni image, ni glyphe, ni teinte propre à Naruto
   assert.doesNotMatch(texte, /data:image|webp/i, 'aucune image embarquée dans la peau')
   assert.doesNotMatch(texte, /Naruto|忍/, 'aucun glyphe ni nom de Konoha dans la peau')
   assert.doesNotMatch(texte, /#f2a26f|#a85526|#fbf4e6|#aec7a7/i, 'aucune teinte Naruto en dur dans la peau')
-  // Et aucune règle de structure par thème : les variantes de thème sont des
-  // tokens ou des décors, jamais une seconde peau.
-  assert.doesNotMatch(SOURCE, /\[data-skin="paper"\]\[data-theme="(manga|noel)"\] \.missions-(card|row|group|toolbar|tabs|tab-count|drawer-tabs)\b/)
 })
 
-test('Noël rend son bandeau, sa marque et son état vide sans image Konoha', () => {
-  const arbre = arbreTheme('noel', { 'missions.tab': 'missions' })
-  const flat = JSON.stringify(renderTree(arbre))
-  assert.match(flat, /"data-theme":"noel"/)
-  assert.match(flat, /"data-skin":"paper"/)
-  // Bandeau : la scène SVG, la marque ❄ et le kicker Noël.
-  assert.match(flat, /missions-hero-scene/)
-  assert.match(flat, /missions-title-mark/)
-  assert.match(flat, /❄/)
-  assert.match(flat, /Noël · mission log/)
-  // Aucune image raster : ni les webp de Konoha, ni une autre ressource.
-  assert.doesNotMatch(flat, /data:image\/webp/)
-
-  // État vide filtré : l'art CSS/SVG remplace la photo de Konoha.
-  const vue = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const vide = JSON.stringify(renderTree(arbreTheme('noel', { 'missions.tab': 'missions' }, vue, [{ ...EMPTY_BAR, query: 'zzz' }, vue])))
-  assert.match(vide, /missions-empty-scene/)
-  assert.doesNotMatch(vide, /data:image/)
-})
-
-test('le thème Naruto garde ses images et son glyphe', () => {
+test('le thème Naruto garde sa photo, son kicker et son glyphe', () => {
+  // Given le thème Naruto monté sur la vue Missions
   const flat = JSON.stringify(renduTheme('manga', { 'missions.tab': 'missions' }))
+
+  // When le panneau est rendu
   assert.match(flat, /"data-theme":"manga"/)
   assert.match(flat, /"data-skin":"paper"/)
+
+  // Then le décor de Konoha est intact : photo, kicker et marque
   assert.match(flat, /missions-hero-photo/)
   assert.match(flat, /data:image\/webp/)
+  assert.match(flat, /Konoha · mission log/)
   assert.match(flat, /忍/)
 })
 
-test('Noël anime un flocon sur le rafraîchissement et la pastille en attente', () => {
-  const vue = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const { api, ctx, registered } = charger({ getItem: () => 'noel', setItem: () => {} }, [EMPTY_BAR, vue, 'missions'])
-  api.apply(ctx)
-  const list = findAll(registered.main({}), 'MissionsView')[0]
-  const tree = renderTree({ ...list, props: { ...list.props } })
-  const icones = findAll(tree, 'svg').filter((node) => String(node.props.className ?? '').startsWith('missions-icon-'))
-  assert.equal(icones.length, 1)
-  assert.equal(icones[0].props.className, 'missions-icon-snowflake')
+test('la source ne garde aucune trace du thème Noël', () => {
+  // Given la source et le bundle, images embarquées mises de côté
+  const sources = [SANS_IMAGES, SANS_IMAGES.replace(/\s+/g, ' ')]
 
-  // Pastille en attente : le même flocon, dans la barre.
-  const attente = renderTree(arbreTheme('noel', {}, vueSansReponse()))
-  const flocons = findAll(attente, 'svg').filter((node) => node.props.className === 'missions-icon-snowflake')
-  assert.ok(flocons.length >= 2, 'les trois onglets en attente portent le flocon')
+  // When chaque motif du thème supprimé est cherché
+  const motifs = [/noel/i, /noël/i, /snow/i, /flocon/i, /❄/, /missions-hero-scene/, /missions-empty-scene/, /missions-snowflake-turn/]
 
-  // Le flocon tourne, et s'arrête quand moins de mouvement est demandé.
-  assert.match(corpsDe('.missions-panel[data-skin="paper"][data-theme="noel"] .missions-icon-snowflake'), /animation: missions-snowflake-turn 2\.6s linear infinite/)
-  assert.match(SOURCE, /@keyframes missions-snowflake-turn \{ to \{ transform: rotate\(360deg\); \} \}/)
-  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-icon-snowflake \{ animation: none; \}/)
+  // Then aucun n'apparaît
+  for (const source of sources) {
+    for (const motif of motifs) assert.doesNotMatch(source, motif, `trace restante : ${motif}`)
+  }
 })
 
-test('le sélecteur de thème propose Default, Naruto et Noël dans cet ordre', () => {
+test('le sélecteur de thème propose Default puis Naruto', () => {
   // Given
   const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'])
   api.apply(ctx)
@@ -7194,27 +7157,12 @@ test('le sélecteur de thème propose Default, Naruto et Noël dans cet ordre', 
 
   // Then
   assert.ok(select, 'le select « Theme » est rendu')
-  assert.deepEqual(select.children.map((option) => option.props.value), ['default', 'manga', 'noel'])
-  assert.deepEqual(select.children.map((option) => textOf(option)), ['Default', 'Naruto', 'Noël'])
+  assert.deepEqual(select.children.map((option) => option.props.value), ['default', 'manga'])
+  assert.deepEqual(select.children.map((option) => textOf(option)), ['Default', 'Naruto'])
   assert.equal(select.props.value, 'default')
 })
 
-test('un thème Noël stocké devient la valeur courante du sélecteur', () => {
-  // Given
-  const { api, ctx, registered } = charger({ getItem: () => 'noel', setItem: () => {} }, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
-  api.apply(ctx)
-  const rendu = renderTree(findAll(registered.main({}), 'ThemeSelect')[0])
-
-  // When
-  const select = findAll(rendu, 'select').find((node) => node.props['aria-label'] === 'Theme')
-  const libelle = findAll(rendu, 'span').find((node) => node.props.className === 'missions-theme-value')
-
-  // Then
-  assert.equal(select.props.value, 'noel')
-  assert.equal(textOf(libelle), 'Noël')
-})
-
-test('THEMES déclare les trois thèmes dans l’ordre', () => {
+test('THEMES déclare les deux thèmes dans l’ordre', () => {
   // Given
   const debut = SOURCE.indexOf('const THEMES = [')
   assert.ok(debut >= 0, 'THEMES est déclaré')
@@ -7224,18 +7172,27 @@ test('THEMES déclare les trois thèmes dans l’ordre', () => {
 
   // Then
   const entrees = [...bloc.matchAll(/\{ id: '([^']+)', label: '([^']+)' \}/g)].map((match) => [match[1], match[2]])
-  assert.deepEqual(entrees, [['default', 'Default'], ['manga', 'Naruto'], ['noel', 'Noël']])
+  assert.deepEqual(entrees, [['default', 'Default'], ['manga', 'Naruto']])
 })
 
-test('un thème Noël stocké devient le thème du panneau', () => {
-  // Given
+test('un thème noel stocké retombe sur Default, sélecteur compris', () => {
+  // Given un stockage qui garde encore l'identifiant du thème supprimé
   const stockage = { getItem: () => 'noel', setItem: () => {} }
+  const { api, ctx, registered } = charger(stockage, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
 
-  // When
-  const theme = themeDuStockage(stockage)
+  // When le panneau et son sélecteur lisent ce stockage
+  const panneau = findAll(tree, 'div').find((node) => node.props.className === 'missions-panel')
+  const select = findAll(renderTree(findAll(tree, 'ThemeSelect')[0]), 'select')
+    .find((node) => node.props['aria-label'] === 'Theme')
 
-  // Then
-  assert.equal(theme, 'noel')
+  // Then le thème courant est Default, sans peau illustrée
+  assert.equal(panneau.props['data-theme'], 'default')
+  assert.equal(panneau.props['data-skin'], undefined)
+  assert.equal(select.props.value, 'default')
+  assert.equal(select.children.length, 2)
+  assert.equal(themeDuStockage(stockage), 'default')
 })
 
 test('un thème stocké inconnu retombe sur Default', () => {
@@ -7283,12 +7240,12 @@ test('changer de thème écrit missions.theme et compte le geste', () => {
 
   try {
     // When
-    select.props.onChange({ target: { value: 'noel' } })
+    select.props.onChange({ target: { value: 'default' } })
 
     // Then
-    assert.deepEqual(ecritures, [['missions.theme', 'noel']])
-    assert.ok(setters.includes('noel'), 'le thème courant devient Noël')
-    spy.geste('action.theme', 'noel')
+    assert.deepEqual(ecritures, [['missions.theme', 'default']])
+    assert.ok(setters.includes('default'), 'le thème courant redevient Default')
+    spy.geste('action.theme', 'default')
   } finally {
     spy.restore()
   }
