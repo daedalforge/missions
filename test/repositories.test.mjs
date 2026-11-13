@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -7,6 +7,7 @@ import test from 'node:test'
 import {
   GIT_TIMEOUT_MS,
   SCAN_CONCURRENCY,
+  adoptWorktree,
   countRepositories,
   flattenLayout,
   isValidBranchName,
@@ -70,7 +71,10 @@ function fauxGit(answers = {}, { delay = 0 } = {}) {
     peak = Math.max(peak, active)
     try {
       if (delay > 0) await new Promise((done) => setTimeout(done, delay))
-      const answer = answers[`${name} ${command}`]
+      // Une réponse peut être une file : un test qui fait échouer git *après*
+      // qu'il a écrit a besoin de deux réponses différentes pour la même commande.
+      const queue = answers[`${name} ${command}`]
+      const answer = Array.isArray(queue) ? queue.shift() : queue
       if (answer === undefined) throw Object.assign(new Error(`commande imprévue : ${name} ${command}`), { stderr: '' })
       if (answer instanceof Error) throw Object.assign(answer, { stderr: answer.stderr ?? answer.message })
       return { stdout: answer, stderr: '' }
@@ -671,4 +675,300 @@ test('sans fichier machete, l’arbre est plat mais les worktrees restent', asyn
   assert.equal(tree.layout, false)
   assert.deepEqual(tree.branches, [])
   assert.deepEqual(tree.worktrees.map((row) => [row.path, row.branch, row.current]), [[join(dir, 'alpha'), 'main', true]])
+})
+
+/**
+ * La bascule : le seul geste qui écrit. Chaque test monte deux dossiers
+ * jetables — un clone et son worktree — et répond à git par une table, pour
+ * voir non seulement la réponse mais l'ordre exact des commandes.
+ */
+async function paire(t) {
+  const dir = await mkdtemp(join(tmpdir(), 'missions-adopt-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await mkdir(join(dir, 'repo', '.git'), { recursive: true })
+  await mkdir(join(dir, 'repo-feat'), { recursive: true })
+  await writeFile(join(dir, 'repo-feat', '.git'), `gitdir: ${join(dir, 'repo', '.git', 'worktrees', 'repo-feat')}\n`)
+  return dir
+}
+
+const branche = (name) => `# branch.oid 1a2b3c4d\n# branch.head ${name}\n`
+const principal = (dir) => `worktree ${join(dir, 'repo')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`
+
+test('la bascule détache, met la branche dans le principal, puis retire le dossier', async (t) => {
+  const dir = await paire(t)
+  const { run, calls } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': branche('feat/x'),
+    'repo status --porcelain=v2 --branch': branche('main'),
+    'repo-feat status --porcelain --ignored=matching': '',
+    'repo-feat switch --detach': '',
+    'repo switch feat/x': '',
+    [`repo worktree remove ${join(dir, 'repo-feat')}`]: '',
+  })
+
+  const result = await adoptWorktree(dir, 'repo-feat', { run })
+
+  assert.deepEqual(calls.map((call) => `${call.name} ${call.command}`), [
+    'repo-feat worktree list --porcelain',
+    'repo-feat status --porcelain=v2 --branch',
+    'repo status --porcelain=v2 --branch',
+    'repo-feat status --porcelain --ignored=matching',
+    'repo-feat switch --detach',
+    'repo switch feat/x',
+    `repo worktree remove ${join(dir, 'repo-feat')}`,
+  ], 'l’ordre est la sécurité : détacher, basculer, retirer')
+  assert.deepEqual(result, {
+    ok: true,
+    source: 'repo-feat',
+    branch: 'feat/x',
+    main: { name: 'repo', path: join(dir, 'repo') },
+    removed: true,
+    reason: null,
+  })
+})
+
+test('un principal sale refuse la bascule avant d’écrire quoi que ce soit', async (t) => {
+  const dir = await paire(t)
+  const { run, calls } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': branche('feat/x'),
+    'repo status --porcelain=v2 --branch': `${branche('main')}1 .M N... 100644 100644 100644 aaa bbb yarn.lock\n`,
+    'repo status --porcelain': ' M yarn.lock\n',
+  })
+
+  const error = await adoptWorktree(dir, 'repo-feat', { run }).then(() => null, (refusal) => refusal)
+
+  assert.equal(error.status, 409)
+  assert.equal(error.side, 'main')
+  assert.deepEqual(error.files, ['yarn.lock'])
+  assert.equal(error.message, 'repo has uncommitted changes (one file: yarn.lock) — commit or stash them first')
+  assert.equal(calls.some((call) => / switch /.test(` ${call.command} `)), false, 'aucun switch, aucun retrait')
+  assert.equal(calls.some((call) => call.command.startsWith('worktree remove')), false)
+})
+
+test('un worktree sale refuse aussi, même avec un principal propre', async (t) => {
+  const dir = await paire(t)
+  const { run } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': `${branche('feat/x')}1 .M N... 100644 100644 100644 aaa bbb src/a.js\n1 .M N... 100644 100644 100644 ccc ddd src/b.js\n`,
+    'repo status --porcelain=v2 --branch': branche('main'),
+    'repo-feat status --porcelain': ' M src/a.js\n M src/b.js\n',
+  })
+
+  const error = await adoptWorktree(dir, 'repo-feat', { run }).then(() => null, (refusal) => refusal)
+
+  assert.equal(error.side, 'worktree')
+  assert.deepEqual(error.files, ['src/a.js', 'src/b.js'])
+  assert.match(error.message, /^the worktree repo-feat has uncommitted changes \(2 files: src\/a\.js, src\/b\.js\)/)
+})
+
+test('un worktree détaché n’a aucune branche à reprendre', async (t) => {
+  const dir = await paire(t)
+  const { run, calls } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': '# branch.oid 1a2b3c4d\n# branch.head (detached)\n',
+    'repo status --porcelain=v2 --branch': branche('main'),
+  })
+
+  const error = await adoptWorktree(dir, 'repo-feat', { run }).then(() => null, (refusal) => refusal)
+
+  assert.equal(error.status, 409)
+  assert.equal(error.message, 'the worktree repo-feat is detached: it has no branch to bring back')
+  assert.equal(calls.some((call) => call.command.includes('switch')), false, 'aucune commande n’est lancée')
+})
+
+test('un switch que git refuse remet le worktree sur sa branche', async (t) => {
+  const dir = await paire(t)
+  const { run, calls } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    // Le détachement a eu lieu, git bouge donc HEAD avant de refuser : la
+    // même commande de lecture répond trois fois, dans l'ordre du réel.
+    'repo-feat status --porcelain=v2 --branch': [branche('feat/x'), '# branch.head (detached)\n', branche('feat/x')],
+    'repo status --porcelain=v2 --branch': branche('main'),
+    'repo-feat status --porcelain --ignored=matching': '',
+    'repo-feat switch --detach': '',
+    'repo switch feat/x': Object.assign(new Error('refus'), { stderr: 'fatal: Unable to create index.lock\n' }),
+    'repo-feat switch feat/x': '',
+  })
+
+  const error = await adoptWorktree(dir, 'repo-feat', { run }).then(() => null, (refusal) => refusal)
+
+  assert.equal(error.status, 502)
+  assert.match(error.message, /^git refused to switch repo to feat\/x: Unable to create index\.lock/)
+  assert.match(error.message, /— repo-feat was put back on feat\/x$/)
+  const order = calls.map((call) => `${call.name} ${call.command}`)
+  assert.ok(
+    order.indexOf('repo-feat switch feat/x') > order.indexOf('repo switch feat/x'),
+    'le retour en arrière vient après le refus, pas avant',
+  )
+  assert.equal(calls.some((call) => call.command.startsWith('worktree remove')), false)
+})
+
+test('un worktree que git garde est un retrait partiel, pas un échec', async (t) => {
+  const dir = await paire(t)
+  const { run } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': branche('feat/x'),
+    'repo status --porcelain=v2 --branch': branche('main'),
+    'repo-feat switch --detach': '',
+    'repo switch feat/x': '',
+    [`repo worktree remove ${join(dir, 'repo-feat')}`]: Object.assign(new Error('refus'), { stderr: 'fatal: cannot remove: locked\n' }),
+  })
+
+  const result = await adoptWorktree(dir, 'repo-feat', { run })
+
+  assert.equal(result.removed, false)
+  assert.match(result.reason, /locked/)
+  assert.equal(result.branch, 'feat/x', 'la branche a bien bougé : le retrait seul a manqué')
+})
+
+test('hors racine, un clone, un principal déjà sur la branche : refus avant écriture', async (t) => {
+  const dir = await paire(t)
+  const refus = async (answers, name = 'repo-feat') =>
+    adoptWorktree(dir, name, { run: fauxGit(answers).run }).then(() => null, (refusal) => refusal)
+
+  const ailleurs = await refus({ 'repo-feat worktree list --porcelain': 'worktree /Users/moi/ailleurs/repo\nHEAD 1a2b3c4d\nbranch refs/heads/main\n' })
+  assert.equal(ailleurs.status, 409)
+  assert.match(ailleurs.message, /lives outside the workspace root/)
+
+  const clone = await refus({}, 'repo')
+  assert.equal(clone.status, 400)
+  assert.match(clone.message, /is not a worktree/)
+
+  const meme = await refus({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': branche('feat/x'),
+    'repo status --porcelain=v2 --branch': branche('feat/x'),
+  })
+  assert.equal(meme.status, 409)
+  assert.match(meme.message, /^repo already holds feat\/x$/)
+})
+
+test('les fichiers ignorés sont nommés avant d’être supprimés', async (t) => {
+  // `git worktree remove` les prend sans rien dire : node_modules est
+  // régénérable, .env ne l'est pas. Rien ne bouge tant qu'ils ne sont pas dits.
+  const dir = await paire(t)
+  const { run, calls } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': branche('feat/x'),
+    'repo status --porcelain=v2 --branch': branche('main'),
+    'repo-feat status --porcelain --ignored=matching': '!! node_modules/\n!! .env\n!! .cache/\n!! dist/\n!! build/\n',
+  })
+
+  const error = await adoptWorktree(dir, 'repo-feat', { run }).then(() => null, (refusal) => refusal)
+
+  assert.equal(error.status, 409)
+  assert.equal(error.ignored, true)
+  assert.equal(error.side, 'worktree')
+  assert.deepEqual(error.files, ['node_modules', '.env', '.cache', 'dist'], 'quatre noms, pas un flot')
+  assert.equal(
+    error.message,
+    'the worktree repo-feat holds 5 ignored entries (node_modules, .env, .cache, dist, …) that git deletes with the folder — send acceptIgnored to remove them with it',
+  )
+  assert.equal(calls.some((call) => call.command.startsWith('switch')), false, 'rien n’a bougé')
+})
+
+test('une seconde réponse accepte les ignorés, et le dossier part avec eux', async (t) => {
+  const dir = await paire(t)
+  // Pas de réponse pour `--ignored=matching` : le test prouverait un appel de trop.
+  const { run } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': branche('feat/x'),
+    'repo status --porcelain=v2 --branch': branche('main'),
+    'repo-feat switch --detach': '',
+    'repo switch feat/x': '',
+    [`repo worktree remove ${join(dir, 'repo-feat')}`]: '',
+  })
+
+  const result = await adoptWorktree(dir, 'repo-feat', { run, acceptIgnored: true })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.removed, true)
+})
+
+test('un hook qui échoue après avoir détaché ne bloque pas la reprise', async (t) => {
+  // Un hook post-checkout sort en 1 *après* que git a bougé HEAD : le code ne
+  // peut pas croire le code de sortie, il relit l'arbre.
+  const dir = await paire(t)
+  const { run } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': [branche('feat/x'), '# branch.head (detached)\n'],
+    'repo status --porcelain=v2 --branch': branche('main'),
+    'repo-feat status --porcelain --ignored=matching': '',
+    'repo-feat switch --detach': Object.assign(new Error('hook'), { stderr: 'fatal: hook refused\n' }),
+    'repo switch feat/x': '',
+    [`repo worktree remove ${join(dir, 'repo-feat')}`]: '',
+  })
+
+  const result = await adoptWorktree(dir, 'repo-feat', { run })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.branch, 'feat/x')
+})
+
+test('un hook qui échoue après le switch du principal ne fait pas échouer la reprise', async (t) => {
+  const dir = await paire(t)
+  const { run } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': branche('feat/x'),
+    'repo status --porcelain=v2 --branch': [branche('main'), branche('feat/x')],
+    'repo-feat status --porcelain --ignored=matching': '',
+    'repo-feat switch --detach': '',
+    'repo switch feat/x': Object.assign(new Error('hook'), { stderr: 'fatal: hook refused\n' }),
+    [`repo worktree remove ${join(dir, 'repo-feat')}`]: '',
+  })
+
+  const result = await adoptWorktree(dir, 'repo-feat', { run })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.removed, true, 'la branche est bien dans le principal : le retrait suit')
+})
+
+test('quand le retour en arrière est impossible, le message dit où sont les arbres', async (t) => {
+  const dir = await paire(t)
+  const { run } = fauxGit({
+    'repo-feat worktree list --porcelain': principal(dir),
+    'repo-feat status --porcelain=v2 --branch': [
+      branche('feat/x'),
+      '# branch.head (detached)\n',
+      '# branch.head (detached)\n',
+    ],
+    'repo status --porcelain=v2 --branch': branche('main'),
+    'repo-feat status --porcelain --ignored=matching': '',
+    'repo-feat switch --detach': '',
+    'repo switch feat/x': Object.assign(new Error('refus'), { stderr: 'fatal: index.lock\n' }),
+    'repo-feat switch feat/x': Object.assign(new Error('refus'), { stderr: 'fatal: index.lock\n' }),
+  })
+
+  const error = await adoptWorktree(dir, 'repo-feat', { run }).then(() => null, (refusal) => refusal)
+
+  assert.equal(error.status, 502)
+  assert.match(error.message, /— repo-feat is still detached and feat\/x is checked out nowhere: fix the cause, then run git -C /)
+})
+
+test('un principal atteint par un lien symbolique hors racine est refusé', async (t) => {
+  // Le scan ne liste que des enfants directs ; un enfant qui est un lien vers
+  // l'extérieur resterait une ligne. Le follow-up réel ne doit pas le toucher.
+  const dir = await mkdtemp(join(tmpdir(), 'missions-adopt-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const outside = join(dir, 'ailleurs')
+  const root = join(dir, 'racine')
+  await mkdir(join(outside, 'repo', '.git'), { recursive: true })
+  await mkdir(root, { recursive: true })
+  await symlink(join(outside, 'repo'), join(root, 'repo'))
+  await mkdir(join(root, 'wt'), { recursive: true })
+  await writeFile(join(root, 'wt', '.git'), `gitdir: ${join(outside, 'repo', '.git', 'worktrees', 'wt')}\n`)
+  // git nomme le principal par le chemin qu'on lui a donné : le symlink sous la
+  // racine, dont la cible réelle est ailleurs.
+  const { run, calls } = fauxGit({
+    'wt worktree list --porcelain': `worktree ${join(root, 'repo')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
+  })
+
+  const error = await adoptWorktree(root, 'wt', { run }).then(() => null, (refusal) => refusal)
+
+  assert.equal(error.status, 409)
+  assert.match(error.message, /^the main worktree of wt lives outside the workspace root/)
+  assert.deepEqual(calls.map((call) => `${call.name} ${call.command}`), [
+    'wt worktree list --porcelain',
+  ], 'le refus tombe avant la moindre lecture d’état, et avant toute écriture')
 })

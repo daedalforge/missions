@@ -1372,7 +1372,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
     'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout',
     'mission.session', 'mission.feedback-session',
-    'repository.open', 'repository.main', 'repository.tab.details', 'repository.tab.history', 'repository.tab.worktrees',
+    'repository.open', 'repository.adopt', 'repository.tab.details', 'repository.tab.history', 'repository.tab.worktrees',
     'repository.branch', 'repository.more',
     'workflow.step', 'workflow.save', 'workflow.reload', 'workflow.gesture.add', 'workflow.gesture.remove',
     'workflow.arc.add', 'workflow.arc.update', 'workflow.arc.remove',
