@@ -3208,6 +3208,11 @@ test('une racine qui ne porte que des worktrees le dit, au lieu de paraître vid
   const ferme = montrerRepositories(scanReady(unSeul))
 
   assert.doesNotMatch(textOf(ferme.inner), /No repository in the workspace root\./)
+  assert.equal(
+    findAll(ferme.inner, 'input').some((node) => node.props['aria-label'] === 'Filter repositories'),
+    false,
+    'un genre vide ne monte pas la barre',
+  )
   assert.match(textOf(ferme.inner), /0 repositories · 1 worktree · scanned in 1\.9 s/)
   assert.match(textOf(ferme.inner), /The only worktree of the workspace root is hidden\./)
   assert.match(textOf(ferme.inner), /Show worktrees lists it\. Scanned \/Users\/moi\/projects\./)
@@ -3242,6 +3247,11 @@ test('le switch activé sans worktree le dit, au lieu de rendre les clones', () 
 
   // Then la liste est vide, l'état vide le dit, et le switch reste désactivable
   assert.deepEqual(lignes, [], 'aucun clone ne remplace les worktrees manquants')
+  assert.equal(
+    findAll(rendu.inner, 'input').some((node) => node.props['aria-label'] === 'Filter repositories'),
+    false,
+    'un genre vide ne monte pas la barre',
+  )
   assert.match(textOf(rendu.inner), /2 repositories · scanned in 1\.9 s/)
   assert.match(textOf(rendu.inner), /No worktree in the workspace root\./)
   assert.match(textOf(rendu.inner), /Show worktrees is on: turn it off to see the 2 repositories\./)
@@ -3472,6 +3482,11 @@ test('un scan en échec est un bandeau, une racine vide est un état vide', () =
 
   const vide = montrerRepositories(scanReady({ root: '/Users/moi/projects/vide', count: 0, durationMs: 40, errors: [], repositories: [] }))
   assert.match(textOf(vide.inner), /No repository in the workspace root\./)
+  assert.equal(
+    findAll(vide.inner, 'input').some((node) => node.props['aria-label'] === 'Filter repositories'),
+    false,
+    'une racine vide ne monte pas la barre',
+  )
   assert.match(textOf(vide.inner), /Scanned \/Users\/moi\/projects\/vide\./)
 })
 
