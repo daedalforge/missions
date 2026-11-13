@@ -241,7 +241,7 @@ window.__ModuleLoader__.load({
   // l'étape que la session a laissée ouverte.
   const WORKFLOW_STEPS = ['cadrage', 'execution', 'review', 'cloture']
   const WORKFLOW_KIND_LABELS = { etape: 'étapes', statuts: 'statuts' }
-  const WORKFLOW_FORM = { title: '', description: '', kind: 'etape' }
+  const WORKFLOW_FORM = { title: '', description: '', kind: 'etape', local: false }
     const REFRESH_MS = 60000
 
     const STATE_LABELS = {
@@ -489,7 +489,7 @@ window.__ModuleLoader__.load({
 .wf-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
 .wf-field > span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-field input, .wf-field select, .wf-field textarea { font: inherit; font-size: 12px; height: 28px; padding: 0 7px; border-radius: 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); background: transparent; color: inherit; }
-.wf-field textarea { height: auto; padding: 6px 7px; resize: vertical; }
+.wf-field textarea { height: auto; min-height: 3lh; padding: 6px 7px; resize: vertical; }
 .wf-field-hint { font-size: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .wf-arc { display: flex; align-items: center; gap: 6px; padding: 2px 4px; margin: 0 -4px; border-radius: 6px; font-size: 12px; cursor: pointer; }
@@ -509,8 +509,10 @@ window.__ModuleLoader__.load({
 .wf-pick[aria-pressed="true"] { border-color: var(--dsw-alias-label-primary, #1f1f1f); box-shadow: inset 0 0 0 1px var(--dsw-alias-label-primary, #1f1f1f); }
 .wf-pick-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .wf-pick-title { font-size: 13px; font-weight: 600; }
+.wf-pick-badges { display: flex; align-items: center; gap: 4px; flex: none; }
+.wf-pick-local { flex: none; padding: 1px 7px; border: 1px solid color-mix(in srgb, #8250df 35%, transparent); border-radius: 999px; color: #8250df; background: color-mix(in srgb, #8250df 9%, transparent); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
 .wf-pick-kind { flex: none; padding: 1px 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 999px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
-.wf-pick-summary { font-size: 12px; color: var(--dsw-alias-label-secondary, #4a4a4a); }
+.wf-pick-summary { font-size: 12px; color: var(--dsw-alias-label-secondary, #4a4a4a); white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .wf-pick-meta { font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-pick-flow { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-pick-flow code { padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, currentColor 8%, transparent); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; }
@@ -546,7 +548,7 @@ window.__ModuleLoader__.load({
 .wf-map-table td { padding: 3px 0; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.07)); vertical-align: top; }
 .wf-map-table code { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-drawer-close { flex: none; padding: 0 2px; border: 0; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 20px; line-height: 1; cursor: pointer; }
-.wf-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.wf-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 .wf-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
 /* Playbook: the five pages on the left, the open page's markdown on the right. */
 .pb-view { padding-top: 8px; }
@@ -748,37 +750,6 @@ window.__ModuleLoader__.load({
 .missions-drawer-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-drawer-note--blocked { color: var(--dsw-alias-label-secondary, #5c534b); }
-.missions-drawer--decision { gap: 14px; }
-.missions-drawer--decision-empty { justify-content: center; align-items: center; border-left: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
-.missions-queue-headtext { min-width: 0; }
-.missions-queue-position { margin-left: auto; flex: none; padding-top: 6px; color: var(--dsw-alias-label-tertiary, rgba(122,113,104,1)); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.missions-queue-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); border-radius: 12px; background: var(--dsw-alias-bg-layer-1, rgba(255,255,255,1)); }
-.missions-queue-card-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.missions-queue-key { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; color: var(--dsw-alias-label-tertiary, rgba(122,113,104,1)); }
-.missions-queue-verb { margin-left: auto; flex: none; padding: 1px 7px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05)); color: var(--dsw-alias-label-secondary, rgba(74,74,74,1)); font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-.missions-queue-title { margin: 0; font-size: 13.5px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-.missions-queue-cues { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.missions-queue-cue { padding: 1px 7px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.045)); color: var(--dsw-alias-label-secondary, rgba(74,74,74,1)); font-size: 10.5px; }
-.missions-queue-cue[data-quiet="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05)); color: var(--dsw-alias-label-primary, rgba(31,31,31,1)); font-weight: 600; }
-.missions-queue-cue--blocked { background: color-mix(in srgb, var(--dsw-alias-label-danger, rgba(180,35,24,1)) 12%, transparent); color: var(--dsw-alias-label-danger, rgba(180,35,24,1)); font-weight: 600; }
-.missions-queue-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
-.missions-queue-action { height: 30px; padding: 0 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 7px; background: transparent; color: var(--dsw-alias-label-primary, rgba(31,31,31,1)); font: inherit; font-size: 11.5px; cursor: pointer; }
-.missions-queue-action:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
-.missions-queue-action:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, rgba(31,31,31,1)) 45%, transparent); outline-offset: 2px; }
-.missions-queue-action--primary { border-color: transparent; background: var(--dsw-alias-button-primary-fill, rgba(31,31,31,1)); color: var(--dsw-alias-label-primary-foreground, rgba(255,255,255,1)); font-weight: 600; }
-.missions-queue-action--primary:hover { filter: brightness(1.06); background: var(--dsw-alias-button-primary-fill, rgba(31,31,31,1)); }
-.missions-queue-action:disabled { opacity: .55; cursor: default; }
-.missions-queue-note { margin: 0; color: var(--dsw-alias-label-tertiary, rgba(122,113,104,1)); font-size: 10.5px; overflow-wrap: anywhere; }
-.missions-queue-note--error { color: var(--dsw-alias-label-danger, rgba(180,35,24,1)); }
-.missions-queue-lines { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
-.missions-queue-lineitem { min-width: 0; }
-.missions-queue-line { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 4px; border: 0; border-radius: 5px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.missions-queue-line:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
-.missions-queue-line:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
-.missions-queue-linekey { flex: none; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; color: var(--dsw-alias-label-tertiary, rgba(122,113,104,1)); }
-.missions-queue-lineverb { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary, rgba(122,113,104,1)); font-size: 10.5px; }
-.missions-queue-empty { display: flex; flex-direction: column; gap: 10px; }
-.missions-queue-empty-text { margin: 0; color: var(--dsw-alias-label-tertiary, rgba(122,113,104,1)); font-size: 12px; line-height: 1.45; }
 .missions-declare { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
 .missions-declare-field { display: grid; gap: 4px; }
 .missions-declare-label { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
@@ -979,7 +950,6 @@ window.__ModuleLoader__.load({
 @media (max-width: 640px) {
   .wf-toolbar { align-items: flex-start; }
   .wf-list { grid-template-columns: minmax(0, 1fr); }
-  .wf-form { grid-template-columns: minmax(0, 1fr); }
 }
 `
 
@@ -1497,133 +1467,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           h('span', { className: 'missions-rowpoints' }, points),
           h('span', { className: 'missions-rowage', 'data-quiet': age.quiet ? 'true' : 'false' }, age.label),
         ),
-      )
-    }
-
-    /**
-     * The dashboard's right panel: the queue, turned into a decision desk. The
-     * dashboard already ranks what waits on the user; the desk takes the first
-     * card — key, title, state verb, age, points, blocked — and offers the two
-     * gestures that are worth anything there: start the step's session, or open
-     * the mission. The rest of the queue stays one click away, and choosing one
-     * line makes it the card without leaving the dashboard.
-     */
-    function DashboardQueue({
-      missions = [],
-      services,
-      workspaceId,
-      workspaceRoot,
-      now = Date.now(),
-      onOpenMission,
-      onOpenMissions,
-    }) {
-      const queue = needsYou(missions)
-      const [chosenKey, setChosenKey] = React.useState(null)
-      const [note, setNote] = React.useState(null)
-      const found = queue.findIndex((mission) => mission.key === chosenKey)
-      const index = found === -1 ? 0 : found
-      const head = queue[index] ?? null
-      const rest = queue.filter((mission) => mission.key !== head?.key)
-
-      const openSession = async (mission) => {
-        const blocker = executionBlocker(mission)
-        if (blocker) {
-          return
-        }
-        track('mission.session', 'dashboard')
-        try {
-          const { prefilledBy, openedBy, uiError } = await openMissionSession(services, missionSessionPrompt(mission), workspaceId, workspaceRoot)
-          if (uiError) {
-            setNote(`Session not opened: ${uiError}`)
-          } else if (!openedBy && !prefilledBy) {
-            setNote(
-              `Session created ${workspaceId ? 'in the projects workspace' : 'without a workspace'} — pick it in the sidebar.`,
-            )
-          }
-        } catch (error) {
-          setNote(`Session not opened: ${error?.message ?? error}`)
-        }
-      }
-
-      if (!head) {
-        return h('aside', { className: 'missions-drawer missions-drawer--decision missions-drawer--decision-empty', role: 'complementary', 'aria-label': 'Now' },
-          h('div', { className: 'missions-drawer-head' },
-            h('div', { className: 'missions-queue-headtext' },
-              h('div', { className: 'missions-drawer-key' }, 'decision'),
-              h('h2', { className: 'missions-drawer-title' }, 'Now'),
-            ),
-          ),
-          h('div', { className: 'missions-queue-empty' },
-            h('p', { className: 'missions-queue-empty-text' }, 'Nothing is waiting on a decision. Start or ship a mission from Missions.'),
-            h('button', { type: 'button', className: 'missions-queue-action', onClick: () => onOpenMissions?.() }, 'Open Missions'),
-          ),
-        )
-      }
-
-      const age = missionAge(head.updatedAt, now)
-      const step = missionStep(head)
-      const sessionLabel = step ? `Start a session — ${step}` : 'Start a session'
-      const blocker = executionBlocker(head)
-      const value = Number(head.points)
-      const counted = head.points !== null && head.points !== undefined && head.points !== ''
-        && Number.isFinite(value)
-      const ageText = age.label ? `updated ${age.label} ago${age.quiet ? ' · quiet' : ''}` : 'no update date'
-
-      return h('aside', { className: 'missions-drawer missions-drawer--decision', role: 'complementary', 'aria-label': 'Now' },
-        h('div', { className: 'missions-drawer-head' },
-          h('div', { className: 'missions-queue-headtext' },
-            h('div', { className: 'missions-drawer-key' }, 'decision'),
-            h('h2', { className: 'missions-drawer-title' }, 'Now'),
-          ),
-          h('span', { className: 'missions-queue-position' }, `${index + 1} of ${queue.length}`),
-        ),
-        h('article', { className: 'missions-queue-card' },
-          h('div', { className: 'missions-queue-card-top' },
-            h('span', { className: 'missions-queue-key' }, head.key),
-            h('span', { className: 'missions-queue-verb' }, actionVerb(head.state)),
-          ),
-          h('h3', { className: 'missions-queue-title' }, head.title),
-          h('ul', { className: 'missions-queue-cues' },
-            h('li', { className: 'missions-queue-cue', 'data-quiet': age.quiet ? 'true' : 'false' }, ageText),
-            counted ? h('li', { className: 'missions-queue-cue' }, `${value} pt${value === 1 ? '' : 's'}`) : null,
-            head.blocked ? h('li', { className: 'missions-queue-cue missions-queue-cue--blocked' }, 'blocked') : null,
-          ),
-          h('div', { className: 'missions-queue-actions' },
-            h('button', {
-              type: 'button',
-              className: 'missions-queue-action missions-queue-action--primary',
-              onClick: () => openSession(head),
-              disabled: blocker !== null,
-              title: blocker ?? sessionLabel,
-              'aria-label': sessionLabel,
-              'aria-describedby': blocker ? 'missions-queue-blocked' : undefined,
-            }, sessionLabel),
-            h('button', {
-              type: 'button',
-              className: 'missions-queue-action',
-              onClick: () => onOpenMission?.(head),
-              title: `Open ${head.key}`,
-              'aria-label': `Details for ${head.key}`,
-            }, 'Details'),
-          ),
-          blocker ? h('p', { id: 'missions-queue-blocked', className: 'missions-queue-note' }, `Session blocked: ${blocker}.`) : null,
-          note ? h('p', { className: 'missions-queue-note missions-queue-note--error', role: 'alert' }, note) : null,
-        ),
-        rest.length > 0
-          ? h('ol', { className: 'missions-queue-lines' },
-              rest.map((mission) => h('li', { key: mission.key, className: 'missions-queue-lineitem' },
-                h('button', {
-                  type: 'button',
-                  className: 'missions-queue-line',
-                  onClick: () => setChosenKey(mission.key),
-                  'aria-label': `${mission.key} ${mission.title}`,
-                },
-                  h('span', { className: 'missions-queue-linekey' }, mission.key),
-                  h('span', { className: 'missions-queue-lineverb' }, actionVerb(mission.state)),
-                ),
-              )),
-            )
-          : null,
       )
     }
 
@@ -3471,10 +3314,11 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         track('workflow.save')
         setSaving(true)
         setStatus(null)
+        const { local, ...model } = draft
         fetch(WORKFLOW_MODEL_URL, {
           method: 'POST',
           headers: { 'content-type': 'application/json', accept: 'application/json' },
-          body: JSON.stringify({ workflow: draft.workflow, model: { ...draft, exit: parseExits(exitText) } }),
+          body: JSON.stringify({ workflow: draft.workflow, model: { ...model, exit: parseExits(exitText) }, local: local === true }),
         })
           .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
           .then(({ ok, data }) => {
@@ -3551,6 +3395,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             title: form.title.trim(),
             description: form.description.trim(),
             kind: form.kind,
+            local: form.local === true,
           }),
         })
           .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
@@ -3592,13 +3437,15 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         ),
         h('label', { className: 'wf-field' },
           h('span', null, 'Description'),
-          h('input', {
+          h('textarea', {
             value: form.description,
+            rows: 3,
+            maxLength: 280,
             placeholder: 'À quoi sert ce parcours',
             'aria-invalid': formErrors.description ? 'true' : 'false',
             onChange: (event) => updateForm('description', event.target.value),
           }),
-          h('small', { className: 'wf-field-hint' }, 'une ligne, 280 caractères au plus'),
+          h('small', { className: 'wf-field-hint' }, 'trois lignes au moins, 280 caractères au plus'),
           formErrors.description ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.description) : null,
         ),
         h('label', { className: 'wf-field' },
@@ -3608,6 +3455,16 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             h('option', { value: 'statuts' }, 'Statuts'),
           ),
           formErrors.kind ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.kind) : null,
+        ),
+        h('div', { className: 'wf-field' },
+          Switch({
+            label: 'Versionné',
+            checked: form.local !== true,
+            onChange: (value) => updateForm('local', !value),
+          }),
+          h('small', { className: 'wf-field-hint' }, form.local === true
+            ? 'rangé sous workflows/local/, ignoré par git'
+            : 'rangé sous workflows/model/, versionné'),
         ),
         formErrors.key ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.key) : null,
         formErrors.document ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.document) : null,
@@ -3692,13 +3549,14 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           ),
           h('label', { className: 'wf-field' },
             h('span', null, 'Description'),
-            h('input', {
+            h('textarea', {
               value: draft.description ?? '',
+              rows: 3,
               maxLength: 280,
               placeholder: 'À quoi sert ce parcours',
               onChange: (event) => patchModel('description', event.target.value),
             }),
-            h('small', { className: 'wf-field-hint' }, 'une ligne, 280 caractères au plus'),
+            h('small', { className: 'wf-field-hint' }, 'trois lignes au moins, 280 caractères au plus'),
           ),
           h('label', { className: 'wf-field' },
             h('span', null, 'Entrée'),
@@ -3710,6 +3568,16 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             h('span', null, 'Sorties'),
             h('input', { value: exitText, placeholder: 'done', onChange: (event) => changeExitText(event.target.value) }),
             h('small', { className: 'wf-field-hint' }, 'un ou plusieurs états, séparés par des virgules'),
+          ),
+          h('div', { className: 'wf-field' },
+            Switch({
+              label: 'Versionné',
+              checked: draft.local !== true,
+              onChange: (value) => patchModel('local', !value),
+            }),
+            h('small', { className: 'wf-field-hint' }, draft.local === true
+              ? 'rangé sous workflows/local/, ignoré par git'
+              : 'rangé sous workflows/model/, versionné'),
           ),
         ),
         h('div', { className: 'wf-props' },
@@ -3958,7 +3826,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             },
               h('span', { className: 'wf-pick-top' },
                 h('span', { className: 'wf-pick-title' }, workflow.title || workflow.workflow),
-                h('span', { className: 'wf-pick-kind' }, WORKFLOW_KIND_LABELS[workflow.kind] ?? workflow.kind),
+                h('span', { className: 'wf-pick-badges' },
+                  workflow.local ? h('span', { className: 'wf-pick-local' }, 'Local') : null,
+                  h('span', { className: 'wf-pick-kind' }, WORKFLOW_KIND_LABELS[workflow.kind] ?? workflow.kind),
+                ),
               ),
               h('span', { className: 'wf-pick-summary' }, workflow.description || workflow.summary || '—'),
               h('span', { className: 'wf-pick-meta' }, counts(workflow)),
@@ -3976,9 +3847,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             h('h3', { className: 'wf-detail-title' }, entry.title || entry.workflow),
             h('p', { className: 'wf-note' }, `${entry.document} — entrée ${entry.entry ?? '?'} · sortie(s) ${(entry.exit ?? []).join(', ') || '?'}`),
           ),
-          statuts
-            ? h('span', { className: 'wf-pick-kind' }, WORKFLOW_KIND_LABELS.statuts)
-            : null,
+          h('span', { className: 'wf-pick-badges' },
+            entry.local ? h('span', { className: 'wf-pick-local' }, 'Local') : null,
+            statuts ? h('span', { className: 'wf-pick-kind' }, WORKFLOW_KIND_LABELS.statuts) : null,
+          ),
         ),
 
         h('div', { className: 'wf-layout' }, canvas, dock),
@@ -5851,17 +5723,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Repository details' },
                   h('p', { className: 'missions-drawer-hint' }, 'Select a repository to see its remote, its upstream and its last commits.'),
                 )
+            : tab === 'dashboard'
+            ? null
             : selected
             ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onArchived: applyArchive, theme })
-            : tab === 'dashboard'
-            ? h(DashboardQueue, {
-                missions,
-                services,
-                workspaceId,
-                workspaceRoot,
-                onOpenMission: (mission) => { openMission(mission); setTab('missions') },
-                onOpenMissions: () => { setSelected(null); changeTab('missions') },
-              })
             : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },
                 h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),
               ),

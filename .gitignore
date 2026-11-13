@@ -2,6 +2,9 @@ node_modules/
 .DS_Store
 dist/
 missions/*/
+# Workflows rangés hors du dépôt : le dossier suit `workflows/model/`, ses
+# fichiers ne partent pas avec le clone.
+workflows/local/
 
 # Configuration Emacs propre au poste (MIS-135) : le gabarit et le script
 # sont versionnés, le fichier du système et sa liste générée ne le sont pas.

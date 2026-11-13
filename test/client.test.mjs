@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { USAGE_ELEMENTS, modelOf, missionSessionPrompt, needsYou } from '../lib/view.js'
+import { USAGE_ELEMENTS, modelOf } from '../lib/view.js'
 import { MODELS_DIR, readWorkflow } from '../lib/workflows.js'
 import { blockedReasonAfterWrite } from '../lib/view.js'
 import { forgetToken, setBlocked } from '../lib/trackers/jira.js'
@@ -795,8 +795,8 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   assert.match(flat, /missions-hero/)
   assert.match(flat, /data:image\/webp;base64,/)
   assert.match(SOURCE, /Naruto theme/)
-  assert.match(flat, /DashboardQueue/)
-  assert.match(SOURCE, /missions-drawer--decision/)
+  assert.match(flat, /DashboardView/)
+  assert.doesNotMatch(flat, /DashboardQueue/)
   assert.doesNotMatch(SOURCE, /missions-drawer--empty \{ display: none; \}/)
   assert.match(SOURCE, /\[data-skin="paper"\] \.missions-card:hover \{[^}]*background: color-mix/)
   assert.doesNotMatch(SOURCE, /\[data-skin="paper"\] \.missions-card:hover \{[^}]*translateY/)
@@ -1275,7 +1275,7 @@ function workflowStateValues(draft, patch = {}) {
     selectedArc: null,
     tab: 'infos',
     creating: false,
-    form: { title: '', description: '', kind: 'etape' },
+    form: { title: '', description: '', kind: 'etape', local: false },
     formErrors: {},
     creatingBusy: false,
     exitText: (draft.exit ?? []).join(', '),
@@ -1997,234 +1997,12 @@ test('un chargement sans donnée rend le loader, un refresh garde les lignes', (
   assert.equal(findAll(warm.tree, 'button').filter((button) => button.props['data-state'] !== undefined).length, 10)
 })
 
-/**
- * La file du dashboard, telle que le tracker la publie : les trois états qui
- * attendent une décision, un état inconnu à arbitrer, et une
- * mission déjà lancée qui n'a rien à y faire. Les dates sont fixes et le plus
- * ancien état est Q-1, pour que le tri ne dépende pas du jour de la suite.
- */
-const QUEUE_MISSIONS = [
-  { key: 'Q-9', title: 'waiting for review', state: 'in-review', branch: 'feat/q-9', base: 'main', points: 3, updatedAt: '2026-11-09T12:00:00Z' },
-  { key: 'Q-1', title: 'old ready work', state: 'ready', branch: 'feat/q-1', base: 'main', updatedAt: '2026-10-01T12:00:00Z' },
-  { key: 'Q-2', title: 'blocked story', state: 'ready', branch: 'feat/q-2', base: 'main', blocked: true, updatedAt: '2026-11-08T12:00:00Z' },
-  { key: 'Q-7', title: 'awaiting refinement', state: 'to-refine', branch: 'feat/q-7', base: 'main', updatedAt: '2026-11-10T12:00:00Z' },
-  { key: 'Q-4', title: 'unmapped status', state: null, updatedAt: '2026-11-11T06:00:00Z' },
-  { key: 'Q-5', title: 'running now', state: 'in-progress', branch: 'feat/q-5', base: 'main', updatedAt: '2026-11-11T10:00:00Z' },
-]
-
-/**
- * Le panneau monté sur le dashboard, puis le `DashboardQueue` résolu avec un
- * `now` figé. La file a ses propres hooks : chaque rendu remonte le panneau
- * d'abord, comme un vrai re-render rejoue les setters du clic.
- */
-function monterFile(etats, { now = DASH_NOW, services, workspaceId = 'w' } = {}) {
-  const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, etats)
-  api.apply(ctx)
-
-  /** Remonte le panneau avec les mêmes états initiaux, comme un remontage vrai. */
-  const monterPanneau = () => {
-    resetHooks()
-    queue.length = 0
-    queue.push(...etats)
-    return registered.main({})
-  }
-  const rendu = (panneau = monterPanneau()) => {
-    const file = findAll(panneau, 'DashboardQueue')[0]
-    assert.ok(file, 'le dashboard doit rendre DashboardQueue')
-    const props = { ...file.props, now, workspaceId }
-    if (services !== undefined) props.services = services
-    return { panneau, file, tree: renderTree({ ...file, props }) }
-  }
-  return { registered, setters, monterPanneau, rendu, premier: rendu() }
-}
-
-test('sous le dashboard, le volet devient le poste de décision de la file', () => {
-  // Given trois états en attente, un état inconnu et une mission lancée.
-  const { tree, panneau } = monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard']).premier
-
-  // Then le volet rend la carte du poste de décision, et une seule.
-  assert.equal(findAll(tree, 'article').length, 1)
-  assert.equal(findAll(tree, 'article')[0].props.className, 'missions-queue-card')
-  assert.equal(findAll(tree, 'aside').length, 1, 'un seul volet, celui du poste de décision')
-  const aside = findAll(tree, 'aside')[0]
-  assert.match(aside.props.className, /missions-drawer/)
-  assert.match(aside.props.className, /missions-drawer--decision/)
-  assert.equal(textOf(findAll(aside, 'h2')[0]), 'Now')
-  assert.match(textOf(aside), /1 of 5/, 'la carte dit sa position dans la file')
-  assert.match(textOf(aside), /^decisionNow1 of 5/, 'le titre, puis la position')
-  assert.doesNotMatch(textOf(aside), /Select a mission/)
-  assert.match(SOURCE, /^\.missions-queue-card \{/m, 'la règle de la carte est présente')
-
-  // Then le panneau rend le poste de décision, pas l'aside vide d'avant.
-  assert.equal(findAll(panneau, 'DashboardQueue').length, 1)
-
-  // Then la tête est la première de la file, dans l'ordre que le dashboard applique déjà.
-  const attendu = needsYou(QUEUE_MISSIONS)[0]
-  assert.equal(attendu.key, 'Q-9')
-  assert.match(textOf(aside), /Q-9/)
-  assert.match(textOf(aside), /waiting for review/)
-  assert.match(textOf(aside), /Review/)
-  assert.doesNotMatch(textOf(aside), /running now/, 'une mission lancée ne se décide pas ici')
-})
-
-test('le poste de décision suit la file quand une mission change d’état', () => {
-  // Given Q-7 quitte to-refine pour in-review, plus ancienne que Q-9.
-  const permutees = QUEUE_MISSIONS.map((mission) => {
-    if (mission.key === 'Q-7') return { ...mission, state: 'in-review', updatedAt: '2026-11-05T12:00:00Z' }
-    if (mission.key === 'Q-9') return { ...mission, updatedAt: '2026-11-12T12:00:00Z' }
-    return mission
-  })
-  const { tree } = monterFile([EMPTY_BAR, dashboardView(permutees), 'dashboard']).premier
-
-  // Then la tête change avec la file, sans code de tri propre au volet.
-  assert.equal(needsYou(permutees)[0].key, 'Q-7')
-  const aside = findAll(tree, 'aside')[0]
-  assert.equal(textOf(findAll(aside, 'h3')[0]), 'awaiting refinement')
-  assert.match(textOf(aside), /Q-7/)
-  assert.match(textOf(aside), /1 of 5/)
-  const lignes = findAll(aside, 'button').filter((node) => node.props.className === 'missions-queue-line')
-  assert.match(textOf(lignes[0]), /Q-9/, 'Q-9 redescend dans la suite de la file')
-})
-
-test('la carte porte l’âge, la marque quiet, les points et le blocage', () => {
-  // Given une tête vieille de deux jours, avec trois points.
-  const QUESTION_OLD = QUEUE_MISSIONS[1]
-  const jeune = monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard']).premier.tree
-  const aside = findAll(jeune, 'aside')[0]
-  const age = findAll(aside, 'li').find((node) => node.props.className === 'missions-queue-cue' && textOf(node).includes('updated'))
-  assert.ok(age, 'la carte porte son âge')
-  assert.equal(age.props['data-quiet'], 'false')
-  assert.match(textOf(age), /updated 2 d ago/)
-  assert.match(textOf(aside), /3 pts/)
-  assert.match(textOf(aside), /Review/, 'la tête in-review dit Review')
-  const verbes = findAll(aside, 'button')
-    .filter((node) => node.props.className === 'missions-queue-line')
-    .map((node) => textOf(findAll(node, 'span').at(-1)))
-  assert.deepEqual(verbes, ['Start', 'Start', 'Refine', 'Open'], 'chaque ligne dit le verbe de son état, un état inconnu reste neutre')
-
-  // Then une tête ancienne (41 jours) : la marque quiet apparaît, en texte et en attribut.
-  const vieille = monterFile([EMPTY_BAR, dashboardView([QUESTION_OLD]), 'dashboard']).premier.tree
-  const vieuxAside = findAll(vieille, 'aside')[0]
-  const vieuxAge = findAll(vieuxAside, 'li')[0]
-  assert.equal(vieuxAge.props['data-quiet'], 'true')
-  assert.match(textOf(vieuxAge), /updated 41 d ago · quiet/)
-
-  // Then une mission bloquée porte sa marque, sans se retirer de la file.
-  const bloque = monterFile([EMPTY_BAR, dashboardView([QUEUE_MISSIONS[2]]), 'dashboard']).premier.tree
-  const bloqueAside = findAll(bloque, 'aside')[0]
-  const marque = findAll(bloqueAside, 'li').find((node) => textOf(node) === 'blocked')
-  assert.ok(marque, 'la carte dit le blocage')
-  assert.match(marque.props.className, /missions-queue-cue--blocked/)
-})
-
-test('choisir une ligne de la file refait la carte sans quitter le dashboard', () => {
-  // Given le dashboard monté sur la file.
-  const app = monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard'])
-
-  // When la ligne de Q-7 est choisie.
-  const ligne = findAll(app.premier.tree, 'button')
-    .find((bouton) => bouton.props.className === 'missions-queue-line' && textOf(bouton).includes('Q-7'))
-  assert.ok(ligne, 'Q-7 fait partie de la suite de la file')
-  ligne.props.onClick()
-
-  // Then la carte devient Q-7, toujours sous le dashboard, à sa position dans la file.
-  const suite = app.rendu()
-  const aside = findAll(suite.tree, 'aside')[0]
-  assert.equal(textOf(findAll(aside, 'h3')[0]), 'awaiting refinement')
-  assert.match(textOf(aside), /4 of 5/)
-  assert.match(textOf(aside), /Refine/)
-  assert.equal(findAll(suite.panneau, 'DashboardView').length, 1)
-  assert.equal(findAll(suite.panneau, 'MissionsView').length, 0)
-  assert.equal(findAll(suite.panneau, 'DoneView').length, 0)
-})
-
-test('le bouton de session ouvre la session avec le prompt de l’étape', async () => {
-  const captures = []
-  let sent = 0
-  const services = {
-    getService: (name) => {
-      if (name !== 'uiWorkspace') {
-        return null
-      }
-      return {
-        startSession: (id, options) => captures.push({ id, prompt: options?.prompt }),
-        send: () => {
-          sent += 1
-        },
-      }
-    },
-  }
-
-  // Given une tête `ready`, dont la branche et la base sont déclarées.
-  const ready = { ...QUEUE_MISSIONS[1], blocked: false }
-  const app = monterFile([EMPTY_BAR, dashboardView([ready]), 'dashboard'], { services })
-  const bouton = findAll(app.premier.tree, 'button')
-    .find((node) => node.props.className === 'missions-queue-action missions-queue-action--primary')
-  assert.ok(bouton, 'la carte porte son geste de session')
-  assert.match(textOf(bouton), /^Start a session — exécution$/)
-  assert.equal(bouton.props.disabled, false)
-
-  // When le geste part, le prompt est celui de l'étape, pas une copie locale.
-  await bouton.props.onClick()
-
-  // Then une session est ouverte, dans le workspace du panneau, avec ce prompt.
-  assert.equal(captures.length, 1)
-  assert.equal(captures[0].id, 'w')
-  assert.equal(typeof captures[0].prompt, 'string')
-  assert.ok(captures[0].prompt.length > 0)
-  assert.equal(captures[0].prompt, missionSessionPrompt(ready))
-  assert.equal(sent, 0, 'le geste préremplit le composer, il n’envoie rien')
-  assert.equal(findAll(app.premier.tree, 'p').filter((node) => node.props.role === 'alert').length, 0)
-})
-
-test('les détails ouvrent la mission dans l’onglet Missions', () => {
-  // Given la tête Q-9.
-  const app = monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard'])
-
-  // When Details est cliqué.
-  const details = findAll(app.premier.tree, 'button').find((node) => textOf(node) === 'Details')
-  assert.ok(details)
-  details.props.onClick()
-
-  // Then la mission est sélectionnée, l'onglet Missions la montre, son volet est monté.
-  const panneau = app.monterPanneau()
-  assert.equal(findAll(panneau, 'MissionsView').length, 1)
-  assert.equal(findAll(panneau, 'DashboardView').length, 0)
-  const volet = findAll(panneau, 'MissionDrawer')[0]
-  assert.ok(volet)
-  assert.equal(volet.props.mission.key, 'Q-9')
-})
-
-test('une file vide le dit et ramène aux missions', () => {
-  // Given une liste dont rien n'attend une décision.
-  const missions = [
-    { key: 'R-1', title: 'running', state: 'in-progress', branch: 'feat/r-1', base: 'main', updatedAt: '2026-11-11T10:00:00Z' },
-    { key: 'D-1', title: 'shipped', state: 'done', updatedAt: '2026-11-11T09:00:00Z' },
-  ]
-  const app = monterFile([EMPTY_BAR, dashboardView(missions), 'dashboard'])
-
-  // Then l'état vide est explicite, sans carte ni ligne inventée.
-  const aside = findAll(app.premier.tree, 'aside')[0]
-  assert.match(aside.props.className, /missions-drawer--decision-empty/)
-  assert.match(textOf(aside), /Nothing is waiting on a decision\./)
-  assert.equal(findAll(app.premier.tree, 'article').filter((node) => node.props.className === 'missions-queue-card').length, 0)
-  assert.equal(findAll(app.premier.tree, 'button').filter((node) => node.props.className === 'missions-queue-line').length, 0)
-
-  // Then son geste ramène à la liste.
-  findAll(app.premier.tree, 'button').find((node) => textOf(node) === 'Open Missions').props.onClick()
-  const panneau = app.monterPanneau()
-  assert.equal(findAll(panneau, 'MissionsView').length, 1)
-  assert.equal(findAll(panneau, 'DashboardQueue').length, 0)
-})
-
 test('chaque volet garde la famille missions-drawer et son titre', () => {
-  // Given le dashboard, l'onglet Missions, le volet d'une mission, celui d'un dépôt.
-  const file = findAll(monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard']).premier.tree, 'aside')[0]
-  const vide = findAll(monter([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'missions']), 'aside')[0]
+  // Given l'onglet Missions, le volet d'une mission, celui d'un dépôt.
+  const vide = findAll(monter([EMPTY_BAR, dashboardView([]), 'missions']), 'aside')[0]
   const volet = findAll(monterVolet().tree, 'aside')[0]
   const depot = findAll(voletDepot(REPO_SCAN.repositories[0]).inner, 'aside')[0]
   const cas = [
-    [file, 'Now'],
     [volet, MISSION.title],
     [depot, REPO_SCAN.repositories[0].name],
   ]
@@ -2239,27 +2017,42 @@ test('chaque volet garde la famille missions-drawer et son titre', () => {
   assert.match(textOf(vide), /Select a mission to see its details/)
 })
 
-test('le poste de décision tient en thème manga, sans couleur littérale', () => {
-  // Given le panneau monté en thème manga sur le dashboard.
-  const storage = { getItem: () => 'manga', setItem: () => {} }
-  const { api, ctx, registered } = charger(storage, [EMPTY_BAR, dashboardView(QUEUE_MISSIONS)])
-  api.apply(ctx)
-  const panneau = registered.main({})
-  const file = findAll(panneau, 'DashboardQueue')[0]
-  const tree = renderTree({ ...file, props: { ...file.props, now: DASH_NOW } })
+test('le dashboard occupe toute la largeur, sans volet à droite', () => {
+  // Given le panneau monté sur le dashboard.
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'])
 
-  // Then le poste de décision se rend, et le thème ne le cache pas.
-  assert.match(JSON.stringify(panneau), /"data-theme":"manga"/)
-  assert.match(textOf(tree), /Now/)
-  assert.doesNotMatch(SOURCE, /\[data-theme="manga"\] \.missions-drawer--decision \{ display: none; \}/)
+  // Then le digest est seul : aucun aside, aucun poste de décision.
+  assert.equal(findAll(tree, 'aside').length, 0)
+  assert.equal(findAll(tree, 'DashboardView').length, 1)
+  assert.doesNotMatch(JSON.stringify(tree), /DashboardQueue/)
 
-  // Then le bloc CSS du poste ne porte ni couleur littérale ni règle de thème.
-  const debut = SOURCE.indexOf('.missions-drawer--decision {')
-  const fin = SOURCE.indexOf('.missions-queue-empty-text {')
-  const bloc = SOURCE.slice(debut, SOURCE.indexOf('}', fin) + 1)
-  assert.match(bloc, /\.missions-queue-card \{/)
-  assert.doesNotMatch(bloc, /#[0-9a-fA-F]{3,8}/)
-  assert.doesNotMatch(bloc, /\[data-theme/)
+  // Then une file sans rien à décider ne monte pas non plus de volet vide.
+  const vide = monter([EMPTY_BAR, dashboardView([MISSION]), 'dashboard'])
+  assert.equal(findAll(vide, 'aside').length, 0)
+})
+
+test('sous le dashboard, le corps est le seul occupant de missions-content', () => {
+  // Given le panneau monté sur le dashboard.
+  const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'])
+
+  // Then missions-content ne porte que le corps, qui prend la largeur.
+  const contenu = findAll(tree, 'div').find((node) => node.props.className === 'missions-content')
+  assert.ok(contenu, 'missions-content est monté')
+  const enfants = contenu.children.filter((enfant) => enfant !== null && enfant !== undefined)
+  assert.equal(enfants.length, 1)
+  assert.equal(enfants[0].props.className, 'missions-body')
+  assert.match(regle('.missions-body'), /flex: 1/)
+})
+
+test('une mission choisie ne rouvre pas de volet sous le dashboard', () => {
+  // Given la même mission choisie, sous le dashboard puis sous Missions.
+  const surDashboard = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard', '', EMPTY_BAR.filters, null, MISSION])
+  const surMissions = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', EMPTY_BAR.filters, null, MISSION])
+
+  // Then le dashboard reste sans volet, et l'onglet Missions garde son tiroir.
+  assert.equal(findAll(surDashboard, 'aside').length, 0)
+  assert.equal(findAll(surDashboard, 'MissionDrawer').length, 0)
+  assert.equal(findAll(surMissions, 'MissionDrawer').length, 1)
 })
 
 test('le panneau relit la barre de la session au montage', () => {
@@ -2447,16 +2240,15 @@ test('un brouillon sale refuse d’ouvrir la création', () => {
   assert.equal(setters.some((value) => value?.kind === 'error' && /d’abord/.test(value.message)), true, 'le panneau demande d’enregistrer ou d’annuler')
 })
 
-test('les règles de repli de la liste et du volet sont déclarées sous 900 px et 640 px', () => {
-  // Le rendu ne se mesure pas ici : jsdom ne calcule aucune mise en page. Ce
-  // test prouve les déclarations CSS ; la mesure réelle du panneau à 1280 px et
-  // 640 px est consignée dans le journal de MIS-195, avec ses captures.
-  // La grille des cartes se replie d'elle-même ; sous 900 px le volet passe
-  // sous le graphe ; sous 640 px le formulaire passe sur une seule colonne. Le
-  // canevas garde son propre défilement : jamais la page entière.
+test('les formulaires empilent leurs champs sur une colonne', () => {
+  assert.match(regle('.wf-form'), /grid-template-columns: minmax\(0, 1fr\)/)
+  assert.match(regle('.wf-form-actions'), /grid-column: 1 \/ -1/)
+  assert.doesNotMatch(SOURCE, /@media \(max-width: 640px\) \{[\s\S]*?\.wf-form \{/, 'le média ne répète plus la grille')
+})
+
+test('la liste, le volet et le canevas gardent leurs règles de repli', () => {
   assert.match(regle('.wf-list'), /grid-template-columns: repeat\(auto-fill, minmax\(240px, 1fr\)\)/)
   assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\.wf-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
-  assert.match(SOURCE, /@media \(max-width: 640px\) \{[\s\S]*?\.wf-form \{ grid-template-columns: minmax\(0, 1fr\); \}/)
   assert.match(regle('.wf-canvas-wrap'), /overflow: auto/)
   assert.match(regle('.missions-body'), /overflow: auto/)
 })
@@ -2608,8 +2400,16 @@ test('la création ne demande que le titre, la description et le type', async ()
   assert.ok(form, 'le formulaire de création est ouvert')
   const etiquettes = findAll(form, 'label').map((label) => textOf(findAll(label, 'span')[0]))
   assert.deepEqual(etiquettes, ['Titre', 'Description', 'Type'], 'trois champs, pas un de plus')
-  assert.equal(findAll(form, 'input').length, 2, 'un titre et une description : la clé et le document ne se tapent pas')
+  assert.equal(findAll(form, 'input').length, 1, 'le titre seulement : la clé et le document ne se tapent pas')
+  const description = findAll(form, 'textarea')[0]
+  assert.ok(description, 'la description est un textarea')
+  assert.ok(Number(description.props.rows) >= 3, 'trois lignes au moins')
+  assert.equal(description.props.maxLength, 280)
   assert.equal(findAll(form, 'select').length, 1, 'seul le type se choisit')
+  const versionne = findAll(form, 'button').find((node) => node.props.role === 'switch')
+  assert.ok(versionne, 'le switch de versionnement est là')
+  assert.equal(versionne.props['aria-checked'], 'true', 'coché par défaut : versionné')
+  assert.match(textOf(versionne), /Versionné/)
 })
 
 test('la création envoie le titre, la description et le type, jamais la clé', async () => {
@@ -2640,12 +2440,13 @@ test('la création envoie le titre, la description et le type, jamais la clé', 
     const formulaire = findAll(inner, 'form')[0]
     assert.ok(formulaire, 'le dialogue est rendu')
     const champs = findAll(formulaire, 'input')
+    const description = findAll(formulaire, 'textarea')[0]
 
     // Chaque frappe passe par le setter du formulaire : le champ est piloté,
     // pas seulement décoré.
     const avant = setters.length
     champs[0].props.onChange({ target: { value: 'Incidents' } })
-    champs[1].props.onChange({ target: { value: 'Les incidents du workspace' } })
+    description.props.onChange({ target: { value: 'Les incidents du workspace' } })
     findAll(formulaire, 'select')[0].props.onChange({ target: { value: 'statuts' } })
     // Chaque frappe pose le formulaire puis ses erreurs : le formulaire d'abord.
     const vide = { title: '', description: '', kind: 'etape' }
@@ -2671,6 +2472,7 @@ test('la création envoie le titre, la description et le type, jamais la clé', 
       title: 'Incidents',
       description: 'Les incidents du workspace',
       kind: 'statuts',
+      local: false,
     }, 'la clé et le document se déduisent du titre : ils ne partent pas')
   } finally {
     globalThis.fetch = vraiFetch
@@ -7582,4 +7384,46 @@ test('changer de thème écrit missions.theme et compte le geste', () => {
   } finally {
     spy.restore()
   }
+})
+
+test('la carte et la tête du détail portent la pastille Local, et seulement pour un local', () => {
+  const local = montrerWorkflows([workflowEntry({ local: true })], { tab: 'infos' })
+  const carte = findAll(local.rendered, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+  const pastilles = findAll(carte, 'span').filter((node) => node.props.className === 'wf-pick-local')
+  assert.equal(pastilles.length, 1, 'la carte porte la pastille')
+  assert.equal(textOf(pastilles[0]), 'Local')
+  const tete = findAll(local.rendered, 'div').find((node) => node.props.className === 'wf-detail-head')
+  assert.ok(tete, 'la tête du détail est rendue')
+  assert.match(textOf(tete), /Local/, 'la tête du détail porte la pastille')
+
+  const versionne = montrerWorkflows([workflowEntry({ local: false })]).rendered
+  const carteVersionnee = findAll(versionne, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+  assert.equal(findAll(carteVersionnee, 'span').filter((node) => node.props.className === 'wf-pick-local').length, 0)
+  assert.match(regle('.wf-pick-local'), /color: #8250df/, 'la pastille locale a sa teinte, distincte du type')
+  assert.match(regle('.wf-pick-summary'), /white-space: pre-line/)
+  assert.match(regle('.wf-pick-summary'), /-webkit-line-clamp: 2/)
+})
+
+test('Informations rend la description en textarea et le versionnement en switch', () => {
+  const { rendered, setters } = montrerWorkflows([workflowEntry({ local: false })], { tab: 'infos' })
+  const description = findAll(rendered, 'textarea')[0]
+  assert.ok(description, 'la description est un textarea')
+  assert.ok(Number(description.props.rows) >= 3)
+  assert.equal(description.props.maxLength, 280)
+
+  const versionne = findAll(rendered, 'button').find((node) => node.props.role === 'switch')
+  assert.ok(versionne, 'le switch est dans Informations')
+  assert.equal(versionne.props['aria-checked'], 'true', 'versionné par défaut')
+
+  const avant = setters.length
+  versionne.props.onClick()
+  const misesAJour = setters.slice(avant).filter((value) => typeof value === 'function')
+  assert.ok(misesAJour.length, 'le basculement marque le brouillon')
+  const bascule = misesAJour[0](modelOf(workflowEntry({ local: false })))
+  assert.equal(bascule.local, true, 'décocher range en local')
+  assert.notDeepEqual(bascule, modelOf(workflowEntry({ local: false })), 'le brouillon devient sale')
+
+  const local = montrerWorkflows([workflowEntry({ local: true })], { tab: 'infos' }).rendered
+  const switchLocal = findAll(local, 'button').find((node) => node.props.role === 'switch')
+  assert.equal(switchLocal.props['aria-checked'], 'false', 'un local n’est pas coché versionné')
 })

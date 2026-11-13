@@ -659,7 +659,7 @@ async function copyWorkflows(dir) {
 
 /** Le modèle nu, tel que le panneau le renvoie au serveur. */
 function bareModel(entry) {
-  const { errors, orphanSections, headings, file, summary, counts, ...model } = entry
+  const { errors, orphanSections, headings, file, summary, counts, local, ...model } = entry
   return model
 }
 
@@ -2603,4 +2603,110 @@ test('POST playbooks/page écrit une page valide et refuse une page fautive', as
     body: { page: '../../etc/passwd', text: 'x', mtimeMs: Date.now() },
   })
   assert.equal(traversal.status, 400)
+})
+
+test('POST /workflows range la création locale sous workflows/local/ et la liste la marque', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const created = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows',
+    body: { title: 'Brouillon local', description: 'deux\nlignes', kind: 'etape', local: true },
+  })
+
+  assert.equal(created.status, 201)
+  assert.equal(created.body.local, true)
+  assert.equal(created.body.file, 'workflows/local/model/brouillon-local.yml')
+  assert.equal(created.body.document, 'workflows/local/brouillon-local.md')
+  assert.equal(created.body.entry.local, true)
+  assert.match(await readFile(join(dir, 'workflows', 'local', 'model', 'brouillon-local.yml'), 'utf8'), /description: \|-/)
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'brouillon-local.md'), 'utf8'), '# Brouillon local\n\n## Ce qu\'on fait\n')
+  assert.equal(await readFile(join(dir, 'workflows', 'model', 'brouillon-local.yml'), 'utf8').catch(() => null), null)
+
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const local = list.body.workflows.find((entry) => entry.workflow === 'brouillon-local')
+  assert.ok(local, 'la liste réunit les deux dossiers')
+  assert.equal(local.local, true)
+  assert.equal(local.file, 'workflows/local/model/brouillon-local.yml')
+  assert.equal(local.document, 'workflows/local/brouillon-local.md')
+  assert.ok(list.body.workflows.slice(0, 4).every((entry) => entry.local === false), 'les étapes restent versionnées')
+
+  const read = await call(handler, { path: '/missions/api/workflows/model?workflow=brouillon-local' })
+  assert.equal(read.status, 200)
+  assert.equal(read.body.local, true)
+  assert.equal(read.body.file, 'workflows/local/model/brouillon-local.yml')
+  assert.match(read.body.text, /document: workflows\/local\/brouillon-local\.md/)
+})
+
+test('POST /workflows refuse une description de 281 caractères sans rien écrire', async (t) => {
+  // Given : un dépôt temporaire dont seuls les cinq modèles versionnés existent.
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  // When : la création poste une description d'un caractère de trop.
+  const refused = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows',
+    body: { title: 'Description trop longue', description: 'x'.repeat(281), kind: 'etape', local: true },
+  })
+
+  // Then : le refus nomme la description, et rien n'est écrit dans les deux dossiers.
+  assert.equal(refused.status, 400)
+  assert.equal(refused.body.error, 'workflow invalid')
+  assert.equal(refused.body.errors[0].field, 'description')
+  assert.equal(refused.body.errors[0].code, 'description-invalide')
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'model', 'description-trop-longue.yml'), 'utf8').catch(() => null), null)
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'description-trop-longue.md'), 'utf8').catch(() => null), null)
+  assert.equal(await readFile(join(dir, 'workflows', 'model', 'description-trop-longue.yml'), 'utf8').catch(() => null), null)
+})
+
+test('POST /workflows/model bascule un workflow local puis le ramène, en un geste', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const model = bareModel(list.body.workflows[0])
+
+  const moved = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows/model',
+    body: { workflow: 'cadrage', model, local: true },
+  })
+  assert.equal(moved.status, 200)
+  assert.equal(moved.body.local, true)
+  assert.equal(moved.body.file, 'workflows/local/model/cadrage.yml')
+  assert.equal(moved.body.entry.local, true)
+  assert.match(await readFile(join(dir, 'workflows', 'local', 'model', 'cadrage.yml'), 'utf8'), /document: workflows\/local\/cadrage\.md/)
+  assert.equal(await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8').catch(() => null), null)
+
+  const back = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows/model',
+    body: { workflow: 'cadrage', model: moved.body.model, local: false },
+  })
+  assert.equal(back.status, 200)
+  assert.equal(back.body.local, false)
+  assert.equal(back.body.file, 'workflows/model/cadrage.yml')
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'model', 'cadrage.yml'), 'utf8').catch(() => null), null)
+})
+
+test('un déplacement qui collisionne répond 409 sans toucher la source', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  await mkdir(join(dir, 'workflows', 'local', 'model'), { recursive: true })
+  await writeFile(join(dir, 'workflows', 'local', 'model', 'cadrage.yml'), 'workflow: cadrage\n', 'utf8')
+  const source = await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8')
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const model = bareModel(list.body.workflows[0])
+
+  const refused = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows/model',
+    body: { workflow: 'cadrage', model, local: true },
+  })
+
+  assert.equal(refused.status, 409)
+  assert.equal(refused.body.error, 'workflow conflict')
+  assert.equal(refused.body.errors[0].code, 'cle-double')
+  assert.equal(await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8'), source, 'la source reste intacte')
 })
