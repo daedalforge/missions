@@ -2967,6 +2967,37 @@ test('la barre des dépôts filtre la liste affichée, sans relire la racine', (
   }
 })
 
+test('le menu State compte les lignes de la liste affichée', () => {
+  // Given un scan dont chaque ligne répond à un état, une ligne à deux à la fois
+  const scan = {
+    ...REPO_SCAN,
+    count: 4,
+    repositories: [
+      { name: 'propre', kind: 'clone', branch: 'main', dirty: 0, lastCommit: null, error: null },
+      { name: 'sale', kind: 'clone', branch: 'main', dirty: 2, lastCommit: null, error: null },
+      { name: 'detache-et-sale', kind: 'clone', branch: null, detached: true, head: 'abc1234', dirty: 1, lastCommit: null, error: null },
+      { name: 'casse', kind: 'clone', branch: null, detached: false, dirty: 0, lastCommit: null, error: 'not a git repository' },
+    ],
+  }
+  const { inner, rerendre } = montrerRepositories(scanReady(scan), null, memorySession())
+
+  // When le menu des états s'ouvre
+  const puce = findAll(inner, 'button').find((button) => /^Filter by state \(All\)$/.test(button.props['aria-label']))
+  assert.ok(puce, 'le filtre d’état est rendu')
+  puce.props.onClick()
+  const ouvert = rerendre()
+
+  // Then chaque valeur porte son compte, et les comptes se recouvrent : la
+  // ligne détachée et sale compte dans les deux états, la ligne cassée dans un seul.
+  const comptes = {}
+  for (const label of findAll(ouvert, 'label').filter((node) => node.props['data-state'] !== undefined)) {
+    const compte = findAll(label, 'span').find((span) => span.props.className === 'missions-status-count')
+    assert.ok(compte, `la valeur ${label.props['data-state']} porte son compte`)
+    comptes[label.props['data-state']] = textOf(compte)
+  }
+  assert.deepEqual(comptes, { clean: '1', dirty: '2', detached: '1', unreadable: '1' })
+})
+
 test('une barre restaurée rouvre la recherche et les états, et le switch garde son genre', () => {
   // Given la session qui a laissé une recherche et un état
   const session = memorySession({ 'missions.repositories.filters': '{"query":"116","state":["dirty"]}' })
