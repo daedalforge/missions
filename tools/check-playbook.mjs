@@ -155,13 +155,13 @@ function checkPage(page, source, errors) {
   }
 
   const rules = bodies.get('## Où lire les règles') ?? ''
+  if (!/standards\/[\w./-]+\.md/.test(rules)) {
+    errors.push(`${page} : la section « Où lire les règles » ne nomme aucun chemin standards/`)
+  }
   const step = stepOfPage(page)
   if (step === null) {
     if (!rules.includes('workflows/')) {
       errors.push(`${page} : la section « Où lire les règles » ne nomme aucun document workflows/`)
-    }
-    if (!/standards\/[\w./-]+\.md/.test(rules)) {
-      errors.push(`${page} : la section « Où lire les règles » ne nomme aucun chemin standards/`)
     }
     return
   }

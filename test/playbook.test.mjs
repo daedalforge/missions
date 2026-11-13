@@ -12,10 +12,10 @@ import { PLAYBOOK_STEP_FILES, playbookFile } from '../lib/view.js'
 /**
  * Le playbook, contre son index, ses pages et les prompts.
  *
- * Quatre dérives sont possibles : une page indexée mais absente, une page
+ * Cinq dérives sont possibles : une page indexée mais absente, une page
  * présente mais non indexée, une section manquante, un renvoi `workflows/`
- * retiré. Chaque test casse une seule chose et attend une erreur qui nomme le
- * fichier.
+ * retiré, un chemin `standards/` retiré d'une page d'étape. Chaque test casse
+ * une seule chose et attend une erreur qui nomme le fichier.
  */
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHECKER = join(ROOT, 'tools', 'check-playbook.mjs')
@@ -96,4 +96,19 @@ test('une page qui ne nomme pas son document workflows/ échoue en la nommant', 
   assert.notEqual(result.code, 0)
   assert.match(result.stderr, /playbook\/cadrage\.md/)
   assert.match(result.stderr, /workflows\/cadrage\.md/)
+})
+
+test("une page d'étape sans chemin standards/ échoue en la nommant", async (t) => {
+  const root = await fixture(t)
+  const path = join(root, 'playbook', 'execution.md')
+  const source = await readFile(path, 'utf8')
+  const stripped = source
+    .split('\n')
+    .filter((line) => !line.includes('standards/'))
+    .join('\n')
+  await writeFile(path, stripped)
+  const result = await run(root)
+  assert.notEqual(result.code, 0)
+  assert.match(result.stderr, /playbook\/execution\.md/)
+  assert.match(result.stderr, /standards\//)
 })
