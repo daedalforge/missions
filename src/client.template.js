@@ -4035,7 +4035,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // view switch, and a reload must not lose the search, the filters or the
       // order. Nothing outlives the app: session storage dies with the window.
       const [restored] = React.useState(() => filterBarState(readFilterSnapshot(filterStorage())))
-      const [view, setView] = React.useState({ loading: true, proven: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
+      const [view, setView] = React.useState({ loading: true, count: null, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
       // The open view is remembered the same way, and opens on the dashboard:
       // the panel lands on what waits, not on the list. `usage` and `workflows`
       // were tabs of their own: a session stored on one of them reopens that
@@ -4111,20 +4111,22 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             if (data?.error) throw new Error(data.error)
             const missions = data?.missions ?? []
             const errors = data?.errors ?? []
-            setView({
+            setView((previous) => ({
               loading: false,
-              proven: errors.length === 0,
+              count: errors.length === 0
+                ? missions.filter((mission) => mission.state !== 'done').length
+                : previous.count,
               missions,
               errors,
               workspaceId: data?.workspaceId ?? null,
               workspaceRoot: data?.workspaceRoot ?? null,
-            })
+            }))
           })
           .catch((error) => {
             // A silent refresh that fails must not empty the list.
             setView((previous) => ({
               loading: false,
-              proven: silent ? previous.proven : false,
+              count: previous.count,
               workspaceId: previous.workspaceId,
               workspaceRoot: previous.workspaceRoot,
               missions: silent ? previous.missions : [],
@@ -4237,7 +4239,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         return () => clearInterval(timer)
       }, [load, loadDone, tab, trackerTab, loadRepositoryCount])
 
-      const { proven, loading, missions, errors, workspaceId, workspaceRoot } = view
+      const { count, loading, missions, errors, workspaceId, workspaceRoot } = view
       // Done is a perimeter, not a tab looking at the open list: its rows, its
       // failures and its loading come from its own read. The client keeps the
       // promise too — a stale or mixed payload never shows an open mission here.
@@ -4417,11 +4419,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       }
 
       // A tab carries the count its badge names, and says whether the panel is
-      // still waiting for it. Done's count and the repositories count are
-      // `null` until the host answers — the tab then draws the theme's refresh
-      // drawing in the pill the number will take, never a zero nobody proved.
+      // still waiting for it. The three counts are `null` until a whole answer
+      // proves them — the tab then draws the theme's refresh drawing in the
+      // pill the number will take, never a zero nobody proved.
       const tabBadge = (entry) => {
-        if (entry.badge === 'missions') return proven ? { count: openMissions.length } : { loading: true }
+        if (entry.badge === 'missions') return typeof count === 'number' ? { count } : { loading: true }
         if (entry.badge === 'done') return typeof doneView.count === 'number' ? { count: doneView.count } : { loading: true }
         if (entry.badge === 'repositories') return typeof repositoryCount === 'number' ? { count: repositoryCount } : { loading: true }
         return null

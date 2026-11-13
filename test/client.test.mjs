@@ -1187,7 +1187,14 @@ const DASH_MISSIONS = [
 ]
 
 function dashboardView(missions, loading = false) {
-  return { loading, proven: true, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  return {
+    loading,
+    count: missions.filter((mission) => mission.state !== 'done').length,
+    missions,
+    errors: [],
+    workspaceId: 'w',
+    workspaceRoot: '/w',
+  }
 }
 
 /**
@@ -1195,7 +1202,18 @@ function dashboardView(missions, loading = false) {
  * la pastille de Missions attend son compte comme les deux autres.
  */
 function vueSansReponse() {
-  return { loading: true, proven: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null }
+  return { loading: true, count: null, missions: [], errors: [], workspaceId: null, workspaceRoot: null }
+}
+
+/**
+ * Les états de la liste ouverte publiés par une lecture : ses setters sont
+ * fonctionnels, on les rejoue sur l'état de départ comme React le ferait.
+ */
+function vuesPubliees(setters, base) {
+  return setters
+    .filter((next) => typeof next === 'function')
+    .map((update) => update(base))
+    .filter((next) => next !== null && typeof next === 'object')
 }
 
 /**
@@ -2590,8 +2608,9 @@ test('une première réponse entière et vide prouve le zéro de Missions', asyn
     await effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()')).fn()
     await new Promise((done) => setTimeout(done, 0))
     // Then la réponse entière publie un compte prouvé, vide, et la pastille affiche 0
-    const publie = setters.find((next) => next?.proven === true && Array.isArray(next.missions))
+    const publie = vuesPubliees(setters, vueSansReponse()).find((next) => next.workspaceId === 'w')
     assert.ok(publie, 'la réponse entière prouve le compte')
+    assert.equal(publie.count, 0)
     assert.deepEqual(publie.missions, [])
     const rendu = monter([EMPTY_BAR, publie], memorySession())
     assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), '0')
@@ -2619,9 +2638,10 @@ test('une première réponse entière publie le compte de la liste ouverte', asy
     await effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()')).fn()
     await new Promise((done) => setTimeout(done, 0))
     // Then la pastille publie le compte des missions ouvertes, sans loader
-    const publie = setters.find((next) => next?.proven === true && Array.isArray(next.missions))
+    const publie = vuesPubliees(setters, vueSansReponse()).find((next) => next.workspaceId === 'w')
     assert.ok(publie, 'la réponse entière prouve le compte')
     const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
+    assert.equal(publie.count, ouvertes)
     const rendu = monter([EMPTY_BAR, publie], memorySession())
     assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), String(ouvertes))
     assert.equal(pastilleEnAttente(ongletDe(rendu, 'missions')), undefined)
@@ -2642,9 +2662,9 @@ test('un premier échec de la liste laisse la pastille de Missions en attente, s
     await effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()')).fn()
     await new Promise((done) => setTimeout(done, 0))
     // Then l'échec est publié sans prouver de compte, et la pastille attend toujours
-    const echec = setters.filter((next) => typeof next === 'function').map((update) => update(vueSansReponse())).find((next) => next.errors.length > 0)
+    const echec = vuesPubliees(setters, vueSansReponse()).find((next) => next.errors.length > 0)
     assert.ok(echec, 'l’échec de la liste est publié')
-    assert.equal(echec.proven, false)
+    assert.equal(echec.count, null)
     assert.deepEqual(echec.missions, [])
     const enEchec = monter([EMPTY_BAR, echec, 'missions'], memorySession())
     assert.equal(textOf(ongletDe(enEchec, 'missions')), 'Missions', 'aucun chiffre, pas même 0')
@@ -2689,9 +2709,10 @@ test('le tick de 60 s retente la liste après un premier échec et publie le com
     tick()
     await new Promise((done) => setTimeout(done, 0))
     // Then la réponse entière prouve le compte des missions ouvertes
-    const prouve = setters.find((next) => next?.proven === true && Array.isArray(next.missions))
+    const prouve = vuesPubliees(setters, vueSansReponse()).find((next) => next.workspaceId === 'w')
     assert.ok(prouve, 'le tick publie le compte prouvé')
     const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
+    assert.equal(prouve.count, ouvertes)
     const rendu = monter([EMPTY_BAR, prouve], memorySession())
     assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), String(ouvertes))
   } finally {
@@ -2703,7 +2724,7 @@ test('le tick de 60 s retente la liste après un premier échec et publie le com
 test('le Refresh explicite garde le chiffre de Missions pendant la relecture', async () => {
   const vraiFetch = globalThis.fetch
   const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
-  const prouve = { loading: false, proven: true, missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const prouve = { loading: false, count: ouvertes, missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   // Given une liste déjà prouvée, son chiffre affiché, et le Refresh de la vue
   const avant = monter([EMPTY_BAR, prouve, 'missions'], memorySession())
   assert.equal(textOf(pastilleDe(ongletDe(avant, 'missions'))), String(ouvertes))
@@ -2718,11 +2739,11 @@ test('le Refresh explicite garde le chiffre de Missions pendant la relecture', a
     // Then l'état de chargement reste prouvé, et la pastille ne repasse pas par le loader
     const pendant = setters.filter((next) => typeof next === 'function').map((update) => update(prouve)).find((next) => next.loading === true)
     assert.ok(pendant, 'la relecture passe par l’état chargement')
-    assert.equal(pendant.proven, true)
+    assert.equal(pendant.count, ouvertes)
     const enCours = monter([EMPTY_BAR, pendant, 'missions'], memorySession())
     assert.equal(textOf(pastilleDe(ongletDe(enCours, 'missions'))), String(ouvertes))
     assert.equal(pastilleEnAttente(ongletDe(enCours, 'missions')), undefined)
-    assert.ok(setters.some((next) => next?.proven === true && next.missions.length === DASH_MISSIONS.length))
+    assert.ok(vuesPubliees(setters, prouve).some((next) => next.count === ouvertes && next.missions.length === DASH_MISSIONS.length))
   } finally {
     globalThis.fetch = vraiFetch
   }
@@ -2734,7 +2755,7 @@ test('le tick silencieux relit la liste sans dé-prouver le compte de Missions',
   let tick = null
   globalThis.setInterval = (fn) => { tick = fn; return 1 }
   const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
-  const prouve = { loading: false, proven: true, missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const prouve = { loading: false, count: ouvertes, missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const { api, ctx, registered, effects, setters } = charger(undefined, [EMPTY_BAR, prouve, 'missions'], memorySession())
   api.apply(ctx)
   registered.main({})
@@ -2748,7 +2769,7 @@ test('le tick silencieux relit la liste sans dé-prouver le compte de Missions',
     // Then aucun état de chargement n'est publié, et la réponse prolonge le compte prouvé
     assert.equal(setters.length, 0)
     await new Promise((done) => setTimeout(done, 0))
-    const apres = setters.find((next) => next?.proven === true && Array.isArray(next.missions))
+    const apres = vuesPubliees(setters, prouve).find((next) => next.count === ouvertes && next.missions.length === DASH_MISSIONS.length)
     assert.ok(apres, 'la réponse entière prolonge le compte prouvé')
     const rendu = monter([EMPTY_BAR, apres], memorySession())
     assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), String(ouvertes))
@@ -2756,6 +2777,65 @@ test('le tick silencieux relit la liste sans dé-prouver le compte de Missions',
   } finally {
     globalThis.fetch = vraiFetch
     globalThis.setInterval = vraiSetInterval
+  }
+})
+
+test('une relecture partielle laisse le chiffre de Missions déjà prouvé', async () => {
+  const vraiFetch = globalThis.fetch
+  const vraiSetInterval = globalThis.setInterval
+  let tick = null
+  globalThis.setInterval = (fn) => { tick = fn; return 1 }
+  const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
+  const prouve = { loading: false, count: ouvertes, missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered, effects, setters } = charger(undefined, [EMPTY_BAR, prouve, 'missions'], memorySession())
+  api.apply(ctx)
+  registered.main({})
+  // Given une liste déjà prouvée et une relecture qui revient partielle
+  effects.find((effect) => String(effect.fn).includes('REFRESH_MS')).fn()
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ missions: [DASH_MISSIONS[0]], errors: [{ project: 'socle', message: 'open missions: boom' }] }),
+    })
+    setters.length = 0
+    // When le tick silencieux relit la liste
+    tick()
+    await new Promise((done) => setTimeout(done, 0))
+    // Then la réponse partielle laisse le compte publié et la pastille chiffrée
+    const partielle = vuesPubliees(setters, prouve).find((next) => next.errors.length > 0)
+    assert.ok(partielle, 'la réponse partielle est publiée avec ses erreurs')
+    assert.equal(partielle.count, ouvertes)
+    const rendu = monter([EMPTY_BAR, partielle], memorySession())
+    assert.equal(textOf(pastilleDe(ongletDe(rendu, 'missions'))), String(ouvertes))
+    assert.equal(pastilleEnAttente(ongletDe(rendu, 'missions')), undefined)
+  } finally {
+    globalThis.fetch = vraiFetch
+    globalThis.setInterval = vraiSetInterval
+  }
+})
+
+test('un Refresh explicite en échec laisse le chiffre de Missions déjà prouvé', async () => {
+  const vraiFetch = globalThis.fetch
+  const ouvertes = DASH_MISSIONS.filter((mission) => mission.state !== 'done').length
+  const prouve = { loading: false, count: ouvertes, missions: DASH_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, prouve, 'missions'], memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+  try {
+    // Given une liste déjà prouvée, et un Refresh explicite qui échoue
+    globalThis.fetch = async () => { throw new Error('offline') }
+    setters.length = 0
+    // When le Refresh relit la liste
+    await findAll(tree, 'MissionsView')[0].props.onRefresh()
+    // Then l'échec est publié, le compte prouvé reste et la pastille reste chiffrée
+    const echec = vuesPubliees(setters, prouve).find((next) => next.errors.length > 0)
+    assert.ok(echec, 'l’échec du Refresh est publié')
+    assert.equal(echec.count, ouvertes)
+    const enEchec = monter([EMPTY_BAR, echec, 'missions'], memorySession())
+    assert.equal(textOf(pastilleDe(ongletDe(enEchec, 'missions'))), String(ouvertes))
+    assert.equal(pastilleEnAttente(ongletDe(enEchec, 'missions')), undefined)
+  } finally {
+    globalThis.fetch = vraiFetch
   }
 })
 
