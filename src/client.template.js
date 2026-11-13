@@ -236,7 +236,7 @@ window.__ModuleLoader__.load({
   // l'étape que la session a laissée ouverte.
   const WORKFLOW_STEPS = ['cadrage', 'execution', 'review', 'cloture']
   const WORKFLOW_KIND_LABELS = { etape: 'étapes', statuts: 'statuts' }
-  const WORKFLOW_FORM = { key: '', title: '', kind: 'etape', document: '', entry: '', exit: '' }
+  const WORKFLOW_FORM = { title: '', description: '', kind: 'etape' }
     const REFRESH_MS = 60000
 
     const STATE_LABELS = {
@@ -506,7 +506,14 @@ window.__ModuleLoader__.load({
 .wf-pick-meta { font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-pick-flow { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-pick-flow code { padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, currentColor 8%, transparent); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; }
-.wf-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+..." + ".wf-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.wf-tabs { display: flex; gap: 6px; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
+.wf-tab { height: 28px; padding: 0 12px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.wf-tab:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
+.wf-tab--active { border-color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
+.wf-panel { border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 12px; padding: 14px; }
+.wf-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+
 .wf-detail-title { margin: 0; font-size: 15px; font-weight: 650; }
 .wf-empty { display: grid; gap: 6px; padding: 30px 16px; text-align: center; }
 .wf-legend { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; padding: 8px 4px 2px; font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -530,14 +537,9 @@ window.__ModuleLoader__.load({
 .wf-map-table th { padding: 2px 0; text-align: left; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .wf-map-table td { padding: 3px 0; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.07)); vertical-align: top; }
 .wf-map-table code { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); }
-.wf-modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.wf-modal-backdrop { position: absolute; inset: 0; background: color-mix(in srgb, #1f1f1f 38%, transparent); }
-.wf-modal-card { position: relative; width: min(560px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 18px 20px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 14px; background: var(--dsw-alias-bg-layer-1, #ffffff); box-shadow: 0 18px 50px rgba(0,0,0,.18); }
-.wf-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.wf-modal-title { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
 .missions-drawer-close { flex: none; padding: 0 2px; border: 0; background: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 20px; line-height: 1; cursor: pointer; }
 .wf-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
-.wf-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
+.wf-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
 .missions-group { margin-top: 20px; }
 .missions-group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); position: sticky; top: 0; background: var(--dsw-alias-bg-base, #fbfaf8); z-index: 1; }
 .missions-group-head .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -935,8 +937,6 @@ window.__ModuleLoader__.load({
   .wf-toolbar { align-items: flex-start; }
   .wf-list { grid-template-columns: minmax(0, 1fr); }
   .wf-form { grid-template-columns: minmax(0, 1fr); }
-  .wf-modal { padding: 10px; }
-  .wf-modal-card { max-height: calc(100vh - 20px); }
 }
 `
 
@@ -3262,10 +3262,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
     }
 
 
-    // L'onglet Workflows : le parcours se lit et s'édite comme un graphe. Le
-    // fichier ne porte aucune coordonnée — la géométrie se recalcule à chaque
-    // rendu (`layoutWorkflow`), donc deux sauvegardes du même graphe donnent la
-    // même image et le modèle reste lisible à la main.
+    // L'onglet Workflows : un workflow se crée en trois champs — le titre, la
+    // description et le type. La clé et le document en découlent, personne ne
+    // les tape. Le parcours se lit ensuite dans deux onglets : Informations
+    // (le modèle et ses bornes) et Graphe (les gestes et les arcs). Le fichier
+    // ne porte aucune coordonnée — la géométrie se recalcule à chaque rendu
+    // (`layoutWorkflow`), donc deux sauvegardes du même graphe donnent la même
+    // image et le modèle reste lisible à la main.
     function WorkflowsView() {
       const [view, setView] = React.useState({ loading: true, error: null, workflows: [], writers: [], states: [] })
       const [step, setStep] = React.useState(() => {
@@ -3283,11 +3286,12 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const [version, setVersion] = React.useState(0)
       const [baseline, setBaseline] = React.useState(null)
       const [selectedArc, setSelectedArc] = React.useState(null)
+      const [tab, setTab] = React.useState('infos')
       const [creating, setCreating] = React.useState(false)
       const [form, setForm] = React.useState(WORKFLOW_FORM)
       const [formErrors, setFormErrors] = React.useState({})
       const [creatingBusy, setCreatingBusy] = React.useState(false)
-      const documentTouched = React.useRef(false)
+      const [exitText, setExitText] = React.useState('')
 
       const load = React.useCallback(() => {
         fetch(WORKFLOWS_URL, { headers: { accept: 'application/json' } })
@@ -3314,17 +3318,23 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 
       // Le brouillon suit le workflow : la réponse du serveur porte des champs
       // d'affichage (`errors`, `headings`, `file`, `summary`) que le fichier ne
-      // contient pas.
+      // contient pas. Un autre workflow rouvert repart sur Informations.
       React.useEffect(() => {
-        if (!entry) { setDraft(null); setBaseline(null); return }
+        if (!entry) { setDraft(null); setBaseline(null); setExitText(''); return }
         const model = modelOf(entry)
         setDraft(model)
         setBaseline(model)
+        setExitText((model.exit ?? []).join(', '))
+        setTab('infos')
         setChosen(null)
         setSelectedArc(null)
         setStatus(null)
         setArc({ from: '', to: '', when: '' })
       }, [entry && entry.workflow, version])
+
+      // Une retouche non enregistrée se voit : le panneau le dit et refuse
+      // d'ouvrir la création par-dessus.
+      const dirty = Boolean(baseline && draft) && JSON.stringify(draft) !== JSON.stringify(baseline)
 
       const patchNode = (key, value) => {
         if (!chosen) return
@@ -3337,6 +3347,21 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           ...previous,
           edges: previous.edges.map((edge) => (edge.from === from && edge.to === to ? { ...edge, [key]: value } : edge)),
         }))
+        setStatus(null)
+      }
+
+      // Le modèle garde ses bornes en liste ; l'écran les montre séparées par
+      // des virgules. Chaque frappe relit la liste, sinon une sauvegarde
+      // emporterait la valeur d'avant la dernière virgule.
+      const parseExits = (text) => String(text ?? '').split(',').map((value) => value.trim()).filter(Boolean)
+      const changeExitText = (value) => {
+        setExitText(value)
+        setDraft((previous) => (previous ? { ...previous, exit: parseExits(value) } : previous))
+        setStatus(null)
+      }
+
+      const patchModel = (field, value) => {
+        setDraft((previous) => (previous ? { ...previous, [field]: value } : previous))
         setStatus(null)
       }
 
@@ -3358,6 +3383,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         setDraft({ ...draft, nodes: [...draft.nodes, { id, label: 'Nouveau geste', section: heading, writer: view.writers[0] ?? 'session' }] })
         setSelectedArc(null)
         setChosen(id)
+        setTab('graphe')
         setStatus(null)
       }
 
@@ -3405,7 +3431,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         fetch(WORKFLOW_MODEL_URL, {
           method: 'POST',
           headers: { 'content-type': 'application/json', accept: 'application/json' },
-          body: JSON.stringify({ workflow: draft.workflow, model: draft }),
+          body: JSON.stringify({ workflow: draft.workflow, model: { ...draft, exit: parseExits(exitText) } }),
         })
           .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
           .then(({ ok, data }) => {
@@ -3421,6 +3447,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               }))
               setDraft(model)
               setBaseline(model)
+              setExitText((model.exit ?? []).join(', '))
             }
             setStatus({ kind: 'ok', message: `Enregistré — ${data.file}` })
           })
@@ -3437,22 +3464,26 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           nodes: (baseline.nodes ?? []).map((node) => ({ ...node })),
           edges: (baseline.edges ?? []).map((edge) => ({ ...edge })),
         })
+        setExitText((baseline.exit ?? []).join(', '))
         setChosen(null)
         setSelectedArc(null)
         setStatus({ kind: 'ok', message: 'Modifications annulées.' })
       }
 
+      // La création ne demande que ce que personne ne peut déduire : le titre,
+      // la description et le type. La clé est le slug du titre, le document en
+      // découle — les deux restent modifiables par l'API, jamais par l'écran.
       const updateForm = (field, value) => {
-        setForm((previous) => {
-          const next = { ...previous, [field]: value }
-          if (field === 'key' && !documentTouched.current) next.document = value ? `workflows/${value}.md` : ''
-          return next
-        })
+        setForm((previous) => ({ ...previous, [field]: value }))
         setFormErrors((previous) => ({ ...previous, [field]: undefined }))
       }
 
       const openCreate = () => {
-        documentTouched.current = false
+        setTab('infos')
+        if (dirty) {
+          setStatus({ kind: 'error', message: 'Enregistre ou annule d’abord : la création partirait sur un brouillon non enregistré.' })
+          return
+        }
         setForm(WORKFLOW_FORM)
         setFormErrors({})
         setCreating(true)
@@ -3466,23 +3497,17 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const create = () => {
         if (creatingBusy) return
         const errors = {}
-        if (!form.key.trim()) errors.key = 'La clé est obligatoire.'
         if (!form.title.trim()) errors.title = 'Le titre est obligatoire.'
-        if (!form.document.trim()) errors.document = 'Le document est obligatoire.'
-        if (!form.entry.trim()) errors.entry = 'L’entrée est obligatoire.'
-        if (!form.exit.trim()) errors.exit = 'Au moins une sortie est obligatoire.'
+        if (form.description.trim().length > 280) errors.description = 'La description fait 280 caractères au plus.'
         if (Object.keys(errors).length) { setFormErrors(errors); return }
         setCreatingBusy(true)
         fetch(WORKFLOWS_URL, {
           method: 'POST',
           headers: { 'content-type': 'application/json', accept: 'application/json' },
           body: JSON.stringify({
-            workflow: form.key.trim(),
             title: form.title.trim(),
+            description: form.description.trim(),
             kind: form.kind,
-            document: form.document.trim(),
-            entry: form.entry.trim(),
-            exit: form.exit.split(',').map((value) => value.trim()).filter(Boolean),
           }),
         })
           .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
@@ -3495,6 +3520,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             }
             setCreating(false)
             setStep(data.workflow)
+            setTab('infos')
             setStatus({ kind: 'ok', message: `Créé — ${data.document}` })
             load()
           })
@@ -3509,6 +3535,56 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         return () => document.removeEventListener('keydown', onKey)
       }, [creating])
 
+      // La création vit dans le panneau, jamais dans une modale : trois champs
+      // seulement, le reste se déduit du titre ou se pose par défaut.
+      const createForm = h('form', {
+        className: 'wf-form wf-form--create',
+        onSubmit: (event) => { event.preventDefault(); create() },
+      },
+        h('label', { className: 'wf-field' },
+          h('span', null, 'Titre'),
+          h('input', { value: form.title, autoFocus: true, 'aria-invalid': formErrors.title ? 'true' : 'false', onChange: (event) => updateForm('title', event.target.value) }),
+          h('small', { className: 'wf-field-hint' }, 'la clé et le document s’en déduisent'),
+          formErrors.title ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.title) : null,
+        ),
+        h('label', { className: 'wf-field' },
+          h('span', null, 'Description'),
+          h('input', {
+            value: form.description,
+            placeholder: 'À quoi sert ce parcours',
+            'aria-invalid': formErrors.description ? 'true' : 'false',
+            onChange: (event) => updateForm('description', event.target.value),
+          }),
+          h('small', { className: 'wf-field-hint' }, 'une ligne, 280 caractères au plus'),
+          formErrors.description ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.description) : null,
+        ),
+        h('label', { className: 'wf-field' },
+          h('span', null, 'Type'),
+          h('select', { value: form.kind, onChange: (event) => updateForm('kind', event.target.value) },
+            h('option', { value: 'etape' }, 'Étapes'),
+            h('option', { value: 'statuts' }, 'Statuts'),
+          ),
+          formErrors.kind ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.kind) : null,
+        ),
+        formErrors.key ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.key) : null,
+        formErrors.document ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.document) : null,
+        h('div', { className: 'wf-form-actions' },
+          h('button', { type: 'button', className: 'missions-btn', onClick: closeCreate }, 'Annuler'),
+          h('button', { type: 'submit', className: 'missions-btn wf-primary', disabled: creatingBusy }, creatingBusy ? 'Création…' : 'Créer'),
+        ),
+      )
+
+      const createPanel = h('div', { className: 'wf-panel' },
+        h('div', { className: 'wf-panel-head' },
+          h('div', null,
+            h('h3', { className: 'wf-card-title' }, 'Nouveau workflow'),
+            h('p', { className: 'wf-note' }, 'Le modèle et le document sont écrits sous workflows/, jamais à la place d’un fichier existant.'),
+          ),
+          h('button', { type: 'button', className: 'missions-drawer-close', 'aria-label': 'Fermer la création', onClick: closeCreate }, '×'),
+        ),
+        createForm,
+      )
+
       // Deux attentes : le parcours (la liste) puis le modèle du workflow.
       // Entre les deux, l'entrée existe et le brouillon n'est pas encore posé —
       // lire l'entrée du brouillon ici ferait tomber le panneau entier.
@@ -3519,8 +3595,12 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               view.loading ? 'Chargement du parcours…'
                 : !entry ? view.error ?? 'Aucun modèle de workflow.'
                   : 'Chargement du modèle du parcours…'),
-            h('button', { type: 'button', className: 'missions-btn', onClick: () => { track('workflow.reload'); return load() } }, 'Recharger'),
+            h('div', { className: 'wf-actions' },
+              h('button', { type: 'button', className: 'missions-btn', onClick: () => { track('workflow.reload'); return load() } }, 'Recharger'),
+              h('button', { type: 'button', className: 'missions-btn wf-primary', onClick: openCreate }, 'Nouveau workflow'),
+            ),
           ),
+          creating ? createPanel : null,
         )
       }
 
@@ -3545,74 +3625,256 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const incoming = (id) => draft.edges.filter((edge) => edge.to === id)
       const outgoing = (id) => draft.edges.filter((edge) => edge.from === id)
       const prop = (label, value) => h('p', { className: 'wf-prop' }, h('span', null, label), h('code', null, value ?? '—'))
+      const entryChoices = view.states.includes(draft.entry) ? view.states : [draft.entry, ...view.states]
+      const panelTab = (name, label) => h('button', {
+        type: 'button',
+        role: 'tab',
+        className: `wf-tab${tab === name ? ' wf-tab--active' : ''}`,
+        'aria-selected': tab === name ? 'true' : 'false',
+        onClick: () => setTab(name),
+      }, label)
 
-      const modal = creating
-        ? h('div', { className: 'wf-modal' },
-            h('div', { className: 'wf-modal-backdrop', 'data-close': 'modal', onClick: closeCreate }),
-            h('form', {
-              className: 'wf-modal-card',
-              role: 'dialog',
-              'aria-modal': 'true',
-              'aria-labelledby': 'wf-new-title',
-              onSubmit: (event) => { event.preventDefault(); create() },
-            },
-              h('div', { className: 'wf-modal-head' },
-                h('div', null,
-                  h('h2', { className: 'wf-modal-title', id: 'wf-new-title' }, 'Nouveau workflow'),
-                  h('p', { className: 'wf-note' }, 'Le modèle et le document sont écrits sous workflows/, jamais à la place d’un fichier existant.'),
-                ),
-                h('button', { type: 'button', className: 'missions-drawer-close', 'aria-label': 'Fermer', onClick: closeCreate }, '×'),
-              ),
-              h('div', { className: 'wf-form' },
-                h('label', { className: 'wf-field' },
-                  h('span', null, 'Clé'),
-                  h('input', { value: form.key, autoFocus: true, 'aria-invalid': formErrors.key ? 'true' : 'false', onChange: (event) => updateForm('key', event.target.value) }),
-                  h('small', { className: 'wf-field-hint' }, 'minuscules, chiffres et tirets (ex. mon-workflow)'),
-                  formErrors.key ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.key) : null,
-                ),
-                h('label', { className: 'wf-field' },
-                  h('span', null, 'Titre'),
-                  h('input', { value: form.title, onChange: (event) => updateForm('title', event.target.value) }),
-                  formErrors.title ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.title) : null,
-                ),
-                h('label', { className: 'wf-field' },
-                  h('span', null, 'Type'),
-                  h('select', { value: form.kind, onChange: (event) => updateForm('kind', event.target.value) },
-                    h('option', { value: 'etape' }, 'Étapes'),
-                    h('option', { value: 'statuts' }, 'Statuts'),
-                  ),
-                  formErrors.kind ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.kind) : null,
-                ),
-                h('label', { className: 'wf-field' },
-                  h('span', null, 'Document'),
-                  h('input', {
-                    value: form.document,
-                    onChange: (event) => { documentTouched.current = true; updateForm('document', event.target.value) },
-                  }),
-                  formErrors.document ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.document) : null,
-                ),
-                h('label', { className: 'wf-field' },
-                  h('span', null, 'Entrée'),
-                  h('select', { value: form.entry, onChange: (event) => updateForm('entry', event.target.value) },
-                    h('option', { value: '' }, '—'),
-                    view.states.map((state) => h('option', { key: state, value: state }, state)),
-                  ),
-                  formErrors.entry ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.entry) : null,
-                ),
-                h('label', { className: 'wf-field' },
-                  h('span', null, 'Sorties'),
-                  h('input', { value: form.exit, placeholder: 'done, in-review', onChange: (event) => updateForm('exit', event.target.value) }),
-                  h('small', { className: 'wf-field-hint' }, 'un ou plusieurs états, séparés par des virgules'),
-                  formErrors.exit ? h('p', { className: 'wf-error', role: 'alert' }, formErrors.exit) : null,
-                ),
-              ),
-              h('div', { className: 'wf-modal-foot' },
-                h('button', { type: 'button', className: 'missions-btn', onClick: closeCreate }, 'Annuler'),
-                h('button', { type: 'submit', className: 'missions-btn wf-primary', disabled: creatingBusy }, creatingBusy ? 'Création…' : 'Créer'),
-              ),
+      const informations = h('div', { className: 'wf-panel' },
+        h('div', { className: 'wf-panel-head' },
+          h('div', null,
+            h('h3', { className: 'wf-card-title' }, 'Informations'),
+            h('p', { className: 'wf-note' }, 'Ce que le parcours dit de lui — la clé et le document en découlent.'),
+          ),
+          dirty ? h('span', { className: 'wf-pick-kind' }, 'brouillon non enregistré') : null,
+        ),
+        h('div', { className: 'wf-form' },
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Titre'),
+            h('input', { value: draft.title ?? '', onChange: (event) => patchModel('title', event.target.value) }),
+          ),
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Description'),
+            h('input', {
+              value: draft.description ?? '',
+              maxLength: 280,
+              placeholder: 'À quoi sert ce parcours',
+              onChange: (event) => patchModel('description', event.target.value),
+            }),
+            h('small', { className: 'wf-field-hint' }, 'une ligne, 280 caractères au plus'),
+          ),
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Entrée'),
+            h('select', { value: draft.entry ?? '', onChange: (event) => patchModel('entry', event.target.value) },
+              entryChoices.map((state) => h('option', { key: state, value: state }, state)),
             ),
-          )
-        : null
+          ),
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Sorties'),
+            h('input', { value: exitText, placeholder: 'done', onChange: (event) => changeExitText(event.target.value) }),
+            h('small', { className: 'wf-field-hint' }, 'un ou plusieurs états, séparés par des virgules'),
+          ),
+        ),
+        h('div', { className: 'wf-props' },
+          prop('Clé', draft.workflow),
+          prop('Document', draft.document),
+          prop('Type', WORKFLOW_KIND_LABELS[draft.kind] ?? draft.kind),
+        ),
+        h('p', { className: 'wf-note' }, 'La clé et le document se déduisent du titre : personne ne les tape.'),
+      )
+
+      const canvas = h('div', null,
+        h('div', { className: 'wf-canvas-wrap' },
+          graph.boxes.length === 0
+            ? h('div', { className: 'wf-empty' },
+                h('p', { className: 'wf-note' }, 'Graphe vide'),
+                h('p', { className: 'wf-note' }, statuts
+                  ? 'Aucun événement : ajoute un arc entre deux états pour relier le parcours.'
+                  : 'Aucun geste : ajoute le premier point du parcours.'),
+              )
+            : h('svg', {
+                className: 'wf-canvas',
+                viewBox: `0 0 ${graph.width} ${graph.height}`,
+                width: graph.width,
+                height: graph.height,
+                role: 'img',
+                'aria-label': statuts
+                  ? `${entry.title} — ${graph.boxes.length} états, ${graph.links.length} événements`
+                  : `${entry.title} — ${graph.boxes.length} gestes, ${graph.links.length} arcs`,
+              },
+                h('defs', null,
+                  h('marker', { id: 'wf-arrow', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor', opacity: 0.45 })),
+                  h('marker', { id: 'wf-arrow-selected', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor' })),
+                ),
+                graph.links.map((link) => {
+                  const selected = selectedArc && selectedArc.from === link.from && selectedArc.to === link.to
+                  return h('g', {
+                    key: `${link.from}→${link.to}`,
+                    className: 'wf-link-group',
+                    role: 'button',
+                    tabIndex: 0,
+                    'data-from': link.from,
+                    'data-to': link.to,
+                    'aria-label': `Événement de ${link.from} vers ${link.to}${link.when ? ` — ${link.when}` : ''}`,
+                    onClick: () => { openArc(link); setTab('graphe') },
+                    onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openArc(link); setTab('graphe') } },
+                  },
+                    h('path', { className: 'wf-link-hit', d: link.path }),
+                    h('path', {
+                      className: `wf-link${link.back ? ' wf-link--back' : ''}${selected ? ' wf-link--selected' : ''}`,
+                      d: link.path,
+                      'marker-end': selected ? 'url(#wf-arrow-selected)' : 'url(#wf-arrow)',
+                    }),
+                    link.when ? h('text', {
+                      className: `wf-link-label ${link.back ? 'wf-link-label--back' : 'wf-link-label--forward'}${selected ? ' wf-link-label--selected' : ''}`,
+                      x: link.labelX,
+                      y: link.labelY,
+                      textAnchor: link.labelAnchor,
+                    }, link.when) : null,
+                  )
+                }),
+                graph.decisions.map((decision) => h('g', {
+                  key: `decision-${decision.id}`,
+                  className: 'wf-node-group wf-node-group--decision',
+                  onClick: () => { setSelectedArc(null); setChosen(decision.id); setTab('graphe'); setStatus(null) },
+                },
+                  h('polygon', {
+                    className: `wf-node wf-node--decision${decision.id === chosen ? ' wf-node--selected' : ''}`,
+                    points: `${decision.x + decision.width / 2},${decision.y} ${decision.x + decision.width},${decision.y + decision.height / 2} ${decision.x + decision.width / 2},${decision.y + decision.height} ${decision.x},${decision.y + decision.height / 2}`,
+                  }),
+                )),
+                graph.boxes.map((box) => {
+                  const state = box.kind === 'etat'
+                  const role = entry && box.id === entry.entry ? 'initial' : entry && (entry.exit ?? []).includes(box.id) ? 'terminal' : null
+                  return h('g', {
+                    key: box.id,
+                    className: 'wf-node-group',
+                    role: 'button',
+                    tabIndex: 0,
+                    'data-node': box.id,
+                    'data-kind': box.kind,
+                    'aria-label': `${state ? 'État' : 'Geste'} ${box.label}`,
+                    onClick: () => { setSelectedArc(null); setChosen(box.id); setTab('graphe'); setStatus(null) },
+                    onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedArc(null); setChosen(box.id); setTab('graphe'); setStatus(null) } },
+                  },
+                    h('rect', { className: `wf-node wf-node--${box.kind}${box.id === chosen ? ' wf-node--selected' : ''}`, x: box.x, y: box.y, width: box.width, height: box.height, rx: 9 }),
+                    state
+                      ? [
+                          role ? h('text', { key: 'badge', className: 'wf-node-badge', x: box.x + box.width / 2, y: box.y - 6, textAnchor: 'middle' }, role) : null,
+                          h('text', { key: 'label', className: 'wf-node-label wf-node-label--center', x: box.x + box.width / 2, y: box.y + 15, textAnchor: 'middle' }, clip(box.label, 22)),
+                          h('text', { key: 'id', className: 'wf-node-id', x: box.x + box.width / 2, y: box.y + 27, textAnchor: 'middle' }, box.id),
+                        ]
+                      : [
+                          h('text', { key: 'label', className: 'wf-node-label', x: box.x + 10, y: box.y + 20 }, clip(box.label, 30)),
+                          h('text', { key: 'section', className: 'wf-node-section', x: box.x + 10, y: box.y + 36 }, clip(`${sectionOf(box.id)} · ${writerOf(box.id)}`, 30)),
+                        ],
+                  )
+                }),
+              ),
+        ),
+        statuts
+          ? h('div', { className: 'wf-legend', 'aria-label': 'Légende' },
+              h('span', { className: 'wf-swatch wf-swatch--etat' }), 'état',
+              h('span', { className: 'wf-swatch wf-swatch--initial' }), 'initial',
+              h('span', { className: 'wf-swatch wf-swatch--terminal' }), 'terminal',
+              h('span', { className: 'wf-swatch wf-swatch--back' }), 'arc retour',
+            )
+          : null,
+      )
+
+      const side = h('div', { className: 'wf-side' },
+        chosenNode
+          ? h('div', { className: 'wf-card' },
+              h('div', { className: 'wf-card-title' }, statuts ? 'État' : 'Geste'),
+              h('p', { className: 'wf-note' }, chosenNode.id),
+              h('label', { className: 'wf-field' }, h('span', null, 'Libellé'), h('input', { value: chosenNode.label ?? '', onChange: (event) => patchNode('label', event.target.value) })),
+              statuts
+                ? h('label', { className: 'wf-field' }, h('span', null, 'Description'), h('textarea', { rows: 3, value: chosenNode.description ?? '', onChange: (event) => patchNode('description', event.target.value) }))
+                : h('div', null,
+                    h('label', { className: 'wf-field' }, h('span', null, 'Section du document'), h('select', { value: chosenNode.section ?? '', onChange: (event) => patchNode('section', event.target.value) }, sectionChoices.map((text) => h('option', { key: text, value: text }, text || '—')))),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Écrivain'), h('select', { value: chosenNode.writer ?? '', onChange: (event) => patchNode('writer', event.target.value) }, view.writers.map((writer) => h('option', { key: writer, value: writer }, writer)))),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Condition'), h('input', { value: chosenNode.condition ?? '', placeholder: 'Quand ce geste a lieu', onChange: (event) => patchNode('condition', event.target.value) })),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Artefact'), h('input', { value: chosenNode.artifact ?? '', placeholder: 'Ce que le geste produit', onChange: (event) => patchNode('artifact', event.target.value) })),
+                    h('label', { className: 'wf-field' }, h('span', null, 'Porte'), h('input', { value: chosenNode.gate ?? '', placeholder: 'Ce qui doit être vrai pour avancer', onChange: (event) => patchNode('gate', event.target.value) })),
+                  ),
+              h('div', { className: 'wf-props' },
+                prop('Identifiant', chosenNode.id),
+                prop('Rôle', roleOf(chosenNode.id)),
+                statuts ? prop('Tracker', chosenNode.tracker) : null,
+              ),
+              h('p', { className: 'wf-note' }, statuts
+                ? 'Identifiant, rôle et tracker sont en lecture seule : ils viennent du vocabulaire du workspace.'
+                : `Entrants : ${incoming(chosenNode.id).map((edge) => edge.from).join(', ') || '—'} · Sortants : ${outgoing(chosenNode.id).map((edge) => edge.to).join(', ') || '—'}`),
+              statuts
+                ? null
+                : h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: removeGesture }, 'Supprimer le geste')),
+            )
+          : chosenEdge
+            ? h('div', { className: 'wf-card' },
+                h('div', { className: 'wf-card-title' }, 'Événement'),
+                h('p', { className: 'wf-note' }, `${labelOf(chosenEdge.from)} → ${labelOf(chosenEdge.to)}`),
+                h('div', { className: 'wf-props' },
+                  prop('De', chosenEdge.from),
+                  prop('Vers', chosenEdge.to),
+                ),
+                h('label', { className: 'wf-field' }, h('span', null, 'Quand (condition)'), h('input', { value: chosenEdge.when ?? '', placeholder: 'ce qui déclenche l’arc', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'when', event.target.value) })),
+                h('label', { className: 'wf-field' }, h('span', null, 'Écrivain'),
+                  h('select', { value: chosenEdge.writer ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'writer', event.target.value) },
+                    h('option', { value: '' }, '—'),
+                    view.writers.map((writer) => h('option', { key: writer, value: writer }, writer)),
+                  )),
+                h('label', { className: 'wf-field' }, h('span', null, 'Artefact'), h('input', { value: chosenEdge.artifact ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'artifact', event.target.value) })),
+                h('label', { className: 'wf-field' }, h('span', null, 'Porte'), h('input', { value: chosenEdge.gate ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'gate', event.target.value) })),
+                h('p', { className: 'wf-note' }, 'Le couple départ/arrivée est en lecture seule : supprime l’arc et repose-le pour le changer.'),
+                h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: () => removeArc(chosenEdge.from, chosenEdge.to) }, 'Supprimer l’arc')),
+              )
+            : h('div', { className: 'wf-card' },
+                h('div', { className: 'wf-card-title' }, 'Graphe'),
+                h('p', { className: 'wf-note' }, statuts ? 'Clique un état ou un événement pour ouvrir son détail.' : 'Clique un geste ou un arc pour ouvrir son détail.'),
+                h('p', { className: 'wf-note' }, `Écrivains : ${view.writers.join(', ') || '—'}`),
+                h('p', { className: 'wf-note' }, statuts
+                  ? `${draft.nodes.length} états · ${draft.edges.length} événements`
+                  : `${draft.nodes.length} gestes · ${draft.edges.length} arcs`),
+                statuts
+                  ? h('div', null,
+                      h('div', { className: 'wf-card-title' }, 'Mapping tracker'),
+                      h('table', { className: 'wf-map-table' },
+                        h('thead', null, h('tr', null, h('th', null, 'État'), h('th', null, 'Tracker'))),
+                        h('tbody', null, draft.nodes.map((node) => h('tr', { key: node.id }, h('td', null, node.label), h('td', null, h('code', null, node.tracker ?? '—'))))),
+                      ),
+                    )
+                  : h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: addGesture }, 'Ajouter un geste')),
+              ),
+
+        h('div', { className: 'wf-card' },
+          h('div', { className: 'wf-card-title' }, statuts ? 'Événements' : 'Arcs'),
+          draft.edges.length === 0
+            ? h('p', { className: 'wf-note' }, statuts ? 'Aucun événement.' : 'Aucun arc.')
+            : h('div', null, draft.edges.map((edge) => h('div', {
+                key: `${edge.from}→${edge.to}`,
+                className: 'wf-arc',
+                role: 'button',
+                tabIndex: 0,
+                title: 'Ouvrir le détail de cet arc',
+                onClick: () => openArc(edge),
+                onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openArc(edge) } },
+              },
+                h('span', null, `${labelOf(edge.from)} → ${labelOf(edge.to)}`),
+                edge.when ? h('span', { className: 'wf-arc-when' }, edge.when) : null,
+                h('button', { type: 'button', className: 'wf-arc-del', title: 'Supprimer l’arc', onClick: (event) => { event.stopPropagation(); removeArc(edge.from, edge.to) } }, '×'),
+              ))),
+          h('label', { className: 'wf-field' }, h('span', null, 'Du'), h('select', { value: arc.from, onChange: (event) => setArc({ ...arc, from: event.target.value }) }, h('option', { value: '' }, '—'), ends.map((end) => h('option', { key: `from-${end.id}`, value: end.id }, end.id)))),
+          h('label', { className: 'wf-field' }, h('span', null, 'Au'), h('select', { value: arc.to, onChange: (event) => setArc({ ...arc, to: event.target.value }) }, h('option', { value: '' }, '—'), ends.map((end) => h('option', { key: `to-${end.id}`, value: end.id }, end.id)))),
+          h('label', { className: 'wf-field' }, h('span', null, 'Quand (facultatif)'), h('input', { value: arc.when, placeholder: 'si …', onChange: (event) => setArc({ ...arc, when: event.target.value }) })),
+          h('div', { className: 'wf-actions' },
+            h('button', { type: 'button', className: 'missions-btn', onClick: addArc }, draft.edges.some((edge) => edge.from === arc.from && edge.to === arc.to && arc.from && arc.to) ? 'Mettre à jour l’arc' : 'Ajouter l’arc'),
+          ),
+        ),
+      )
+
+      // Le canevas reste visible ; le panneau se docke à droite et ses onglets
+      // ne changent que sa colonne, jamais le dessin.
+      const dock = h('div', { className: 'wf-side' },
+        h('div', { className: 'wf-tabs', role: 'tablist', 'aria-label': 'Sections du workflow' },
+          panelTab('infos', 'Informations'),
+          panelTab('graphe', 'Graphe'),
+        ),
+        tab === 'infos' ? (creating ? createPanel : informations) : side,
+      )
 
       return h('div', { className: 'wf-view' },
         h('div', { className: 'wf-toolbar' },
@@ -3655,7 +3917,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                 h('span', { className: 'wf-pick-title' }, workflow.title || workflow.workflow),
                 h('span', { className: 'wf-pick-kind' }, WORKFLOW_KIND_LABELS[workflow.kind] ?? workflow.kind),
               ),
-              h('span', { className: 'wf-pick-summary' }, workflow.summary || '—'),
+              h('span', { className: 'wf-pick-summary' }, workflow.description || workflow.summary || '—'),
               h('span', { className: 'wf-pick-meta' }, counts(workflow)),
               h('span', { className: 'wf-pick-flow' },
                 h('code', null, workflow.entry ?? '?'),
@@ -3673,200 +3935,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           ),
           statuts
             ? h('span', { className: 'wf-pick-kind' }, WORKFLOW_KIND_LABELS.statuts)
-            : h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: addGesture }, 'Ajouter un geste')),
+            : null,
         ),
 
-        h('div', { className: 'wf-layout' },
-          h('div', null,
-            h('div', { className: 'wf-canvas-wrap' },
-              graph.boxes.length === 0
-                ? h('div', { className: 'wf-empty' },
-                    h('p', { className: 'wf-note' }, 'Graphe vide'),
-                    h('p', { className: 'wf-note' }, statuts
-                      ? 'Aucun événement : ajoute un arc entre deux états pour relier le parcours.'
-                      : 'Aucun geste : ajoute le premier point du parcours.'),
-                  )
-                : h('svg', {
-                    className: 'wf-canvas',
-                    viewBox: `0 0 ${graph.width} ${graph.height}`,
-                    width: graph.width,
-                    height: graph.height,
-                    role: 'img',
-                    'aria-label': statuts
-                      ? `${entry.title} — ${graph.boxes.length} états, ${graph.links.length} événements`
-                      : `${entry.title} — ${graph.boxes.length} gestes, ${graph.links.length} arcs`,
-                  },
-                    h('defs', null,
-                      h('marker', { id: 'wf-arrow', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor', opacity: 0.45 })),
-                      h('marker', { id: 'wf-arrow-selected', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M 0 0 L 8 4 L 0 8 z', fill: 'currentColor' })),
-                    ),
-                    graph.links.map((link) => {
-                      const selected = selectedArc && selectedArc.from === link.from && selectedArc.to === link.to
-                      return h('g', {
-                        key: `${link.from}→${link.to}`,
-                        className: 'wf-link-group',
-                        role: 'button',
-                        tabIndex: 0,
-                        'data-from': link.from,
-                        'data-to': link.to,
-                        'aria-label': `Événement de ${link.from} vers ${link.to}${link.when ? ` — ${link.when}` : ''}`,
-                        onClick: () => openArc(link),
-                        onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openArc(link) } },
-                      },
-                        h('path', { className: 'wf-link-hit', d: link.path }),
-                        h('path', {
-                          className: `wf-link${link.back ? ' wf-link--back' : ''}${selected ? ' wf-link--selected' : ''}`,
-                          d: link.path,
-                          'marker-end': selected ? 'url(#wf-arrow-selected)' : 'url(#wf-arrow)',
-                        }),
-                        link.when ? h('text', {
-                          className: `wf-link-label ${link.back ? 'wf-link-label--back' : 'wf-link-label--forward'}${selected ? ' wf-link-label--selected' : ''}`,
-                          x: link.labelX,
-                          y: link.labelY,
-                          textAnchor: link.labelAnchor,
-                        }, link.when) : null,
-                      )
-                    }),
-                    graph.decisions.map((decision) => h('g', {
-                      key: `decision-${decision.id}`,
-                      className: 'wf-node-group wf-node-group--decision',
-                      onClick: () => { setSelectedArc(null); setChosen(decision.id); setStatus(null) },
-                    },
-                      h('polygon', {
-                        className: `wf-node wf-node--decision${decision.id === chosen ? ' wf-node--selected' : ''}`,
-                        points: `${decision.x + decision.width / 2},${decision.y} ${decision.x + decision.width},${decision.y + decision.height / 2} ${decision.x + decision.width / 2},${decision.y + decision.height} ${decision.x},${decision.y + decision.height / 2}`,
-                      }),
-                    )),
-                    graph.boxes.map((box) => {
-                      const state = box.kind === 'etat'
-                      const role = entry && box.id === entry.entry ? 'initial' : entry && (entry.exit ?? []).includes(box.id) ? 'terminal' : null
-                      return h('g', {
-                        key: box.id,
-                        className: 'wf-node-group',
-                        role: 'button',
-                        tabIndex: 0,
-                        'data-node': box.id,
-                        'data-kind': box.kind,
-                        'aria-label': `${state ? 'État' : 'Geste'} ${box.label}`,
-                        onClick: () => { setSelectedArc(null); setChosen(box.id); setStatus(null) },
-                        onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedArc(null); setChosen(box.id); setStatus(null) } },
-                      },
-                        h('rect', { className: `wf-node wf-node--${box.kind}${box.id === chosen ? ' wf-node--selected' : ''}`, x: box.x, y: box.y, width: box.width, height: box.height, rx: 9 }),
-                        state
-                          ? [
-                              role ? h('text', { key: 'badge', className: 'wf-node-badge', x: box.x + box.width / 2, y: box.y - 6, textAnchor: 'middle' }, role) : null,
-                              h('text', { key: 'label', className: 'wf-node-label wf-node-label--center', x: box.x + box.width / 2, y: box.y + 15, textAnchor: 'middle' }, clip(box.label, 22)),
-                              h('text', { key: 'id', className: 'wf-node-id', x: box.x + box.width / 2, y: box.y + 27, textAnchor: 'middle' }, box.id),
-                            ]
-                          : [
-                              h('text', { key: 'label', className: 'wf-node-label', x: box.x + 10, y: box.y + 20 }, clip(box.label, 30)),
-                              h('text', { key: 'section', className: 'wf-node-section', x: box.x + 10, y: box.y + 36 }, clip(`${sectionOf(box.id)} · ${writerOf(box.id)}`, 30)),
-                            ],
-                      )
-                    }),
-                  ),
-            ),
-            statuts
-              ? h('div', { className: 'wf-legend', 'aria-label': 'Légende' },
-                  h('span', { className: 'wf-swatch wf-swatch--etat' }), 'état',
-                  h('span', { className: 'wf-swatch wf-swatch--initial' }), 'initial',
-                  h('span', { className: 'wf-swatch wf-swatch--terminal' }), 'terminal',
-                  h('span', { className: 'wf-swatch wf-swatch--back' }), 'arc retour',
-                )
-              : null,
-          ),
-
-          h('div', { className: 'wf-side' },
-            chosenNode
-              ? h('div', { className: 'wf-card' },
-                  h('div', { className: 'wf-card-title' }, statuts ? 'État' : 'Geste'),
-                  h('p', { className: 'wf-note' }, chosenNode.id),
-                  h('label', { className: 'wf-field' }, h('span', null, 'Libellé'), h('input', { value: chosenNode.label ?? '', onChange: (event) => patchNode('label', event.target.value) })),
-                  statuts
-                    ? h('label', { className: 'wf-field' }, h('span', null, 'Description'), h('textarea', { rows: 3, value: chosenNode.description ?? '', onChange: (event) => patchNode('description', event.target.value) }))
-                    : h('div', null,
-                        h('label', { className: 'wf-field' }, h('span', null, 'Section du document'), h('select', { value: chosenNode.section ?? '', onChange: (event) => patchNode('section', event.target.value) }, sectionChoices.map((text) => h('option', { key: text, value: text }, text || '—')))),
-                        h('label', { className: 'wf-field' }, h('span', null, 'Écrivain'), h('select', { value: chosenNode.writer ?? '', onChange: (event) => patchNode('writer', event.target.value) }, view.writers.map((writer) => h('option', { key: writer, value: writer }, writer)))),
-                        h('label', { className: 'wf-field' }, h('span', null, 'Condition'), h('input', { value: chosenNode.condition ?? '', placeholder: 'Quand ce geste a lieu', onChange: (event) => patchNode('condition', event.target.value) })),
-                        h('label', { className: 'wf-field' }, h('span', null, 'Artefact'), h('input', { value: chosenNode.artifact ?? '', placeholder: 'Ce que le geste produit', onChange: (event) => patchNode('artifact', event.target.value) })),
-                        h('label', { className: 'wf-field' }, h('span', null, 'Porte'), h('input', { value: chosenNode.gate ?? '', placeholder: 'Ce qui doit être vrai pour avancer', onChange: (event) => patchNode('gate', event.target.value) })),
-                      ),
-                  h('div', { className: 'wf-props' },
-                    prop('Identifiant', chosenNode.id),
-                    prop('Rôle', roleOf(chosenNode.id)),
-                    statuts ? prop('Tracker', chosenNode.tracker) : null,
-                  ),
-                  h('p', { className: 'wf-note' }, statuts
-                    ? 'Identifiant, rôle et tracker sont en lecture seule : ils viennent du vocabulaire du workspace.'
-                    : `Entrants : ${incoming(chosenNode.id).map((edge) => edge.from).join(', ') || '—'} · Sortants : ${outgoing(chosenNode.id).map((edge) => edge.to).join(', ') || '—'}`),
-                  statuts
-                    ? null
-                    : h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: removeGesture }, 'Supprimer le geste')),
-                )
-              : chosenEdge
-                ? h('div', { className: 'wf-card' },
-                    h('div', { className: 'wf-card-title' }, 'Événement'),
-                    h('p', { className: 'wf-note' }, `${labelOf(chosenEdge.from)} → ${labelOf(chosenEdge.to)}`),
-                    h('div', { className: 'wf-props' },
-                      prop('De', chosenEdge.from),
-                      prop('Vers', chosenEdge.to),
-                    ),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Quand (condition)'), h('input', { value: chosenEdge.when ?? '', placeholder: 'ce qui déclenche l’arc', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'when', event.target.value) })),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Écrivain'),
-                      h('select', { value: chosenEdge.writer ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'writer', event.target.value) },
-                        h('option', { value: '' }, '—'),
-                        view.writers.map((writer) => h('option', { key: writer, value: writer }, writer)),
-                      )),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Artefact'), h('input', { value: chosenEdge.artifact ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'artifact', event.target.value) })),
-                    h('label', { className: 'wf-field' }, h('span', null, 'Porte'), h('input', { value: chosenEdge.gate ?? '', onChange: (event) => patchEdge(chosenEdge.from, chosenEdge.to, 'gate', event.target.value) })),
-                    h('p', { className: 'wf-note' }, 'Le couple départ/arrivée est en lecture seule : supprime l’arc et repose-le pour le changer.'),
-                    h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: () => removeArc(chosenEdge.from, chosenEdge.to) }, 'Supprimer l’arc')),
-                  )
-                : h('div', { className: 'wf-card' },
-                    h('div', { className: 'wf-card-title' }, 'Graphe'),
-                    h('p', { className: 'wf-note' }, statuts ? 'Clique un état ou un événement pour ouvrir son détail.' : 'Clique un geste ou un arc pour ouvrir son détail.'),
-                    h('p', { className: 'wf-note' }, `Écrivains : ${view.writers.join(', ') || '—'}`),
-                    h('p', { className: 'wf-note' }, statuts
-                      ? `${draft.nodes.length} états · ${draft.edges.length} événements`
-                      : `${draft.nodes.length} gestes · ${draft.edges.length} arcs`),
-                    statuts
-                      ? h('div', null,
-                          h('div', { className: 'wf-card-title' }, 'Mapping tracker'),
-                          h('table', { className: 'wf-map-table' },
-                            h('thead', null, h('tr', null, h('th', null, 'État'), h('th', null, 'Tracker'))),
-                            h('tbody', null, draft.nodes.map((node) => h('tr', { key: node.id }, h('td', null, node.label), h('td', null, h('code', null, node.tracker ?? '—'))))),
-                          ),
-                        )
-                      : h('div', { className: 'wf-actions' }, h('button', { type: 'button', className: 'missions-btn', onClick: addGesture }, 'Ajouter un geste')),
-                  ),
-
-            h('div', { className: 'wf-card' },
-              h('div', { className: 'wf-card-title' }, statuts ? 'Événements' : 'Arcs'),
-              draft.edges.length === 0
-                ? h('p', { className: 'wf-note' }, statuts ? 'Aucun événement.' : 'Aucun arc.')
-                : h('div', null, draft.edges.map((edge) => h('div', {
-                    key: `${edge.from}→${edge.to}`,
-                    className: 'wf-arc',
-                    role: 'button',
-                    tabIndex: 0,
-                    title: 'Ouvrir le détail de cet arc',
-                    onClick: () => openArc(edge),
-                    onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openArc(edge) } },
-                  },
-                    h('span', null, `${labelOf(edge.from)} → ${labelOf(edge.to)}`),
-                    edge.when ? h('span', { className: 'wf-arc-when' }, edge.when) : null,
-                    h('button', { type: 'button', className: 'wf-arc-del', title: 'Supprimer l’arc', onClick: (event) => { event.stopPropagation(); removeArc(edge.from, edge.to) } }, '×'),
-                  ))),
-              h('label', { className: 'wf-field' }, h('span', null, 'Du'), h('select', { value: arc.from, onChange: (event) => setArc({ ...arc, from: event.target.value }) }, h('option', { value: '' }, '—'), ends.map((end) => h('option', { key: `from-${end.id}`, value: end.id }, end.id)))),
-              h('label', { className: 'wf-field' }, h('span', null, 'Au'), h('select', { value: arc.to, onChange: (event) => setArc({ ...arc, to: event.target.value }) }, h('option', { value: '' }, '—'), ends.map((end) => h('option', { key: `to-${end.id}`, value: end.id }, end.id)))),
-              h('label', { className: 'wf-field' }, h('span', null, 'Quand (facultatif)'), h('input', { value: arc.when, placeholder: 'si …', onChange: (event) => setArc({ ...arc, when: event.target.value }) })),
-              h('div', { className: 'wf-actions' },
-                h('button', { type: 'button', className: 'missions-btn', onClick: addArc }, draft.edges.some((edge) => edge.from === arc.from && edge.to === arc.to && arc.from && arc.to) ? 'Mettre à jour l’arc' : 'Ajouter l’arc'),
-              ),
-            ),
-          ),
-        ),
-        modal,
+        h('div', { className: 'wf-layout' }, canvas, dock),
       )
     }
 

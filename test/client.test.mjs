@@ -1245,42 +1245,57 @@ function monter(initialStates, session) {
 }
 
 /**
- * L'état initial de `WorkflowsView`, dans l'ordre de ses huit hooks : la vue
- * reçoit le modèle, le brouillon posé et, si on le donne, le geste choisi.
+ * Les seize hooks de `WorkflowsView`, dans l'ordre de leur déclaration : le
+ * harnais compte les `useState` par index, donc un état de test se construit
+ * par nom — jamais par position, sinon un hook ajouté déplace tout le reste.
  */
-function workflowStates(draft, chosen = null) {
-  return [
-    { loading: false, error: null, workflows: [draft], writers: ['demandeur', 'session', 'outil'], states: [] },
-    'review',
+const WORKFLOW_HOOKS = [
+  'view', 'step', 'draft', 'chosen', 'status', 'saving', 'arc', 'version',
+  'baseline', 'selectedArc', 'tab', 'creating', 'form', 'formErrors', 'creatingBusy', 'exitText',
+]
+
+/** L'état initial de `WorkflowsView`, par défaut sur l'onglet Informations. */
+function workflowStateValues(draft, patch = {}) {
+  const base = {
+    view: {
+      loading: false,
+      error: null,
+      workflows: [draft],
+      writers: ['demandeur', 'session', 'outil'],
+      states: ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'],
+    },
+    step: draft.workflow,
     draft,
-    chosen,
-    null,
-    false,
-    { from: '', to: '', when: '' },
-    0,
-  ]
+    chosen: null,
+    status: null,
+    saving: false,
+    arc: { from: '', to: '', when: '' },
+    version: 0,
+    baseline: draft,
+    selectedArc: null,
+    tab: 'infos',
+    creating: false,
+    form: { title: '', description: '', kind: 'etape' },
+    formErrors: {},
+    creatingBusy: false,
+    exitText: (draft.exit ?? []).join(', '),
+  }
+  return WORKFLOW_HOOKS.map((name) => (name in patch ? patch[name] : base[name]))
 }
 
-/** Les quatorze hooks du panneau, pour les tests qui rouvrent le dialogue. */
+/** L'état du panneau ouvert sur le graphe, pour les tests qui cliquent un nœud. */
+function workflowStates(draft, chosen = null) {
+  return workflowStateValues(draft, {
+    view: { loading: false, error: null, workflows: [draft], writers: ['demandeur', 'session', 'outil'], states: [] },
+    step: 'review',
+    chosen,
+    tab: 'graphe',
+  })
+}
+
+/** L'état du panneau ouvert sur Informations, pour les tests de création. */
 function workflowPanelStates(draft, patch = {}) {
-  const values = [
-    { loading: false, error: null, workflows: [draft], writers: ['demandeur', 'session', 'outil'], states: ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'] },
-    draft.workflow,
-    draft,
-    null,
-    null,
-    false,
-    { from: '', to: '', when: '' },
-    0,
-    draft,
-    null,
-    false,
-    { key: '', title: '', kind: 'etape', document: '', entry: '', exit: '' },
-    {},
-    false,
-  ]
-  for (const [index, value] of Object.entries(patch)) values[Number(index)] = value
-  return values
+  return workflowStateValues(draft, patch)
 }
 
 test('sans onglet retenu, le panneau ouvre sur le dashboard', () => {
@@ -2377,6 +2392,58 @@ test('le graphe a ses règles : nœuds, sélection, retour en pointillé', () =>
   assert.match(regle('.wf-card'), /border-radius: 12px/)
 })
 
+test('les onglets Informations et Graphe ont leurs règles', () => {
+  assert.match(regle('.wf-tabs'), /display: flex/)
+  assert.match(regle('.wf-tab--active'), /font-weight: 600/)
+  assert.match(regle('.wf-panel'), /border-radius: 12px/)
+  assert.match(regle('.wf-panel-head'), /justify-content: space-between/)
+})
+
+test('les deux onglets se lisent et se choisissent', () => {
+  const { rendered, setters } = montrerWorkflows([workflowEntry()], { tab: 'infos' })
+  const liste = findAll(rendered, 'div').find((node) => node.props.role === 'tablist')
+  assert.ok(liste, 'la barre d’onglets a son rôle')
+  const onglets = findAll(rendered, 'button').filter((node) => node.props.role === 'tab')
+  assert.deepEqual(onglets.map((node) => textOf(node)), ['Informations', 'Graphe'])
+  assert.equal(onglets[0].props['aria-selected'], 'true')
+  assert.equal(onglets[1].props['aria-selected'], 'false')
+
+  onglets[1].props.onClick()
+  assert.equal(setters.at(-1), 'graphe', 'le clic bascule l’onglet')
+})
+
+test('la carte dit la description, à défaut le résumé', () => {
+  const decrit = workflowEntry({ description: 'Les incidents qui restent à traiter.' })
+  const { rendered } = montrerWorkflows([decrit])
+  const carte = findAll(rendered, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+  assert.match(textOf(carte), /Les incidents qui restent à traiter\./)
+  assert.doesNotMatch(textOf(carte), /Comprendre le ticket/, 'la description prend la place du résumé')
+
+  const sansDescription = montrerWorkflows([workflowEntry()]).rendered
+  const repliee = findAll(sansDescription, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+  assert.match(textOf(repliee), /Comprendre le ticket/, 'sans description, la carte garde son résumé')
+})
+
+test('Informations montre la clé et le document, jamais en champ de saisie', () => {
+  const { rendered } = montrerWorkflows([workflowEntry()], { tab: 'infos' })
+  const codes = findAll(rendered, 'code').map(textOf)
+  assert.ok(codes.includes('cadrage'), 'la clé se lit')
+  assert.ok(codes.includes('workflows/cadrage.md'), 'le document se lit')
+  const valeurs = findAll(rendered, 'input').map((node) => node.props.value)
+  assert.equal(valeurs.includes('cadrage'), false, 'la clé ne s’édite pas')
+  assert.equal(valeurs.includes('workflows/cadrage.md'), false, 'le document ne s’édite pas')
+  assert.match(textOf(rendered), /déduisent du titre/, 'le panneau dit d’où ils viennent')
+})
+
+test('un brouillon sale refuse d’ouvrir la création', () => {
+  const { rendered, setters } = montrerWorkflows([workflowEntry()], {
+    tab: 'infos',
+    draft: { ...modelOf(workflowEntry()), title: 'Cadrage retouché' },
+  })
+  findAll(rendered, 'button').find((node) => textOf(node) === 'Nouveau workflow').props.onClick()
+  assert.equal(setters.some((value) => value?.kind === 'error' && /d’abord/.test(value.message)), true, 'le panneau demande d’enregistrer ou d’annuler')
+})
+
 test('les règles de repli de la liste et du volet sont déclarées sous 900 px et 640 px', () => {
   // Le rendu ne se mesure pas ici : jsdom ne calcule aucune mise en page. Ce
   // test prouve les déclarations CSS ; la mesure réelle du panneau à 1280 px et
@@ -2417,7 +2484,7 @@ test('le losange du choix se dessine, montre les conditions entières et ouvre l
   const group = findAll(graph, 'g').find((node) => node.props.key === 'decision-decider')
   assert.ok(group, 'le losange de « decider » est cliquable')
   group.props.onClick()
-  assert.deepEqual(setters.slice(-2), ['decider', null])
+  assert.deepEqual(setters.slice(-3), ['decider', 'graphe', null], 'le clic ouvre le geste et bascule sur Graphe')
 
   // Avec ce choix, la carte « Geste » s’ouvre et le losange se marque.
   queue.push(...workflowStates(review, 'decider'))
@@ -2521,46 +2588,73 @@ test('Recharger redemande la liste au serveur', async () => {
   }
 })
 
-test('la création valide écrit par la route et sélectionne le workflow né', async () => {
+test('la création ne demande que le titre, la description et le type', async () => {
   const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
-  const neuf = { ...review, workflow: 'incidents', title: 'Incidents', document: 'workflows/incidents.md', kind: 'etape', nodes: [], edges: [], counts: { nodes: 0, edges: 0 }, summary: '' }
-  const appels = []
+  const session = memorySession({ 'missions.tab': 'workflows' })
+  const { api, ctx, registered, queue, reset } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+  api.apply(ctx)
+  const vue = findAll(registered.main({}), 'WorkflowsView')[0]
+  queue.push(...workflowPanelStates(review))
+  let inner = renderTree(vue)
+
+  findAll(inner, 'button').find((node) => textOf(node) === 'Nouveau workflow').props.onClick()
+  reset()
+  queue.push(...workflowPanelStates(review, { creating: true }))
+  inner = renderTree(vue)
+  const form = findAll(inner, 'form')[0]
+  assert.ok(form, 'le formulaire de création est ouvert')
+  const etiquettes = findAll(form, 'label').map((label) => textOf(findAll(label, 'span')[0]))
+  assert.deepEqual(etiquettes, ['Titre', 'Description', 'Type'], 'trois champs, pas un de plus')
+  assert.equal(findAll(form, 'input').length, 2, 'un titre et une description : la clé et le document ne se tapent pas')
+  assert.equal(findAll(form, 'select').length, 1, 'seul le type se choisit')
+})
+
+test('la création envoie le titre, la description et le type, jamais la clé', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
   const vraiFetch = globalThis.fetch
+  const appels = []
   globalThis.fetch = async (url, options) => {
     appels.push({ url, options })
-    if (options?.method === 'POST') return { ok: true, json: async () => ({ workflow: 'incidents', document: 'workflows/incidents.md', entry: neuf }) }
-    return { ok: true, json: async () => ({ workflows: [review], writers: ['session'], states: [] }) }
+    return {
+      ok: true,
+      json: async () => ({ workflow: 'incidents', file: 'workflows/model/incidents.yml', document: 'workflows/incidents.md', entry: { ...review, workflow: 'incidents' } }),
+    }
   }
   try {
     const session = memorySession({ 'missions.tab': 'workflows' })
-    const { api, ctx, registered, queue, reset } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+    const { api, ctx, registered, queue, reset, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
     api.apply(ctx)
-    const tree = registered.main({})
-    const vue = findAll(tree, 'WorkflowsView')[0]
+    const vue = findAll(registered.main({}), 'WorkflowsView')[0]
     queue.push(...workflowPanelStates(review))
     let inner = renderTree(vue)
     appels.length = 0
 
     findAll(inner, 'button').find((node) => textOf(node) === 'Nouveau workflow').props.onClick()
     reset()
-    queue.push(...workflowPanelStates(review, { 10: true }))
+    queue.push(...workflowPanelStates(review, { creating: true }))
     inner = renderTree(vue)
 
-    // La clé remplit le document tant que la personne ne l'a pas touché.
-    findAll(inner, 'input')[0].props.onChange({ target: { value: 'incidents' } })
-    reset()
-    queue.push(...workflowPanelStates(review, {
-      10: true,
-      11: { key: 'incidents', title: '', kind: 'etape', document: 'workflows/incidents.md', entry: 'in-review', exit: '' },
-    }))
-    inner = renderTree(vue)
-    const document = findAll(inner, 'input').find((node) => node.props.value === 'workflows/incidents.md')
-    assert.ok(document, 'le document suit la clé')
+    const formulaire = findAll(inner, 'form')[0]
+    assert.ok(formulaire, 'le dialogue est rendu')
+    const champs = findAll(formulaire, 'input')
+
+    // Chaque frappe passe par le setter du formulaire : le champ est piloté,
+    // pas seulement décoré.
+    const avant = setters.length
+    champs[0].props.onChange({ target: { value: 'Incidents' } })
+    champs[1].props.onChange({ target: { value: 'Les incidents du workspace' } })
+    findAll(formulaire, 'select')[0].props.onChange({ target: { value: 'statuts' } })
+    // Chaque frappe pose le formulaire puis ses erreurs : le formulaire d'abord.
+    const vide = { title: '', description: '', kind: 'etape' }
+    const misesAJour = setters.slice(avant).filter((value) => typeof value === 'function')
+    const formulaires = [0, 2, 4].map((index) => misesAJour[index](vide))
+    assert.equal(formulaires.length, 3, 'chaque champ écrit le formulaire')
+    assert.equal(formulaires[0].title, 'Incidents', 'le titre entre dans le formulaire')
 
     reset()
     queue.push(...workflowPanelStates(review, {
-      10: true,
-      11: { key: 'incidents', title: 'Incidents', kind: 'etape', document: 'workflows/incidents.md', entry: 'in-review', exit: 'done' },
+      creating: true,
+      form: { title: 'Incidents', description: 'Les incidents du workspace', kind: 'statuts' },
     }))
     inner = renderTree(vue)
     findAll(inner, 'form')[0].props.onSubmit({ preventDefault() {} })
@@ -2569,15 +2663,18 @@ test('la création valide écrit par la route et sélectionne le workflow né', 
 
     const envoi = appels.find((appel) => appel.options?.method === 'POST')
     assert.ok(envoi, 'la création part vers la route')
-    const corps = JSON.parse(envoi.options.body)
-    assert.deepEqual(corps, { workflow: 'incidents', title: 'Incidents', kind: 'etape', document: 'workflows/incidents.md', entry: 'in-review', exit: ['done'] })
     assert.equal(envoi.url, 'missions/api/workflows')
+    assert.deepEqual(JSON.parse(envoi.options.body), {
+      title: 'Incidents',
+      description: 'Les incidents du workspace',
+      kind: 'statuts',
+    }, 'la clé et le document se déduisent du titre : ils ne partent pas')
   } finally {
     globalThis.fetch = vraiFetch
   }
 })
 
-test('la création refuse une clé ou un titre vide avant tout envoi', async () => {
+test('la création refuse un titre vide avant tout envoi', async () => {
   const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
   const vraiFetch = globalThis.fetch
   const appels = []
@@ -2589,25 +2686,45 @@ test('la création refuse une clé ou un titre vide avant tout envoi', async () 
     const session = memorySession({ 'missions.tab': 'workflows' })
     const { api, ctx, registered, queue, setters, reset } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
     api.apply(ctx)
-    const tree = registered.main({})
-    const vue = findAll(tree, 'WorkflowsView')[0]
+    const vue = findAll(registered.main({}), 'WorkflowsView')[0]
     queue.push(...workflowPanelStates(review))
     let inner = renderTree(vue)
     appels.length = 0
 
     findAll(inner, 'button').find((node) => textOf(node) === 'Nouveau workflow').props.onClick()
     reset()
-    queue.push(...workflowPanelStates(review, { 10: true }))
+    queue.push(...workflowPanelStates(review, { creating: true }))
     inner = renderTree(vue)
     findAll(inner, 'form')[0].props.onSubmit({ preventDefault() {} })
 
-    const erreurs = setters.find((value) => value && typeof value === 'object' && value.key === 'La clé est obligatoire.')
-    assert.ok(erreurs, 'l’erreur se pose sous la clé')
-    assert.equal(erreurs.title, 'Le titre est obligatoire.')
+    assert.equal(setters.some((value) => value && typeof value === 'object' && value.title === 'Le titre est obligatoire.'), true, 'l’erreur se pose sous le titre')
     assert.equal(appels.filter((appel) => appel.options?.method === 'POST').length, 0, 'rien ne part au serveur')
   } finally {
     globalThis.fetch = vraiFetch
   }
+})
+
+test('les onglets Informations et Graphe se répartissent le panneau', async () => {
+  const review = await readWorkflow(MODELS_DIR, 'review', { states: [] })
+  const session = memorySession({ 'missions.tab': 'workflows' })
+  const { api, ctx, registered, queue, reset } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+  api.apply(ctx)
+  const vue = findAll(registered.main({}), 'WorkflowsView')[0]
+
+  queue.push(...workflowPanelStates(review))
+  let inner = renderTree(vue)
+  const onglets = findAll(inner, 'button').filter((node) => /wf-tab/.test(node.props.className ?? ''))
+  assert.deepEqual(onglets.map((node) => textOf(node)), ['Informations', 'Graphe'])
+  assert.equal(onglets[0].props['aria-selected'], 'true')
+  assert.ok(findAll(inner, 'svg').some((node) => /wf-canvas/.test(node.props.className ?? '')), 'le canevas reste dessiné : le panneau est docké à côté')
+  assert.equal(findAll(inner, 'input').some((node) => node.props.value === review.title), true, 'le titre s’édite dans Informations')
+  assert.equal(findAll(inner, 'button').some((node) => textOf(node) === 'Ajouter un geste'), false, 'les gestes se posent dans Graphe, pas dans Informations')
+
+  reset()
+  queue.push(...workflowPanelStates(review, { tab: 'graphe' }))
+  inner = renderTree(vue)
+  assert.ok(findAll(inner, 'svg').some((node) => /wf-canvas/.test(node.props.className ?? '')), 'Graphe garde le canevas')
+  assert.ok(findAll(inner, 'button').some((node) => textOf(node) === 'Ajouter un geste'), 'les gestes se posent dans Graphe')
 })
 
 test('l’éditeur attend le modèle au lieu de lire un brouillon absent', () => {
@@ -2616,7 +2733,7 @@ test('l’éditeur attend le modèle au lieu de lire un brouillon absent', () =>
   // React démontait alors le panneau entier, onglets compris.
   assert.match(SOURCE, /if \(!entry \|\| !draft\) \{/, 'le rendu garde les deux attentes')
   assert.match(SOURCE, /'Chargement du modèle du parcours…'/, 'l’attente du modèle se dit')
-  assert.ok(!/draft\.entry/.test(SOURCE), 'aucun accès direct à un brouillon peut-être absent')
+  assert.ok(SOURCE.indexOf('if (!entry || !draft) {') < SOURCE.indexOf('draft.entry'), 'le brouillon ne se lit qu’après la garde')
   assert.match(SOURCE, /const ends = endPoints\(draft\)/, 'les extrémités passent par le helper qui tolère l’absence')
 })
 
@@ -6827,22 +6944,20 @@ function montrerWorkflows(workflows, options = {}) {
   api.apply(ctx)
   const vue = findAll(registered.main({}), 'WorkflowsView')[0]
   assert.ok(vue, 'l’onglet Workflows est monté')
-  queue.push(
-    { loading: false, error: null, workflows, writers: ['demandeur', 'session', 'outil'], states: WORKFLOW_STATES },
-    options.step ?? active.workflow,
-    options.draft ?? modelOf(active),
-    options.chosen ?? null,
-    null,
-    false,
-    options.arc ?? { from: '', to: '', when: '' },
-    0,
-    modelOf(active),
-    options.selectedArc ?? null,
-    options.creating ?? false,
-    options.form ?? { key: '', title: '', kind: 'etape', document: '', entry: '', exit: '' },
-    options.formErrors ?? {},
-    false,
-  )
+  const model = options.draft ?? modelOf(active)
+  queue.push(...WORKFLOW_HOOKS.map((name) => {
+    if (name in options) return options[name]
+    if (name === 'view') return { loading: false, error: null, workflows, writers: ['demandeur', 'session', 'outil'], states: WORKFLOW_STATES }
+    if (name === 'step') return options.step ?? active.workflow
+    if (name === 'draft') return model
+    if (name === 'baseline') return modelOf(active)
+    if (name === 'exitText') return (model.exit ?? []).join(', ')
+    if (name === 'tab') return options.tab ?? 'graphe'
+    if (name === 'form') return { title: '', description: '', kind: 'etape' }
+    if (name === 'arc') return { from: '', to: '', when: '' }
+    if (name === 'status' || name === 'chosen' || name === 'selectedArc') return null
+    return false
+  }))
   return { rendered: renderTree(vue), setters, queue }
 }
 
@@ -6960,7 +7075,7 @@ test('Annuler rend le brouillon au fichier lu, sans rien poster', async () => {
     const annuler = findAll(rendered, 'button').find((node) => textOf(node).trim() === 'Annuler')
     assert.ok(annuler, 'Annuler est rendu')
     annuler.props.onClick()
-    const draft = setters.at(-4)
+    const draft = setters.findLast((value) => value && typeof value === 'object' && value.workflow === 'statuts')
     assert.equal(draft.nodes.find((node) => node.id === 'done').label, 'Terminée')
     assert.equal(appels.length, 0, 'Annuler n’écrit rien')
   } finally {
@@ -6968,23 +7083,24 @@ test('Annuler rend le brouillon au fichier lu, sans rien poster', async () => {
   }
 })
 
-test('le dialogue de création valide chaque champ avant d’écrire', async () => {
+test('la création dans le panneau ne demande que le titre, la description et le type', async () => {
   const appels = []
   const vraiFetch = globalThis.fetch
   globalThis.fetch = async (...args) => { appels.push(args); return { ok: true, json: async () => ({}) } }
   try {
-    const { rendered, setters } = montrerWorkflows([workflowEntry()], { creating: true })
+    const { rendered, setters } = montrerWorkflows([workflowEntry()], { creating: true, tab: 'infos' })
     assert.match(textOf(rendered), /Nouveau workflow/)
-    assert.match(textOf(rendered), /minuscules, chiffres et tirets/)
+    assert.match(textOf(rendered), /la clé et le document s’en déduisent/)
+    assert.match(textOf(rendered), /280 caractères/)
+    assert.equal(findAll(rendered, 'form').length, 1, 'un seul formulaire : celui du panneau')
+    assert.equal(findAll(rendered, 'div').some((node) => /wf-modal/.test(node.props.className ?? '')), false, 'aucune modale')
 
-    const formulaire = findAll(rendered, 'form').find((node) => node.props.role === 'dialog')
+    const formulaire = findAll(rendered, 'form')[0]
     formulaire.props.onSubmit({ preventDefault() {} })
     const erreurs = setters.at(-1)
-    assert.equal(erreurs.key, 'La clé est obligatoire.')
     assert.equal(erreurs.title, 'Le titre est obligatoire.')
-    assert.equal(erreurs.document, 'Le document est obligatoire.')
-    assert.equal(erreurs.entry, 'L’entrée est obligatoire.')
-    assert.equal(erreurs.exit, 'Au moins une sortie est obligatoire.')
+    assert.equal(erreurs.key, undefined, 'aucun champ clé : il ne peut pas manquer')
+    assert.equal(erreurs.document, undefined, 'aucun champ document : il ne peut pas manquer')
     assert.equal(appels.length, 0, 'un formulaire vide n’écrit rien')
   } finally {
     globalThis.fetch = vraiFetch
