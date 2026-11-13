@@ -1062,6 +1062,25 @@ test('la peau papier encadre les trois variantes sans coin sur le texte', () => 
   assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-card--mission::after/)
 })
 
+test('la sélection d’une carte pick se peint aussi en peau papier', () => {
+  // Le cadre papier pose sa bordure et son ombre sur toute carte, et il est
+  // écrit après la règle générique de l'état pressé (à spécificité égale) :
+  // sans règle papier propre, la sélection du pick disparaît (CA4).
+  const cadre = SOURCE.indexOf('.missions-panel[data-skin="paper"] .missions-card {')
+  const pressee = SOURCE.indexOf('.missions-panel[data-skin="paper"] .missions-card[data-interactive="true"][aria-pressed="true"] {')
+  assert.ok(cadre >= 0, 'la peau papier peint ses cartes')
+  assert.ok(pressee > cadre, 'la règle pressée vient après le cadre papier')
+  const reglePressee = regle('.missions-panel[data-skin="paper"] .missions-card[data-interactive="true"][aria-pressed="true"]')
+  assert.match(reglePressee, /border-color: var\(--skin-accent-strong\)/)
+  assert.match(reglePressee, /background: color-mix\(in srgb, var\(--skin-accent\) 22%, var\(--skin-page-2\)\)/)
+  assert.match(reglePressee, /box-shadow: 3px 3px 0 var\(--skin-accent-strong\)/)
+  // La règle générique (0,3,0) perd contre le cadre papier (0,3,0) qui la suit :
+  // la règle papier doit donc porter une spécificité plus forte — une classe
+  // et trois attributs (0,5,0) — et non recopier la coque telle quelle.
+  const generique = SOURCE.indexOf('.missions-card[data-interactive="true"][aria-pressed="true"] {')
+  assert.ok(generique >= 0 && generique < pressee, 'la règle générique reste en amont')
+})
+
 test('le montage lit l’ouvert et les deux comptes ; Done et le résumé paient leur lecture, le bouton et le tick forcent', () => {
   // Le panneau est remonté à chaque changement de vue : forcer au montage
   // paierait tout le trajet tracker à chaque retour sur Missions. Le cache
