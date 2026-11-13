@@ -1,8 +1,8 @@
 # Workspace missions
 
-L'épine dorsale du workspace tient en deux dossiers : ce qu'est une mission
-(`missions/`) et comment elle avance (`workflows/`). Tout le reste — code,
-configuration, outils — s'y accroche.
+L'épine dorsale du workspace tient en trois dossiers : ce qu'est une mission
+(`missions/`), comment elle avance (`workflows/`) et comment on la joue
+(`playbook/`). Tout le reste — code, configuration, outils — s'y accroche.
 
 ## Une mission vit dans son tracker
 
@@ -23,12 +23,20 @@ n'est pas le workflow mais le **tracker** : une mission de `Manager` s'ouvre sur
 Jira, une mission de `missions` s'ouvre sur GitHub. Le projet, son dépôt et son
 tracker sont déclarés une fois dans [`missions/projects.yml`](missions/projects.yml).
 
-## Les deux piliers
+## Les trois piliers
 
 - [`missions/`](missions/README.md) — la mission : son identité, ses états, où
   elle vit, le gabarit qui la décrit, et le tableau des projets.
 - [`workflows/`](workflows/README.md) — le parcours : une page par étape, plus
   la table de correspondance entre états du workflow et états du tracker.
+- [`playbook/`](playbook/README.md) — le mode d'emploi par étape : l'ordre des
+  gestes, les commandes exactes, les pièges observés et la preuve de sortie.
+  Son contrat de lecture dit quelle page chaque étape lit ; le prompt de session
+  nomme cette page, et la session la suit au lieu de redériver la recette.
+
+`workflows/` dit **quoi** faire, `playbook/` dit **comment** le faire, et les
+règles (code, revue, interdits) vivent dans `standards/`. Une page de playbook
+renvoie à ces documents, elle ne les recopie pas.
 
 ## Le plugin
 
