@@ -37,9 +37,13 @@ function contractRows(readme) {
   const rows = new Map()
   for (const line of readme.split('\n')) {
     const match = /^\|\s*([^|]+?)\s*\|(.*)\|\s*$/.exec(line)
-    if (!match) continue
+    if (!match) {
+      continue
+    }
     const step = match[1].trim()
-    if (!STEPS.includes(step)) continue
+    if (!STEPS.includes(step)) {
+      continue
+    }
     rows.set(step, [...match[2].matchAll(/`([^`]+)`/g)].map((cell) => cell[1]))
   }
   return rows

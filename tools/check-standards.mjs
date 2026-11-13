@@ -23,10 +23,14 @@ import { STANDARDS_DIR, STANDARDS_STEP_FILES, standardsFiles, standardsProject }
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url))
 
 function rootFromArgs(argv) {
-  if (argv.length === 0) return REPO_ROOT
+  if (argv.length === 0) {
+    return REPO_ROOT
+  }
   const [first, second] = argv
   const value = first === '--root' ? second : first
-  if (!value) throw new Error('--root expects a directory')
+  if (!value) {
+    throw new Error('--root expects a directory')
+  }
   return resolve(process.cwd(), value)
 }
 
@@ -54,7 +58,9 @@ function indexedFiles(readme) {
   const files = new Set()
   for (const line of readme.split('\n')) {
     const match = /^\|\s*`(standards\/[^`]+\.md)`\s*\|/.exec(line)
-    if (match) files.add(match[1])
+    if (match) {
+      files.add(match[1])
+    }
   }
   return files
 }
@@ -64,9 +70,13 @@ function contractRows(readme) {
   const rows = new Map()
   for (const line of readme.split('\n')) {
     const match = /^\|\s*([^|]+?)\s*\|(.*)\|\s*$/.exec(line)
-    if (!match) continue
+    if (!match) {
+      continue
+    }
     const step = match[1].trim()
-    if (!(step in STANDARDS_STEP_FILES)) continue
+    if (!(step in STANDARDS_STEP_FILES)) {
+      continue
+    }
     rows.set(step, [...match[2].matchAll(/`([^`]+)`/g)].map((cell) => cell[1]))
   }
   return rows
@@ -118,7 +128,9 @@ async function main() {
   }
 
   if (errors.length > 0) {
-    for (const error of errors) console.error(`✖ ${error}`)
+    for (const error of errors) {
+      console.error(`✖ ${error}`)
+    }
     process.exitCode = 1
     return
   }
