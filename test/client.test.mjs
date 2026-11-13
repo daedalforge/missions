@@ -2111,10 +2111,13 @@ test('le graphe a ses règles : nœuds, sélection, retour en pointillé', () =>
   assert.match(regle('.wf-card'), /border-radius: 12px/)
 })
 
-test('la liste et le volet tiennent à 1280 px comme à 640 px, sans débordement de page', () => {
+test('les règles de repli de la liste et du volet sont déclarées sous 900 px et 640 px', () => {
+  // Le rendu ne se mesure pas ici : jsdom ne calcule aucune mise en page. Ce
+  // test prouve les déclarations CSS ; la mesure réelle du panneau à 1280 px et
+  // 640 px est consignée dans le journal de MIS-195, avec ses captures.
   // La grille des cartes se replie d'elle-même ; sous 900 px le volet passe
-  // sous le graphe ; sous 640 px le formulaire passe sur une colonne. Le canevas
-  // garde son propre défilement : jamais la page entière.
+  // sous le graphe ; sous 640 px le formulaire passe sur une seule colonne. Le
+  // canevas garde son propre défilement : jamais la page entière.
   assert.match(regle('.wf-list'), /grid-template-columns: repeat\(auto-fill, minmax\(240px, 1fr\)\)/)
   assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\.wf-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
   assert.match(SOURCE, /@media \(max-width: 640px\) \{[\s\S]*?\.wf-form \{ grid-template-columns: minmax\(0, 1fr\); \}/)
