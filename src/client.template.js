@@ -506,7 +506,7 @@ window.__ModuleLoader__.load({
 .wf-pick-meta { font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-pick-flow { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .wf-pick-flow code { padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, currentColor 8%, transparent); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; }
-..." + ".wf-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.wf-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
 .wf-tabs { display: flex; gap: 6px; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
 .wf-tab { height: 28px; padding: 0 12px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
 .wf-tab:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05)); }
