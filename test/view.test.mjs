@@ -65,11 +65,21 @@ import {
   readFilterSnapshot,
   readTab,
   readWorktreesShown,
+  readRepositoryFilters,
   relativeAge,
+  REPOSITORIES_FILTERS_KEY,
   REPOSITORIES_WORKTREES_KEY,
+  REPOSITORY_FILTER_LABELS,
+  REPOSITORY_FILTER_OPTIONS,
   repositoryBranch,
   repositoryCommit,
+  repositoryFilterCounts,
+  repositoryFilterSnapshot,
   repositoryState,
+  parseRepositoryFilters,
+  hasActiveRepositoryFilters,
+  filterRepositories,
+  writeRepositoryFilters,
   scanDuration,
   scanLabel,
   sortMissions,
@@ -1233,6 +1243,132 @@ test('une ligne dit sa branche, son état et son dernier commit', () => {
   assert.equal(repositoryCommit({ lastCommit: { sha: 'abc1234', subject: '' } }), 'abc1234')
   assert.equal(repositoryCommit({ lastCommit: null }), 'no commit yet')
   assert.equal(repositoryCommit({ error: 'boom' }), '')
+})
+
+test('la session garde la barre des dépôts, et l’efface quand on la vide', () => {
+  const storage = memoryStorage()
+
+  // Given a session that has never opened the bar
+  assert.deepEqual(readRepositoryFilters(storage), { query: '', state: null })
+  assert.equal(storage.entries.has(REPOSITORIES_FILTERS_KEY), false)
+
+  // When the bar is written
+  writeRepositoryFilters(storage, { query: 'missions', state: ['clean'] })
+
+  // Then the session keeps the snapshot, and reads it back
+  assert.deepEqual([...storage.entries], [[REPOSITORIES_FILTERS_KEY, '{"query":"missions","state":["clean"]}']])
+  assert.deepEqual(readRepositoryFilters(storage), { query: 'missions', state: ['clean'] })
+
+  // When nothing is left in the bar
+  writeRepositoryFilters(storage, { query: '   ', state: null })
+
+  // Then the key is dropped instead of keeping an empty snapshot
+  assert.equal(storage.entries.has(REPOSITORIES_FILTERS_KEY), false)
+})
+
+test('un stockage en panne ou absent garde la barre vide sans lever', () => {
+  // Given no storage at all
+  assert.deepEqual(readRepositoryFilters(undefined), { query: '', state: null })
+  assert.deepEqual(readRepositoryFilters({}), { query: '', state: null })
+  assert.doesNotThrow(() => writeRepositoryFilters(null, { query: 'x' }))
+
+  // Given a storage that refuses everything
+  const throwing = {
+    getItem: () => { throw new Error('blocked') },
+    setItem: () => { throw new Error('quota') },
+    removeItem: () => { throw new Error('blocked') },
+  }
+
+  // Then the bar falls back to the empty snapshot, both ways
+  assert.deepEqual(readRepositoryFilters(throwing), { query: '', state: null })
+  assert.doesNotThrow(() => writeRepositoryFilters(throwing, { query: 'x', state: ['dirty'] }))
+  assert.doesNotThrow(() => writeRepositoryFilters(throwing, {}))
+})
+
+test('une barre enregistrée ne revient qu’avec les états que le panneau propose', () => {
+  // Given junk in the session
+  for (const raw of ['', 'null', 'true', '[]', '"missions"', '{', '{"state":"nope"}', '{"query":42,"state":["dirty"]}']) {
+    assert.deepEqual(parseRepositoryFilters(raw), { query: '', state: null }, `« ${raw} » garde la barre vide`)
+  }
+
+  // Given a snapshot with a foreign state, a single value and a reversed list
+  assert.deepEqual(
+    parseRepositoryFilters('{"query":"gh","state":["dirty","nope"]}'),
+    { query: 'gh', state: ['dirty'] },
+    'un état que le panneau n’offre pas disparaît',
+  )
+  assert.deepEqual(
+    parseRepositoryFilters('{"state":"detached"}'),
+    { query: '', state: ['detached'] },
+    'une valeur seule venue d’une session plus ancienne est acceptée',
+  )
+  assert.deepEqual(
+    parseRepositoryFilters('{"state":["unreadable","clean"]}'),
+    { query: '', state: ['clean', 'unreadable'] },
+    'la liste revient dans l’ordre du panneau',
+  )
+
+  // Given the canonical snapshot and its working copy
+  assert.deepEqual(repositoryFilterSnapshot({ query: 'gh', state: ['dirty'] }), { query: 'gh', state: ['dirty'] })
+  assert.equal(hasActiveRepositoryFilters({}), false)
+  assert.equal(hasActiveRepositoryFilters({ query: '  ' }), false)
+  assert.equal(hasActiveRepositoryFilters({ query: 'gh' }), true)
+  assert.equal(hasActiveRepositoryFilters({ state: ['clean'] }), true)
+  assert.deepEqual(REPOSITORY_FILTER_OPTIONS, ['clean', 'dirty', 'detached', 'unreadable'])
+  assert.deepEqual(REPOSITORY_FILTER_LABELS, { clean: 'Clean', dirty: 'Dirty', detached: 'Detached', unreadable: 'Unreadable' })
+})
+
+test('les quatre états comptent des lignes qui se recouvrent', () => {
+  // Given a displayed list of one row per state, one row in two states at once,
+  // and a detached row git then refused
+  const rows = [
+    { name: 'propre', dirty: 0 },
+    { name: 'sale', dirty: 2 },
+    { name: 'detache-et-sale', detached: true, dirty: 1 },
+    { name: 'casse', error: 'not a git repository' },
+    { name: 'detache-casse', detached: true, head: 'abc1234', error: 'git log failed' },
+  ]
+
+  // Then each count asks the row itself: Clean 1, Dirty 2, Detached 2, Unreadable 2
+  assert.deepEqual(repositoryFilterCounts(rows), { clean: 1, dirty: 2, detached: 2, unreadable: 2 })
+  assert.deepEqual(repositoryFilterCounts([]), { clean: 0, dirty: 0, detached: 0, unreadable: 0 })
+  assert.deepEqual(repositoryFilterCounts(undefined), { clean: 0, dirty: 0, detached: 0, unreadable: 0 })
+})
+
+test('le filtre des dépôts cherche le nom, la branche affichée et le dernier commit', () => {
+  // Given the rows the tab shows, in the order the scan gave them
+  const rows = [
+    { name: 'zeta', branch: 'main', path: '/Users/moi/projects/zeta', dirty: 0 },
+    { name: 'missions', branch: 'feat/mis-116', path: '/Users/moi/projects/missions', dirty: 2, lastCommit: { subject: 'MIS-116: ajoute l’onglet' } },
+    { name: 'missions-gh20', branch: 'gh-20-hover', dirty: 1, lastCommit: { subject: 'gh-20: le survol' } },
+    { name: 'socle', detached: true, head: 'abc1234' },
+    { name: 'casse', error: 'not a git repository' },
+    { name: 'detache-casse', detached: true, head: 'abc1234', error: 'git log failed' },
+  ]
+  const names = (list) => list.map((row) => row.name)
+
+  // Then the search is case-insensitive and trims its needle
+  assert.deepEqual(names(filterRepositories(rows, { query: 'GH-20' })), ['missions-gh20'])
+  assert.deepEqual(names(filterRepositories(rows, { query: 'feat/mis' })), ['missions'])
+  assert.deepEqual(names(filterRepositories(rows, { query: 'MIS-116' })), ['missions'])
+  assert.deepEqual(names(filterRepositories(rows, { query: '  ' })), names(rows))
+  assert.deepEqual(names(filterRepositories(rows, {})), names(rows))
+  // The path is never searched: what the row shows is the contract.
+  assert.deepEqual(names(filterRepositories(rows, { query: 'projects/missions' })), [])
+  assert.deepEqual(names(filterRepositories(rows, { query: 'introuvable' })), [])
+
+  // Then a state keeps the rows that answer it, the same way the counts do
+  assert.deepEqual(names(filterRepositories(rows, { state: ['dirty'] })), ['missions', 'missions-gh20'])
+  assert.deepEqual(names(filterRepositories(rows, { state: ['clean'] })), ['zeta', 'socle'])
+  // A detached row stays Detached even when git then refused to read it, and
+  // it answers Unreadable too: the two states are read one by one.
+  assert.deepEqual(names(filterRepositories(rows, { state: ['detached'] })), ['socle', 'detache-casse'])
+  assert.deepEqual(names(filterRepositories(rows, { state: ['unreadable'] })), ['casse', 'detache-casse'])
+  assert.deepEqual(names(filterRepositories(rows, { state: ['clean', 'unreadable'] })), ['zeta', 'socle', 'casse', 'detache-casse'])
+
+  // Then the search and the states combine with AND, and the order survives
+  assert.deepEqual(names(filterRepositories(rows, { query: 'missions', state: ['dirty'] })), ['missions', 'missions-gh20'])
+  assert.deepEqual(names(filterRepositories(rows, { query: 'missions', state: ['clean'] })), [])
 })
 
 test('l’en-tête dit ce que le scan a lu, et ce qu’il n’a pas pu lire', () => {

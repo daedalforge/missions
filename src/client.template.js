@@ -760,6 +760,7 @@ window.__ModuleLoader__.load({
 .missions-repo-age { justify-self: end; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .missions-repos-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .missions-repos-headtools { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.missions-repos-filters { margin: 0 0 10px; }
 .missions-repos-total { color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 12px; font-weight: 600; }
 .missions-repos-root { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10.5px; }
 .missions-repos-adopt { margin: 0 0 10px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 14%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 4%, transparent); color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 12px; line-height: 1.45; }
@@ -3384,6 +3385,44 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * of the tab shows the workspace as it is now — the list is never served
      * from a cache.
      */
+    /**
+     * The repositories bar: a free-text search and the working-tree states the
+     * displayed list answers.
+     *
+     * The state menu carries a count per state, frozen on the list the switch
+     * shows — what the bar can find, not what it found. The Clear button only
+     * exists while something is set, so the bar at rest stays two controls.
+     */
+    function RepositoriesFilters({ filters, counts, onChange, onClear }) {
+      return h('div', { className: 'missions-filters missions-repos-filters' },
+        h('label', { className: 'missions-search' },
+          h('svg', { width: 13, height: 13, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, 'aria-hidden': 'true' },
+            h('circle', { cx: 7, cy: 7, r: 4.6 }),
+            h('path', { d: 'M10.4 10.4 14 14', strokeLinecap: 'round' }),
+          ),
+          h('input', {
+            type: 'search',
+            value: filters.query,
+            placeholder: 'Filter by name, branch or commit…',
+            'aria-label': 'Filter repositories',
+            onChange: (event) => onChange({ ...filters, query: event.target.value }),
+          }),
+        ),
+        h(ChecklistFilter, {
+          label: 'State',
+          value: filters.state,
+          options: REPOSITORY_FILTER_OPTIONS,
+          labels: REPOSITORY_FILTER_LABELS,
+          counts,
+          allLabel: 'All states',
+          onChange: (state) => onChange({ ...filters, state }),
+        }),
+        hasActiveRepositoryFilters(filters)
+          ? h('button', { type: 'button', className: 'missions-clear', onClick: onClear }, 'Clear')
+          : null,
+      )
+    }
+
     function RepositoriesView({ theme, onOpen, onAdopted = () => {}, refresh = 0 }) {
       const [scan, setScan] = React.useState({ loading: true, data: null, error: null })
       // The tab's own write: the last gesture, its state and the sentence it
@@ -3394,6 +3433,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // The worktrees are hidden until the session asks: the switch reads its
       // default from the session, never from a setting that outlives the app.
       const [worktreesShown, setWorktreesShown] = React.useState(() => readWorktreesShown(filterStorage()))
+      const [filters, setFilters] = React.useState(() => readRepositoryFilters(filterStorage()))
 
       React.useEffect(() => {
         let alive = true
@@ -3432,6 +3472,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const clones = rows.filter((repository) => repository.kind !== 'worktree')
       const worktrees = rows.filter((repository) => repository.kind === 'worktree')
       const repositories = worktreesShown ? worktrees : clones
+      const counts = repositoryFilterCounts(repositories)
+      const visible = filterRepositories(repositories, filters)
       const hiddenWorktrees = !worktreesShown && worktrees.length > 0
       const hiddenLabel = `${worktrees.length === 1 ? 'The only worktree' : `All ${worktrees.length} worktrees`} of the workspace root ${worktrees.length === 1 ? 'is' : 'are'} hidden.`
       const revealHint = `Show worktrees lists ${worktrees.length === 1 ? 'it' : 'them'}.`
@@ -3451,6 +3493,11 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setWorktreesShown(shown)
         writeWorktreesShown(filterStorage(), shown)
       }
+      const applyFilters = (next) => {
+        setFilters(next)
+        writeRepositoryFilters(filterStorage(), next)
+      }
+      const clearFilters = () => applyFilters({ query: '', state: null })
       const now = Date.now()
       const missing = Array.isArray(data.errors) ? data.errors : []
       // Bringing a worktree back is the tab's one write: it asks first, then
@@ -3538,6 +3585,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               h('p', { className: 'missions-dash-empty-hint' }, emptyHint),
             )
           : h(React.Fragment, null,
+              h(RepositoriesFilters, { filters, counts, onChange: applyFilters, onClear: clearFilters }),
               h('div', { className: 'missions-repo-head', 'aria-hidden': 'true' },
                 h('div', { className: 'missions-repo-headgrid missions-repo-grid' },
                   h('span', null, 'Repository'),
@@ -3548,9 +3596,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                 ),
                 h('span', { className: 'missions-repo-headmain' }),
               ),
-              h('ul', { className: 'missions-rows' },
-                repositories.map((repository) => h(RepositoryRow, { key: repository.name, repository, now, onOpen, onAdopt: adoptWorktree, adopting: running === repository.name, blocked: running !== null })),
-              ),
+              visible.length === 0
+                ? h('div', { className: 'missions-dash-empty' },
+                    h('p', null, 'No repository matches these filters.'),
+                    h('p', { className: 'missions-dash-empty-hint' },
+                      h('button', { type: 'button', className: 'missions-clear', onClick: clearFilters }, 'Clear filters'),
+                    ),
+                  )
+                : h('ul', { className: 'missions-rows' },
+                    visible.map((repository) => h(RepositoryRow, { key: repository.name, repository, now, onOpen, onAdopt: adoptWorktree, adopting: running === repository.name, blocked: running !== null })),
+                  ),
             ),
         missing.length > 0
           ? h('p', { className: 'missions-repos-note' },

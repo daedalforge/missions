@@ -3514,23 +3514,169 @@ test('l’onglet demande le scan au serveur, une fois, à son montage', async ()
     return { ok: true, json: async () => REPO_SCAN }
   }
   try {
-    const { api, ctx, registered, effects } = charger(undefined, repositoriesStates(scanReady(REPO_SCAN)), memorySession())
-    api.apply(ctx)
-    const tree = registered.main({})
-    const avant = effects.length
-    renderTree(findAll(tree, 'RepositoriesView')[0])
+    const { inner, effects, rerendre, session } = montrerRepositories(scanReady(REPO_SCAN), null, memorySession())
     // Les effets du panneau (dont son rafraîchissement de 60 s) ne sont pas
-    // joués : seul celui que la vue arme en se montant l'est.
-    assert.equal(effects.length - avant, 1, 'un seul effet de chargement pour l’onglet')
-    for (const effect of effects.slice(avant)) effect.fn()
+    // joués : la vue arme le chargement, puis la barre arme la fermeture de son
+    // menu d'état au clic extérieur. Le scan, lui, part une fois.
+    const poses = effects.slice(-2)
+    assert.equal(poses.length, 2, 'le chargement, puis la fermeture du menu de l’état')
+    for (const pose of poses.slice(0, 1)) pose.fn()
     await new Promise((done) => setTimeout(done, 0))
 
     assert.equal(appels.length, 1, 'un scan par ouverture de l’onglet')
     assert.equal(appels[0].url, 'missions/api/repositories')
     assert.equal(appels[0].options.headers.accept, 'application/json')
+
+    // When un état s'ajoute à la barre, puis qu'une seconde frappe cherche
+    const puce = findAll(inner, 'button').find((button) => /^Filter by state \(All\)$/.test(button.props['aria-label']))
+    assert.ok(puce, 'le filtre d’état est rendu')
+    puce.props.onClick()
+    const ouvert = rerendre()
+    const caseDirty = findAll(ouvert, 'label').find((label) => label.props['data-state'] === 'dirty')
+    assert.ok(caseDirty, 'l’état Dirty est offert quand le menu est ouvert')
+    findAll(caseDirty, 'input')[0].props.onChange()
+    const filtre = rerendre()
+    findAll(filtre, 'input').find((node) => node.props['aria-label'] === 'Filter repositories')
+      .props.onChange({ target: { value: 'fe' } })
+    const seconde = rerendre()
+    findAll(seconde, 'input').find((node) => node.props['aria-label'] === 'Filter repositories')
+      .props.onChange({ target: { value: 'feat' } })
+
+    // Then ni l'état ni les deux frappes ne relisent la racine : le scan est le
+    // seul appel, le geste se contente d'écrire la session.
+    assert.equal(appels.length, 1, 'un scan au montage, aucune lecture pour un filtre')
+    assert.equal(session.entries.get('missions.repositories.filters'), '{"query":"feat","state":["dirty"]}')
   } finally {
     globalThis.fetch = vraiFetch
   }
+})
+
+test('la barre des dépôts filtre la liste affichée, sans relire la racine', () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => REPO_SCAN }
+  }
+  try {
+    // Given le scan, et la barre au repos : deux contrôles, pas de Clear
+    const { inner, session, rerendre } = montrerRepositories(scanReady(REPO_SCAN), null, memorySession())
+    const barre = findAll(inner, 'div').find((node) => node.props.className === 'missions-filters missions-repos-filters')
+    assert.ok(barre, 'la barre se place entre l’en-tête et la liste')
+    const recherche = findAll(inner, 'input').find((node) => node.props['aria-label'] === 'Filter repositories')
+    assert.equal(recherche.props.type, 'search')
+    assert.equal(recherche.props.placeholder, 'Filter by name, branch or commit…')
+    assert.equal(findAll(inner, 'button').some((button) => textOf(button) === 'Clear'), false, 'aucun Clear sans filtre')
+    assert.ok(findAll(inner, 'button').some((button) => /^Filter by state \(All\)$/.test(button.props['aria-label'])))
+
+    // When la recherche filtre sur la branche
+    recherche.props.onChange({ target: { value: 'feat/mis' } })
+    const filtre = rerendre()
+    const lignes = findAll(filtre, 'button').filter((button) => button.props['data-repository'] !== undefined)
+    assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions'])
+    // The flag writes the session, and the search does not read the root again
+    assert.equal(session.entries.get('missions.repositories.filters'), '{"query":"feat/mis","state":null}')
+    assert.equal(appels.length, 0, 'aucune requête pendant la saisie')
+
+    // When le Clear efface la barre
+    const clear = findAll(filtre, 'button').find((button) => textOf(button) === 'Clear')
+    assert.ok(clear, 'le Clear apparaît avec le filtre')
+    clear.props.onClick()
+    const repos = rerendre()
+    const ramenees = findAll(repos, 'button').filter((button) => button.props['data-repository'] !== undefined)
+    assert.deepEqual(ramenees.map((ligne) => ligne.props['data-repository']), ['missions', 'zeta'])
+    assert.equal(session.entries.has('missions.repositories.filters'), false, 'une barre vide ne laisse aucune clé')
+    assert.equal(appels.length, 0)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('le menu State compte les lignes de la liste affichée', () => {
+  // Given un scan dont chaque ligne répond à un état, une ligne à deux à la fois
+  const scan = {
+    ...REPO_SCAN,
+    count: 4,
+    repositories: [
+      { name: 'propre', kind: 'clone', branch: 'main', dirty: 0, lastCommit: null, error: null },
+      { name: 'sale', kind: 'clone', branch: 'main', dirty: 2, lastCommit: null, error: null },
+      { name: 'detache-et-sale', kind: 'clone', branch: null, detached: true, head: 'abc1234', dirty: 1, lastCommit: null, error: null },
+      { name: 'casse', kind: 'clone', branch: null, detached: false, dirty: 0, lastCommit: null, error: 'not a git repository' },
+    ],
+  }
+  const { inner, rerendre } = montrerRepositories(scanReady(scan), null, memorySession())
+
+  // When le menu des états s'ouvre
+  const puce = findAll(inner, 'button').find((button) => /^Filter by state \(All\)$/.test(button.props['aria-label']))
+  assert.ok(puce, 'le filtre d’état est rendu')
+  puce.props.onClick()
+  const ouvert = rerendre()
+
+  // Then chaque valeur porte son compte, et les comptes se recouvrent : la
+  // ligne détachée et sale compte dans les deux états, la ligne cassée dans un seul.
+  const comptes = {}
+  for (const label of findAll(ouvert, 'label').filter((node) => node.props['data-state'] !== undefined)) {
+    const compte = findAll(label, 'span').find((span) => span.props.className === 'missions-status-count')
+    assert.ok(compte, `la valeur ${label.props['data-state']} porte son compte`)
+    comptes[label.props['data-state']] = textOf(compte)
+  }
+  assert.deepEqual(comptes, { clean: '1', dirty: '2', detached: '1', unreadable: '1' })
+})
+
+test('une barre restaurée rouvre la recherche et l’état', () => {
+  // Given la session qui a laissé une recherche et un état
+  const session = memorySession({ 'missions.repositories.filters': '{"query":"116","state":["dirty"]}' })
+  const { inner } = montrerRepositories(scanReady(REPO_SCAN), null, session)
+
+  // Then la barre retrouve sa recherche et son état, et la liste ses deux filtres
+  const lignes = findAll(inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions'], 'la recherche et l’état se cumulent')
+  assert.equal(findAll(inner, 'input').find((node) => node.props['aria-label'] === 'Filter repositories').props.value, '116')
+  assert.ok(findAll(inner, 'button').some((button) => /^Filter by state \(Dirty\)$/.test(button.props['aria-label'])))
+  // L'en-tête reste celui du scan entier, pas celui des lignes gardées
+  assert.match(textOf(inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
+})
+
+test('le même état filtre les clones puis les worktrees, sans que l’en-tête bouge', () => {
+  // Given la session qui garde l'état Dirty, le switch fermé sur les clones
+  const session = memorySession({ 'missions.repositories.filters': '{"query":"","state":["dirty"]}' })
+  const clones = montrerRepositories(scanReady(REPO_SCAN), null, session)
+  const clone = findAll(clones.inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(clone.map((ligne) => ligne.props['data-repository']), ['missions'], 'l’état écarte le clone propre')
+  assert.match(textOf(clones.inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
+
+  // When le switch ouvre les worktrees, la même session porte le même état
+  const ouverts = memorySession({ ...Object.fromEntries(session.entries), 'missions.repositories.worktrees': '1' })
+  const worktrees = montrerRepositories(scanReady(REPO_SCAN), null, ouverts)
+  const worktree = findAll(worktrees.inner, 'button').filter((button) => button.props['data-repository'] !== undefined)
+
+  // Then l'état a suivi le switch, sa liste est filtrée, et l'en-tête reste celui du scan
+  assert.ok(
+    findAll(worktrees.inner, 'button').some((button) => /^Filter by state \(Dirty\)$/.test(button.props['aria-label'])),
+    'le même état est restauré sur les worktrees',
+  )
+  assert.deepEqual(worktree.map((ligne) => ligne.props['data-repository']), ['missions-gh20'])
+  assert.match(textOf(worktrees.inner), /2 repositories · 1 worktree · scanned in 1\.9 s/)
+})
+
+test('aucune ligne ne répond : la barre le dit et son bouton efface', () => {
+  // Given une recherche qui ne garde rien
+  const session = memorySession({ 'missions.repositories.filters': '{"query":"introuvable"}' })
+  const { inner, rerendre } = montrerRepositories(scanReady(REPO_SCAN), null, session)
+
+  // Then l'état vide de la barre, distinct des trois états du genre
+  assert.match(textOf(inner), /No repository matches these filters\./)
+  assert.equal(findAll(inner, 'li').filter((li) => li.props.className === 'missions-repo-rowitem').length, 0)
+  const clear = findAll(inner, 'button').find((button) => textOf(button) === 'Clear filters')
+  assert.ok(clear, 'le bouton de l’état vide')
+  assert.match(textOf(inner), /Show worktrees/, 'le switch reste offert')
+
+  // When on efface
+  clear.props.onClick()
+  const rendu = rerendre()
+  assert.equal(session.entries.has('missions.repositories.filters'), false)
+  const lignes = findAll(rendu, 'button').filter((button) => button.props['data-repository'] !== undefined)
+  assert.deepEqual(lignes.map((ligne) => ligne.props['data-repository']), ['missions', 'zeta'])
 })
 
 test('chaque clone est une ligne : nom, branche, état, dernier commit, âge', () => {
@@ -3671,6 +3817,11 @@ test('une racine qui ne porte que des worktrees le dit, au lieu de paraître vid
   const ferme = montrerRepositories(scanReady(unSeul))
 
   assert.doesNotMatch(textOf(ferme.inner), /No repository in the workspace root\./)
+  assert.equal(
+    findAll(ferme.inner, 'input').some((node) => node.props['aria-label'] === 'Filter repositories'),
+    false,
+    'un genre vide ne monte pas la barre',
+  )
   assert.match(textOf(ferme.inner), /0 repositories · 1 worktree · scanned in 1\.9 s/)
   assert.match(textOf(ferme.inner), /The only worktree of the workspace root is hidden\./)
   assert.match(textOf(ferme.inner), /Show worktrees lists it\. Scanned \/Users\/moi\/projects\./)
@@ -3705,6 +3856,11 @@ test('le switch activé sans worktree le dit, au lieu de rendre les clones', () 
 
   // Then la liste est vide, l'état vide le dit, et le switch reste désactivable
   assert.deepEqual(lignes, [], 'aucun clone ne remplace les worktrees manquants')
+  assert.equal(
+    findAll(rendu.inner, 'input').some((node) => node.props['aria-label'] === 'Filter repositories'),
+    false,
+    'un genre vide ne monte pas la barre',
+  )
   assert.match(textOf(rendu.inner), /2 repositories · scanned in 1\.9 s/)
   assert.match(textOf(rendu.inner), /No worktree in the workspace root\./)
   assert.match(textOf(rendu.inner), /Show worktrees is on: turn it off to see the 2 repositories\./)
@@ -3935,6 +4091,11 @@ test('un scan en échec est un bandeau, une racine vide est un état vide', () =
 
   const vide = montrerRepositories(scanReady({ root: '/Users/moi/projects/vide', count: 0, durationMs: 40, errors: [], repositories: [] }))
   assert.match(textOf(vide.inner), /No repository in the workspace root\./)
+  assert.equal(
+    findAll(vide.inner, 'input').some((node) => node.props['aria-label'] === 'Filter repositories'),
+    false,
+    'une racine vide ne monte pas la barre',
+  )
   assert.match(textOf(vide.inner), /Scanned \/Users\/moi\/projects\/vide\./)
 })
 
