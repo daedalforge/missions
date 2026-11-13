@@ -12,7 +12,11 @@
   `lib/client.js`), `node tools/check-workflows.mjs` (modèle de workflow),
   `node tools/check-standards.mjs` (index des standards).
 - La CI n'est pas le garde-fou principal: les trois vérifications ci-dessus se
-  lancent depuis la session, et `npm test` couvre la suite entière du dépôt.
+  lancent depuis la session, `npm test` compris. C'est l'exception bornée de
+  `standards/code.md`: le lanceur de tests de Node ne rend que ses échecs, sans
+  compilation ni service à démarrer, et la suite entière tourne en une vingtaine
+  de secondes. Un dépôt dont la suite remplit ces conditions n'a rien à gagner à
+  la réserver à la CI.
 
 ## Exécution
 

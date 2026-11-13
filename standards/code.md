@@ -131,18 +131,26 @@ nommer, extraire, typer.
 
 ## Tests
 
-### La suite complète ne se lance pas depuis une session
+### La suite complète ne se lance depuis une session que si son coût est borné
 
-Une session exécute les tests bornés que la fiche demande, l'analyse statique et
-le formateur. Ces deux derniers rendent peu de lignes par construction. La suite
-appartient à la CI, au push.
+Une session exécute les tests que la fiche du dépôt lui nomme, l'analyse statique
+et le formateur. Une suite dont la sortie d'échec n'est pas bornée — compilation,
+services à démarrer, e2e — n'entre pas dans ces tests: elle appartient à la CI, au
+push. Une suite dont la sortie reste de quelques lignes fait partie des gates de
+session, et la fiche du dépôt le dit.
 
 **Raison**: un run vert rend quelques centaines d'octets; le même run en échec
 rend des mégaoctets pour une cause unique, parfois environnementale. La dépense
-n'est pas bornable avant d'être engagée.
+n'est pas bornable avant d'être engagée. Quand elle l'est — un lanceur de tests
+qui ne rend que ses échecs, sans compilation ni service à démarrer —, refuser la
+suite n'achète rien: elle laisse passer une régression que la CI découvrira sur
+une pile de branches.
 
-**Portée**: un échec de suite se découvre au push, sur une pile de branches.
-C'est le prix accepté.
+**Portée**: quelle suite la session lance se lit dans la fiche du dépôt, jamais
+dans le ticket. `standards/repos/missions.md` déclare `npm test` comme gate:
+le lanceur de Node ne rend que ses échecs, et ce dépôt n'a ni compilation ni
+service. Les fiches produit gardent la règle générale: leurs suites ne sont pas
+bornées.
 
 ### Cypress: sélection par `data-cy`, assertion sur attribut
 

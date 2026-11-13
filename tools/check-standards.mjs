@@ -97,10 +97,14 @@ async function main() {
 
   const errors = []
   for (const file of present) {
-    if (!indexed.has(file)) errors.push(`fichier présent mais absent de l'index : ${file}`)
+    if (!indexed.has(file)) {
+      errors.push(`fichier présent mais absent de l'index : ${file}`)
+    }
   }
   for (const file of indexed) {
-    if (!present.includes(file)) errors.push(`fichier indexé mais absent du disque : ${file}`)
+    if (!present.includes(file)) {
+      errors.push(`fichier indexé mais absent du disque : ${file}`)
+    }
   }
 
   for (const step of Object.keys(STANDARDS_STEP_FILES)) {
@@ -124,7 +128,9 @@ async function main() {
   for (const project of projects) {
     const sheet = standardsProject(project.repo) ?? project.id
     const path = `${STANDARDS_DIR}/repos/${sheet}.md`
-    if (!present.includes(path)) errors.push(`projet ${project.id} déclaré sans fiche : ${path}`)
+    if (!present.includes(path)) {
+      errors.push(`projet ${project.id} déclaré sans fiche : ${path}`)
+    }
   }
 
   if (errors.length > 0) {
