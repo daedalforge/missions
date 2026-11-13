@@ -2513,7 +2513,10 @@ test('la bascule ramène le worktree dans le principal, après confirmation, et 
     assert.equal(spy.postes().length, 0)
 
     // La vue arme la relecture, et le panneau ne change pas de volet.
-    assert.ok(rendu.setters.includes(1), 'la liste est relue après le geste')
+    assert.ok(
+      rendu.setters.some((value) => (typeof value === 'function' ? value(0) === 1 : value === 1)),
+      'la liste est relue après le geste',
+    )
     assert.equal(rendu.setters.some((value) => value === 'missions'), false, 'l’onglet Repositories ne bouge pas')
     // La ligne est passée par « en cours » avant de célébrer le résultat.
     const etats = rendu.setters.filter((value) => value && value.name === 'missions-gh20' && value.state)
@@ -2564,7 +2567,10 @@ test('un refus de l’hôte est le bandeau, mot pour mot, et la liste est relue'
     const erreur = rendu.setters.filter((value) => value && value.state === 'error').at(-1)
     assert.ok(erreur, 'la ligne porte l’erreur')
     assert.equal(erreur.message, 'Manager has uncommitted changes (1 file: yarn.lock) — commit or stash them first')
-    assert.ok(rendu.setters.includes(1), 'même un refus relit la liste')
+    assert.ok(
+      rendu.setters.some((value) => (typeof value === 'function' ? value(0) === 1 : value === 1)),
+      'même un refus relit la liste',
+    )
     assert.equal(appels.some((appel) => appel.method === 'POST' && appel.url.includes('adopt')), true)
   } finally {
     globalThis.confirm = vraiConfirm

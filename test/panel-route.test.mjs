@@ -1734,3 +1734,69 @@ test('une panne du tracker répond 502 et ne déplace rien', async (t) => {
     else process.env.GH_TOKEN = before
   }
 })
+
+test('POST repositories/adopt ne supprime pas des fichiers ignorés sans un second oui', async (t) => {
+  const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }])
+  const { run, calls } = fauxGitRun({
+    'gamma worktree list --porcelain': `worktree ${join(root, 'alpha')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n',
+    'alpha status --porcelain=v2 --branch': '# branch.head main\n',
+    'gamma status --porcelain --ignored=matching': '!! node_modules/\n!! .env\n',
+    'gamma switch --detach': '',
+    'alpha switch gh-20-hover': '',
+    [`alpha worktree remove ${join(root, 'gamma')}`]: '',
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const refused = await call(handler, { method: 'POST', path: '/missions/api/repositories/adopt', body: { name: 'gamma' } })
+  assert.equal(refused.status, 409)
+  assert.equal(refused.body.ignored, true, 'le corps dit pourquoi la question est posée')
+  assert.equal(refused.body.side, 'worktree')
+  assert.deepEqual(refused.body.files, ['node_modules', '.env'])
+  assert.match(refused.body.error, /holds 2 ignored entries \(node_modules, \.env\)/)
+  assert.equal(calls.some((line) => line.includes(' switch ')), false, 'le premier refus n’écrit rien')
+
+  const accepted = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/repositories/adopt',
+    body: { name: 'gamma', acceptIgnored: true },
+  })
+  assert.equal(accepted.status, 200)
+  assert.equal(accepted.body.removed, true)
+  assert.equal(accepted.body.branch, 'gh-20-hover')
+})
+
+test('deux POST repositories/adopt ne se chevauchent pas', async (t) => {
+  const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }])
+  const base = fauxGitRun({
+    'gamma worktree list --porcelain': `worktree ${join(root, 'alpha')}\nHEAD 1a2b3c4d\nbranch refs/heads/main\n`,
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n',
+    'alpha status --porcelain=v2 --branch': '# branch.head main\n',
+    'gamma switch --detach': '',
+    'alpha switch gh-20-hover': '',
+    [`alpha worktree remove ${join(root, 'gamma')}`]: '',
+  })
+  // Le vrai git prend des millisecondes : sans verrou, les deux gestes liraient
+  // le même état puis écriraient tous les deux. On compte les chevauchements.
+  let active = 0
+  let peak = 0
+  const run = async (file, args) => {
+    active += 1
+    peak = Math.max(peak, active)
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      return await base.run(file, args)
+    } finally {
+      active -= 1
+    }
+  }
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const [first, second] = await Promise.all([
+    call(handler, { method: 'POST', path: '/missions/api/repositories/adopt', body: { name: 'gamma' } }),
+    call(handler, { method: 'POST', path: '/missions/api/repositories/adopt', body: { name: 'gamma' } }),
+  ])
+  assert.equal(first.status, 200)
+  assert.equal(second.status, 200)
+  assert.equal(peak, 1, 'le second geste attend que le premier ait fini')
+})

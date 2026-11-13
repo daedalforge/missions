@@ -157,3 +157,32 @@ gitTest('le scan d’après ne compte plus qu’un dépôt, sur la branche repri
   assert.equal(apres.repositories[0].kind, 'clone')
   assert.equal(apres.repositories[0].branch, 'feat/x', 'le principal porte la branche reprise')
 })
+
+gitTest('des fichiers ignorés arrêtent la bascule : le dossier les emporterait', async (t) => {
+  const { root, principal, worktree } = await duo(t)
+  // Un worktree « propre » au sens de git peut cacher node_modules, .env, dist :
+  // `worktree remove` les supprime sans un mot, et personne ne les retrouve.
+  await writeFile(join(worktree, '.gitignore'), 'node_modules/\n')
+  await git(worktree, 'add', '.gitignore')
+  await git(worktree, 'commit', '-q', '-m', 'ignore node_modules')
+  await mkdir(join(worktree, 'node_modules'), { recursive: true })
+  await writeFile(join(worktree, 'node_modules', 'junk.js'), 'x\n')
+  assert.equal((await git(worktree, 'status', '--porcelain')).trim(), '', 'git le dit propre')
+
+  const error = await adoptWorktree(root, 'repo-feat').then(() => null, (refusal) => refusal)
+
+  assert.equal(error.status, 409)
+  assert.equal(error.ignored, true)
+  assert.equal(error.side, 'worktree')
+  assert.deepEqual(error.files, ['node_modules'])
+  assert.match(error.message, /^the worktree repo-feat holds 1 ignored entry \(node_modules\)/)
+  assert.equal(await branche(principal), 'main', 'le principal n’a pas bougé')
+  assert.equal(await branche(worktree), 'feat/x')
+  assert.equal(existsSync(join(worktree, 'node_modules', 'junk.js')), true, 'le fichier est intact')
+
+  const consenti = await adoptWorktree(root, 'repo-feat', { acceptIgnored: true })
+
+  assert.equal(consenti.removed, true)
+  assert.equal(await branche(principal), 'feat/x')
+  assert.equal(existsSync(worktree), false, 'consentement donné, le dossier part avec ses ignorés')
+})

@@ -2836,7 +2836,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
      * row is the button — the tab's job is to get a repository open, not to
      * list it completely.
      */
-    function RepositoryRow({ repository, now, onOpen, onAdopt, adopting }) {
+    function RepositoryRow({ repository, now, onOpen, onAdopt, adopting, blocked = false }) {
       const state = repositoryState(repository)
       const branch = repositoryBranch(repository)
       const commit = repositoryCommit(repository)
@@ -2881,7 +2881,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               title: switchTitle,
               'aria-label': mainName ? `Bring ${repository.name} into ${mainName}` : 'Bring the worktree into its main checkout',
               'aria-busy': adopting ? 'true' : 'false',
-              disabled: !mainName || adopting,
+              disabled: !mainName || adopting || blocked,
               onClick: mainName ? () => onAdopt(repository) : undefined,
             }, h(MainWorktreeIcon))
           : h('span', { className: 'missions-repo-main-slot', 'aria-hidden': 'true' }),
@@ -2949,35 +2949,55 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         if (!worktree || !worktree.main?.name) return
         const mainName = worktree.main.name
         const branch = worktree.branch || 'its branch'
-        const question = `Bring ${branch} into ${mainName}?\n\n${mainName} will check out ${branch}, and the worktree ${worktree.name} (${worktree.path}) will be removed. Both trees must be clean: one uncommitted change refuses the switch.`
-        const scope = typeof globalThis.confirm === 'function' ? globalThis : (typeof window !== 'undefined' && typeof window.confirm === 'function' ? window : null)
-        if (scope && !scope.confirm(question)) return
-        track('repository.adopt', worktree.name)
-        setAdoption({ name: worktree.name, state: 'running', message: `Bringing ${branch} into ${mainName}…` })
-        try {
+        const ask = (question) => {
+          const scope = typeof globalThis.confirm === 'function' ? globalThis : (typeof window !== 'undefined' && typeof window.confirm === 'function' ? window : null)
+          return !scope || scope.confirm(question)
+        }
+        const post = async (acceptIgnored) => {
           const response = await fetch(REPOSITORY_ADOPT_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ name: worktree.name }),
+            body: JSON.stringify(acceptIgnored ? { name: worktree.name, acceptIgnored: true } : { name: worktree.name }),
           })
-          const data = await response.json().catch(() => ({}))
-          if (!response.ok) throw new Error(data?.error ?? `switch failed (${response.status})`)
-          const held = data.branch ?? branch
-          const where = data.main?.name ?? mainName
+          const body = await response.json().catch(() => ({}))
+          return { response, body }
+        }
+
+        const question = `Bring ${branch} into ${mainName}?\n\n${mainName} will check out ${branch}, and the worktree ${worktree.name} (${worktree.path}) will be removed. Both trees must be clean: one uncommitted change refuses the switch.`
+        if (!ask(question)) return
+        track('repository.adopt', worktree.name)
+        setAdoption({ name: worktree.name, state: 'running', message: `Bringing ${branch} into ${mainName}…` })
+        try {
+          let { response, body } = await post(false)
+          // Ignored files go with the folder without git saying so: the host
+          // names them, and a second yes is what deletes them.
+          if (!response.ok && body?.ignored) {
+            const held = Array.isArray(body.files) && body.files.length ? ` (${body.files.join(', ')})` : ''
+            const noun = body.files?.length === 1 ? 'entry' : 'entries'
+            if (!ask(`${worktree.name} also holds ignored ${noun}${held} that git deletes with the folder.\n\nRemove them with it?`)) {
+              setAdoption({ name: worktree.name, state: 'error', message: `Nothing was removed: ${worktree.name} still holds ignored ${noun}.` })
+              return
+            }
+            ;({ response, body } = await post(true))
+          }
+          if (!response.ok) throw new Error(body?.error ?? `switch failed (${response.status})`)
+          const held = body.branch ?? branch
+          const where = body.main?.name ?? mainName
           setAdoption({
             name: worktree.name,
-            state: data.removed === false ? 'partial' : 'done',
-            message: data.removed === false
-              ? `${where} now holds ${held}, but the worktree ${worktree.name} stayed${data.reason ? `: ${data.reason}` : '.'}`
+            state: body.removed === false ? 'partial' : 'done',
+            message: body.removed === false
+              ? `${where} now holds ${held}, but the worktree ${worktree.name} stayed${body.reason ? `: ${body.reason}` : '.'}`
               : `${where} now holds ${held}; the worktree ${worktree.name} is gone.`,
           })
-          // The drawer of that worktree has no folder left to describe.
-          onAdopted(worktree)
+          // The drawer of that worktree has no folder left to describe — but a
+          // folder git kept still has one.
+          if (body.removed !== false) onAdopted(worktree)
         } catch (error) {
           setAdoption({ name: worktree.name, state: 'error', message: error?.message ?? String(error) })
         }
         // A refusal changed nothing, a partial switch did: read again anyway.
-        setReload(reload + 1)
+        setReload((value) => value + 1)
       }
 
       const running = adoption?.state === 'running' ? adoption.name : null
@@ -3012,7 +3032,7 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                 h('span', { className: 'missions-repo-headmain' }),
               ),
               h('ul', { className: 'missions-rows' },
-                repositories.map((repository) => h(RepositoryRow, { key: repository.name, repository, now, onOpen, onAdopt: adoptWorktree, adopting: running === repository.name })),
+                repositories.map((repository) => h(RepositoryRow, { key: repository.name, repository, now, onOpen, onAdopt: adoptWorktree, adopting: running === repository.name, blocked: running !== null })),
               ),
             ),
         missing.length > 0
