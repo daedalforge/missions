@@ -166,6 +166,9 @@ window.__ModuleLoader__.load({
     }
 
     const LIST_URL = 'missions/api/list'
+    // The Done tab's badge reads this count at mount. The closed lines stay on
+    // demand, behind `?done=1` on the list route above.
+    const DONE_COUNT_URL = 'missions/api/done/count'
     const DECLARE_URL = 'missions/api/branches'
     const BLOCKED_URL = 'missions/api/blocked'
     const PRIORITY_URL = 'missions/api/priority'
@@ -257,15 +260,17 @@ window.__ModuleLoader__.load({
 
     // Each tab declares what it reads: the tracker tabs share one read, so one
     // failure speaks for both. `badge` names the count the tab carries: the
-    // open missions the list already holds, or the root's repositories, read
-    // on its own route. Done reads the tracker too, but in its own perimeter:
-    // closed missions the machine declares, with a bar and a read of their own.
+    // open missions the list already holds, the root's repositories, read on
+    // its own route, or the declared closed missions, counted at mount by their
+    // own route. Done also reads the tracker, in its own perimeter — closed
+    // missions the machine declares, with a bar and a read of their own, paid
+    // when the tab opens.
     // Settings reads neither the tracker nor the open list: its sections carry
     // their own source, so no perimeter is declared here.
     const TABS = [
       { id: 'dashboard', label: 'Dashboard', source: 'tracker' },
       { id: 'missions', label: 'Missions', source: 'tracker', badge: 'missions' },
-      { id: 'done', label: 'Done', source: 'tracker' },
+      { id: 'done', label: 'Done', source: 'tracker', badge: 'done' },
       // The repositories tab reads the host, not the tracker: it declares its
       // own source, so it never wears the tracker's banner.
       { id: 'repositories', label: 'Repositories', source: 'host', badge: 'repositories' },
@@ -3893,11 +3898,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // The repository whose drawer is open, and only while the repositories
       // tab is the open one: the tab switch below clears it.
       const [repository, setRepository] = React.useState(null)
-      // Done is a view of its own: its own bar, its own rows, its own failures.
-      // These states come after the open list's so the order above — and the
-      // session each state restores — does not move.
+      // Done is a view of its own: its own bar, its own rows, its own failures,
+      // and the count its badge carries. These states come after the open
+      // list's so the order above — and the session each state restores — does
+      // not move.
       const [doneRestored] = React.useState(() => filterBarState(readFilterSnapshot(filterStorage(), DONE_FILTERS_KEY, { allowDone: true }), { allowDone: true }))
-      const [doneView, setDoneView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
+      const [doneView, setDoneView] = React.useState({ loading: true, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null })
       const [doneQuery, setDoneQuery] = React.useState(doneRestored.query)
       // The status of Done is not a choice: the view is closed work, and its bar
       // fixes the value instead of offering the other states.
@@ -3961,7 +3967,9 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
 
       // The closed read has its own perimeter and its own cache: `?done=1` asks
       // the server for the declared closed missions, and refresh keeps that
-      // perimeter too instead of mixing it with the open list.
+      // perimeter too instead of mixing it with the open list. A read that came
+      // back whole proves the badge's number on the same perimeter; a partial
+      // or failed one leaves the count where it was.
       const loadDone = React.useCallback(({ silent = false, refresh = false } = {}) => {
         if (!silent) setDoneView((previous) => ({ ...previous, loading: true }))
         const url = `${LIST_URL}?done=1${refresh ? '&refresh=1' : ''}`
@@ -3969,7 +3977,18 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           .then((response) => response.json())
           .then((data) => {
             if (data?.error) throw new Error(data.error)
-            setDoneView({ loading: false, missions: data?.missions ?? [], errors: data?.errors ?? [], workspaceId: data?.workspaceId ?? null, workspaceRoot: data?.workspaceRoot ?? null })
+            const missions = data?.missions ?? []
+            const errors = data?.errors ?? []
+            setDoneView((previous) => ({
+              loading: false,
+              missions,
+              errors,
+              workspaceId: data?.workspaceId ?? null,
+              workspaceRoot: data?.workspaceRoot ?? null,
+              count: errors.length === 0
+                ? missions.filter((mission) => mission.state === 'done').length
+                : previous.count,
+            }))
           })
           .catch((error) => {
             setDoneView((previous) => ({
@@ -3978,8 +3997,26 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               workspaceRoot: previous.workspaceRoot,
               missions: silent ? previous.missions : [],
               errors: [{ project: 'panel', message: error?.message ?? 'read failed' }],
+              count: previous.count,
             }))
           })
+      }, [])
+
+      // The Done badge's number, read at mount: the tab must answer without
+      // being opened, and the route costs no closed read. Only a whole answer
+      // sets it — a failure or a partial read keeps the count already shown, so
+      // the tab never blanks or proves a number the panel does not have.
+      const loadDoneCount = React.useCallback(() => {
+        return fetch(DONE_COUNT_URL, { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => {
+            if (Array.isArray(data?.errors) && data.errors.length > 0) return
+            const count = Number(data?.count)
+            if (Number.isInteger(count) && count >= 0) {
+              setDoneView((previous) => ({ ...previous, count }))
+            }
+          })
+          .catch(() => { /* the badge keeps the count it has */ })
       }, [])
 
       // The badge's count costs no git process, so the panel reads it at mount
@@ -3996,15 +4033,17 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           .catch(() => { /* the badge keeps the count it has */ })
       }, [])
 
-      // The count is read at mount too: the badge must answer without the tab
-      // being opened, and the route costs no git process.
+      // Both counts are read at mount too: a badge must answer without its tab
+      // being opened, and neither route pays a git process or a closed line.
       React.useEffect(() => {
         load()
+        loadDoneCount()
         loadRepositoryCount()
-      }, [load, loadRepositoryCount])
+      }, [load, loadDoneCount, loadRepositoryCount])
 
       // Opening Done pays the closed read once; the server caches it for 60 s.
-      // The panel never reads closed work at mount, whichever tab it lands on.
+      // The panel never reads closed lines at mount, whichever tab it lands on:
+      // their count is the only thing read there, on the route above.
       React.useEffect(() => {
         if (tab !== 'done') return undefined
         loadDone()
@@ -4038,8 +4077,8 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       // list, so they share its failure too. The source is declared above, by
       // the tab or by the Settings section, never copied into a condition.
       const failed = activeErrors.length > 0
-      // The header and the tab badge count open work: a done mission the Done
-      // view shows is history, not a mission waiting on anyone.
+      // The header and the Missions badge count open work: a done mission the
+      // Done view shows is history, not a mission waiting on anyone.
       const openMissions = missions.filter((mission) => mission.state !== 'done')
       const projectCount = new Set(openMissions.map((mission) => mission.project).filter(Boolean)).size
       const changeTheme = (value) => {
@@ -4095,15 +4134,21 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         ))
       }
       // Archiving takes the folder out of Done: the row leaves both copies at
-      // once, the drawer closes, and the closed read refreshes without asking
-      // the tracker for a key the machine no longer declares.
+      // once, the badge drops it without waiting, the drawer closes, and the
+      // closed read refreshes without asking the tracker for a key the machine
+      // no longer declares.
       const applyArchive = (archived) => {
         const drop = (previous) => ({
           ...previous,
           missions: previous.missions.filter((mission) => mission.key !== archived.key),
         })
+        // The count follows the row at once, then the fresh read confirms it.
+        const dropCount = (previous) => ({
+          ...previous,
+          count: typeof previous.count === 'number' && previous.count > 0 ? previous.count - 1 : previous.count,
+        })
         setView(drop)
-        setDoneView(drop)
+        setDoneView((previous) => dropCount(drop(previous)))
         setSelected(null)
         loadDone({ silent: true, refresh: true })
       }
@@ -4198,11 +4243,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setSettingsView(next)
       }
 
-      // A tab carries the count its badge names. The repositories count is
-      // `null` until the host answers, so the tab draws no badge before that
-      // first read: a zero nobody proved is not a count.
+      // A tab carries the count its badge names. Done's count and the
+      // repositories count are `null` until the host answers, so the tab draws
+      // no badge before that first read: a zero nobody proved is not a count.
       const tabBadge = (entry) => {
         if (entry.badge === 'missions') return openMissions.length
+        if (entry.badge === 'done') return typeof doneView.count === 'number' ? doneView.count : null
         if (entry.badge === 'repositories') return repositoryCount
         return null
       }
