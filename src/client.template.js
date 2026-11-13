@@ -2551,6 +2551,15 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           h('path', { d: 'M3 12.6 8 8l4.9 4.6' }),
         )
       }
+      if (name === 'squash') {
+        // Three lines meeting on one line: the branch's commits folded into a
+        // single commit, without losing what they carried.
+        return h('svg', common,
+          h('path', { d: 'M2.5 3.6 7.4 7.6' }),
+          h('path', { d: 'M2.5 12.4 7.4 8.4' }),
+          h('path', { d: 'M7.4 8h6.1' }),
+        )
+      }
       // A play triangle: the step that moves the ticket.
       return h('svg', common, h('path', { d: 'M5.2 3.3 12.6 8l-7.4 4.7Z' }))
     }
@@ -3186,6 +3195,34 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         }
       }
 
+      // Le second geste du volet : replier la branche de mission en un commit,
+      // dans le workspace dont le chemin est ce dépôt. Le panneau n'écrit pas
+      // de git : le prompt demande, la session replie. Le bouton garde sa
+      // place tant que le détail est inconnu — le geste ne bouge pas, il
+      // attend ou dit pourquoi il ne peut pas.
+      const squashLabel = 'Squash the mission branch into one commit'
+      const squashBlocker = detail.loading
+        ? 'Reading the repository…'
+        : detail.error
+          ? 'The repository could not be read'
+          : shown.detached || !shown.branch
+            ? 'Detached HEAD — no branch to squash'
+            : null
+      const squashPrompt = repositorySquashPrompt(shown)
+      const openSquashSession = async () => {
+        track('repository.squash')
+        try {
+          const { prefilledBy, openedBy, uiError } = await openMissionSession(services, squashPrompt, workspaceId, shown.path)
+          if (uiError) {
+            setNote(`Session not opened: ${uiError}`)
+          } else if (!openedBy && !prefilledBy) {
+            setNote('Session created — pick it in the sidebar.')
+          }
+        } catch (error) {
+          setNote(`Session not opened: ${error?.message ?? error}`)
+        }
+      }
+
       return h('aside', {
         className: 'missions-drawer',
         role: 'complementary',
@@ -3248,9 +3285,10 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                     ),
         ),
         // The footer is the mission drawer's: the same classes, the same icon
-        // family, so the gesture reads as one of the panel's actions. The
-        // button stays visible without a known conflict — the scan does not
-        // read one, and the prompt says what to do when there is none.
+        // family, so the gestures read as one of the panel's actions. Each
+        // button stays visible without its precondition — the scan does not
+        // read a conflict, and a loading detail has no branch — and the prompt
+        // says what to do when there is nothing to resolve or fold.
         h('div', { className: 'missions-drawer-foot' },
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
           h('div', { className: 'missions-drawer-actions' },
@@ -3261,6 +3299,14 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
               title: 'Resolve conflicts',
               'aria-label': 'Resolve conflicts',
             }, h(ActionIcon, { name: 'resolve' })),
+            h('button', {
+              type: 'button',
+              className: 'missions-action missions-action--icon missions-action--primary',
+              onClick: openSquashSession,
+              disabled: squashBlocker !== null,
+              title: squashBlocker ?? squashLabel,
+              'aria-label': squashBlocker ?? squashLabel,
+            }, h(ActionIcon, { name: 'squash' })),
           ),
         ),
       )
