@@ -54,8 +54,9 @@ déclaré sur le poste (`missions/<clé>/mission.yml`), avec sa propre barre de
 filtres et son propre cache. Sans dossier déclaré, aucune mission close n'est
 même lue ; l'onglet affiche « No done mission declared on this machine. ».
 Sa **pastille** affiche le nombre de ces missions closes déclarées : ce compte
-se lit au montage, sur sa propre route, sans ouvrir l'onglet ni payer la liste
-close — les lignes, elles, restent lues à la demande.
+se lit au montage, sur sa propre route, sans ouvrir l'onglet ni transporter les
+lignes — la lecture close qu'il paie est celle de Done, partagée quand l'onglet
+s'ouvre, et les lignes restent demandées à l'ouverture.
 
 Depuis cet onglet, une mission close peut être **archivée** : son dossier passe
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas

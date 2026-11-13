@@ -280,14 +280,19 @@ projects:
   }
 })
 
-test('le compte et les lignes de Done partagent leur lecture', async (t) => {
+test('le compte et les lignes de Done partagent leur lecture au montage', async (t) => {
   const appels = []
   const fetchImpl = async (url) => {
     const href = String(url)
     appels.push(href)
     const json = (body) => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) })
     if (href.endsWith('/user')) return json({ login: 'me' })
-    if (href.includes('state=closed')) return json([{ number: 9, state: 'closed', title: 'Close', labels: [] }])
+    if (href.includes('state=closed')) {
+      // La lecture close est lente : les deux routes partent avant qu'aucune
+      // n'ait rempli le cache, comme au montage sur Done.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      return json([{ number: 9, state: 'closed', title: 'Close', labels: [] }])
+    }
     return json([])
   }
   const { dir, handler } = await mount(t, { fetchImpl })
@@ -326,24 +331,27 @@ projects:
   const before = process.env.GH_TOKEN
   process.env.GH_TOKEN = 'test-token'
   try {
-    clearCache()
-    // L'onglet Done ouvert d'abord : sa lecture est mise en cache pour le compte.
-    const lignes = await call(handler, { path: '/missions/api/list?done=1' })
-    assert.equal(lignes.body.missions.length, 1)
-    const closes = appels.filter((href) => href.includes('state=closed')).length
-    const compte = await call(handler, { path: '/missions/api/done/count' })
-    assert.equal(compte.body.count, 1)
-    assert.equal(appels.filter((href) => href.includes('state=closed')).length, closes, 'le compte ne relit pas les closes')
-
-    // Le compte d'abord : la liste close, elle, relit quand elle est demandée
-    // avec refresh — mais la lecture simple partage encore l'entrée.
+    // Au montage sur Done, l'effet de montage et l'ouverture de l'onglet
+    // partent ensemble : une seule lecture close doit être payée.
     clearCache()
     appels.length = 0
-    await call(handler, { path: '/missions/api/done/count' })
-    const apresCompte = appels.filter((href) => href.includes('state=closed')).length
-    const relue = await call(handler, { path: '/missions/api/list?done=1' })
-    assert.equal(relue.body.missions.length, 1)
-    assert.equal(appels.filter((href) => href.includes('state=closed')).length, apresCompte)
+    const [compte, lignes] = await Promise.all([
+      call(handler, { path: '/missions/api/done/count' }),
+      call(handler, { path: '/missions/api/list?done=1' }),
+    ])
+    assert.deepEqual(compte.body, { count: 1, errors: [] })
+    assert.equal(lignes.body.missions.length, 1)
+    assert.equal(appels.filter((href) => href.includes('state=closed')).length, 1, 'les deux routes partagent une seule lecture close')
+
+    // Une lecture déjà terminée reste partagée par les deux routes.
+    clearCache()
+    appels.length = 0
+    const premieres = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.equal(premieres.body.missions.length, 1)
+    const closes = appels.filter((href) => href.includes('state=closed')).length
+    const apres = await call(handler, { path: '/missions/api/done/count' })
+    assert.deepEqual(apres.body, { count: 1, errors: [] })
+    assert.equal(appels.filter((href) => href.includes('state=closed')).length, closes, 'le compte ne relit pas les closes')
   } finally {
     if (before === undefined) delete process.env.GH_TOKEN
     else process.env.GH_TOKEN = before
