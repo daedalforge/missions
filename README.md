@@ -29,14 +29,14 @@ tracker sont déclarés une fois dans [`missions/projects.yml`](missions/project
   elle vit, le gabarit qui la décrit, et le tableau des projets.
 - [`workflows/`](workflows/README.md) — le parcours : une page par étape, plus
   la table de correspondance entre états du workflow et états du tracker.
-- [`playbook/`](playbook/README.md) — le mode d'emploi par étape : l'ordre des
-  gestes, les commandes exactes, les pièges observés et la preuve de sortie.
-  Son contrat de lecture dit quelle page chaque étape lit ; le prompt de session
-  nomme cette page, et la session la suit au lieu de redériver la recette.
+- [`playbook/`](playbook/README.md) — le mode d'emploi par étape : la recette,
+  les règles (code, revue, interdits) et la fiche du dépôt. Son contrat de
+  lecture dit quelle page chaque étape lit ; le prompt de session nomme cette
+  page, et la session la suit au lieu de redériver la recette.
 
-`workflows/` dit **quoi** faire, `playbook/` dit **comment** le faire, et les
-règles (code, revue, interdits) vivent dans `standards/`. Une page de playbook
-renvoie à ces documents, elle ne les recopie pas.
+`workflows/` dit **quoi** faire et garde les états ; `playbook/` dit **comment**,
+**sous quelles règles** et **dans quel dépôt**. Une page de playbook ne recopie
+pas `workflows/`, elle le cite.
 
 ## Le plugin
 

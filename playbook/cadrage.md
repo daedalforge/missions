@@ -52,10 +52,51 @@ Transformer un ticket vague en mission exécutable, et s'arrêter là.
 - `missions/<dossier>/mission.yml`, `journal.md` et `checklist.md` existent.
 - La branche et la base proposées sont notées dans `mission.yml` et validées.
 
-## Où lire les règles
+## Les règles
 
-- [`workflows/cadrage.md`](../workflows/cadrage.md) — l'étape que la page met
-  en œuvre.
-- [`standards/README.md`](../standards/README.md) — le contrat de lecture.
-- [`standards/repos/missions.md`](../standards/repos/missions.md) — commandes et
-  conventions du dépôt.
+Communs à toutes les étapes — les treize sont dans
+[`workspace.md`](workspace.md#les-règles) :
+
+- **Aucun push sur `main` ni sur une branche protégée** (interdit 1).
+- **Aucun force-push** (interdit 2).
+- **Aucun merge de PR** (interdit 3).
+- **Aucun `Approve` sur une PR** (interdit 4).
+
+Ce que le cadrage ajoute :
+
+- **Aucune exécution pendant le cadrage** (interdit 12) : ni branche, ni commit,
+  ni PR tant que le ticket est `to-refine`. Le cadrage lit, décrit, négocie —
+  il ne corrige pas.
+- **Le ticket se lit au CLI**, jamais sa page HTML : une page `github.com` pèse
+  ~350 Ko et se fait tronquer, un corps partiel se travaille sans qu'on le
+  sache.
+- **La fiche suit le gabarit** : proposition de valeur, périmètre,
+  hors-périmètre, critères d'acceptation numérotés et observables, risques. Un
+  CA qui ne se vérifie pas n'est pas un CA.
+- **Un ticket = une branche = une PR** : une demande qui ne tient pas dans une
+  PR se découpe en plusieurs tickets.
+- **La branche et la base sont déclarées** dans `missions/<dossier>/mission.yml`
+  et validées par le demandeur avant `ready` ; aucune branche n'est créée ici.
+- **Un seul label d'état** : `ready` remplace `to-refine`, et l'invariant se
+  vérifie à la pose.
+- **Le cadrage n'écrit pas dans le dépôt** (interdit 6) : `missions/*/` reste
+  ignoré par git, rien ne part dans la branche.
+- **Rien hors de `~/projects`** (interdit 13), **aucun secret** (interdit 7).
+
+## La fiche du dépôt
+
+La base n'est pas fixée ici : elle est déclarée dans
+`missions/<dossier>/mission.yml`. Les cinq dépôts sans projet déclaré sont
+marqués « non déclaré » ; le cadrage n'en promet ni branche ni revue sans le
+dire dans les risques.
+
+| Dépôt | Ce que le cadrage en lit | Tracker |
+| --- | --- | --- |
+| `missions` | `AGENTS.md`, `playbook/`, `workflows/`, `test/`, le gabarit de mission | GitHub (`daedalforge/missions`) |
+| `manager` | `README.md`, `package.json`, `tsconfig`, `cypress/`, le design system | Jira (`saas-office.atlassian.net`, SO) |
+| `connect` | `README.md`, `composer.json`, `tests/`, `assets/` | Jira (`saas-office.atlassian.net`, SOC) |
+| `clienthub` | non déclaré ; Flutter, `pubspec.yaml`, `test/` | non déclaré |
+| `backend` | non déclaré ; PHP, API Platform, `tests/` | non déclaré |
+| `core-service` | non déclaré ; Symfony, `tests/` | non déclaré |
+| `marketplace-service` | non déclaré ; Symfony 7.4, API Platform 4, `tests/` | non déclaré |
+| `ticketing-service` | non déclaré ; Symfony, `tests/` | non déclaré |

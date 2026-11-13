@@ -5,32 +5,17 @@ import { fileURLToPath } from 'node:url'
 
 import { PLAYBOOK_DIR, PLAYBOOK_STEP_FILES, PLAYBOOK_WORKSPACE, playbookFile } from '../lib/view.js'
 
-/**
- * Check the playbook against the files on disk, its index and the prompts.
- *
- * Four things can drift apart: the pages under `playbook/`, the index table of
- * `playbook/README.md`, the files the panel names for a step
- * (`PLAYBOOK_STEP_FILES` in `lib/view.js`), and the shape of each page — the
- * five sections, the entry/exit line, the `workflows/` document and the
- * `standards/` paths it names. This command fails when they do. Every error
- * names the file or the step so it can be fixed without guessing.
- *
- * Usage: `node tools/check-playbook.mjs [--root <dir>]`; the root defaults to
- * the package root, which is what the test copies into a temporary folder to
- * prove a missing or extra page fails.
- */
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url))
 
-/** The five sections every page carries, in order. */
 const SECTIONS = [
   "## Avant d'agir",
   "## Les gestes, dans l'ordre",
   '## Pièges observés',
   '## Preuve de sortie',
-  '## Où lire les règles',
+  '## Les règles',
+  '## La fiche du dépôt',
 ]
 
-/** The states a page declares, as the workflow model names them. */
 const STATES = {
   cadrage: { entry: 'to-refine', exit: 'ready' },
   'exécution': { entry: 'ready', exit: 'in-review' },
@@ -38,7 +23,6 @@ const STATES = {
   'clôture': { entry: 'ready-for-prod', exit: 'done' },
 }
 
-/** The `workflows/` document each step page puts into practice. */
 const WORKFLOW_DOCS = {
   cadrage: 'workflows/cadrage.md',
   'exécution': 'workflows/execution.md',
@@ -46,7 +30,19 @@ const WORKFLOW_DOCS = {
   'clôture': 'workflows/cloture.md',
 }
 
-const MAX_LINES = 80
+const REPOS = [
+  'missions',
+  'manager',
+  'connect',
+  'clienthub',
+  'backend',
+  'core-service',
+  'marketplace-service',
+  'ticketing-service',
+]
+
+const MAX_LINES = 200
+const INTERDICTS = 13
 
 function rootFromArgs(argv) {
   if (argv.length === 0) {
@@ -60,7 +56,6 @@ function rootFromArgs(argv) {
   return resolve(process.cwd(), value)
 }
 
-/** Every page under `playbook/` except the README, as repository-relative paths. */
 async function listPages(root) {
   const pages = []
   async function walk(folder) {
@@ -89,7 +84,6 @@ async function listPages(root) {
   return pages.sort()
 }
 
-/** The pages the README indexes: a table row whose first cell is a path. */
 function indexedPages(readme) {
   const pages = new Set()
   for (const line of readme.split('\n')) {
@@ -101,7 +95,6 @@ function indexedPages(readme) {
   return pages
 }
 
-/** The page each step reads, from the README's reading-contract table. */
 function contractRows(readme) {
   const rows = new Map()
   for (const line of readme.split('\n')) {
@@ -118,7 +111,6 @@ function contractRows(readme) {
   return rows
 }
 
-/** The body of each `## ` section, keyed by its exact heading. */
 function sections(source) {
   const bodies = new Map()
   let current = null
@@ -136,10 +128,17 @@ function sections(source) {
   return new Map([...bodies].map(([name, lines]) => [name, lines.join('\n')]))
 }
 
-/** The step a page belongs to, or null for the workspace page. */
 function stepOfPage(page) {
   const file = basename(page)
   return Object.keys(PLAYBOOK_STEP_FILES).find((step) => PLAYBOOK_STEP_FILES[step] === file) ?? null
+}
+
+function numberedItems(body) {
+  return body
+    .split('\n')
+    .map((line) => /^(\d+)\.\s/.exec(line))
+    .filter(Boolean)
+    .map((match) => Number(match[1]))
 }
 
 function checkPage(page, source, errors) {
@@ -154,14 +153,19 @@ function checkPage(page, source, errors) {
     }
   }
 
-  const rules = bodies.get('## Où lire les règles') ?? ''
-  if (!/standards\/[\w./-]+\.md/.test(rules)) {
-    errors.push(`${page} : la section « Où lire les règles » ne nomme aucun chemin standards/`)
+  const fiche = bodies.get('## La fiche du dépôt') ?? ''
+  for (const repo of REPOS) {
+    if (!fiche.includes(`\`${repo}\``)) {
+      errors.push(`${page} : la fiche du dépôt ne nomme pas \`${repo}\``)
+    }
   }
+
   const step = stepOfPage(page)
   if (step === null) {
-    if (!rules.includes('workflows/')) {
-      errors.push(`${page} : la section « Où lire les règles » ne nomme aucun document workflows/`)
+    const rules = bodies.get('## Les règles') ?? ''
+    const items = numberedItems(rules)
+    if (items.length !== INTERDICTS || items.some((item, index) => item !== index + 1)) {
+      errors.push(`${page} : la section « Les règles » ne numérote pas les ${INTERDICTS} interdits`)
     }
     return
   }
@@ -177,8 +181,8 @@ function checkPage(page, source, errors) {
   }
 
   const document = WORKFLOW_DOCS[step] ?? null
-  if (document && !rules.includes(document)) {
-    errors.push(`${page} : la section « Où lire les règles » ne nomme pas ${document}`)
+  if (document && !source.includes(document)) {
+    errors.push(`${page} : la page ne nomme pas ${document}`)
   }
 }
 
