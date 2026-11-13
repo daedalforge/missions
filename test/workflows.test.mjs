@@ -8,8 +8,11 @@ import YAML, { parse } from 'yaml'
 
 import { loadProjects } from '../lib/projects.js'
 import {
+  STATUS_STATES,
   WORKFLOWS,
+  createWorkflow,
   fileModel,
+  isWorkflowKey,
   loadWorkflows,
   readHeadings,
   readWorkflow,
@@ -62,14 +65,21 @@ function codes(result) {
   return result.errors.map((error) => error.code)
 }
 
-test('les quatre modèles du dépôt sont valides et concordent avec leurs documents', async () => {
+test('les cinq modèles du dépôt sont valides et concordent avec leurs documents', async () => {
   const { workflows } = await loadWorkflows(MODELS, { states: STATES })
 
-  assert.equal(workflows.length, 4)
-  assert.deepEqual(workflows.map((entry) => entry.workflow), WORKFLOWS)
+  assert.equal(workflows.length, 5)
+  assert.deepEqual(workflows.map((entry) => entry.workflow), [...WORKFLOWS, 'statuts'])
   for (const entry of workflows) {
     assert.deepEqual(entry.errors, [], `${entry.workflow} : ${JSON.stringify(entry.errors)}`)
     assert.deepEqual(entry.orphanSections, [])
+    assert.ok(entry.kind === 'statuts' || entry.kind === 'etape')
+    if (entry.kind === 'statuts') {
+      // Le workflow des statuts est le vocabulaire lui-même, dans son ordre.
+      assert.deepEqual(entry.nodes.map((node) => node.id), STATES)
+      assert.ok(entry.nodes.every((node) => node.label && node.description && node.tracker))
+      continue
+    }
     assert.ok(entry.nodes.length >= 10, `${entry.workflow} porte ses gestes`)
     assert.ok(entry.edges.length >= entry.nodes.length, `${entry.workflow} porte ses arcs`)
     // Chaque geste vient d'un titre du document : c'est la concordance.
@@ -245,4 +255,191 @@ test('fileModel ordonne les clés et retire les champs vides', () => {
   const positions = ['workflow:', 'title:', 'document:', 'entry:', 'exit:', 'nodes:', 'edges:'].map((key) => ordered.indexOf(key))
   assert.deepEqual([...positions].sort((a, b) => a - b), positions, 'les clés sortent dans l’ordre du schéma')
   assert.ok(!ordered.includes('gate:'), 'un champ vide ne s’écrit pas')
+})
+
+/** Le workflow des statuts : six états canoniques, une chaîne d'événements. */
+function statuts(over = {}) {
+  return {
+    workflow: 'statuts',
+    kind: 'statuts',
+    title: 'Statuts des missions',
+    document: 'workflows/statuts.md',
+    entry: 'to-refine',
+    exit: ['done'],
+    nodes: STATES.map((id) => ({ id, label: id, description: `L'état ${id}.`, tracker: `label ${id}` })),
+    edges: [
+      { from: 'to-refine', to: 'ready' },
+      { from: 'ready', to: 'in-progress' },
+      { from: 'in-progress', to: 'in-review' },
+      { from: 'in-review', to: 'ready-for-prod' },
+      { from: 'ready-for-prod', to: 'done' },
+    ],
+    ...over,
+  }
+}
+
+function valideStatuts(doc) {
+  return validateModel(doc, { headings: [], states: STATES, workflow: 'statuts' })
+}
+
+test('un workflow de statuts valide suit le vocabulaire et son ordre', () => {
+  const result = valideStatuts(statuts())
+
+  assert.deepEqual(result.errors, [])
+  assert.deepEqual(result.orphanSections, [])
+})
+
+test('un état inconnu, un doublon ou un ordre faux sont refusés dans les statuts', () => {
+  const inconnu = statuts()
+  inconnu.nodes[0] = { ...inconnu.nodes[0], id: 'refined' }
+  assert.ok(codes(valideStatuts(inconnu)).includes('etat-inconnu'))
+
+  const double = statuts()
+  double.nodes[1] = { ...double.nodes[1], id: 'to-refine' }
+  assert.ok(codes(valideStatuts(double)).includes('id-double'))
+
+  const desordre = statuts()
+  desordre.nodes = [desordre.nodes[1], desordre.nodes[0], ...desordre.nodes.slice(2)]
+  assert.ok(codes(valideStatuts(desordre)).includes('etats-desordonnes'))
+})
+
+test('un arc de statuts inconnu, une boucle ou un double arc sont refusés', () => {
+  const orphelin = statuts({ edges: [...statuts().edges, { from: 'done', to: 'shipped' }] })
+  assert.ok(codes(valideStatuts(orphelin)).includes('arc-orphelin'))
+
+  const boucle = statuts({ edges: [...statuts().edges, { from: 'ready', to: 'ready' }] })
+  assert.ok(codes(valideStatuts(boucle)).includes('arc-boucle'))
+
+  const double = statuts({ edges: [...statuts().edges, { from: 'to-refine', to: 'ready' }] })
+  assert.ok(codes(valideStatuts(double)).includes('arc-double'))
+})
+
+test('un genre inconnu ou une clé de geste dans les statuts sont refusés', () => {
+  const genre = statuts({ kind: 'autre' })
+  assert.ok(codes(valideStatuts(genre)).includes('genre-inconnu'))
+
+  const doc = statuts()
+  doc.nodes[0] = { ...doc.nodes[0], section: "Ce qu'on fait" }
+  const cle = valideStatuts(doc)
+  assert.ok(codes(cle).includes('cle-inconnue'))
+  assert.equal(cle.errors[0].field, 'nodes[0].section')
+})
+
+test('un arc de statuts porte condition, écrivain, artefact et porte', () => {
+  const doc = statuts()
+  doc.edges[0] = { ...doc.edges[0], when: 'cadrage validé', writer: 'session', artifact: 'label ready', gate: 'accord du demandeur' }
+  assert.deepEqual(valideStatuts(doc).errors, [])
+
+  const boucle = statuts()
+  boucle.edges[0] = { ...boucle.edges[0], writer: 'robot' }
+  assert.ok(codes(valideStatuts(boucle)).includes('ecrivain-inconnu'))
+})
+
+test('les six états du modèle de statuts viennent du vocabulaire du workspace', () => {
+  assert.deepEqual(STATUS_STATES.map((state) => state.id), STATES)
+  for (const state of STATUS_STATES) {
+    assert.ok(state.label && state.description && state.tracker, state.id)
+  }
+})
+
+test('isWorkflowKey accepte les clés du dossier et refuse le reste', () => {
+  assert.ok(isWorkflowKey('statuts'))
+  assert.ok(isWorkflowKey('mon-workflow'))
+  assert.ok(!isWorkflowKey('../main'))
+  assert.ok(!isWorkflowKey('Mon-Workflow'))
+  assert.ok(!isWorkflowKey('workflows/statuts'))
+})
+
+test('createWorkflow écrit le modèle et le document, jamais par-dessus l’existant', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-create-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+
+  const created = await createWorkflow(models, {
+    workflow: 'incidents',
+    title: 'Incidents',
+    kind: 'etape',
+    document: 'workflows/incidents.md',
+    entry: 'to-refine',
+    exit: ['ready'],
+  }, { states: STATES })
+
+  assert.deepEqual(created.errors, [])
+  assert.equal(created.entry.workflow, 'incidents')
+  assert.equal(created.entry.kind, 'etape')
+  assert.deepEqual(created.entry.nodes, [])
+  const written = parse(await readFile(join(models, 'incidents.yml'), 'utf8'))
+  assert.equal(written.document, 'workflows/incidents.md')
+  assert.deepEqual(written.nodes, [])
+  assert.deepEqual(written.edges, [])
+  assert.equal(await readFile(join(dir, 'workflows', 'incidents.md'), 'utf8'), '# Incidents\n')
+
+  const again = await createWorkflow(models, {
+    workflow: 'incidents',
+    title: 'Autre titre',
+    kind: 'etape',
+    document: 'workflows/incidents.md',
+    entry: 'to-refine',
+    exit: ['ready'],
+  }, { states: STATES })
+  assert.deepEqual(codes(again), ['cle-double'])
+  assert.equal(parse(await readFile(join(models, 'incidents.yml'), 'utf8')).title, 'Incidents')
+})
+
+test('createWorkflow refuse une clé invalide et un document hors de workflows/', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-create-refus-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+
+  const cle = await createWorkflow(models, {
+    workflow: '../main', title: 'Fuite', kind: 'etape', document: 'workflows/main.md', entry: 'to-refine', exit: ['ready'],
+  }, { states: STATES })
+  assert.deepEqual(codes(cle), ['cle-invalide'])
+
+  const document = await createWorkflow(models, {
+    workflow: 'incidents', title: 'Incidents', kind: 'etape', document: '../incidents.md', entry: 'to-refine', exit: ['ready'],
+  }, { states: STATES })
+  assert.deepEqual(codes(document), ['document-invalide'])
+
+  const sortie = await createWorkflow(models, {
+    workflow: 'incidents', title: 'Incidents', kind: 'etape', document: 'workflows/incidents.md', entry: 'to-refine', exit: ['shipped'],
+  }, { states: STATES })
+  assert.deepEqual(codes(sortie), ['etat-inconnu'])
+})
+
+test('createWorkflow pré-remplit les six états d’un workflow de statuts', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-create-statuts-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+
+  const created = await createWorkflow(models, {
+    workflow: 'statuts-bis',
+    title: 'Statuts bis',
+    kind: 'statuts',
+    document: 'workflows/statuts-bis.md',
+    entry: 'to-refine',
+    exit: ['done'],
+  }, { states: STATES })
+
+  assert.deepEqual(created.errors, [])
+  assert.deepEqual(created.entry.nodes.map((node) => node.id), STATES)
+  assert.deepEqual(created.entry.edges, [])
+  assert.ok(created.entry.nodes.every((node) => node.label && node.tracker))
+})
+
+test('un fichier ajouté au dossier apparaît dans la liste, même cassé', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-list-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await mkdir(join(dir, 'workflows', 'model'), { recursive: true })
+  const created = await createWorkflow(join(dir, 'workflows', 'model'), {
+    workflow: 'statuts', title: 'Statuts', kind: 'statuts', document: 'workflows/statuts.md', entry: 'to-refine', exit: ['done'],
+  }, { states: STATES })
+  assert.deepEqual(created.errors, [])
+  await writeFile(join(dir, 'workflows', 'model', 'essai.yml'), 'nodes: [\n', 'utf8')
+
+  const { workflows } = await loadWorkflows(join(dir, 'workflows', 'model'), { states: STATES })
+  assert.deepEqual(workflows.map((entry) => entry.workflow), ['essai', 'statuts'])
+  assert.ok(codes(workflows[0]).includes('yaml-invalide'))
+  assert.equal(workflows[0].kind, 'etape')
+  assert.equal(workflows[1].kind, 'statuts')
 })

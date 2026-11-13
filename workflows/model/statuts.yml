@@ -1,0 +1,81 @@
+workflow: statuts
+kind: statuts
+title: Statuts des missions
+document: workflows/statuts.md
+entry: to-refine
+exit:
+  - done
+nodes:
+  - id: to-refine
+    label: À cadrer
+    description: Le ticket est ouvert ; rien n'est encore décidé.
+    tracker: label to-refine
+  - id: ready
+    label: Prête
+    description: 'Le cadrage est validé : périmètre, critères et plan.'
+    tracker: label ready
+  - id: in-progress
+    label: En cours
+    description: La branche est poussée ; l'exécution travaille.
+    tracker: label in-progress
+  - id: in-review
+    label: En revue
+    description: La PR est ouverte ; une relecture tranche.
+    tracker: label in-review
+  - id: ready-for-prod
+    label: Prête à partir
+    description: La PR est approuvée ; le demandeur livre.
+    tracker: label ready-for-prod
+  - id: done
+    label: Terminée
+    description: 'Merge fait, ticket fermé, branche supprimée.'
+    tracker: 'issue fermée (map: null)'
+edges:
+  - from: to-refine
+    to: ready
+    when: cadrage validé
+    writer: session
+    artifact: label ready
+    gate: neuf cases du cadrage cochées et accord du demandeur
+  - from: ready
+    to: in-progress
+    when: branche poussée
+    writer: session
+    artifact: label in-progress
+    gate: la branche est poussée vers la base
+  - from: in-progress
+    to: in-review
+    when: PR ouverte et complète
+    writer: session
+    artifact: label in-review
+    gate: 'PR assignée, étiquetée, milestone posée, Closes #N'
+  - from: in-progress
+    to: to-refine
+    when: cadrage faux
+    writer: demandeur
+    artifact: label to-refine
+    gate: le cadrage ou le périmètre change
+  - from: in-review
+    to: ready-for-prod
+    when: revue approuvée
+    writer: session
+    artifact: label ready-for-prod
+    gate: cinq cases de sortie de revue cochées
+  - from: in-review
+    to: in-progress
+    when: changements demandés
+    writer: demandeur
+    artifact: label in-progress
+    gate: un critère ou une preuve manque
+  - from: in-review
+    to: to-refine
+    when: diff hors périmètre
+    writer: demandeur
+    artifact: label to-refine
+    gate: le diff sort du cadrage
+  - from: ready-for-prod
+    to: done
+    when: merge et ticket fermé
+    writer: demandeur
+    artifact: issue fermée
+    gate: PR mergée et ticket fermé

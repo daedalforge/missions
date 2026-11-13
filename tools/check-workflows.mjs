@@ -29,15 +29,18 @@ try {
 const { workflows } = await loadWorkflows(join(root, MODEL_DIR), { states })
 let failures = 0
 
-console.log(`workflows · ${workflows.length} étapes · vocabulaire ${states.join(', ')}`)
+console.log(`workflows · ${workflows.length} modèles · vocabulaire ${states.join(', ')}`)
 
 for (const entry of workflows) {
   const broken = entry.errors.length > 0
   if (broken) failures += 1
   const exit = entry.exit.length ? entry.exit.join(', ') : '(aucune sortie)'
+  const counts = entry.kind === 'statuts'
+    ? `${entry.counts.nodes} états · ${entry.counts.edges} événements`
+    : `${entry.counts.nodes} gestes · ${entry.counts.edges} arcs`
   console.log('')
   console.log(`${broken ? '✖' : '✔'} ${entry.workflow} — ${entry.title} (${entry.entry ?? '?'} → ${exit})`)
-  console.log(`  ${entry.file} · ${entry.nodes.length} gestes · ${entry.edges.length} arcs`)
+  console.log(`  ${entry.file} · ${entry.kind} · ${counts}`)
   for (const error of entry.errors) {
     const where = error.field ? `${error.field} · ` : ''
     console.log(`  ${where}${error.code} : ${error.message}`)
@@ -54,6 +57,13 @@ if (missing.length) {
   failures += 1
 }
 
+const statuts = workflows.find((entry) => entry.workflow === 'statuts')
+if (!statuts) {
+  console.log('')
+  console.log('✖ le workflow des statuts est absent')
+  failures += 1
+}
+
 console.log('')
-console.log(failures === 0 ? 'modèles valides.' : `${failures} étape(s) invalide(s).`)
+console.log(failures === 0 ? 'modèles valides.' : `${failures} modèle(s) invalide(s).`)
 process.exit(failures === 0 ? 0 : 1)
