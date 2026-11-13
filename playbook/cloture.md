@@ -48,11 +48,46 @@ Constate et archive ; ne merge pas, ne ferme pas.
 - Le journal porte la clôture datée ; la checklist est soldée (faite ou suite
   nommée).
 
-## Où lire les règles
+## Les règles
 
-- [`workflows/cloture.md`](../workflows/cloture.md) — l'étape que la page met
-  en œuvre.
-- [`standards/interdits.md`](../standards/interdits.md) — merge et écriture
-  `main` interdits.
-- [`standards/revue.md`](../standards/revue.md) — la décision qui a mené à
-  `ready-for-prod`.
+Communs à toutes les étapes — les treize sont dans
+[`workspace.md`](workspace.md#les-règles) :
+
+- **Aucun push sur `main` ni sur une branche protégée** (interdit 1).
+- **Aucun force-push** (interdit 2).
+- **Aucun merge de PR** (interdit 3).
+- **Aucun `Approve` sur une PR** (interdit 4).
+
+Ce que la clôture ajoute :
+
+- **Le merge, la fermeture du ticket et la suppression de branche sont les
+  gestes du demandeur**, même s'il les demande par écrit : la session constate
+  et le dit (interdit 3).
+- **On constate, on n'anticipe pas** : un ticket dont la PR n'est pas mergée
+  reste ouvert ; le journal note l'attente au lieu de la contourner.
+- **Le dossier local ne se ferme pas** : supprimer un worktree ou un dossier
+  `missions/<dossier>/` est un geste du panneau.
+- **Une dérogation est écrite et consignée**, et le treizième interdit n'en
+  admet aucune ; la clôture ne crée pas de règle nouvelle (interdits 9, 10).
+- **Aucune écriture sur le tracker** pour obtenir un état : on lit l'état réel,
+  on ne le fabrique pas.
+- **Journal et checklist soldés** : une case sans preuve n'est pas cochée, une
+  case sans suite n'est pas close.
+- **Rien hors de `~/projects`** (interdit 13), **aucun secret** (interdit 7).
+
+## La fiche du dépôt
+
+La base et la branche sont celles de `missions/<dossier>/mission.yml` ; la
+clôture ne les crée ni ne les supprime. Les cinq dépôts sans projet déclaré
+sont marqués « non déclaré ».
+
+| Dépôt | Ce que la clôture constate |
+| --- | --- |
+| `missions` | PR mergée par le demandeur, ticket fermé par `Closes #N`, branche distante supprimée |
+| `manager` | PR mergée, ticket Jira passé en `Released` par le demandeur, branche supprimée |
+| `connect` | PR mergée, ticket Jira passé en `Released` par le demandeur, branche supprimée |
+| `clienthub` | non déclaré : merge et fermeture restent au demandeur, sans tracker déclaré |
+| `backend` | non déclaré : merge et fermeture restent au demandeur |
+| `core-service` | non déclaré : merge et fermeture restent au demandeur |
+| `marketplace-service` | non déclaré : merge et fermeture restent au demandeur |
+| `ticketing-service` | non déclaré : merge et fermeture restent au demandeur |

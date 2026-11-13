@@ -1386,7 +1386,7 @@ test('le prompt du squash nomme le chemin, la branche, la mission et le garde-fo
     'Chemin : /Users/moi/projects/missions.',
     'Branche courante : feat/mis-165.',
     '',
-    'Trouve d’abord la mission qui déclare cette branche : parcours missions/*/mission.yml et retiens celui dont le champ branch vaut exactement feat/mis-165. Si aucune mission ne la déclare, dis-le et arrête-toi sans geste git. Sinon, lis son ticket avec le CLI, jamais sa page HTML, puis lis le contrat de lecture : standards/README.md, standards/code.md, standards/interdits.md et standards/repos/<projet>.md — <projet> est le dernier segment du chemin, en minuscules.',
+    'Trouve d’abord la mission qui déclare cette branche : parcours missions/*/mission.yml et retiens celui dont le champ branch vaut exactement feat/mis-165. Si aucune mission ne la déclare, dis-le et arrête-toi sans geste git. Sinon, lis son ticket avec le CLI, jamais sa page HTML, puis lis son playbook : playbook/execution.md pour les gestes et playbook/workspace.md pour les treize interdits.',
     '',
     'Replie ensuite la branche sur sa base déclarée (le champ base de mission.yml), en capturant la pointe avant tout geste :',
     '',
