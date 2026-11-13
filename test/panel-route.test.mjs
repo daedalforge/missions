@@ -9,6 +9,7 @@ import { parse } from 'yaml'
 
 import { MISSION_FILE } from '../lib/branches.js'
 import { apply } from '../lib/index.js'
+import { clearCache } from '../lib/trackers/index.js'
 
 /**
  * La route de déclaration, de bout en bout côté hôte.
@@ -175,6 +176,255 @@ projects:
     if (before === undefined) delete process.env.GH_TOKEN
     else process.env.GH_TOKEN = before
   }
+})
+
+test('le compte de Done suit le périmètre déclaré, projet par projet', async (t) => {
+  // Le tracker expose une close déclarée (9) et une close que rien ne déclare
+  // (8) : seule la première entre dans le périmètre. Un second projet sans
+  // dossier ne doit coûter aucune requête.
+  const appels = []
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    appels.push(href)
+    const json = (body) => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) })
+    if (href.endsWith('/user')) return json({ login: 'me' })
+    if (href.includes('state=closed')) {
+      return json([
+        { number: 9, state: 'closed', title: 'Close', labels: [] },
+        { number: 8, state: 'closed', title: 'Close non déclarée', labels: [] },
+      ])
+    }
+    return json([{ number: 2, state: 'open', title: 'Ouverte', labels: [{ name: 'ready' }] }])
+  }
+  const { dir, handler } = await mount(t, { fetchImpl })
+  t.after(() => clearCache())
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+  - id: signet
+    name: Signet
+    reference: SIG
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: signet
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`)
+  await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-9', MISSION_FILE), 'key: MIS-9\nbranch: feat/mis-9\nbase: main\n')
+
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    clearCache()
+    const compte = await call(handler, { path: '/missions/api/done/count' })
+    assert.equal(compte.status, 200)
+    assert.deepEqual(compte.body, { count: 1, errors: [] })
+    // Une seule lecture close : celle du projet qui déclare au moins une clé.
+    const closes = appels.filter((href) => href.includes('state=closed'))
+    assert.equal(closes.length, 1)
+    assert.match(closes[0], /\/repos\/daedalforge\/missions\/issues/)
+    assert.equal(appels.some((href) => href.includes('/repos/daedalforge/signet/')), false, 'aucune requête pour un projet sans clé déclarée')
+
+    // Le compte est celui des lignes que Done montrerait pour la même lecture.
+    const lignes = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.equal(lignes.body.missions.filter((mission) => mission.state === 'done').length, compte.body.count)
+
+    // Déclaration retirée : le périmètre se vide, sans un seul appel au tracker.
+    clearCache()
+    await rm(join(dir, 'missions', 'MIS-9'), { recursive: true, force: true })
+    appels.length = 0
+    const vide = await call(handler, { path: '/missions/api/done/count' })
+    assert.deepEqual(vide.body, { count: 0, errors: [] })
+    assert.equal(appels.filter((href) => href.includes('state=closed')).length, 0)
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('le compte et les lignes de Done partagent leur lecture au montage', async (t) => {
+  const appels = []
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    appels.push(href)
+    const json = (body) => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) })
+    if (href.endsWith('/user')) return json({ login: 'me' })
+    if (href.includes('state=closed')) {
+      // La lecture close est lente : les deux routes partent avant qu'aucune
+      // n'ait rempli le cache, comme au montage sur Done.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      return json([{ number: 9, state: 'closed', title: 'Close', labels: [] }])
+    }
+    return json([])
+  }
+  const { dir, handler } = await mount(t, { fetchImpl })
+  t.after(() => clearCache())
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`)
+  await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-9', MISSION_FILE), 'key: MIS-9\nbranch: feat/mis-9\nbase: main\n')
+
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    // Au montage sur Done, l'effet de montage et l'ouverture de l'onglet
+    // partent ensemble : une seule lecture close doit être payée.
+    clearCache()
+    appels.length = 0
+    const [compte, lignes] = await Promise.all([
+      call(handler, { path: '/missions/api/done/count' }),
+      call(handler, { path: '/missions/api/list?done=1' }),
+    ])
+    assert.deepEqual(compte.body, { count: 1, errors: [] })
+    assert.equal(lignes.body.missions.length, 1)
+    assert.equal(appels.filter((href) => href.includes('state=closed')).length, 1, 'les deux routes partagent une seule lecture close')
+
+    // Une lecture déjà terminée reste partagée par les deux routes.
+    clearCache()
+    appels.length = 0
+    const premieres = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.equal(premieres.body.missions.length, 1)
+    const closes = appels.filter((href) => href.includes('state=closed')).length
+    const apres = await call(handler, { path: '/missions/api/done/count' })
+    assert.deepEqual(apres.body, { count: 1, errors: [] })
+    assert.equal(appels.filter((href) => href.includes('state=closed')).length, closes, 'le compte ne relit pas les closes')
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('une déclaration cassée accompagne le compte de ses erreurs', async (t) => {
+  const appels = []
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    appels.push(href)
+    const json = (body) => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) })
+    if (href.endsWith('/user')) return json({ login: 'me' })
+    return json([])
+  }
+  const { dir, handler } = await mount(t, { fetchImpl })
+  t.after(() => clearCache())
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`)
+  // Le dossier existe mais sa déclaration est illisible : le périmètre devient
+  // partiel, et le compte ne peut plus prétendre à un nombre.
+  await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-9', MISSION_FILE), 'key: [\n')
+
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    clearCache()
+    const compte = await call(handler, { path: '/missions/api/done/count' })
+    assert.equal(compte.status, 200)
+    assert.equal(compte.body.count, 0)
+    assert.equal(compte.body.errors.length, 1)
+    assert.match(compte.body.errors[0].message, /MIS-9/)
+    // Aucune clé déclarée : pas une requête close.
+    assert.equal(appels.filter((href) => href.includes('state=closed')).length, 0)
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('le compte de Done ne répond qu’en GET', async (t) => {
+  const { handler } = await mount(t)
+  const refused = await call(handler, { method: 'POST', path: '/missions/api/done/count' })
+  assert.equal(refused.status, 405)
+  assert.equal(refused.headers.allow, 'GET')
+  assert.match(refused.body.error, /method not allowed/)
 })
 
 test('un corps invalide ou une déclaration invalide répond 400', async (t) => {

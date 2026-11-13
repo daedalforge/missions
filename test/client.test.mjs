@@ -722,8 +722,10 @@ test('le bundle cantonne done à l’onglet Done, jamais à la liste ouverte', (
   assert.match(SOURCE, /const STATE_ORDER = \['in-progress', 'in-review', 'ready', 'to-refine', 'ready-for-prod', 'done'\]/)
   assert.match(SOURCE, /STATE_FILTER_ORDER = \['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'\]/)
   assert.match(SOURCE, /done: 'done'/)
-  // Done est un onglet déclaré entre Missions et Repositories, pas un filtre.
-  assert.match(SOURCE, /\{ id: 'done', label: 'Done', source: 'tracker' \},/)
+  // Done est un onglet déclaré entre Missions et Repositories, pas un filtre, et
+  // il porte le compte des closes déclarées : sa pastille a sa route à part.
+  assert.match(SOURCE, /\{ id: 'done', label: 'Done', source: 'tracker', badge: 'done' \},/)
+  assert.match(SOURCE, /const DONE_COUNT_URL = 'missions\/api\/done\/count'/)
   // La liste ouverte ne relit plus done, même si un filtre le nomme : seul le
   // périmètre Done passe `allowDone`.
   assert.match(SOURCE, /if \(!allowDone && mission\.state === 'done'\) return false/)
@@ -921,17 +923,19 @@ test('chaque carte porte un repère de priorité qui se lit sans la couleur', ()
   assert.ok(SOURCE.includes('.missions-prio .prio-bar, .missions-prio .prio-mark { fill: currentColor; }'))
 })
 
-test('le montage ne lit que l’ouvert ; Done paie sa lecture, le bouton et le tick forcent', () => {
+test('le montage lit l’ouvert et les deux comptes ; Done paie sa lecture, le bouton et le tick forcent', () => {
   // Le panneau est remonté à chaque changement de vue : forcer au montage
   // paierait tout le trajet tracker à chaque retour sur Missions. Le cache
   // serveur de 60 s est lu ; le bouton Refresh et le tick de 60 s forcent.
   assert.match(SOURCE, /const load = React\.useCallback\(\(\{ silent = false, refresh = false \} = \{\}\) => \{/)
   assert.match(SOURCE, /const loadDone = React\.useCallback\(\(\{ silent = false, refresh = false \} = \{\}\) => \{/)
+  assert.match(SOURCE, /const loadDoneCount = React\.useCallback\(\(\) => \{/)
   assert.match(SOURCE, /const url = refresh \? `\$\{LIST_URL\}\?refresh=1` : LIST_URL/)
   assert.match(SOURCE, /const url = `\$\{LIST_URL\}\?done=1\$\{refresh \? '&refresh=1' : ''\}`/)
-  // Le montage appelle load() et le compte des dépôts, sans option ; Done lit à
-  // l'ouverture de son onglet, et le compte se relit au tick quel que soit l'onglet.
-  assert.match(SOURCE, /React\.useEffect\(\(\) => \{\n\s+load\(\)\n\s+loadRepositoryCount\(\)\n\s+\}, \[load, loadRepositoryCount\]\)/)
+  // Le montage appelle load(), le compte de Done et celui des dépôts, sans
+  // option ; les lignes closes attendent l'ouverture de leur onglet, et le
+  // compte des dépôts se relit au tick quel que soit l'onglet.
+  assert.match(SOURCE, /React\.useEffect\(\(\) => \{\n\s+load\(\)\n\s+loadDoneCount\(\)\n\s+loadRepositoryCount\(\)\n\s+\}, \[load, loadDoneCount, loadRepositoryCount\]\)/)
   assert.match(SOURCE, /if \(tab !== 'done'\) return undefined\n\s+loadDone\(\)/)
   // Le tick suit le périmètre de la vue ouverte : Done relit le clos, les vues
   // tracker lisent l'ouvert, et Settings n'en relit aucune.
@@ -1143,7 +1147,8 @@ test('la source d’un onglet est déclarée dans TABS, pas recopiée', () => {
   // L'ajout d'un onglet (MIS-116) ne doit pas obliger à réécrire les conditions.
   assert.match(SOURCE, /\{ id: 'dashboard', label: 'Dashboard', source: 'tracker' \},/)
   assert.match(SOURCE, /\{ id: 'missions', label: 'Missions', source: 'tracker', badge: 'missions' \},/)
-  assert.match(SOURCE, /\{ id: 'done', label: 'Done', source: 'tracker' \},/)
+  // Done porte le compte des closes déclarées : son badge est nommé, lui aussi.
+  assert.match(SOURCE, /\{ id: 'done', label: 'Done', source: 'tracker', badge: 'done' \},/)
   // Repositories lit l'hôte et porte le compte de la racine : son badge est
   // nommé, pas un booléen, pour que chaque onglet dise quel compte il porte.
   assert.match(SOURCE, /\{ id: 'repositories', label: 'Repositories', source: 'host', badge: 'repositories' \},/)
@@ -2148,7 +2153,7 @@ function repositoriesStates(view, repository = null, count = null) {
     'default',
     repository,
     EMPTY_BAR,
-    { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null },
+    { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null },
     '',
     { ...EMPTY_BAR.filters, state: ['done'] },
     null,
@@ -2365,7 +2370,7 @@ test('sous Settings, le tick ne relit pas la liste des missions ouvertes', async
     // le tick s'arme.
     for (const effect of effects) effect.fn()
     await new Promise((done) => setTimeout(done, 0))
-    assert.deepEqual(appels.map((appel) => appel.url), ['missions/api/list', 'missions/api/repositories/count'], 'le montage lit l’ouvert et la pastille')
+    assert.deepEqual(appels.map((appel) => appel.url), ['missions/api/list', 'missions/api/done/count', 'missions/api/repositories/count'], 'le montage lit l’ouvert et les deux pastilles')
 
     // Le tick suit le périmètre de la section : ni tracker, ni liste ouverte.
     const tickEffect = effects.find((effect) => String(effect.fn).includes('REFRESH_MS'))
@@ -2395,12 +2400,12 @@ test('ouvrir Done lit les closes une fois, sans toucher à la liste ouverte', as
     const ouvert = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'missions' }))
     ouvert.api.apply(ouvert.ctx)
     ouvert.registered.main({})
-    const montageOuvert = ouvert.effects.find((effect) => String(effect.fn).includes('loadRepositoryCount()') && !String(effect.fn).includes('loadDone'))
+    const montageOuvert = ouvert.effects.find((effect) => String(effect.fn).includes('loadRepositoryCount()') && String(effect.fn).includes('loadDoneCount()'))
     const doneOuvert = ouvert.effects.find((effect) => String(effect.fn).includes("if (tab !== 'done')"))
     montageOuvert.fn()
     doneOuvert.fn()
     await new Promise((resolve) => setTimeout(resolve, 0))
-    assert.deepEqual(appels, ['missions/api/list', 'missions/api/repositories/count'])
+    assert.deepEqual(appels, ['missions/api/list', 'missions/api/done/count', 'missions/api/repositories/count'])
     assert.equal(doneOuvert.deps[0], 'missions')
 
     // Onglet Done : les mêmes effets ne lisent que les closes.
@@ -2408,12 +2413,12 @@ test('ouvrir Done lit les closes une fois, sans toucher à la liste ouverte', as
     const done = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'done' }))
     done.api.apply(done.ctx)
     done.registered.main({})
-    const montageDone = done.effects.find((effect) => String(effect.fn).includes('loadRepositoryCount()') && !String(effect.fn).includes('loadDone'))
+    const montageDone = done.effects.find((effect) => String(effect.fn).includes('loadRepositoryCount()') && String(effect.fn).includes('loadDoneCount()'))
     const doneEffect = done.effects.find((effect) => String(effect.fn).includes("if (tab !== 'done')"))
     montageDone.fn()
     doneEffect.fn()
     await new Promise((resolve) => setTimeout(resolve, 0))
-    assert.deepEqual(appels, ['missions/api/list', 'missions/api/repositories/count', 'missions/api/list?done=1'])
+    assert.deepEqual(appels, ['missions/api/list', 'missions/api/done/count', 'missions/api/repositories/count', 'missions/api/list?done=1'])
     assert.equal(doneEffect.deps[0], 'done')
   } finally {
     globalThis.fetch = vraiFetch
@@ -2481,6 +2486,183 @@ test('l’onglet Repositories porte son compte, et pas de pastille avant de le c
   assert.equal(textOf(pastille(onglet(avant, 'missions'))), String(ouvertes))
 })
 
+/**
+ * Les états du panneau pour la pastille de Done : le compte vit dans l'état de
+ * la vue close, avec ses lignes et ses erreurs.
+ */
+function doneCountStates(count, { tab = 'dashboard', missions = [], errors = [] } = {}) {
+  return [
+    EMPTY_BAR,
+    dashboardView(DASH_MISSIONS),
+    tab,
+    '',
+    { ...EMPTY_BAR.filters },
+    null,
+    null,
+    'default',
+    null,
+    EMPTY_BAR,
+    { loading: false, missions, errors, workspaceId: 'w', workspaceRoot: '/w', count },
+    '',
+    { ...EMPTY_BAR.filters, state: ['done'] },
+    null,
+    null,
+    'usage',
+  ]
+}
+
+/** La pastille de l'onglet Done, telle que la barre la rend. */
+function pastilleDone(tree) {
+  const bouton = findAll(tree, 'button').find((node) => node.props.id === 'missions-tab-done')
+  const span = findAll(bouton, 'span').find((node) => node.props.className === 'missions-tab-count')
+  return span === undefined ? undefined : textOf(span)
+}
+
+/** Le lecteur du compte de Done, retrouvé par la route qu'il appelle. */
+function lecteurDeDone(effects) {
+  for (const effect of effects) {
+    const dep = (effect.deps ?? []).find((item) => typeof item === 'function' && String(item).includes('DONE_COUNT_URL'))
+    if (dep) return dep
+  }
+  return null
+}
+
+test('l’onglet Done porte le compte lu au montage, sans ouvrir ses lignes', () => {
+  // Le compte publié s'affiche sur la barre, l'onglet resté fermé.
+  const deux = monter(doneCountStates(2), memorySession())
+  assert.equal(findAll(deux, 'DashboardView').length, 1, 'l’onglet Done reste fermé')
+  assert.equal(pastilleDone(deux), '2')
+
+  // Zéro est un compte prouvé : il s'affiche, il ne s'efface pas.
+  assert.equal(pastilleDone(monter(doneCountStates(0), memorySession())), '0')
+
+  // Aucun nombre encore : aucune pastille, plutôt qu'un 0 que rien ne prouve.
+  assert.equal(pastilleDone(monter(doneCountStates(null), memorySession())), undefined)
+
+  // La pastille ne s'invente pas un compte : la vue close seule le porte.
+  assert.match(SOURCE, /if \(entry\.badge === 'done'\) return typeof doneView\.count === 'number' \? doneView\.count : null/)
+})
+
+test('le compte de Done est lu au montage, sur sa route, sans payer les lignes closes', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    const cible = String(url)
+    appels.push(cible)
+    if (cible === 'missions/api/done/count') return { ok: true, json: async () => ({ count: 2, errors: [] }) }
+    if (cible === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 4 }) }
+    return { ok: true, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+  }
+  try {
+    const { api, ctx, registered, effects, setters } = charger(undefined, doneCountStates(null), memorySession())
+    api.apply(ctx)
+    registered.main({})
+    const montage = effects.find((effect) => String(effect.fn).includes('loadDoneCount()'))
+    assert.ok(montage, 'le compte de Done est une dépendance de l’effet de montage')
+    await montage.fn()
+    await new Promise((done) => setTimeout(done, 0))
+
+    // Une seule route dédiée : le montage ne paie aucune ligne close.
+    assert.deepEqual(appels, ['missions/api/list', 'missions/api/done/count', 'missions/api/repositories/count'])
+    assert.equal(appels.some((url) => url.includes('done=1')), false, 'le montage ne lit aucune ligne close')
+
+    // Le nombre lu est publié tel quel, prêt pour la pastille.
+    const publie = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ count: null }))
+      .find((next) => next.count === 2)
+    assert.ok(publie, 'le compte lu est publié dans la vue close')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un compte de Done raté ou partiel ne publie aucun nombre, et n’allume pas de bandeau', async () => {
+  const vraiFetch = globalThis.fetch
+  const { api, ctx, registered, effects, setters } = charger(undefined, doneCountStates(3), memorySession())
+  api.apply(ctx)
+  const tree = registered.main({})
+  const lecture = lecteurDeDone(effects)
+  assert.ok(lecture, 'le compte de Done est une dépendance de l’effet de montage')
+
+  try {
+    const lectures = [
+      async () => { throw new Error('offline') },
+      async () => ({ ok: false, status: 500, json: async () => ({ error: 'count failed' }) }),
+      async () => ({ ok: true, json: async () => ({ count: 5, errors: [{ project: 'missions', message: 'done missions: boom' }] }) }),
+    ]
+    for (const reponse of lectures) {
+      globalThis.fetch = (url) => {
+        assert.equal(String(url), 'missions/api/done/count')
+        return reponse()
+      }
+      const avant = setters.length
+      await lecture()
+      assert.equal(setters.length, avant, 'un échec ou un compte partiel ne pousse aucun nombre')
+    }
+
+    // La pastille garde le compte déjà prouvé, et aucune lecture de compte
+    // n'allume le bandeau : seules les listes le portent.
+    assert.equal(pastilleDone(tree), '3')
+    assert.equal(findAll(tree, 'div').filter((node) => node.props.className === 'missions-errors').length, 0)
+
+    // La lecture complète publie, zéro compris.
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ count: 0, errors: [] }) })
+    await lecture()
+    const publie = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ count: 3 }))
+      .find((next) => next.count === 0)
+    assert.ok(publie, 'un zéro prouvé est publiable')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('ouvrir Done fixe la pastille au nombre de lignes closes, une lecture partielle la laisse', async () => {
+  const closed = DASH_MISSIONS.find((mission) => mission.key === 'MIS-6')
+  const opened = DASH_MISSIONS.find((mission) => mission.key === 'MIS-1')
+  const vraiFetch = globalThis.fetch
+
+  const { api, ctx, registered, effects, setters } = charger(undefined, doneCountStates(9, { tab: 'done' }), memorySession())
+  api.apply(ctx)
+  registered.main({})
+  const ouverture = effects.find((effect) => String(effect.fn).includes("if (tab !== 'done')"))
+  assert.ok(ouverture, 'l’ouverture de Done paie sa lecture')
+
+  try {
+    // Le serveur promet le périmètre clos : le client ne compte que les lignes
+    // closes, et la pastille prend leur nombre, pas celui de la charge reçue.
+    globalThis.fetch = async (url) => {
+      assert.equal(String(url), 'missions/api/list?done=1')
+      return { ok: true, json: async () => ({ missions: [closed, opened], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+    }
+    await ouverture.fn()
+    await new Promise((done) => setTimeout(done, 0))
+    const complete = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [], errors: [], count: 9 }))
+      .find((next) => next.count === 1)
+    assert.ok(complete, 'une lecture complète fixe le compte aux lignes closes')
+
+    // Une lecture qui revient avec des erreurs n'a pas de compte à prouver :
+    // celui déjà affiché reste.
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ missions: [closed], errors: [{ project: 'missions', message: 'done missions: boom' }] }),
+    })
+    await ouverture.fn()
+    await new Promise((done) => setTimeout(done, 0))
+    const partielle = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [], errors: [], count: 9 }))
+      .find((next) => next.count === 9)
+    assert.ok(partielle, 'une lecture partielle laisse le compte publié')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
 /** Le lecteur du compte tel que le panneau l'arme : une dépendance de son effet de montage. */
 function lecteurDeCompte(effects) {
   for (const effect of effects) {
@@ -2508,13 +2690,13 @@ test('le compte est lu au montage, sur Dashboard comme sur Missions, et jamais l
       const { api, ctx, registered, effects } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': onglet }))
       api.apply(ctx)
       registered.main({})
-      const montage = effects.find((effect) => String(effect.fn).includes('loadRepositoryCount()') && !String(effect.fn).includes('loadDone'))
+      const montage = effects.find((effect) => String(effect.fn).includes('loadRepositoryCount()') && String(effect.fn).includes('loadDoneCount()'))
       assert.ok(montage, `le montage lit le compte (onglet ${onglet})`)
       montage.fn()
       await new Promise((done) => setTimeout(done, 0))
       assert.deepEqual(
         appels,
-        ['missions/api/list', 'missions/api/repositories/count'],
+        ['missions/api/list', 'missions/api/done/count', 'missions/api/repositories/count'],
         `onglet ${onglet} : le compte une fois, le scan jamais`,
       )
       assert.equal(appels.filter((url) => url === 'missions/api/repositories').length, 0)
@@ -3973,7 +4155,7 @@ function monterUsage(releve = USAGE_LOADED) {
       'default',
       null,
       EMPTY_BAR,
-      { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null },
+      { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null },
       '',
       { ...EMPTY_BAR.filters, state: ['done'] },
       null,
@@ -4178,9 +4360,9 @@ test('le montage et le tick de rafraîchissement ne comptent rien', async () => 
     // Les effets du panneau joués comme React les jouerait au montage.
     for (const effect of effects) effect.fn()
     await new Promise((done) => setTimeout(done, 0))
-    // Le montage lit la liste et le compte de la pastille, et ne compte rien.
-    assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET'], 'le montage lit la liste et le compte, sans compter')
-    assert.deepEqual(calls.map((call) => call.url), ['missions/api/list', 'missions/api/repositories/count'])
+    // Le montage lit la liste et les deux comptes de pastilles, et ne compte rien.
+    assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET', 'GET'], 'le montage lit la liste et les comptes, sans compter')
+    assert.deepEqual(calls.map((call) => call.url), ['missions/api/list', 'missions/api/done/count', 'missions/api/repositories/count'])
 
     assert.ok(tick, 'le tick de 60 s est armé')
     calls.length = 0
@@ -4458,7 +4640,7 @@ test('sans `fetch`, le panneau ne compte rien et le geste passe quand même', ()
 /** Le volet avec ses vingt états, préremplis si le test en a besoin. */
 function monterVoletAvec(mission, etatsVolet = []) {
   const view = { loading: false, missions: [mission], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null }
+  const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
   const panneau = [
     EMPTY_BAR, view, 'missions', '', { ...EMPTY_BAR.filters }, null, mission,
     'default', null, EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, null,
@@ -4864,6 +5046,12 @@ test('archiver retire la ligne de Done et referme le volet', async () => {
       .filter((value) => typeof value === 'function')
       .map((update) => update({ missions: [{ key: 'MIS-42' }, { key: 'MIS-1' }] }))
     assert.ok(filtered.every((next) => next.missions.length === 1 && next.missions[0].key === 'MIS-1'))
+    // La pastille perd la mission archivée tout de suite, elle aussi.
+    const pastille = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [{ key: 'MIS-42' }, { key: 'MIS-1' }], count: 3 }))
+      .find((next) => next.count === 2)
+    assert.ok(pastille, 'la pastille décroît sans attendre la relecture')
     assert.deepEqual(calls, ['missions/api/list?done=1&refresh=1'])
   } finally {
     globalThis.fetch = vraiFetch

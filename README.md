@@ -53,6 +53,10 @@ seule porte vers les missions closes : il lit les `done` dont le dossier est
 déclaré sur le poste (`missions/<clé>/mission.yml`), avec sa propre barre de
 filtres et son propre cache. Sans dossier déclaré, aucune mission close n'est
 même lue ; l'onglet affiche « No done mission declared on this machine. ».
+Sa **pastille** affiche le nombre de ces missions closes déclarées : ce compte
+se lit au montage, sur sa propre route, sans ouvrir l'onglet ni transporter les
+lignes — la lecture close qu'il paie est celle de Done, partagée quand l'onglet
+s'ouvre, et les lignes restent demandées à l'ouverture.
 
 Depuis cet onglet, une mission close peut être **archivée** : son dossier passe
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
@@ -75,7 +79,7 @@ La barre porte cinq onglets — **Dashboard**, **Missions**, **Done**,
 **Repositories**, **Settings** — chacun devant son icône : un trait géométrique
 dans le thème par défaut, un motif manga dans le thème manga. Le libellé reste
 le nom accessible ; l'icône n'est qu'un repère (16 px, `currentColor`). Les
-pastilles de compte restent sur Missions et Repositories.
+pastilles de compte restent sur Missions, Done et Repositories.
 
 **Repositories** ne montre par défaut que les clones de la racine du workspace :
 un worktree est un second checkout d'un dépôt déjà listé, et l'en-tête continue
