@@ -77,6 +77,14 @@ dans le thème par défaut, un motif manga dans le thème manga. Le libellé res
 le nom accessible ; l'icône n'est qu'un repère (16 px, `currentColor`). Les
 pastilles de compte restent sur Missions et Repositories.
 
+**Repositories** ne montre par défaut que les clones de la racine du workspace :
+un worktree est un second checkout d'un dépôt déjà listé, et l'en-tête continue
+de le compter même quand sa ligne est cachée. Un interrupteur **Show worktrees**
+dans l'en-tête de la liste les révèle ; le choix ne vit que la session —
+`missions.repositories.worktrees` dans `sessionStorage` — si bien que revenir
+sur l'onglet le retrouve et que fermer la fenêtre l'oublie. Une racine qui ne
+porte que des worktrees le dit, au lieu de paraître vide.
+
 **Settings** range les deux vues qui ne lisent ni le tracker ni la liste des
 missions ouvertes : **Usage** puis **Workflows**, dans une navigation verticale
 à gauche. La section ouverte est la seule montée ; Usage est le défaut. Aucune
