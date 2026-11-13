@@ -58,6 +58,23 @@ Depuis cet onglet, une mission close peut être **archivée** : son dossier pass
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
 modifié — la mission quitte Done et reste sur le disque.
 
+## La barre et Settings
+
+La barre porte cinq onglets — **Dashboard**, **Missions**, **Done**,
+**Repositories**, **Settings** — chacun devant son icône : un trait géométrique
+dans le thème par défaut, un motif manga dans le thème manga. Le libellé reste
+le nom accessible ; l'icône n'est qu'un repère (16 px, `currentColor`). Les
+pastilles de compte restent sur Missions et Repositories.
+
+**Settings** range les deux vues qui ne lisent ni le tracker ni la liste des
+missions ouvertes : **Usage** puis **Workflows**, dans une navigation verticale
+à gauche. La section ouverte est la seule montée ; Usage est le défaut. Aucune
+clé de stockage nouvelle : `missions.tab` range la section (`usage`,
+`workflows`) tant que Settings est ouvert, si bien qu'une session restée sur
+l'un de ces anciens onglets rouvre Settings sur cette section ; une valeur
+inconnue retombe sur le Dashboard. Sous Settings, pas de bandeau tracker, et le
+rafraîchissement périodique ne relit jamais la liste des missions ouvertes.
+
 ## Le relevé d'usage
 
 Le panneau tient sa propre comptabilité : chaque geste — un onglet, un filtre,
@@ -68,7 +85,7 @@ est `$DSH_HOME/storages/dsh-missions/usage.json`, écrit en une fois (dossier,
 fichier temporaire, `rename`), avec au plus 32 détails distincts de 64 caractères
 par geste.
 
-L'onglet **Usage**, entre Repositories et Workflows, lit ce fichier par
+La section **Usage** de **Settings** lit ce fichier par
 `GET missions/api/usage` et le lit comme un rapport : les gestes utilisés rangés
 par section et par nombre, le total et la fenêtre couverte, les gestes jamais
 utilisés, et les identifiants retirés du registre — qui gardent leur compte au
