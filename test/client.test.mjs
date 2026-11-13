@@ -3324,8 +3324,8 @@ const PLAYBOOK_VIEW_PAGES = [
   { page: 'workspace', name: 'workspace.md', file: 'playbook/workspace.md', step: null, title: 'Workspace — la fiche du dépôt', lines: 18, exists: true },
 ]
 
-/** Les sept hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
-const PLAYBOOK_HOOKS = ['view', 'chosen', 'draft', 'baseline', 'mtimeMs', 'status', 'saving']
+/** Les huit hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
+const PLAYBOOK_HOOKS = ['view', 'chosen', 'draft', 'baseline', 'mtimeMs', 'status', 'saving', 'pending']
 
 /** L'état de `PlaybookView`, par défaut sur la page d'exécution, sans retouche. */
 function playbookStates(patch = {}) {
@@ -3337,6 +3337,7 @@ function playbookStates(patch = {}) {
     mtimeMs: 1234,
     status: null,
     saving: false,
+    pending: null,
   }
   return PLAYBOOK_HOOKS.map((name) => (name in patch ? patch[name] : base[name]))
 }
@@ -3368,6 +3369,7 @@ test('la section Playbook liste les cinq pages et ouvre celle de la session', ()
   assert.match(textOf(pages[0]), /Étape cadrage/)
   assert.match(textOf(pages[4]), /Workspace — la fiche du dépôt/)
   assert.match(textOf(pages[4]), /Workspace/)
+  assert.match(textOf(pages[1]), /40 lignes/, 'chaque page dit son nombre de lignes')
 
   // La page retenue est marquée, les autres non.
   assert.equal(pages[1].props['aria-current'], 'true', 'la page de la session est ouverte')
@@ -3425,7 +3427,7 @@ test('Enregistrer envoie le texte et la version lues, puis affiche le fichier é
   }
   try {
     const { tree, setters } = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
-    const bouton = findAll(tree, 'button').find((node) => textOf(node) === 'Enregistrer')
+    const bouton = findAll(tree, 'button').find((node) => textOf(node) === 'Save')
     bouton.props.onClick()
     await tick()
     await tick()
@@ -3449,7 +3451,7 @@ test('un refus du serveur s’affiche avec sa cause et la liste des manques', as
   globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: 'page invalid', errors: [manque] }) })
   try {
     const { tree, setters } = monterPlaybook(playbookStates({ draft: 'court\n' }))
-    findAll(tree, 'button').find((node) => textOf(node) === 'Enregistrer').props.onClick()
+    findAll(tree, 'button').find((node) => textOf(node) === 'Save').props.onClick()
     await tick()
     await tick()
     const refus = setters.filter((value) => value && typeof value === 'object' && value.kind === 'error').at(-1)
@@ -3466,33 +3468,50 @@ test('un refus du serveur s’affiche avec sa cause et la liste des manques', as
   }
 })
 
-test('quitter une page au brouillon demande confirmation, et les deux issues tiennent', () => {
-  const vraiConfirm = globalThis.confirm
-  const questions = []
-  try {
-    globalThis.confirm = (question) => { questions.push(question); return false }
-    const { tree, setters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n' }))
-    const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
-    setters.length = 0
+test('quitter une page au brouillon demande confirmation en ligne, et les deux issues tiennent', () => {
+  const { tree, setters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n' }))
+  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
+  setters.length = 0
 
-    // Annuler la confirmation : rien ne bouge, la page reste ouverte.
-    pages[4].props.onClick()
-    assert.equal(questions.length, 1)
-    assert.match(questions[0], /modifications non enregistrées/)
-    assert.deepEqual(setters, [], 'refuser garde la page ouverte')
+  // Un clic sur une autre page n'ouvre rien : il pose la question, et le
+  // brouillon reste où il est.
+  pages[4].props.onClick()
+  assert.deepEqual(setters, ['workspace'], 'la page demandée attend la réponse')
+  assert.equal(findAll(tree, 'textarea').length, 1, 'aucune boîte système, le panneau reste monté')
 
-    // Confirmer : la page choisie est ouverte, la précédente n'a jamais été écrite.
-    globalThis.confirm = () => true
-    pages[4].props.onClick()
-    assert.ok(setters.includes('workspace'), 'confirmer ouvre la page choisie')
-  } finally {
-    globalThis.confirm = vraiConfirm
-  }
+  // « Keep editing » efface la question et laisse la page ouverte.
+  const { tree: question } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  const dialogue = findAll(question, 'div').find((node) => /pb-confirm\b/.test(node.props.className ?? ''))
+  assert.ok(dialogue, 'la confirmation vit dans la section')
+  assert.equal(dialogue.props.role, 'alertdialog')
+  assert.match(textOf(dialogue), /modifications non enregistrées/)
+  assert.match(textOf(dialogue), /workspace\.md/)
+  const garder = findAll(dialogue, 'button').find((node) => textOf(node) === 'Keep editing')
+  const abandonner = findAll(dialogue, 'button').find((node) => textOf(node) === 'Discard')
+  assert.ok(garder && abandonner, 'les deux issues sont des boutons')
+
+  const { tree: garde, setters: gardeSetters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  findAll(garde, 'button').find((node) => textOf(node) === 'Keep editing').props.onClick()
+  assert.deepEqual(gardeSetters, [null], 'Keep editing ne change pas de page')
+
+  // « Discard » charge la page demandée, et le brouillon repart du fichier.
+  const { tree: abandon, setters: abandonSetters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
+  findAll(abandon, 'button').find((node) => textOf(node) === 'Discard').props.onClick()
+  // Discard ouvre la page, vide le brouillon le temps de la relecture (Save
+  // retombe désactivé), puis efface la question.
+  assert.deepEqual(abandonSetters, ['workspace', null, null, null, null])
+
+  // Jamais de boîte système : la question est du panneau.
+  const debut = SOURCE.indexOf('function PlaybookView')
+  const fin = SOURCE.indexOf('function RepositoriesView')
+  const source = SOURCE.slice(debut, fin)
+  assert.ok(debut > -1 && fin > debut)
+  assert.equal(/\bconfirm\(/.test(source), false)
 })
 
-test('Annuler rend le brouillon au dernier état enregistré', () => {
+test('Cancel rend le brouillon au dernier état enregistré', () => {
   const { tree, setters } = monterPlaybook(playbookStates({ draft: 'retouche non enregistrée\n' }))
-  findAll(tree, 'button').find((node) => textOf(node) === 'Annuler').props.onClick()
+  findAll(tree, 'button').find((node) => textOf(node) === 'Cancel').props.onClick()
   assert.deepEqual(setters.slice(-2), ['## Avant d’agir\n', { kind: 'ok', message: 'Modifications annulées.' }])
 })
 

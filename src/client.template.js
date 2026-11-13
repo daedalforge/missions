@@ -556,7 +556,12 @@ window.__ModuleLoader__.load({
 .pb-page:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); }
 .pb-page[aria-current="true"] { border-color: var(--dsw-alias-label-primary, #1f1f1f); box-shadow: inset 0 0 0 1px var(--dsw-alias-label-primary, #1f1f1f); }
 .pb-page-title { font-size: 12.5px; font-weight: 600; }
+.pb-page-meta { display: flex; align-items: baseline; gap: 8px; }
 .pb-page-step { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.pb-page-lines { font-size: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.pb-confirm { padding: 8px 10px; border: 1px solid color-mix(in srgb, #a33a2a 35%, transparent); border-radius: 9px; }
+.pb-confirm-text { margin: 0 0 8px; font-size: 12px; }
+.pb-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .pb-page-missing { font-size: 10.5px; color: #a33a2a; }
 .pb-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .pb-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
@@ -3995,6 +4000,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const [mtimeMs, setMtimeMs] = React.useState(null)
       const [status, setStatus] = React.useState(null)
       const [saving, setSaving] = React.useState(false)
+      const [pending, setPending] = React.useState(null)
 
       const load = React.useCallback(() => {
         fetch(PLAYBOOKS_URL, { headers: { accept: 'application/json' } })
@@ -4056,15 +4062,29 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // does not move on a keystroke.
       const dirty = baseline !== null && draft !== baseline
 
-      const ask = (question) => (typeof confirm === 'function' ? confirm(question) : true)
-
+      // The confirmation is inline, never a system box: Discard loads the
+      // asked page, Keep editing changes nothing and keeps the draft.
       const openPage = (next) => {
         if (!next || next.page === page?.page) return
-        const question = `La page « ${page.name} » a des modifications non enregistrées. Les abandonner pour ouvrir « ${next.name} » ?`
-        if (dirty && !ask(question)) return
+        if (dirty) {
+          setPending(next.page)
+          return
+        }
         setChosen(next.page)
+        setDraft(null)
+        setBaseline(null)
         setStatus(null)
       }
+
+      const discardDraft = () => {
+        setChosen(pending)
+        setDraft(null)
+        setBaseline(null)
+        setPending(null)
+        setStatus(null)
+      }
+
+      const keepEditing = () => setPending(null)
 
       // The host judges, says no, and writes nothing: the button only sends
       // the text and the version it read.
@@ -4091,7 +4111,8 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               ...previous,
               pages: previous.pages.map((entry) => (entry.page === page.page ? { ...entry, ...data } : entry)),
             }))
-            setStatus({ kind: 'ok', message: `Enregistré — ${data.file}` })
+            const heure = savedAt(data.mtimeMs)
+            setStatus({ kind: 'ok', message: `Enregistré — ${data.file}${heure ? ` à ${heure}` : ''}` })
           })
           .catch((error) => setStatus({ kind: 'error', message: error?.message ?? 'save failed' }))
           .finally(() => setSaving(false))
@@ -4106,6 +4127,12 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       }
 
       const stepLabel = (entry) => (entry.step ? `Étape ${entry.step}` : 'Workspace')
+
+      const savedAt = (value) => {
+        if (!value) return ''
+        const date = new Date(value)
+        return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      }
 
       if (!page || draft === null) {
         return h('div', { className: 'pb-view' },
@@ -4129,7 +4156,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               onClick: () => openPage(entry),
             },
               h('span', { className: 'pb-page-title' }, entry.title ?? entry.name),
-              h('span', { className: 'pb-page-step' }, stepLabel(entry)),
+              h('span', { className: 'pb-page-meta' },
+                h('span', { className: 'pb-page-step' }, stepLabel(entry)),
+                h('span', { className: 'pb-page-lines' }, `${entry.lines ?? 0} lignes`),
+              ),
               entry.exists ? null : h('span', { className: 'pb-page-missing' }, 'fichier absent'),
             )),
           ),
@@ -4151,9 +4181,19 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               }),
             ),
             h('div', { className: 'pb-actions' },
-              h('button', { type: 'button', className: 'missions-btn', disabled: saving || !dirty, onClick: revert }, 'Annuler'),
-              h('button', { type: 'button', className: 'missions-btn pb-primary', disabled: saving || !dirty, onClick: save }, saving ? 'Enregistrement…' : 'Enregistrer'),
+              h('button', { type: 'button', className: 'missions-btn', disabled: saving || !dirty, onClick: revert }, 'Cancel'),
+              h('button', { type: 'button', className: 'missions-btn pb-primary', disabled: saving || !dirty, onClick: save }, saving ? 'Saving…' : 'Save'),
             ),
+            pending
+              ? h('div', { className: 'pb-confirm', role: 'alertdialog', 'aria-label': 'Unsaved changes' },
+                  h('p', { className: 'pb-confirm-text' },
+                    `« ${page.name} » a des modifications non enregistrées. Les abandonner pour ouvrir « ${(view.pages.find((entry) => entry.page === pending) ?? {}).name} » ?`),
+                  h('div', { className: 'pb-confirm-actions' },
+                    h('button', { type: 'button', className: 'missions-btn', onClick: keepEditing }, 'Keep editing'),
+                    h('button', { type: 'button', className: 'missions-btn pb-primary', onClick: discardDraft }, 'Discard'),
+                  ),
+                )
+              : null,
             status ? h('div', { className: `pb-status pb-status--${status.kind}`, role: status.kind === 'error' ? 'alert' : 'status' },
               h('p', { className: 'pb-status-text' }, status.message ?? ''),
               (status.errors ?? []).length > 0
