@@ -27,6 +27,7 @@ import {
   feedbackSessionPrompt,
   freeSessionPrompt,
   repositoryConflictPrompt,
+  repositorySquashPrompt,
   FEEDBACK_BRIEF,
   FREE_BRIEF,
   ticketReadLine,
@@ -1375,6 +1376,82 @@ test('sans dépôt nommé, le prompt des conflits ne laisse pas de trou dans la 
   assert.match(prompt, /Chemin : \(chemin inconnu\)\./)
 })
 
+test('le prompt du squash nomme le chemin, la branche, la mission et le garde-fou', () => {
+  const depot = { name: 'missions', path: '/Users/moi/projects/missions', branch: 'feat/mis-165' }
+  // La chaîne est pinnée au caractère près, comme celle du prompt de session :
+  // elle est écrite une fois ici, pas recopiée dans le gabarit client.
+  const attendu = [
+    'Travaille sur la remise en un seul commit du dépôt missions — replie sa branche courante sur sa base.',
+    '',
+    'Chemin : /Users/moi/projects/missions.',
+    'Branche courante : feat/mis-165.',
+    '',
+    'Trouve d’abord la mission qui déclare cette branche : parcours missions/*/mission.yml et retiens celui dont le champ branch vaut exactement feat/mis-165. Si aucune mission ne la déclare, dis-le et arrête-toi sans geste git. Sinon, lis son ticket avec le CLI, jamais sa page HTML, puis lis le contrat de lecture : standards/README.md, standards/code.md, standards/interdits.md et standards/repos/<projet>.md — <projet> est le dernier segment du chemin, en minuscules.',
+    '',
+    'Replie ensuite la branche sur sa base déclarée (le champ base de mission.yml), en capturant la pointe avant tout geste :',
+    '',
+    '- `git fetch origin` ;',
+    '- `git rev-parse HEAD` : sa sortie est l’ancienne tête, la pointe de la branche avant le reset ; c’est elle que la preuve et le lease attendent ;',
+    '- `git merge-base origin/<base> HEAD` : sa sortie est la cible du reset, pas l’ancienne tête ;',
+    '- lis les commits à replier avec `git log --oneline <cible du reset>..HEAD` ;',
+    "- `git reset --soft <cible du reset>`, puis un seul commit : son titre vient de `gh pr view --json title --jq .title` s’il existe une PR, sinon du sujet du dernier commit local ; ne le préfixe par '<clé>: ' que s’il ne l’est pas déjà, puis `git commit -m '<titre>'`.",
+    '',
+    'Avant de pousser, prouve que l’arbre ne bouge pas : `git diff <ancienne tête> HEAD` doit sortir vide.',
+    '',
+    'Puis :',
+    '',
+    '- `npm test` ;',
+    '- `node tools/build.mjs`, puis `git diff --exit-code lib/client.js` doit sortir vide ;',
+    '- mets à jour le journal de mission, la checklist et le corps de la PR (avec `Closes #N`) ;',
+    '- `git push --force-with-lease=<branche>:<ancienne tête>` — une seule fois, sur cette branche seulement. Si la tête distante a bougé, si la branche n’est pas réductible ou si elle n’a déjà qu’un seul commit au-dessus de la base, arrête-toi et dis-le sans toucher à l’historique.',
+    '',
+    'Garde-fou : tu ne merges jamais la PR et tu n’écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s’il te le demande. Tu ne touches ni aux labels, ni au statut du ticket, ni à une autre branche, et tu ne demandes pas de revue.',
+    '',
+    'Quand c’est fait, résume le commit obtenu et arrête-toi.',
+  ].join('\n')
+
+  assert.equal(repositorySquashPrompt(depot), attendu)
+  // Le geste ne joue aucune étape : ce n'est pas une session de mission.
+  assert.doesNotMatch(repositorySquashPrompt(depot), /Étape en cours/)
+  assert.doesNotMatch(repositorySquashPrompt(depot), /Chaque étape se joue dans une nouvelle session/)
+})
+
+test('le prompt du squash dit ce qu’il prouve : pointe capturée, cible du reset, un commit', () => {
+  const prompt = repositorySquashPrompt({ name: 'missions', path: '/Users/moi/projects/missions', branch: 'feat/mis-165' })
+
+  // La base n'est pas dans le détail du dépôt : la session la lit dans la mission.
+  assert.match(prompt, /le champ base de mission\.yml/)
+  assert.match(prompt, /git rev-parse HEAD/)
+  assert.match(prompt, /git merge-base origin\/<base> HEAD/)
+  // La cible du reset n'est pas l'ancienne tête : le diff et le lease
+  // comparent à la pointe capturée avant le reset.
+  assert.match(prompt, /git reset --soft <cible du reset>/)
+  assert.match(prompt, /git diff <ancienne tête> HEAD` doit sortir vide/)
+  assert.match(prompt, /git push --force-with-lease=<branche>:<ancienne tête>/)
+  // Le titre ne double jamais le préfixe déjà présent.
+  assert.match(prompt, /gh pr view --json title --jq \.title/)
+  assert.match(prompt, /ne le préfixe par '<clé>: ' que s’il ne l’est pas déjà/)
+  // Une mission déclare la branche ; aucune ne doit laisser la session deviner.
+  assert.match(prompt, /Si aucune mission ne la déclare, dis-le et arrête-toi sans geste git\./)
+  // Le garde-fou et la sortie, comme les autres sessions du panneau.
+  assert.match(prompt, /tu ne merges jamais la PR/)
+  assert.match(prompt, /tu n’écris jamais sur main/)
+  assert.match(prompt, /Quand c’est fait, résume le commit obtenu et arrête-toi\./)
+})
+
+test('sans branche, le prompt du squash dit le HEAD détaché et ne ment pas', () => {
+  const prompt = repositorySquashPrompt({ name: 'missions', path: '/Users/moi/projects/missions', branch: null })
+
+  assert.match(prompt, /Branche courante : \(HEAD détaché\)\./)
+})
+
+test('sans dépôt nommé, le prompt du squash ne laisse pas de trou dans la phrase', () => {
+  const prompt = repositorySquashPrompt({})
+
+  assert.match(prompt, /^Travaille sur la remise en un seul commit du dépôt \(dépôt inconnu\)/)
+  assert.match(prompt, /Chemin : \(chemin inconnu\)\./)
+})
+
 test('historyLabel chiffre le total par milliers, et nomme sa branche', () => {
   assert.equal(historyLabel({ total: 3094, branch: 'main' }), '3 094 commits on main')
   assert.equal(historyLabel({ total: 1, branch: 'feat/a' }), '1 commit on feat/a')
@@ -1436,7 +1513,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout',
     'mission.session', 'mission.feedback-session',
     'repository.open', 'repository.adopt', 'repository.tab.details', 'repository.tab.history', 'repository.tab.worktrees',
-    'repository.branch', 'repository.more', 'repository.resolve',
+    'repository.branch', 'repository.more', 'repository.resolve', 'repository.squash',
     'workflow.step', 'workflow.save', 'workflow.reload', 'workflow.gesture.add', 'workflow.gesture.remove',
     'workflow.arc.add', 'workflow.arc.update', 'workflow.arc.remove',
     'action.theme',

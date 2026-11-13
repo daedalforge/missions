@@ -3023,26 +3023,70 @@ function voletDepot(repository, { services = undefined, note = null } = {}) {
   return { inner: renderTree(propose), setters }
 }
 
+/**
+ * Le volet d'un dépôt, monté avec le détail que le test lui donne et les
+ * services que le panneau lui passe. `repositoriesStates` fournit quinze états
+ * au panneau puis le seizième au `detail` du volet ; `renderTree` invoque le
+ * volet, c'est donc là que ses quatre derniers `useState` prennent la file.
+ */
+function voletSquash(repository, { detail, services = undefined, note = null } = {}) {
+  const detailState = detail ?? scanReady({ ...repository, remote: 'https://github.com/daedalforge/missions.git' })
+  const { api, ctx, registered, setters } = charger(
+    undefined,
+    [...repositoriesStates(detailState, repository), 'details', null, null, note],
+    memorySession(),
+  )
+  api.apply(ctx)
+  const tree = registered.main({})
+  const node = findAll(tree, 'RepositoryDrawer')[0]
+  assert.ok(node, 'le volet du dépôt choisi est monté')
+  const propose = services ? { ...node, props: { ...node.props, services, workspaceId: 'w' } } : node
+  return { inner: renderTree(propose), setters }
+}
+
 function boutonConflits(inner) {
   return findAll(inner, 'button').find((node) => node.props['aria-label'] === 'Resolve conflicts') ?? null
 }
 
-test('le volet d’un dépôt porte « Resolve conflicts » dans son pied, même sans conflit connu', () => {
+/** La rangée d'actions du pied : elle porte les deux gestes du dépôt. */
+function actionsSquash(inner) {
+  const actions = findAll(inner, 'div').filter((node) => node.props.className === 'missions-drawer-actions')
+  assert.equal(actions.length, 1, 'une seule rangée d’actions')
+  return actions[0]
+}
+
+function boutonSquash(inner) {
+  const label = 'Squash the mission branch into one commit'
+  const bouton = findAll(actionsSquash(inner), 'button').find((node) => node.props['aria-label'] === label
+    || node.props['aria-label'] === 'Reading the repository…'
+    || node.props['aria-label'] === 'The repository could not be read'
+    || node.props['aria-label'] === 'Detached HEAD — no branch to squash')
+  assert.ok(bouton, 'le bouton squash est dans la rangée')
+  return bouton
+}
+
+test('le volet d’un dépôt porte « Resolve conflicts » et « Squash » dans la même rangée de pied', () => {
   for (const repository of REPO_SCAN.repositories) {
     const { inner } = voletDepot(repository)
     const bouton = boutonConflits(inner)
-    assert.ok(bouton, `le geste est rendu pour ${repository.name}`)
+    assert.ok(bouton, `le geste resolve est rendu pour ${repository.name}`)
     assert.match(bouton.props.className, /missions-action--icon/)
     assert.equal(bouton.props.title, 'Resolve conflicts')
     assert.equal(bouton.props.type, 'button')
     assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans title et aria-label')
     assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte son dessin')
+
+    const squash = boutonSquash(inner)
+    assert.equal(squash.props.title, 'Squash the mission branch into one commit')
+    assert.equal(textOf(squash), '', 'icône seule : le nom vit dans title et aria-label')
+    assert.equal(findAll(squash, 'svg').length, 1, 'le bouton porte son dessin')
+
     // Le pied reprend la famille du volet mission.
     const pied = findAll(inner, 'div').find((node) => node.props.className === 'missions-drawer-foot')
     assert.ok(pied, 'le pied porte .missions-drawer-foot')
     const actions = findAll(pied, 'div').find((node) => node.props.className === 'missions-drawer-actions')
     assert.ok(actions, 'les actions portent .missions-drawer-actions')
-    assert.ok(findAll(actions, 'button').includes(bouton))
+    assert.deepEqual(findAll(actions, 'button').map((node) => node.props['aria-label']), ['Resolve conflicts', 'Squash the mission branch into one commit'])
   }
 })
 
@@ -3079,6 +3123,86 @@ test('un clic sur « Resolve conflicts » ouvre la session dans le workspace du 
   assert.match(ouverts[0].prompt, /tu n’écris jamais sur main/)
 })
 
+test('le volet d’un dépôt porte « Squash the mission branch into one commit » dans son pied', () => {
+  const label = 'Squash the mission branch into one commit'
+  for (const repository of REPO_SCAN.repositories) {
+    const { inner } = voletSquash(repository)
+    const bouton = boutonSquash(inner)
+    assert.equal(bouton.props.className, 'missions-action missions-action--icon missions-action--primary')
+    assert.equal(bouton.props.type, 'button')
+    assert.equal(bouton.props.title, label)
+    assert.equal(bouton.props['aria-label'], label)
+    assert.equal(bouton.props.disabled, false)
+    assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans title et aria-label')
+    assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte son dessin')
+    // Le pied reprend la famille du volet mission.
+    const pied = findAll(inner, 'div').find((node) => node.props.className === 'missions-drawer-foot')
+    assert.ok(pied, 'le pied porte .missions-drawer-foot')
+    assert.ok(findAll(pied, 'div').some((node) => node.props.className === 'missions-drawer-actions'), 'la rangée est dans le pied')
+  }
+})
+
+test('sans détail lisible ou sans branche, « Squash » reste visible, désactivé, et dit pourquoi', () => {
+  const repository = REPO_SCAN.repositories[1]
+
+  const lecture = boutonSquash(voletSquash(repository, { detail: { loading: true, data: null, error: null } }).inner)
+  assert.equal(lecture.props.disabled, true)
+  assert.equal(lecture.props.title, 'Reading the repository…')
+  assert.equal(lecture.props['aria-label'], 'Reading the repository…')
+
+  const echec = boutonSquash(voletSquash(repository, { detail: { loading: false, data: null, error: 'fatal: not a git repository' } }).inner)
+  assert.equal(echec.props.disabled, true)
+  assert.equal(echec.props.title, 'The repository could not be read')
+  assert.equal(echec.props['aria-label'], 'The repository could not be read')
+
+  const detache = boutonSquash(voletSquash(repository, { detail: scanReady({ ...repository, detached: true, branch: null, remote: 'x' }) }).inner)
+  assert.equal(detache.props.disabled, true)
+  assert.equal(detache.props.title, 'Detached HEAD — no branch to squash')
+  assert.equal(detache.props['aria-label'], 'Detached HEAD — no branch to squash')
+
+  // Le détail donne une branche : le geste se débloque et reprend son nom.
+  const actif = boutonSquash(voletSquash(repository).inner)
+  assert.equal(actif.props.disabled, false)
+  assert.equal(actif.props.title, 'Squash the mission branch into one commit')
+})
+
+test('un clic sur « Squash » ouvre la session dans le workspace du dépôt, sans l’envoyer', async () => {
+  const repository = REPO_SCAN.repositories[1]
+  const ouverts = []
+  let envoye = false
+  const services = {
+    getService: (name) => {
+      if (name === 'uiWorkspace') {
+        return { startSession: (id, options) => ouverts.push({ id, prompt: options?.prompt }) }
+      }
+      if (name === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => [
+              { workspaceId: 'w-zeta', path: '/Users/moi/projects/zeta' },
+              { workspaceId: 'w-missions', path: repository.path },
+            ],
+          },
+        }
+      }
+      if (name === 'sessions') return { create: () => { envoye = true; throw new Error('sent') } }
+      return null
+    },
+  }
+
+  const { inner } = voletSquash(repository, { services })
+  await boutonSquash(inner).props.onClick()
+
+  assert.equal(ouverts.length, 1, 'un clic, une session')
+  assert.equal(ouverts[0].id, 'w-missions', 'l’identifiant est celui du workspace dont le chemin est le dépôt')
+  assert.equal(envoye, false, 'le prompt est posé dans le composeur, jamais envoyé')
+  assert.match(ouverts[0].prompt, /Chemin : \/Users\/moi\/projects\/missions\./)
+  assert.match(ouverts[0].prompt, /Branche courante : feat\/mis-116\./)
+  assert.match(ouverts[0].prompt, /git reset --soft/)
+  assert.match(ouverts[0].prompt, /tu ne merges jamais la PR/)
+  assert.match(ouverts[0].prompt, /tu n’écris jamais sur main/)
+})
+
 test('une session refusée dit « Session not opened: … » sans perdre le prompt', async () => {
   const repository = REPO_SCAN.repositories[1]
   const envois = []
@@ -3088,8 +3212,8 @@ test('une session refusée dit « Session not opened: … » sans perdre le prom
       : null),
   }
 
-  const { inner, setters } = voletDepot(repository, { services })
-  const bouton = boutonConflits(inner)
+  const { inner, setters } = voletSquash(repository, { services })
+  const bouton = boutonSquash(inner)
   await bouton.props.onClick()
 
   assert.ok(setters.includes('Session not opened: workspace/not-found'), 'l’échec est dit en une ligne')
@@ -3098,10 +3222,36 @@ test('une session refusée dit « Session not opened: … » sans perdre le prom
   assert.equal(envois.length, 2)
   assert.equal(envois[0], envois[1])
 
-  // La note est rendue dans le pied du volet, au-dessus du bouton.
-  const apres = voletDepot(repository, { services, note: 'Session not opened: workspace/not-found' })
+  // La note est rendue dans le volet, au-dessus du bouton qui reste en place.
+  const apres = voletSquash(repository, { services, note: 'Session not opened: workspace/not-found' })
   assert.match(textOf(apres.inner), /Session not opened: workspace\/not-found/)
-  assert.ok(boutonConflits(apres.inner), 'le bouton reste rendu après l’échec')
+  assert.equal(textOf(boutonSquash(apres.inner)), '', 'le bouton reste une icône après l’échec')
+})
+
+test('le bouton « Squash » compte « repository.squash », un seul POST, aucun autre appel', async () => {
+  const spy = espionUsage()
+  try {
+    const repository = REPO_SCAN.repositories[1]
+    const services = {
+      getService: (name) => {
+        if (name === 'uiWorkspace') return { startSession: () => {} }
+        if (name === 'workspaces') return { list: { getSnapshot: () => [{ workspaceId: 'w-missions', path: repository.path }] } }
+        return null
+      },
+    }
+    const { inner } = voletSquash(repository, { services })
+    await boutonSquash(inner).props.onClick()
+    // Le relevé se lit AVANT `geste`, qui vide `appels` : un seul appel part,
+    // le POST du geste — ni lecture, ni création, ni envoi de session.
+    assert.deepEqual(
+      spy.appels,
+      [{ url: 'missions/api/usage', method: 'POST', body: { element: 'repository.squash' } }],
+      'un clic, un seul appel : le POST missions/api/usage, aucun autre',
+    )
+    spy.geste('repository.squash')
+  } finally {
+    spy.restore()
+  }
 })
 
 test('le bouton des conflits compte « repository.resolve », un seul POST', async () => {
@@ -3407,7 +3557,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(43\)/)
+  assert.match(texte, /Never used \(44\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -3423,7 +3573,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(46\)/)
+  assert.match(textOf(zero.inner), /Never used \(47\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
