@@ -7247,7 +7247,7 @@ test('changer de thème écrit missions.theme et compte le geste', () => {
 
 test('la carte et la tête du détail portent la pastille Local, et seulement pour un local', () => {
   const local = montrerWorkflows([workflowEntry({ local: true })], { tab: 'infos' })
-  const carte = findAll(local.rendered, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+  const carte = findAll(local.rendered, 'button').find((node) => /missions-card--pick/.test(node.props.className ?? ''))
   const pastilles = findAll(carte, 'span').filter((node) => node.props.className === 'wf-pick-local')
   assert.equal(pastilles.length, 1, 'la carte porte la pastille')
   assert.equal(textOf(pastilles[0]), 'Local')
@@ -7256,7 +7256,7 @@ test('la carte et la tête du détail portent la pastille Local, et seulement po
   assert.match(textOf(tete), /Local/, 'la tête du détail porte la pastille')
 
   const versionne = montrerWorkflows([workflowEntry({ local: false })]).rendered
-  const carteVersionnee = findAll(versionne, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+  const carteVersionnee = findAll(versionne, 'button').find((node) => /missions-card--pick/.test(node.props.className ?? ''))
   assert.equal(findAll(carteVersionnee, 'span').filter((node) => node.props.className === 'wf-pick-local').length, 0)
   assert.match(regle('.wf-pick-local'), /color: #8250df/, 'la pastille locale a sa teinte, distincte du type')
   assert.match(regle('.wf-pick-summary'), /white-space: pre-line/)
