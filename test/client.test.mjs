@@ -2905,15 +2905,11 @@ test('l’onglet demande le scan au serveur, une fois, à son montage', async ()
     return { ok: true, json: async () => REPO_SCAN }
   }
   try {
-    const { api, ctx, registered, effects } = charger(undefined, repositoriesStates(scanReady(REPO_SCAN)), memorySession())
-    api.apply(ctx)
-    const tree = registered.main({})
-    const avant = effects.length
-    renderTree(findAll(tree, 'RepositoriesView')[0])
+    const { inner, effects, rerendre, session } = montrerRepositories(scanReady(REPO_SCAN), null, memorySession())
     // Les effets du panneau (dont son rafraîchissement de 60 s) ne sont pas
-    // joués : la vue arme le chargement, puis le menu de l'état fermé arme sa
-    // fermeture au clic extérieur. Seul le premier des deux part au montage.
-    const poses = effects.slice(avant)
+    // joués : la vue arme le chargement, puis la barre arme la fermeture de son
+    // menu d'état au clic extérieur. Le scan, lui, part une fois.
+    const poses = effects.slice(-2)
     assert.equal(poses.length, 2, 'le chargement, puis la fermeture du menu de l’état')
     for (const pose of poses.slice(0, 1)) pose.fn()
     await new Promise((done) => setTimeout(done, 0))
@@ -2921,6 +2917,23 @@ test('l’onglet demande le scan au serveur, une fois, à son montage', async ()
     assert.equal(appels.length, 1, 'un scan par ouverture de l’onglet')
     assert.equal(appels[0].url, 'missions/api/repositories')
     assert.equal(appels[0].options.headers.accept, 'application/json')
+
+    // When un état s'ajoute à la barre, puis qu'une seconde frappe cherche
+    const puce = findAll(inner, 'button').find((button) => /^Filter by state \(All\)$/.test(button.props['aria-label']))
+    assert.ok(puce, 'le filtre d’état est rendu')
+    puce.props.onClick()
+    const ouvert = rerendre()
+    const caseDirty = findAll(ouvert, 'label').find((label) => label.props['data-state'] === 'dirty')
+    assert.ok(caseDirty, 'l’état Dirty est offert quand le menu est ouvert')
+    findAll(caseDirty, 'input')[0].props.onChange()
+    const filtre = rerendre()
+    findAll(filtre, 'input').find((node) => node.props['aria-label'] === 'Filter repositories')
+      .props.onChange({ target: { value: 'feat' } })
+
+    // Then ni l'état ni la frappe ne relisent la racine : le scan est le seul
+    // appel, le geste se contente d'écrire la session.
+    assert.equal(appels.length, 1, 'un scan au montage, aucune lecture pour un filtre')
+    assert.equal(session.entries.get('missions.repositories.filters'), '{"query":"feat","state":["dirty"]}')
   } finally {
     globalThis.fetch = vraiFetch
   }
