@@ -3126,8 +3126,8 @@ const PLAYBOOK_VIEW_PAGES = [
   { page: 'workspace', name: 'workspace.md', file: 'playbook/workspace.md', step: null, title: 'Workspace — la fiche du dépôt', lines: 18, exists: true },
 ]
 
-/** Les huit hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
-const PLAYBOOK_HOOKS = ['view', 'chosen', 'draft', 'baseline', 'mtimeMs', 'status', 'saving', 'pending']
+/** Les dix hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
+const PLAYBOOK_HOOKS = ['view', 'chosen', 'draft', 'baseline', 'mtimeMs', 'status', 'pageError', 'saving', 'pending', 'attempt']
 
 /** L'état de `PlaybookView`, par défaut sur la page d'exécution, sans retouche. */
 function playbookStates(patch = {}) {
@@ -3138,8 +3138,10 @@ function playbookStates(patch = {}) {
     baseline: '## Avant d’agir\n',
     mtimeMs: 1234,
     status: null,
+    pageError: null,
     saving: false,
     pending: null,
+    attempt: 0,
   }
   return PLAYBOOK_HOOKS.map((name) => (name in patch ? patch[name] : base[name]))
 }
@@ -3215,6 +3217,42 @@ test('l’éditeur demande les cinq pages, puis la page choisie, au serveur', as
     await tick()
     assert.match(appels[1], /^missions\/api\/playbooks\/page\?page=/)
     assert.match(appels[1], /cadrage/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('une page illisible montre le refus du serveur et propose une page lisible', async () => {
+  const refus = 'playbook/execution.md is missing'
+  const vraiFetch = globalThis.fetch
+  // La liste dit la page absente, puis la lecture de cette page est refusée.
+  globalThis.fetch = async (url) => {
+    if (String(url) === 'missions/api/playbooks') {
+      return {
+        ok: true,
+        json: async () => ({ pages: PLAYBOOK_VIEW_PAGES.map((entry) => (entry.page === 'execution' ? { ...entry, exists: false, lines: 0 } : entry)) }),
+      }
+    }
+    return { ok: false, json: async () => ({ error: refus }) }
+  }
+  try {
+    // Le refus du serveur remonte à la vue, tel qu'il est écrit.
+    const lecture = monterPlaybook(playbookStates({ chosen: 'execution', draft: null, baseline: null, mtimeMs: null }))
+    for (const effect of lecture.propres) effect.fn()
+    await tick()
+    await tick()
+    assert.equal(lecture.setters.filter((value) => value === refus).at(-1), refus, 'le refus de lecture arrive à l’écran')
+
+    // Rendu, la page absente dit le refus et cesse d'attendre.
+    const rendu = monterPlaybook(playbookStates({ chosen: 'execution', draft: null, baseline: null, mtimeMs: null, pageError: refus }))
+    assert.match(textOf(rendu.tree), /playbook\/execution\.md is missing/)
+    assert.doesNotMatch(textOf(rendu.tree), /Chargement de la page…/)
+
+    // Et la première page lisible s'ouvre d'un clic.
+    const retour = findAll(rendu.tree, 'button').find((node) => textOf(node) === 'Ouvrir « cadrage »')
+    assert.ok(retour, 'une page illisible propose une page lisible')
+    retour.props.onClick()
+    assert.ok(rendu.setters.includes('cadrage'), 'le clic ouvre la page proposée')
   } finally {
     globalThis.fetch = vraiFetch
   }

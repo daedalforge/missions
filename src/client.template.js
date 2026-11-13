@@ -3871,8 +3871,14 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const [baseline, setBaseline] = React.useState(null)
       const [mtimeMs, setMtimeMs] = React.useState(null)
       const [status, setStatus] = React.useState(null)
+      // A page the host refuses to read says so here: the editor never shows
+      // the text of the previous page in its place.
+      const [pageError, setPageError] = React.useState(null)
       const [saving, setSaving] = React.useState(false)
       const [pending, setPending] = React.useState(null)
+      // Recharger re-reads the list AND the page: bumping this key re-runs the
+      // page read when the page itself did not change.
+      const [attempt, setAttempt] = React.useState(0)
 
       const load = React.useCallback(() => {
         fetch(PLAYBOOKS_URL, { headers: { accept: 'application/json' } })
@@ -3910,12 +3916,15 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           return
         }
         let current = true
+        setPageError(null)
         fetch(`${PLAYBOOK_PAGE_URL}?page=${encodeURIComponent(page.page)}`, { headers: { accept: 'application/json' } })
           .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
           .then(({ ok, data }) => {
             if (!current) return
             if (!ok) {
-              setStatus({ kind: 'error', message: data?.error ?? 'read failed' })
+              const message = data?.error ?? 'read failed'
+              setPageError(message)
+              setStatus({ kind: 'error', message })
               return
             }
             setDraft(data.text ?? '')
@@ -3924,10 +3933,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             setStatus(null)
           })
           .catch((error) => {
-            if (current) setStatus({ kind: 'error', message: error?.message ?? 'read failed' })
+            if (!current) return
+            const message = error?.message ?? 'read failed'
+            setPageError(message)
+            setStatus({ kind: 'error', message })
           })
         return () => { current = false }
-      }, [page && page.page])
+      }, [page && page.page, attempt])
 
       // An unsaved edit shows itself and opens the only question the screen
       // asks: abandon or stay. Nothing is sent before Enregistrer — the file
@@ -4006,13 +4018,22 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
       }
 
+      // The page the host refused says why, and offers the page a session can
+      // open right away: never a spinner that never ends.
+      const fallback = pageError
+        ? view.pages.find((entry) => entry.exists && entry.page !== page?.page) ?? null
+        : null
+
       if (!page || draft === null) {
         return h('div', { className: 'pb-view' },
           h('p', { className: 'pb-note' },
             view.loading ? 'Chargement du playbook…'
-              : view.error ?? (!page ? 'Aucune page de playbook.' : 'Chargement de la page…')),
+              : view.error ?? pageError ?? (!page ? 'Aucune page de playbook.' : 'Chargement de la page…')),
           h('div', { className: 'pb-actions' },
-            h('button', { type: 'button', className: 'missions-btn', onClick: () => load() }, 'Recharger'),
+            h('button', { type: 'button', className: 'missions-btn', onClick: () => { load(); setAttempt((current) => current + 1) } }, 'Recharger'),
+            fallback
+              ? h('button', { type: 'button', className: 'missions-btn pb-primary', onClick: () => openPage(fallback) }, `Ouvrir « ${fallback.page} »`)
+              : null,
           ),
         )
       }
