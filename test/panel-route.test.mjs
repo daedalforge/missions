@@ -737,7 +737,7 @@ test('GET /workflows/model rend le YAML, un couple inconnu répond 400', async (
   assert.equal(refused.status, 400)
 })
 
-test('POST /workflows crée le modèle et le document, jamais par-dessus', async (t) => {
+test('POST /workflows ne reçoit que le titre, la description et le type', async (t) => {
   const { dir, handler } = await mount(t)
   await copyWorkflows(dir)
 
@@ -745,35 +745,27 @@ test('POST /workflows crée le modèle et le document, jamais par-dessus', async
     method: 'POST',
     path: '/missions/api/workflows',
     body: {
-      workflow: 'incidents',
       title: 'Incidents',
+      description: 'Les incidents du workspace.',
       kind: 'etape',
-      document: 'workflows/incidents.md',
-      entry: 'to-refine',
-      exit: ['ready'],
     },
   })
 
   assert.equal(created.status, 201)
-  assert.equal(created.body.workflow, 'incidents')
-  assert.equal(created.body.document, 'workflows/incidents.md')
+  assert.equal(created.body.workflow, 'incidents', 'la clé est le slug du titre')
+  assert.equal(created.body.document, 'workflows/incidents.md', 'le document suit la clé')
   assert.equal(created.body.entry.kind, 'etape')
+  assert.equal(created.body.entry.description, 'Les incidents du workspace.')
   assert.deepEqual(created.body.entry.nodes, [])
-  assert.equal(await readFile(join(dir, 'workflows', 'incidents.md'), 'utf8'), '# Incidents\n')
+  assert.equal(await readFile(join(dir, 'workflows', 'incidents.md'), 'utf8'), '# Incidents\n\n## Ce qu’on fait\n')
   const modele = await readFile(join(dir, 'workflows', 'model', 'incidents.yml'), 'utf8')
   assert.match(modele, /document: workflows\/incidents\.md/)
+  assert.match(modele, /description: Les incidents du workspace\./)
 
   const again = await call(handler, {
     method: 'POST',
     path: '/missions/api/workflows',
-    body: {
-      workflow: 'incidents',
-      title: 'Autre titre',
-      kind: 'etape',
-      document: 'workflows/incidents.md',
-      entry: 'to-refine',
-      exit: ['ready'],
-    },
+    body: { title: 'Incidents', kind: 'etape' },
   })
   assert.equal(again.status, 400)
   assert.equal(again.body.errors[0].code, 'cle-double')
