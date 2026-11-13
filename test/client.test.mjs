@@ -3005,6 +3005,124 @@ test('l’onglet Repositories a sa grille et ses deux thèmes', () => {
   assert.match(SOURCE, /@media \(max-width: 860px\) \{\s+\.missions-repo-grid \{ grid-template-columns: [^}]+\}\s+\.missions-col-commit \{ display: none; \}/)
 })
 
+/** Le volet d'un dépôt, monté avec les services que le panneau lui passe. */
+function voletDepot(repository, { services = undefined, note = null } = {}) {
+  const detail = { ...repository, remote: 'https://github.com/daedalforge/missions.git' }
+  const { api, ctx, registered, setters } = charger(
+    undefined,
+    [...repositoriesStates(scanReady(detail), repository), 'details', null, null, note],
+    memorySession(),
+  )
+  api.apply(ctx)
+  const tree = registered.main({})
+  const node = findAll(tree, 'RepositoryDrawer')[0]
+  assert.ok(node, 'le volet du dépôt choisi est monté')
+  // Le rendu réel passe `services` et `workspaceId` au volet : le test les
+  // pose sur le même nœud.
+  const propose = services ? { ...node, props: { ...node.props, services, workspaceId: 'w' } } : node
+  return { inner: renderTree(propose), setters }
+}
+
+function boutonConflits(inner) {
+  return findAll(inner, 'button').find((node) => node.props['aria-label'] === 'Resolve conflicts') ?? null
+}
+
+test('le volet d’un dépôt porte « Resolve conflicts » dans son pied, même sans conflit connu', () => {
+  for (const repository of REPO_SCAN.repositories) {
+    const { inner } = voletDepot(repository)
+    const bouton = boutonConflits(inner)
+    assert.ok(bouton, `le geste est rendu pour ${repository.name}`)
+    assert.match(bouton.props.className, /missions-action--icon/)
+    assert.equal(bouton.props.title, 'Resolve conflicts')
+    assert.equal(bouton.props.type, 'button')
+    assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans title et aria-label')
+    assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte son dessin')
+    // Le pied reprend la famille du volet mission.
+    const pied = findAll(inner, 'div').find((node) => node.props.className === 'missions-drawer-foot')
+    assert.ok(pied, 'le pied porte .missions-drawer-foot')
+    const actions = findAll(pied, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+    assert.ok(actions, 'les actions portent .missions-drawer-actions')
+    assert.ok(findAll(actions, 'button').includes(bouton))
+  }
+})
+
+test('un clic sur « Resolve conflicts » ouvre la session dans le workspace du dépôt', async () => {
+  const repository = REPO_SCAN.repositories[1]
+  const ouverts = []
+  const services = {
+    getService: (name) => {
+      if (name === 'uiWorkspace') {
+        return { startSession: (id, options) => ouverts.push({ id, prompt: options?.prompt }) }
+      }
+      if (name === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => [
+              { workspaceId: 'w-zeta', path: '/Users/moi/projects/zeta' },
+              { workspaceId: 'w-missions', path: repository.path },
+            ],
+          },
+        }
+      }
+      return null
+    },
+  }
+
+  const { inner } = voletDepot(repository, { services })
+  await boutonConflits(inner).props.onClick()
+
+  assert.equal(ouverts.length, 1, 'un clic, une session')
+  assert.equal(ouverts[0].id, 'w-missions', 'l’identifiant est celui du workspace dont le chemin est le dépôt')
+  assert.match(ouverts[0].prompt, /Chemin : \/Users\/moi\/projects\/missions\./)
+  assert.match(ouverts[0].prompt, /Branche courante : feat\/mis-116\./)
+  assert.match(ouverts[0].prompt, /tu ne merges jamais la PR/)
+  assert.match(ouverts[0].prompt, /tu n’écris jamais sur main/)
+})
+
+test('une session refusée dit « Session not opened: … » sans perdre le prompt', async () => {
+  const repository = REPO_SCAN.repositories[1]
+  const envois = []
+  const services = {
+    getService: (name) => (name === 'uiWorkspace'
+      ? { startSession: (id, options) => { envois.push(options?.prompt); throw new Error('workspace/not-found') } }
+      : null),
+  }
+
+  const { inner, setters } = voletDepot(repository, { services })
+  const bouton = boutonConflits(inner)
+  await bouton.props.onClick()
+
+  assert.ok(setters.includes('Session not opened: workspace/not-found'), 'l’échec est dit en une ligne')
+  // Le prompt n’est pas perdu : un second clic envoie exactement le même.
+  await bouton.props.onClick()
+  assert.equal(envois.length, 2)
+  assert.equal(envois[0], envois[1])
+
+  // La note est rendue dans le pied du volet, au-dessus du bouton.
+  const apres = voletDepot(repository, { services, note: 'Session not opened: workspace/not-found' })
+  assert.match(textOf(apres.inner), /Session not opened: workspace\/not-found/)
+  assert.ok(boutonConflits(apres.inner), 'le bouton reste rendu après l’échec')
+})
+
+test('le bouton des conflits compte « repository.resolve », un seul POST', async () => {
+  const spy = espionUsage()
+  try {
+    const repository = REPO_SCAN.repositories[1]
+    const services = {
+      getService: (name) => {
+        if (name === 'uiWorkspace') return { startSession: () => {} }
+        if (name === 'workspaces') return { list: { getSnapshot: () => [{ workspaceId: 'w-missions', path: repository.path }] } }
+        return null
+      },
+    }
+    const { inner } = voletDepot(repository, { services })
+    await boutonConflits(inner).props.onClick()
+    spy.geste('repository.resolve')
+  } finally {
+    spy.restore()
+  }
+})
+
 function monterVoletCloture(mission = { ...MISSION, state: 'ready-for-prod', updatedAt: MISSION.updated }) {
   return monterVolet(mission)
 }
@@ -3289,7 +3407,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(42\)/)
+  assert.match(texte, /Never used \(43\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -3305,7 +3423,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(45\)/)
+  assert.match(textOf(zero.inner), /Never used \(46\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
