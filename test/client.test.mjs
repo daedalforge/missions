@@ -1275,7 +1275,7 @@ function workflowStateValues(draft, patch = {}) {
     selectedArc: null,
     tab: 'infos',
     creating: false,
-    form: { title: '', description: '', kind: 'etape' },
+    form: { title: '', description: '', kind: 'etape', local: false },
     formErrors: {},
     creatingBusy: false,
     exitText: (draft.exit ?? []).join(', '),
@@ -2240,16 +2240,15 @@ test('un brouillon sale refuse d’ouvrir la création', () => {
   assert.equal(setters.some((value) => value?.kind === 'error' && /d’abord/.test(value.message)), true, 'le panneau demande d’enregistrer ou d’annuler')
 })
 
-test('les règles de repli de la liste et du volet sont déclarées sous 900 px et 640 px', () => {
-  // Le rendu ne se mesure pas ici : jsdom ne calcule aucune mise en page. Ce
-  // test prouve les déclarations CSS ; la mesure réelle du panneau à 1280 px et
-  // 640 px est consignée dans le journal de MIS-195, avec ses captures.
-  // La grille des cartes se replie d'elle-même ; sous 900 px le volet passe
-  // sous le graphe ; sous 640 px le formulaire passe sur une seule colonne. Le
-  // canevas garde son propre défilement : jamais la page entière.
+test('les formulaires empilent leurs champs sur une colonne', () => {
+  assert.match(regle('.wf-form'), /grid-template-columns: minmax\(0, 1fr\)/)
+  assert.match(regle('.wf-form-actions'), /grid-column: 1 \/ -1/)
+  assert.doesNotMatch(SOURCE, /@media \(max-width: 640px\) \{[\s\S]*?\.wf-form \{/, 'le média ne répète plus la grille')
+})
+
+test('la liste, le volet et le canevas gardent leurs règles de repli', () => {
   assert.match(regle('.wf-list'), /grid-template-columns: repeat\(auto-fill, minmax\(240px, 1fr\)\)/)
   assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\.wf-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
-  assert.match(SOURCE, /@media \(max-width: 640px\) \{[\s\S]*?\.wf-form \{ grid-template-columns: minmax\(0, 1fr\); \}/)
   assert.match(regle('.wf-canvas-wrap'), /overflow: auto/)
   assert.match(regle('.missions-body'), /overflow: auto/)
 })
@@ -2401,8 +2400,16 @@ test('la création ne demande que le titre, la description et le type', async ()
   assert.ok(form, 'le formulaire de création est ouvert')
   const etiquettes = findAll(form, 'label').map((label) => textOf(findAll(label, 'span')[0]))
   assert.deepEqual(etiquettes, ['Titre', 'Description', 'Type'], 'trois champs, pas un de plus')
-  assert.equal(findAll(form, 'input').length, 2, 'un titre et une description : la clé et le document ne se tapent pas')
+  assert.equal(findAll(form, 'input').length, 1, 'le titre seulement : la clé et le document ne se tapent pas')
+  const description = findAll(form, 'textarea')[0]
+  assert.ok(description, 'la description est un textarea')
+  assert.ok(Number(description.props.rows) >= 3, 'trois lignes au moins')
+  assert.equal(description.props.maxLength, 280)
   assert.equal(findAll(form, 'select').length, 1, 'seul le type se choisit')
+  const versionne = findAll(form, 'button').find((node) => node.props.role === 'switch')
+  assert.ok(versionne, 'le switch de versionnement est là')
+  assert.equal(versionne.props['aria-checked'], 'true', 'coché par défaut : versionné')
+  assert.match(textOf(versionne), /Versionné/)
 })
 
 test('la création envoie le titre, la description et le type, jamais la clé', async () => {
@@ -2433,12 +2440,13 @@ test('la création envoie le titre, la description et le type, jamais la clé', 
     const formulaire = findAll(inner, 'form')[0]
     assert.ok(formulaire, 'le dialogue est rendu')
     const champs = findAll(formulaire, 'input')
+    const description = findAll(formulaire, 'textarea')[0]
 
     // Chaque frappe passe par le setter du formulaire : le champ est piloté,
     // pas seulement décoré.
     const avant = setters.length
     champs[0].props.onChange({ target: { value: 'Incidents' } })
-    champs[1].props.onChange({ target: { value: 'Les incidents du workspace' } })
+    description.props.onChange({ target: { value: 'Les incidents du workspace' } })
     findAll(formulaire, 'select')[0].props.onChange({ target: { value: 'statuts' } })
     // Chaque frappe pose le formulaire puis ses erreurs : le formulaire d'abord.
     const vide = { title: '', description: '', kind: 'etape' }
@@ -2464,6 +2472,7 @@ test('la création envoie le titre, la description et le type, jamais la clé', 
       title: 'Incidents',
       description: 'Les incidents du workspace',
       kind: 'statuts',
+      local: false,
     }, 'la clé et le document se déduisent du titre : ils ne partent pas')
   } finally {
     globalThis.fetch = vraiFetch
@@ -7161,4 +7170,46 @@ test('changer de thème écrit missions.theme et compte le geste', () => {
   } finally {
     spy.restore()
   }
+})
+
+test('la carte et la tête du détail portent la pastille Local, et seulement pour un local', () => {
+  const local = montrerWorkflows([workflowEntry({ local: true })], { tab: 'infos' })
+  const carte = findAll(local.rendered, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+  const pastilles = findAll(carte, 'span').filter((node) => node.props.className === 'wf-pick-local')
+  assert.equal(pastilles.length, 1, 'la carte porte la pastille')
+  assert.equal(textOf(pastilles[0]), 'Local')
+  const tete = findAll(local.rendered, 'div').find((node) => node.props.className === 'wf-detail-head')
+  assert.ok(tete, 'la tête du détail est rendue')
+  assert.match(textOf(tete), /Local/, 'la tête du détail porte la pastille')
+
+  const versionne = montrerWorkflows([workflowEntry({ local: false })]).rendered
+  const carteVersionnee = findAll(versionne, 'button').find((node) => /wf-pick/.test(node.props.className ?? ''))
+  assert.equal(findAll(carteVersionnee, 'span').filter((node) => node.props.className === 'wf-pick-local').length, 0)
+  assert.match(regle('.wf-pick-local'), /color: #8250df/, 'la pastille locale a sa teinte, distincte du type')
+  assert.match(regle('.wf-pick-summary'), /white-space: pre-line/)
+  assert.match(regle('.wf-pick-summary'), /-webkit-line-clamp: 2/)
+})
+
+test('Informations rend la description en textarea et le versionnement en switch', () => {
+  const { rendered, setters } = montrerWorkflows([workflowEntry({ local: false })], { tab: 'infos' })
+  const description = findAll(rendered, 'textarea')[0]
+  assert.ok(description, 'la description est un textarea')
+  assert.ok(Number(description.props.rows) >= 3)
+  assert.equal(description.props.maxLength, 280)
+
+  const versionne = findAll(rendered, 'button').find((node) => node.props.role === 'switch')
+  assert.ok(versionne, 'le switch est dans Informations')
+  assert.equal(versionne.props['aria-checked'], 'true', 'versionné par défaut')
+
+  const avant = setters.length
+  versionne.props.onClick()
+  const misesAJour = setters.slice(avant).filter((value) => typeof value === 'function')
+  assert.ok(misesAJour.length, 'le basculement marque le brouillon')
+  const bascule = misesAJour[0](modelOf(workflowEntry({ local: false })))
+  assert.equal(bascule.local, true, 'décocher range en local')
+  assert.notDeepEqual(bascule, modelOf(workflowEntry({ local: false })), 'le brouillon devient sale')
+
+  const local = montrerWorkflows([workflowEntry({ local: true })], { tab: 'infos' }).rendered
+  const switchLocal = findAll(local, 'button').find((node) => node.props.role === 'switch')
+  assert.equal(switchLocal.props['aria-checked'], 'false', 'un local n’est pas coché versionné')
 })
