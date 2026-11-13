@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { USAGE_ELEMENTS } from '../lib/view.js'
+import { missionSessionPrompt, needsYou, USAGE_ELEMENTS } from '../lib/view.js'
 import { MODELS_DIR, readWorkflow } from '../lib/workflows.js'
 import { blockedReasonAfterWrite } from '../lib/view.js'
 import { forgetToken, setBlocked } from '../lib/trackers/jira.js'
@@ -794,7 +794,8 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   assert.match(flat, /missions-hero/)
   assert.match(flat, /data:image\/webp;base64,/)
   assert.match(SOURCE, /Naruto theme/)
-  assert.match(flat, /missions-drawer--empty/)
+  assert.match(flat, /DashboardQueue/)
+  assert.match(SOURCE, /missions-drawer--decision/)
   assert.doesNotMatch(SOURCE, /missions-drawer--empty \{ display: none; \}/)
   assert.match(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*background: color-mix/)
   assert.doesNotMatch(SOURCE, /\[data-theme="manga"\] \.missions-card:hover \{[^}]*translateY/)
@@ -1956,6 +1957,271 @@ test('un chargement sans donnée rend le loader, un refresh garde les lignes', (
   const warm = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS, true), 'dashboard'], { now: DASH_NOW })
   assert.equal(findAll(warm.tree, 'div').filter((div) => div.props.className === 'missions-loader').length, 0)
   assert.equal(findAll(warm.tree, 'button').filter((button) => button.props['data-state'] !== undefined).length, 10)
+})
+
+/**
+ * La file du dashboard, telle que le tracker la publie : les trois états qui
+ * attendent une décision, un état inconnu à arbitrer, et une
+ * mission déjà lancée qui n'a rien à y faire. Les dates sont fixes et le plus
+ * ancien état est Q-1, pour que le tri ne dépende pas du jour de la suite.
+ */
+const QUEUE_MISSIONS = [
+  { key: 'Q-9', title: 'waiting for review', state: 'in-review', branch: 'feat/q-9', base: 'main', points: 3, updatedAt: '2026-11-09T12:00:00Z' },
+  { key: 'Q-1', title: 'old ready work', state: 'ready', branch: 'feat/q-1', base: 'main', updatedAt: '2026-10-01T12:00:00Z' },
+  { key: 'Q-2', title: 'blocked story', state: 'ready', branch: 'feat/q-2', base: 'main', blocked: true, updatedAt: '2026-11-08T12:00:00Z' },
+  { key: 'Q-7', title: 'awaiting refinement', state: 'to-refine', branch: 'feat/q-7', base: 'main', updatedAt: '2026-11-10T12:00:00Z' },
+  { key: 'Q-4', title: 'unmapped status', state: null, updatedAt: '2026-11-11T06:00:00Z' },
+  { key: 'Q-5', title: 'running now', state: 'in-progress', branch: 'feat/q-5', base: 'main', updatedAt: '2026-11-11T10:00:00Z' },
+]
+
+/**
+ * Le panneau monté sur le dashboard, puis le `DashboardQueue` résolu avec un
+ * `now` figé. La file a ses propres hooks : chaque rendu remonte le panneau
+ * d'abord, comme un vrai re-render rejoue les setters du clic.
+ */
+function monterFile(etats, { now = DASH_NOW, services, workspaceId = 'w' } = {}) {
+  const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, etats)
+  api.apply(ctx)
+
+  /** Remonte le panneau avec les mêmes états initiaux, comme un remontage vrai. */
+  const monterPanneau = () => {
+    resetHooks()
+    queue.length = 0
+    queue.push(...etats)
+    return registered.main({})
+  }
+  const rendu = (panneau = monterPanneau()) => {
+    const file = findAll(panneau, 'DashboardQueue')[0]
+    assert.ok(file, 'le dashboard doit rendre DashboardQueue')
+    const props = { ...file.props, now, workspaceId }
+    if (services !== undefined) props.services = services
+    return { panneau, file, tree: renderTree({ ...file, props }) }
+  }
+  return { registered, setters, monterPanneau, rendu, premier: rendu() }
+}
+
+test('sous le dashboard, le volet devient le poste de décision de la file', () => {
+  // Given trois états en attente, un état inconnu et une mission lancée.
+  const { tree, panneau } = monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard']).premier
+
+  // Then le volet rend la carte du poste de décision, et une seule.
+  assert.equal(findAll(tree, 'article').length, 1)
+  assert.equal(findAll(tree, 'article')[0].props.className, 'missions-queue-card')
+  assert.equal(findAll(tree, 'aside').length, 1, 'un seul volet, celui du poste de décision')
+  const aside = findAll(tree, 'aside')[0]
+  assert.match(aside.props.className, /missions-drawer/)
+  assert.match(aside.props.className, /missions-drawer--decision/)
+  assert.equal(textOf(findAll(aside, 'h2')[0]), 'Now')
+  assert.match(textOf(aside), /1 of 5/, 'la carte dit sa position dans la file')
+  assert.match(textOf(aside), /^decisionNow1 of 5/, 'le titre, puis la position')
+  assert.doesNotMatch(textOf(aside), /Select a mission/)
+  assert.match(SOURCE, /^\.missions-queue-card \{/m, 'la règle de la carte est présente')
+
+  // Then le panneau rend le poste de décision, pas l'aside vide d'avant.
+  assert.equal(findAll(panneau, 'DashboardQueue').length, 1)
+
+  // Then la tête est la première de la file, dans l'ordre que le dashboard applique déjà.
+  const attendu = needsYou(QUEUE_MISSIONS)[0]
+  assert.equal(attendu.key, 'Q-9')
+  assert.match(textOf(aside), /Q-9/)
+  assert.match(textOf(aside), /waiting for review/)
+  assert.match(textOf(aside), /Review/)
+  assert.doesNotMatch(textOf(aside), /running now/, 'une mission lancée ne se décide pas ici')
+})
+
+test('le poste de décision suit la file quand une mission change d’état', () => {
+  // Given Q-7 quitte to-refine pour in-review, plus ancienne que Q-9.
+  const permutees = QUEUE_MISSIONS.map((mission) => {
+    if (mission.key === 'Q-7') return { ...mission, state: 'in-review', updatedAt: '2026-11-05T12:00:00Z' }
+    if (mission.key === 'Q-9') return { ...mission, updatedAt: '2026-11-12T12:00:00Z' }
+    return mission
+  })
+  const { tree } = monterFile([EMPTY_BAR, dashboardView(permutees), 'dashboard']).premier
+
+  // Then la tête change avec la file, sans code de tri propre au volet.
+  assert.equal(needsYou(permutees)[0].key, 'Q-7')
+  const aside = findAll(tree, 'aside')[0]
+  assert.equal(textOf(findAll(aside, 'h3')[0]), 'awaiting refinement')
+  assert.match(textOf(aside), /Q-7/)
+  assert.match(textOf(aside), /1 of 5/)
+  const lignes = findAll(aside, 'button').filter((node) => node.props.className === 'missions-queue-line')
+  assert.match(textOf(lignes[0]), /Q-9/, 'Q-9 redescend dans la suite de la file')
+})
+
+test('la carte porte l’âge, la marque quiet, les points et le blocage', () => {
+  // Given une tête vieille de deux jours, avec trois points.
+  const QUESTION_OLD = QUEUE_MISSIONS[1]
+  const jeune = monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard']).premier.tree
+  const aside = findAll(jeune, 'aside')[0]
+  const age = findAll(aside, 'li').find((node) => node.props.className === 'missions-queue-cue' && textOf(node).includes('updated'))
+  assert.ok(age, 'la carte porte son âge')
+  assert.equal(age.props['data-quiet'], 'false')
+  assert.match(textOf(age), /updated 2 d ago/)
+  assert.match(textOf(aside), /3 pts/)
+  assert.match(textOf(aside), /Review/, 'la tête in-review dit Review')
+  const verbes = findAll(aside, 'button')
+    .filter((node) => node.props.className === 'missions-queue-line')
+    .map((node) => textOf(findAll(node, 'span').at(-1)))
+  assert.deepEqual(verbes, ['Start', 'Start', 'Refine', 'Open'], 'chaque ligne dit le verbe de son état, un état inconnu reste neutre')
+
+  // Then une tête ancienne (41 jours) : la marque quiet apparaît, en texte et en attribut.
+  const vieille = monterFile([EMPTY_BAR, dashboardView([QUESTION_OLD]), 'dashboard']).premier.tree
+  const vieuxAside = findAll(vieille, 'aside')[0]
+  const vieuxAge = findAll(vieuxAside, 'li')[0]
+  assert.equal(vieuxAge.props['data-quiet'], 'true')
+  assert.match(textOf(vieuxAge), /updated 41 d ago · quiet/)
+
+  // Then une mission bloquée porte sa marque, sans se retirer de la file.
+  const bloque = monterFile([EMPTY_BAR, dashboardView([QUEUE_MISSIONS[2]]), 'dashboard']).premier.tree
+  const bloqueAside = findAll(bloque, 'aside')[0]
+  const marque = findAll(bloqueAside, 'li').find((node) => textOf(node) === 'blocked')
+  assert.ok(marque, 'la carte dit le blocage')
+  assert.match(marque.props.className, /missions-queue-cue--blocked/)
+})
+
+test('choisir une ligne de la file refait la carte sans quitter le dashboard', () => {
+  // Given le dashboard monté sur la file.
+  const app = monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard'])
+
+  // When la ligne de Q-7 est choisie.
+  const ligne = findAll(app.premier.tree, 'button')
+    .find((bouton) => bouton.props.className === 'missions-queue-line' && textOf(bouton).includes('Q-7'))
+  assert.ok(ligne, 'Q-7 fait partie de la suite de la file')
+  ligne.props.onClick()
+
+  // Then la carte devient Q-7, toujours sous le dashboard, à sa position dans la file.
+  const suite = app.rendu()
+  const aside = findAll(suite.tree, 'aside')[0]
+  assert.equal(textOf(findAll(aside, 'h3')[0]), 'awaiting refinement')
+  assert.match(textOf(aside), /4 of 5/)
+  assert.match(textOf(aside), /Refine/)
+  assert.equal(findAll(suite.panneau, 'DashboardView').length, 1)
+  assert.equal(findAll(suite.panneau, 'MissionsView').length, 0)
+  assert.equal(findAll(suite.panneau, 'DoneView').length, 0)
+})
+
+test('le bouton de session ouvre la session avec le prompt de l’étape', async () => {
+  const captures = []
+  let sent = 0
+  const services = {
+    getService: (name) => {
+      if (name !== 'uiWorkspace') {
+        return null
+      }
+      return {
+        startSession: (id, options) => captures.push({ id, prompt: options?.prompt }),
+        send: () => {
+          sent += 1
+        },
+      }
+    },
+  }
+
+  // Given une tête `ready`, dont la branche et la base sont déclarées.
+  const ready = { ...QUEUE_MISSIONS[1], blocked: false }
+  const app = monterFile([EMPTY_BAR, dashboardView([ready]), 'dashboard'], { services })
+  const bouton = findAll(app.premier.tree, 'button')
+    .find((node) => node.props.className === 'missions-queue-action missions-queue-action--primary')
+  assert.ok(bouton, 'la carte porte son geste de session')
+  assert.match(textOf(bouton), /^Start a session — exécution$/)
+  assert.equal(bouton.props.disabled, false)
+
+  // When le geste part, le prompt est celui de l'étape, pas une copie locale.
+  await bouton.props.onClick()
+
+  // Then une session est ouverte, dans le workspace du panneau, avec ce prompt.
+  assert.equal(captures.length, 1)
+  assert.equal(captures[0].id, 'w')
+  assert.equal(typeof captures[0].prompt, 'string')
+  assert.ok(captures[0].prompt.length > 0)
+  assert.equal(captures[0].prompt, missionSessionPrompt(ready))
+  assert.equal(sent, 0, 'le geste préremplit le composer, il n’envoie rien')
+  assert.equal(findAll(app.premier.tree, 'p').filter((node) => node.props.role === 'alert').length, 0)
+})
+
+test('les détails ouvrent la mission dans l’onglet Missions', () => {
+  // Given la tête Q-9.
+  const app = monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard'])
+
+  // When Details est cliqué.
+  const details = findAll(app.premier.tree, 'button').find((node) => textOf(node) === 'Details')
+  assert.ok(details)
+  details.props.onClick()
+
+  // Then la mission est sélectionnée, l'onglet Missions la montre, son volet est monté.
+  const panneau = app.monterPanneau()
+  assert.equal(findAll(panneau, 'MissionsView').length, 1)
+  assert.equal(findAll(panneau, 'DashboardView').length, 0)
+  const volet = findAll(panneau, 'MissionDrawer')[0]
+  assert.ok(volet)
+  assert.equal(volet.props.mission.key, 'Q-9')
+})
+
+test('une file vide le dit et ramène aux missions', () => {
+  // Given une liste dont rien n'attend une décision.
+  const missions = [
+    { key: 'R-1', title: 'running', state: 'in-progress', branch: 'feat/r-1', base: 'main', updatedAt: '2026-11-11T10:00:00Z' },
+    { key: 'D-1', title: 'shipped', state: 'done', updatedAt: '2026-11-11T09:00:00Z' },
+  ]
+  const app = monterFile([EMPTY_BAR, dashboardView(missions), 'dashboard'])
+
+  // Then l'état vide est explicite, sans carte ni ligne inventée.
+  const aside = findAll(app.premier.tree, 'aside')[0]
+  assert.match(aside.props.className, /missions-drawer--decision-empty/)
+  assert.match(textOf(aside), /Nothing is waiting on a decision\./)
+  assert.equal(findAll(app.premier.tree, 'article').filter((node) => node.props.className === 'missions-queue-card').length, 0)
+  assert.equal(findAll(app.premier.tree, 'button').filter((node) => node.props.className === 'missions-queue-line').length, 0)
+
+  // Then son geste ramène à la liste.
+  findAll(app.premier.tree, 'button').find((node) => textOf(node) === 'Open Missions').props.onClick()
+  const panneau = app.monterPanneau()
+  assert.equal(findAll(panneau, 'MissionsView').length, 1)
+  assert.equal(findAll(panneau, 'DashboardQueue').length, 0)
+})
+
+test('chaque volet garde la famille missions-drawer et son titre', () => {
+  // Given le dashboard, l'onglet Missions, le volet d'une mission, celui d'un dépôt.
+  const file = findAll(monterFile([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'dashboard']).premier.tree, 'aside')[0]
+  const vide = findAll(monter([EMPTY_BAR, dashboardView(QUEUE_MISSIONS), 'missions']), 'aside')[0]
+  const volet = findAll(monterVolet().tree, 'aside')[0]
+  const depot = findAll(voletDepot(REPO_SCAN.repositories[0]).inner, 'aside')[0]
+  const cas = [
+    [file, 'Now'],
+    [volet, MISSION.title],
+    [depot, REPO_SCAN.repositories[0].name],
+  ]
+
+  // Then chaque volet garde la classe commune et son titre, l'un après l'autre.
+  for (const [aside, titre] of cas) {
+    assert.ok(aside, 'le volet est monté')
+    assert.match(aside.props.className, /(^|\s)missions-drawer(\s|$)/)
+    assert.equal(textOf(findAll(aside, 'h2')[0]), titre)
+  }
+  assert.match(vide.props.className, /missions-drawer--empty/)
+  assert.match(textOf(vide), /Select a mission to see its details/)
+})
+
+test('le poste de décision tient en thème manga, sans couleur littérale', () => {
+  // Given le panneau monté en thème manga sur le dashboard.
+  const storage = { getItem: () => 'manga', setItem: () => {} }
+  const { api, ctx, registered } = charger(storage, [EMPTY_BAR, dashboardView(QUEUE_MISSIONS)])
+  api.apply(ctx)
+  const panneau = registered.main({})
+  const file = findAll(panneau, 'DashboardQueue')[0]
+  const tree = renderTree({ ...file, props: { ...file.props, now: DASH_NOW } })
+
+  // Then le poste de décision se rend, et le thème ne le cache pas.
+  assert.match(JSON.stringify(panneau), /"data-theme":"manga"/)
+  assert.match(textOf(tree), /Now/)
+  assert.doesNotMatch(SOURCE, /\[data-theme="manga"\] \.missions-drawer--decision \{ display: none; \}/)
+
+  // Then le bloc CSS du poste ne porte ni couleur littérale ni règle de thème.
+  const debut = SOURCE.indexOf('.missions-drawer--decision {')
+  const fin = SOURCE.indexOf('.missions-queue-empty-text {')
+  const bloc = SOURCE.slice(debut, SOURCE.indexOf('}', fin) + 1)
+  assert.match(bloc, /\.missions-queue-card \{/)
+  assert.doesNotMatch(bloc, /#[0-9a-fA-F]{3,8}/)
+  assert.doesNotMatch(bloc, /\[data-theme/)
 })
 
 test('le panneau relit la barre de la session au montage', () => {
