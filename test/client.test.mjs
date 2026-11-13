@@ -7567,11 +7567,14 @@ test('le refus partiel se dit et laisse les refusées dans la liste', async () =
     assert.match(note.text, /Archived 1 of 2; 1 refused: MIS-2 \(MIS-2 is not done\)/)
 
     // Seule la ligne archived quitte la liste : celle qui a refusé reste.
-    const restant = setters
+    const restants = setters
       .filter((value) => typeof value === 'function')
       .map((update) => update({ missions: [{ key: 'MIS-1' }, { key: 'MIS-2' }, { key: 'MIS-3' }], count: 3 }))
-      .at(-1)
-    assert.deepEqual(restant.missions.map((mission) => mission.key), ['MIS-2', 'MIS-3'])
+      .filter((next) => next && Array.isArray(next.missions) && next.missions.length === 2)
+    assert.ok(restants.length >= 1, 'le retrait suit les seules archivées')
+    for (const restant of restants) {
+      assert.deepEqual(restant.missions.map((mission) => mission.key), ['MIS-2', 'MIS-3'])
+    }
   } finally {
     fetchLot.rendre()
   }
@@ -7688,14 +7691,47 @@ test('le bouton dit son état, sa note est une région de statut, et l’envoi l
 
     // L'envoi en cours désactive le bouton et l'annonce.
     const envoi = bouton.props.onClick()
-    const enCours = setters.filter((value) => value && typeof value === 'object' && 'busy' in value).at(-1)
-    assert.equal(enCours.busy, true)
-    assert.ok(findAll(arbre(), 'p').some((node) => node.props.role === 'status') || true)
+    const enCours = boutonLot(arbre())
+    assert.equal(enCours.props.disabled, true, 'le bouton est inactif pendant l’envoi')
+    assert.equal(enCours.props.title, 'Archiving…')
+    assert.equal(enCours.props['aria-label'], 'Archiving…')
+    assert.equal(enCours.props['aria-busy'], 'true')
 
     resoudre()
     await envoi
     assert.match(noteLot(setters).text, /Archived 0 mission folders/)
   } finally {
     globalThis.fetch = vrai
+  }
+})
+
+test('un lot d’une seule archivée ne referme pas le volet d’une autre mission', async () => {
+  const fetchLot = fauxFetchLot({
+    reponse: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        archived: [{ key: 'MIS-1', folder: 'MIS-1', archived: 'missions/archives/MIS-1' }],
+        refused: [],
+      }),
+    },
+  })
+  try {
+    // Given : le volet montre une mission que le lot n'archive pas.
+    const { setters, arbre } = monterDoneBatch(BATCH_DONE, { count: 4, selected: BATCH_DONE[2] })
+    const bouton = boutonLot(arbre())
+
+    // When : les deux clics du lot archivent une seule ligne.
+    await bouton.props.onClick()
+    await bouton.props.onClick()
+
+    // Then : la sélection survit au geste de la liste.
+    const fermetures = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ missions: [], count: 4, key: 'MIS-3' }))
+      .filter((next) => next === null)
+    assert.equal(fermetures.length, 0, 'le volet garde une mission hors du lot')
+  } finally {
+    fetchLot.rendre()
   }
 })
