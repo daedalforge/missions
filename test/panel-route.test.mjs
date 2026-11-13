@@ -1018,6 +1018,81 @@ test('POST repositories/adopt écrit une fois, et refuse tout le reste', async (
   assert.equal(calls.filter((line) => line.includes(' switch ')).length, 2, 'un seul geste : deux switch, pas quatre')
 })
 
+test('POST repositories/remove retire le dossier d’un worktree, sans toucher à sa branche', async (t) => {
+  const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }])
+  const { run, calls } = fauxGitRun({
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n',
+    'gamma status --porcelain --ignored=matching': '',
+    [`gamma worktree remove ${join(root, 'gamma')}`]: '',
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  // Un seul geste : `git worktree remove`, sans `--force` et sans branche.
+  const ok = await call(handler, { method: 'POST', path: '/missions/api/repositories/remove', body: { name: 'gamma' } })
+  assert.equal(ok.status, 200)
+  assert.deepEqual(ok.body, { name: 'gamma', removed: true })
+  assert.equal(ok.headers['cache-control'], 'no-store', 'la réponse d’un geste ne se sert pas du cache')
+  assert.deepEqual(calls, ['gamma status --porcelain=v2 --branch', 'gamma status --porcelain --ignored=matching', `gamma worktree remove ${join(root, 'gamma')}`])
+
+  // La route n'accepte qu'un POST : la lire n'est pas un geste.
+  const get = await call(handler, { path: '/missions/api/repositories/remove' })
+  assert.equal(get.status, 405)
+  assert.equal(get.headers.allow, 'POST')
+
+  // Un nom absent, un clone, un nom qui sort de la racine.
+  const missing = await call(handler, { method: 'POST', path: '/missions/api/repositories/remove', body: {} })
+  assert.equal(missing.status, 400)
+  assert.match(missing.body.error, /invalid repository name/)
+  const clone = await call(handler, { method: 'POST', path: '/missions/api/repositories/remove', body: { name: 'alpha' } })
+  assert.equal(clone.status, 400)
+  assert.match(clone.body.error, /alpha is not a worktree/)
+  const unknown = await call(handler, { method: 'POST', path: '/missions/api/repositories/remove', body: { name: 'ghost' } })
+  assert.equal(unknown.status, 404)
+  const traversal = await call(handler, { method: 'POST', path: '/missions/api/repositories/remove', body: { name: '../etc' } })
+  assert.equal(traversal.status, 400)
+})
+
+test('POST repositories/remove rend le refus du worktree, puis accepte les ignorés consentis', async (t) => {
+  const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }])
+  const { run, calls } = fauxGitRun({
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n1 .M N... 100644 100644 100644 aaa bbb README.md\n',
+    'gamma status --porcelain': ' M README.md\n',
+    'gamma status --porcelain --ignored=matching': '',
+    [`gamma worktree remove ${join(root, 'gamma')}`]: '',
+  })
+  const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
+
+  const refused = await call(handler, { method: 'POST', path: '/missions/api/repositories/remove', body: { name: 'gamma' } })
+  assert.equal(refused.status, 409)
+  assert.equal(refused.body.side, 'worktree')
+  assert.deepEqual(refused.body.files, ['README.md'])
+  assert.equal(refused.body.error, 'the worktree gamma has uncommitted changes (one file: README.md) — commit or stash them first')
+  assert.equal(calls.some((line) => /worktree remove/.test(line)), false, 'un refus n’écrit pas')
+
+  // Un worktree propre mais lesté d'un dossier ignoré : la route le nomme et
+  // attend `acceptIgnored` avant de le supprimer avec le dossier.
+  const sale = fauxGitRun({
+    'gamma status --porcelain=v2 --branch': '# branch.head gh-20-hover\n',
+    'gamma status --porcelain --ignored=matching': '!! node_modules/\n',
+    [`gamma worktree remove ${join(root, 'gamma')}`]: '',
+  })
+  const second = await mount(t, { workspaceRoot: root, runGit: sale.run })
+  const ignored = await call(second.handler, { method: 'POST', path: '/missions/api/repositories/remove', body: { name: 'gamma' } })
+  assert.equal(ignored.status, 409)
+  assert.equal(ignored.body.side, 'worktree')
+  assert.equal(ignored.body.ignored, true)
+  assert.deepEqual(ignored.body.files, ['node_modules'])
+  assert.match(ignored.body.error, /^the worktree gamma holds 1 ignored entry \(node_modules\)/)
+
+  const consented = await call(second.handler, {
+    method: 'POST',
+    path: '/missions/api/repositories/remove',
+    body: { name: 'gamma', acceptIgnored: true },
+  })
+  assert.equal(consented.status, 200)
+  assert.deepEqual(consented.body, { name: 'gamma', removed: true })
+})
+
 test('POST repositories/adopt rend le refus de l’état, avec son côté et ses fichiers', async (t) => {
   const root = await workspace(t, ['alpha', { name: 'gamma', kind: 'worktree' }])
   const { run, calls } = fauxGitRun({
