@@ -177,6 +177,9 @@ window.__ModuleLoader__.load({
     const ARCHIVE_URL = 'missions/api/archive'
     const JOURNAL_URL = 'missions/api/journal'
     const CHECKLIST_URL = 'missions/api/checklist'
+    // The Tolgee import reads the branch's diff and writes the XLIFF in the
+    // mission folder: Tolgee itself is never called, the file is the deliverable.
+    const TOLGEE_URL = 'missions/api/tolgee'
     const WORKFLOWS_URL = 'missions/api/workflows'
     const WORKFLOW_MODEL_URL = 'missions/api/workflows/model'
     const REPOSITORIES_URL = 'missions/api/repositories'
@@ -598,6 +601,15 @@ window.__ModuleLoader__.load({
 .missions-declare-save:disabled { opacity: .55; cursor: default; }
 .missions-declare-note { margin: 0; color: var(--dsw-alias-label-secondary, #5c534b); font-size: 11.5px; }
 .missions-declare-note--error { color: var(--dsw-alias-label-danger, #b42318); }
+/* The Tolgee report: the keys the branch adds that a locale misses, then the
+   keys that cannot be imported before they are written in the reference. */
+.missions-tolgee { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
+.missions-tolgee-title { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+.missions-tolgee-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 11.5px; }
+.missions-tolgee-key { display: flex; gap: 6px; justify-content: space-between; align-items: baseline; }
+.missions-tolgee-key code { overflow-wrap: anywhere; }
+.missions-tolgee-missing { color: var(--dsw-alias-label-tertiary, #7a7168); white-space: nowrap; }
+.missions-tolgee-hint { margin: 0; color: var(--dsw-alias-label-secondary, #5c534b); font-size: 11.5px; }
 /* Blocked: a label of the tracker, whose reason is a comment of the ticket. */
 .missions-blocked { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.10)); border-radius: 8px; }
 .missions-blocked[data-blocked="true"] { border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 38%, transparent); background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 6%, transparent); }
@@ -1858,6 +1870,12 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
       const armedArchiveRef = React.useRef(false)
       const [archiving, setArchiving] = React.useState(false)
       const [archiveNote, setArchiveNote] = React.useState(null)
+      // The Tolgee import: the report stays on screen, the XLIFF is written in
+      // the mission folder. Only a project declaring `translations` shows it.
+      const [tolgeeNote, setTolgeeNote] = React.useState(null)
+      const [tolgeeKeys, setTolgeeKeys] = React.useState(null)
+      const [tolgeeUntranslated, setTolgeeUntranslated] = React.useState([])
+      const [importingTolgee, setImportingTolgee] = React.useState(false)
 
       React.useEffect(() => {
         let alive = true
@@ -1903,6 +1921,13 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         setArmedArchive(false)
         setArchiveNote(null)
       }, [mission.key, mission.state])
+
+      // Another mission is another diff: its Tolgee report must not linger.
+      React.useEffect(() => {
+        setTolgeeNote(null)
+        setTolgeeKeys(null)
+        setTolgeeUntranslated([])
+      }, [mission.key])
 
       React.useEffect(() => {
         const onKey = (event) => {
@@ -2109,6 +2134,38 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
         }
       }
 
+      // One click, one report: the host reads the branch's diff and the declared
+      // locales, writes the XLIFF when there is something to import, and answers
+      // with the keys. Nothing here talks to Tolgee.
+      const importTolgee = async () => {
+        track('mission.tolgee')
+        setImportingTolgee(true)
+        setTolgeeNote(null)
+        try {
+          const response = await fetch(TOLGEE_URL, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ key: mission.key }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `tolgee import failed (${response.status})`)
+          const keys = Array.isArray(data.keys) ? data.keys : []
+          setTolgeeKeys(keys)
+          setTolgeeUntranslated(Array.isArray(data.untranslated) ? data.untranslated : [])
+          const locales = [...new Set(keys.flatMap((entry) => entry.missing ?? []))]
+          setTolgeeNote({
+            error: false,
+            text: keys.length === 0
+              ? 'Rien à importer : aucune clé du diff ne manque dans les locales déclarées.'
+              : `${keys.length} clé(s) manquante(s) en ${locales.join(', ')} — fichier écrit dans ${data.file}.`,
+          })
+        } catch (error) {
+          setTolgeeNote({ error: true, text: `Import Tolgee : ${error?.message ?? error}` })
+        } finally {
+          setImportingTolgee(false)
+        }
+      }
+
       // Turning it on only opens the field; turning it off is the unblock.
       const toggleBlocked = (next) => {
         if (next) {
@@ -2262,6 +2319,31 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
             ? h('p', { className: declareNote.error ? 'missions-declare-note missions-declare-note--error' : 'missions-declare-note', role: declareNote.error ? 'alert' : 'status' }, declareNote.text)
             : null,
         ),
+
+        tolgeeKeys !== null || tolgeeUntranslated.length > 0
+          ? h('div', { className: 'missions-tolgee' },
+              h('p', { className: 'missions-tolgee-title' }, 'Clés de traduction du diff'),
+              tolgeeKeys !== null && tolgeeKeys.length > 0
+                ? h('ul', { className: 'missions-tolgee-list' },
+                    tolgeeKeys.map((entry) => h('li', { key: entry.key, className: 'missions-tolgee-key' },
+                      h('code', null, entry.key),
+                      h('span', { className: 'missions-tolgee-missing' }, `manque en ${entry.missing.join(', ')}`),
+                    )),
+                  )
+                : h('p', { className: 'missions-tolgee-hint' }, 'Aucune clé à importer.'),
+              tolgeeUntranslated.length > 0
+                ? h('div', { className: 'missions-tolgee-untranslated' },
+                    h('p', { className: 'missions-tolgee-title' }, 'À écrire en fr d’abord'),
+                    h('ul', { className: 'missions-tolgee-list' },
+                      tolgeeUntranslated.map((entry) => h('li', { key: entry.key, className: 'missions-tolgee-key' },
+                        h('code', null, entry.key),
+                        h('span', { className: 'missions-tolgee-missing' }, (entry.occurrences ?? []).join(', ')),
+                      )),
+                    ),
+                  )
+                : null,
+            )
+          : null,
       )
 
       const journalPanel = h('section', { className: 'missions-journal', 'aria-label': 'Mission journal' },
@@ -2397,6 +2479,19 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
                     onClick: () => track('mission.open-tracker'),
                   }, h(ActionIcon, { name: 'tracker' }))
                 : h('button', { type: 'button', className: 'missions-action missions-action--icon', disabled: true, title: 'No tracker link', 'aria-label': 'No tracker link' }, h(ActionIcon, { name: 'tracker' })),
+              // The Tolgee import belongs to projects that declare their locales:
+              // elsewhere the button is absent, not disabled — there is nothing
+              // to check and no file to write.
+              mission.translations
+                ? h('button', {
+                    type: 'button',
+                    className: 'missions-action missions-action--icon',
+                    onClick: importTolgee,
+                    disabled: importingTolgee,
+                    title: importingTolgee ? 'Checking the translations…' : 'Tolgee import',
+                    'aria-label': importingTolgee ? 'Checking the translations…' : 'Tolgee import',
+                  }, h(ActionIcon, { name: 'tolgee' }))
+                : null,
               // Only a mission in review has remarks to check: the client does
               // not know whether a PR exists, so the state alone decides, and
               // the session stops with a word when `gh` finds none.
@@ -2534,6 +2629,16 @@ body[data-ds-dark-theme] .missions-panel[data-theme="manga"] .missions-prio[data
           h('path', { d: 'M2.2 5.6h11.6v7.2a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1Z' }),
           h('path', { d: 'M1.8 3.4h12.4v2.2H1.8z' }),
           h('path', { d: 'M6.4 8.6h3.2' }),
+        )
+      }
+      if (name === 'tolgee') {
+        // A page with an arrow leaving it: the mission's keys go to Tolgee as
+        // a file, and nothing is read back.
+        return h('svg', common,
+          h('path', { d: 'M3.5 2.5h4.5L11.5 6v2.5' }),
+          h('path', { d: 'M3.5 2.5v11h4.5' }),
+          h('path', { d: 'M8 2.5V6h3.5' }),
+          h('path', { d: 'M11.5 14V9M9.7 10.8 11.5 9l1.8 1.8' }),
         )
       }
       if (name === 'free') {

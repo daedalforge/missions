@@ -58,6 +58,15 @@ Depuis cet onglet, une mission close peut être **archivée** : son dossier pass
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
 modifié — la mission quitte Done et reste sur le disque.
 
+Un projet peut déclarer ses **traductions** dans
+[`missions/projects.yml`](missions/projects.yml) — `translations.locales`,
+`translations.languageFile`, `translations.reference`. Le volet d'une mission de
+ce projet gagne alors un bouton **Tolgee import** : il lit le diff de la branche
+contre sa base, repère les clés `t()` ajoutées et écrit
+`missions/<dossier>/import-tolgee.xliff`. Les clés manquantes en `fr` sont
+listées à part, jamais dans le fichier ; Tolgee n'est jamais appelé, l'import du
+fichier reste un geste manuel.
+
 ## Le relevé d'usage
 
 Le panneau tient sa propre comptabilité : chaque geste — un onglet, un filtre,
