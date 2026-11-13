@@ -950,9 +950,9 @@ test('une carte de mission est un bouton qui se tape, sans état pressé', () =>
 })
 
 test('une carte statique n’est pas un bouton, une carte active l’est', () => {
-  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
+  const { tree } = renderDigest()
   const widgets = findAll(tree, 'article').filter((node) => /missions-card--widget/.test(node.props.className ?? ''))
-  assert.ok(widgets.length >= 4, 'les widgets sont des cartes')
+  assert.equal(widgets.length, 8, 'les huit widgets sont des cartes')
   for (const carte of widgets) {
     assert.equal(carte.props.role, undefined, 'pas de rôle de bouton')
     assert.equal(carte.props.tabIndex, undefined, 'pas dans l’ordre de tabulation')
@@ -973,6 +973,66 @@ test('la carte d’un workflow est un bouton natif, actif et pressé', () => {
   assert.equal(cartes[1].props['aria-pressed'], false)
 })
 
+test('les trois listes passent par la même carte', () => {
+  // Une seule coque est construite : la classe du cadre n'apparaît qu'au
+  // montage de `Card`, et trois sites l'appellent — pas quatre.
+  assert.equal((SOURCE.match(/className: \['missions-card', `missions-card--\$\{variant\}`/g) ?? []).length, 1)
+  assert.equal((SOURCE.match(/h\(Card, \{/g) ?? []).length, 3, 'les trois listes passent par Card')
+
+  // Missions : un article, avec son axe et ses repères.
+  const view = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
+  api.apply(ctx)
+  const list = findAll(registered.main({}), 'MissionsView')[0]
+  const mission = renderTree({ ...list, props: list.props })
+  const missionCard = findAll(mission, 'article').find((node) => /missions-card--mission/.test(node.props.className ?? ''))
+  assert.ok(missionCard, 'la liste des missions passe par Card')
+
+  // Dashboard : les huit widgets, sans interaction.
+  const { tree: dashboard } = renderDigest()
+  const widgets = findAll(dashboard, 'article').filter((node) => /missions-card--widget/.test(node.props.className ?? ''))
+  assert.equal(widgets.length, 8, 'les huit widgets passent par Card')
+
+  // Workflows : les deux cartes de choix, boutons natifs.
+  const { rendered } = montrerWorkflows([workflowEntry(), statutsEntry()])
+  const picks = findAll(rendered, 'button').filter((node) => /missions-card--pick/.test(node.props.className ?? ''))
+  assert.equal(picks.length, 2, 'les cartes de workflow passent par Card')
+
+  // Les trois variantes partagent le cadre et ne peignent que leur géométrie.
+  for (const carte of [missionCard, ...widgets, ...picks]) {
+    assert.match(carte.props.className, /^missions-card missions-card--(mission|widget|pick)( |$)/)
+  }
+})
+
+test('les panneaux statiques ne sont pas des cartes', () => {
+  // Workflows : le dock et ses panneaux sont des surfaces de lecture, pas des
+  // cartes — ils gardent leur propre cadre et ne portent aucune classe de carte.
+  const { rendered } = montrerWorkflows([workflowEntry(), statutsEntry()])
+  const panels = findAll(rendered, 'div').filter((node) => /^(wf-panel|wf-card|wf-panel-head)( |$)/.test(node.props.className ?? ''))
+  assert.ok(panels.length > 0, 'les panneaux Workflows sont rendus')
+  for (const panel of panels) assert.doesNotMatch(panel.props.className, /missions-card/)
+
+  // Repositories : une ligne reste une ligne, jamais une carte.
+  const scan = montrerRepositories(scanReady(REPO_SCAN))
+  const rows = findAll(scan.inner, 'li').filter((li) => /missions-repo-rowitem/.test(li.props.className ?? ''))
+  assert.ok(rows.length > 0, 'les lignes Repositories sont rendues')
+  for (const row of rows) assert.doesNotMatch(row.props.className, /missions-card/)
+
+  // Usage : le rapport se lit en listes, aucune carte n'y entre.
+  const { inner } = monterUsage()
+  const porteurs = (node, found = []) => {
+    if (node === null || node === undefined || typeof node !== 'object') return found
+    if (Array.isArray(node)) {
+      for (const child of node) porteurs(child, found)
+      return found
+    }
+    if (/missions-card/.test(node.props?.className ?? '')) found.push(node)
+    porteurs(node.children, found)
+    return found
+  }
+  assert.deepEqual(porteurs(inner), [], 'Usage ne porte aucune carte')
+})
+
 test('le cadre de carte est commun, la géométrie et l’affordance sont par variante', () => {
   // Une seule coque : la classe de widget ne peint plus son propre cadre.
   assert.match(SOURCE, /^\.missions-card \{ display: flex/m)
@@ -984,6 +1044,10 @@ test('le cadre de carte est commun, la géométrie et l’affordance sont par va
   assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]:hover/)
   assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]:focus-visible/)
   assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]\[aria-pressed="true"\]/)
+  // Le survol d'une carte bloquée reste un survol de contrôle : la teinte de
+  // blocage, elle, se pose sur la carte quelle que soit son interaction.
+  assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]\[data-blocked="true"\]:hover/)
+  assert.doesNotMatch(SOURCE, /^\.missions-card\[data-blocked="true"\]:hover/m, 'pas d’affordance de survol sans interaction')
   assert.doesNotMatch(SOURCE, /\.wf-pick[ ,{]/, 'la carte pick a quitté sa coque locale')
 })
 
