@@ -657,7 +657,7 @@ async function copyWorkflows(dir) {
 
 /** Le modèle nu, tel que le panneau le renvoie au serveur. */
 function bareModel(entry) {
-  const { errors, orphanSections, headings, file, ...model } = entry
+  const { errors, orphanSections, headings, file, summary, counts, ...model } = entry
   return model
 }
 
@@ -735,6 +735,99 @@ test('GET /workflows/model rend le YAML, un couple inconnu répond 400', async (
     body: { workflow: 'deploy', model: {} },
   })
   assert.equal(refused.status, 400)
+})
+
+test('POST /workflows crée le modèle et le document, jamais par-dessus', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const created = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows',
+    body: {
+      workflow: 'incidents',
+      title: 'Incidents',
+      kind: 'etape',
+      document: 'workflows/incidents.md',
+      entry: 'to-refine',
+      exit: ['ready'],
+    },
+  })
+
+  assert.equal(created.status, 201)
+  assert.equal(created.body.workflow, 'incidents')
+  assert.equal(created.body.document, 'workflows/incidents.md')
+  assert.equal(created.body.entry.kind, 'etape')
+  assert.deepEqual(created.body.entry.nodes, [])
+  assert.equal(await readFile(join(dir, 'workflows', 'incidents.md'), 'utf8'), '# Incidents\n')
+  const modele = await readFile(join(dir, 'workflows', 'model', 'incidents.yml'), 'utf8')
+  assert.match(modele, /document: workflows\/incidents\.md/)
+
+  const again = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows',
+    body: {
+      workflow: 'incidents',
+      title: 'Autre titre',
+      kind: 'etape',
+      document: 'workflows/incidents.md',
+      entry: 'to-refine',
+      exit: ['ready'],
+    },
+  })
+  assert.equal(again.status, 400)
+  assert.equal(again.body.errors[0].code, 'cle-double')
+  assert.match(await readFile(join(dir, 'workflows', 'model', 'incidents.yml'), 'utf8'), /title: Incidents/)
+})
+
+test('POST /workflows refuse une clé, un document et une sortie invalides', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  const corps = { workflow: 'incidents', title: 'Incidents', kind: 'etape', document: 'workflows/incidents.md', entry: 'to-refine', exit: ['ready'] }
+
+  const cle = await call(handler, { method: 'POST', path: '/missions/api/workflows', body: { ...corps, workflow: '../main' } })
+  assert.equal(cle.status, 400)
+  assert.equal(cle.body.errors[0].field, 'key')
+  assert.equal(cle.body.errors[0].code, 'cle-invalide')
+
+  const document = await call(handler, { method: 'POST', path: '/missions/api/workflows', body: { ...corps, document: '../incidents.md' } })
+  assert.equal(document.status, 400)
+  assert.equal(document.body.errors[0].code, 'document-invalide')
+
+  const sortie = await call(handler, { method: 'POST', path: '/missions/api/workflows', body: { ...corps, exit: ['shipped'] } })
+  assert.equal(sortie.status, 400)
+  assert.equal(sortie.body.errors[0].code, 'etat-inconnu')
+
+  assert.equal(await readFile(join(dir, 'workflows', 'model', 'incidents.yml'), 'utf8').catch(() => null), null, 'rien n’est écrit')
+})
+
+test('POST /workflows pré-remplit un workflow de statuts, et la liste le rend', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const created = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/workflows',
+    body: {
+      workflow: 'statuts',
+      title: 'Statuts des missions',
+      kind: 'statuts',
+      document: 'workflows/statuts.md',
+      entry: 'to-refine',
+      exit: ['done'],
+    },
+  })
+  assert.equal(created.status, 201)
+  assert.equal(created.body.entry.kind, 'statuts')
+  assert.deepEqual(created.body.entry.nodes.map((node) => node.id), ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'])
+  assert.deepEqual(created.body.entry.edges, [])
+  assert.equal(await readFile(join(dir, 'workflows', 'statuts.md'), 'utf8'), '# Statuts des missions\n')
+
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  assert.equal(list.body.workflows.length, 5)
+  assert.deepEqual(list.body.workflows.map((entry) => entry.workflow), ['cadrage', 'execution', 'review', 'cloture', 'statuts'])
+  assert.equal(list.body.workflows.at(-1).kind, 'statuts')
+  assert.deepEqual(list.body.workflows.at(-1).counts, { nodes: 6, edges: 0 })
 })
 
 /** Réponse d'un tracker : ce que `requestJson` lit d'un vrai `fetch`. */

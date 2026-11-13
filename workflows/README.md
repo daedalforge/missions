@@ -88,9 +88,13 @@ périmètre retourne en cadrage — mais jamais sauter une étape.
 ## Le modèle éditable
 
 Chaque étape a son modèle dans `workflows/model/<étape>.yml` : les gestes de ses
-sections, les arcs qui les enchaînent, l'état d'entrée et les états de sortie.
-Le panneau les dessine et les édite dans son onglet **Workflows** ; le format et
-ses règles sont décrits dans `workflows/model/README.md`.
+sections, les arcs qui les enchaînent, l'état d'entrée et les états de sortie. Le
+parcours des statuts a le sien, `workflows/model/statuts.yml` : les six états
+canoniques et les huit événements qui les relient, avec leur libellé, leur
+description et leur projection de tracker. Le panneau liste tous les modèles du
+dossier, les dessine, les édite et en crée de nouveaux dans son onglet
+**Workflows** ; le format, les deux genres et leurs règles sont décrits dans
+`workflows/model/README.md`.
 
 Le document `.md` reste la référence : le modèle en est la vue éditable, et
 `node tools/check-workflows.mjs` signale, étape par étape, une section du

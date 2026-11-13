@@ -2042,3 +2042,80 @@ test('un clone froid se compte en jours, pas en heures', () => {
   // La constante est la règle du pied de carte : trois dépôts, pas un de moins.
   assert.equal(COLD_CHECKOUT_DAYS, 30)
 })
+
+const STATUTS = {
+  workflow: 'statuts',
+  kind: 'statuts',
+  title: 'Statuts des missions',
+  entry: 'to-refine',
+  exit: ['done'],
+  nodes: [
+    { id: 'to-refine', label: 'À cadrer' },
+    { id: 'ready', label: 'Prête' },
+    { id: 'in-progress', label: 'En cours' },
+    { id: 'in-review', label: 'En revue' },
+    { id: 'ready-for-prod', label: 'Prête à partir' },
+    { id: 'done', label: 'Terminée' },
+  ],
+  edges: [
+    { from: 'to-refine', to: 'ready', when: 'cadrage validé' },
+    { from: 'ready', to: 'in-progress', when: 'branche poussée' },
+    { from: 'in-progress', to: 'in-review', when: 'PR ouverte et complète' },
+    { from: 'in-progress', to: 'to-refine', when: 'cadrage faux' },
+    { from: 'in-review', to: 'ready-for-prod', when: 'revue approuvée' },
+    { from: 'in-review', to: 'in-progress', when: 'changements demandés' },
+    { from: 'in-review', to: 'to-refine', when: 'diff hors périmètre' },
+    { from: 'ready-for-prod', to: 'done', when: 'merge et ticket fermé' },
+  ],
+}
+
+test('les six états d’un workflow de statuts se dessinent dans l’ordre du parcours', () => {
+  const graph = layoutWorkflow(STATUTS)
+
+  assert.deepEqual(graph.boxes.map((box) => [box.id, box.kind, box.level]), [
+    ['to-refine', 'etat', 0],
+    ['ready', 'etat', 1],
+    ['in-progress', 'etat', 2],
+    ['in-review', 'etat', 3],
+    ['ready-for-prod', 'etat', 4],
+    ['done', 'etat', 5],
+  ])
+  assert.equal(graph.boxes[0].id, STATUTS.entry, 'to-refine est l’état initial')
+  assert.equal(graph.boxes.at(-1).id, STATUTS.exit[0], 'done est l’état terminal')
+  assert.deepEqual(graph.decisions, [], 'un état n’a pas de losange de décision')
+})
+
+test('les huit transitions d’un workflow de statuts sont des arcs, les retours en pointillé', () => {
+  const graph = layoutWorkflow(STATUTS)
+
+  assert.equal(graph.links.length, 8)
+  assert.deepEqual(
+    graph.links.filter((link) => link.back).map((link) => [link.from, link.to]),
+    [
+      ['in-progress', 'to-refine'],
+      ['in-review', 'in-progress'],
+      ['in-review', 'to-refine'],
+    ],
+  )
+  assert.ok(graph.links.every((link) => link.when), 'chaque transition porte son libellé')
+  // Les retours passent à droite de toutes les boîtes.
+  const right = Math.max(...graph.boxes.map((box) => box.x + box.width))
+  for (const link of graph.links.filter((link) => link.back)) {
+    assert.ok(link.labelX > right)
+  }
+  assert.ok(graph.width > right)
+})
+
+test('un workflow de statuts neuf se dessine en échelle, un état par rangée', () => {
+  const graph = layoutWorkflow({ ...STATUTS, edges: [] })
+
+  assert.deepEqual(graph.boxes.map((box) => box.id), STATUTS.nodes.map((node) => node.id))
+  assert.deepEqual(graph.boxes.map((box) => box.level), [0, 1, 2, 3, 4, 5])
+  assert.deepEqual(graph.links, [])
+})
+
+test('endPoints d’un workflow de statuts énumère les six états une fois, sans doublon', () => {
+  const points = endPoints(STATUTS)
+
+  assert.deepEqual(points, STATUTS.nodes.map((node) => ({ id: node.id, kind: 'etat' })))
+})
