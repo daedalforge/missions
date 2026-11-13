@@ -1184,6 +1184,7 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
     'Étape en cours : exécution (statut in-progress). Tu ne fais que l’exécution : la branche depuis la base, les commits, la PR vers la base avec `Closes #N`, le journal et la checklist à jour ; à la fin, le ticket passe en in-review et tu t’arrêtes.\n\n' +
     "Chaque étape se joue dans une nouvelle session : à la fin de celle-ci, arrête-toi ; l'étape suivante sera une nouvelle session.\n\n" +
     'Branche : fix/mis-42 ; base : main.\n\n' +
+    'Playbook à lire : playbook/execution.md.\n\n' +
     'Journal de mission : missions/MIS-42/journal.md — tiens-le à jour à chaque étape.\n\n' +
     'Checklist de mission : missions/MIS-42/checklist.md — coche chaque point avec sa preuve.\n\n' +
     "Garde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande."
@@ -1192,6 +1193,27 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
   // Le prompt de session ne porte pas le clone : c'est le prompt des remontées
   // qui a besoin de savoir où lire la PR.
   assert.doesNotMatch(missionSessionPrompt(TEMOIN), /Dépôt du projet/)
+})
+
+test('chaque état nomme la page de playbook de son étape', () => {
+  // La correspondance est épinglée ici, indépendamment de lib/view.js : une
+  // table retournée doit casser ce test, pas le traverser.
+  const PAGE_BY_STATE = {
+    'to-refine': 'playbook/cadrage.md',
+    ready: 'playbook/execution.md',
+    'in-progress': 'playbook/execution.md',
+    'in-review': 'playbook/revue.md',
+    'ready-for-prod': 'playbook/cloture.md',
+  }
+  for (const [state, page] of Object.entries(PAGE_BY_STATE)) {
+    const prompt = missionSessionPrompt({ ...TEMOIN, state })
+    assert.ok(prompt.includes(`Playbook à lire : ${page}.`), `${state} → ${page}`)
+  }
+})
+
+test('la session libre et les remontées nomment la page workspace', () => {
+  assert.match(freeSessionPrompt(TEMOIN), /Playbook à lire : playbook\/workspace\.md\./)
+  assert.match(feedbackSessionPrompt(TEMOIN), /Playbook à lire : playbook\/workspace\.md\./)
 })
 
 test('le prompt des remontées demande la PR, le tri, le push et le garde-fou', () => {
