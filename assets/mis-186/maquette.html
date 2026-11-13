@@ -686,6 +686,10 @@ function stateLabel(id) {
 }
 
 function stateLabelOf(workflow, id) {
+  if (workflow?.kind === 'statuts') {
+    const node = workflow.nodes?.find((item) => item.id === id)
+    if (node) return node.label
+  }
   return workflow?.stateNotes?.[id]?.label ?? stateLabel(id)
 }
 
