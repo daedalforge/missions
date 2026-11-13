@@ -1,6 +1,8 @@
 # Modèles de workflow
 
-Un fichier par workflow, dans `workflows/model/`. Les quatre étapes de la
+Un fichier par workflow, dans `workflows/model/`. Les workflows gardés hors du
+dépôt vivent dans `workflows/local/model/` : même format, autre dossier (voir
+« Workflows locaux »). Les quatre étapes de la
 méthode s'appellent `cadrage.yml`, `execution.yml`, `review.yml` et `cloture.yml`
 ; le parcours des statuts s'appelle `statuts.yml`. Tout autre fichier `.yml` du
 dossier est un workflow de plus ; la liste du panneau est le dossier.
@@ -29,7 +31,7 @@ d'étape n'ont pas eu à être réécrits.
 ```yaml
 workflow: cadrage            # le nom de l'étape, égal au nom du fichier
 title: Cadrage               # ce que le panneau affiche
-description: Lire le ticket # facultatif : une ligne, 280 caractères au plus
+description: Lire le ticket # facultatif : 280 caractères au plus
 document: workflows/cadrage.md
 entry: to-refine             # l'état d'où l'étape part
 exit:
@@ -48,10 +50,11 @@ edges:
     when: …                  # facultatif : la condition de la transition
 ```
 
-`description` est facultatif et purement documentaire : une ligne, 280
-caractères au plus, écrite seulement quand elle est renseignée. C'est elle que
-la carte de la liste affiche ; sans elle, la carte montre `summary`, le premier
-paragraphe du document.
+`description` est facultatif et purement documentaire : 280 caractères au plus,
+écrite seulement quand elle est renseignée. Un retour à la ligne y est permis ;
+le YAML l'écrit alors en bloc (`|-`) et le panneau l'édite dans un `textarea` de
+trois lignes. C'est elle que la carte de la liste affiche, sur deux lignes au
+plus ; sans elle, la carte montre `summary`, le premier paragraphe du document.
 
 `writer` vaut `demandeur`, `session` ou `outil`.
 
@@ -117,7 +120,12 @@ titre ou posé par défaut, et n'est jamais ressaisi.
   qui n'est pas une lettre ou un chiffre devient un tiret, 80 caractères au
   plus. `Déjà vu !` donne `deja-vu` ; un titre sans lettre ni chiffre est
   refusé (`cle-invalide`).
-- **Le document** est `workflows/<clé>.md`.
+- **Le document** est `workflows/<clé>.md`, ou `workflows/local/<clé>.md`
+  quand le workflow est local.
+- **Le rangement** se choisit avec le switch **Versionné**, coché par défaut.
+  Décoché, le modèle et son document partent sous `workflows/local/`, que git
+  ignore ; le même switch, dans l'onglet **Informations**, les déplace plus
+  tard. La clé et le document sont uniques entre les deux dossiers.
 - **L'entrée** vaut `to-refine`, **les sorties** valent `[done]`. La validation
   reste stricte : un état inconnu est refusé comme avant.
 - **Le document** naît avec un squelette : `# <titre>\n\n## Ce qu'on fait\n`
@@ -156,3 +164,28 @@ node tools/check-workflows.mjs
 La commande lit `missions/projects.yml` pour le vocabulaire, charge les modèles
 du dossier, et affiche pour chacun son genre, ses compteurs, ses erreurs et ses
 sections orphelines. Elle sort en erreur (code 1) dès qu'un modèle est invalide.
+
+## Workflows locaux
+
+Un workflow peut rester sur le poste, hors de git. Deux dossiers suffisent :
+
+| Rangement | Modèle | Document |
+| --- | --- | --- |
+| versionné | `workflows/model/<clé>.yml` | `workflows/<clé>.md` |
+| local | `workflows/local/model/<clé>.yml` | `workflows/local/<clé>.md` |
+
+`workflows/local/` est dans `.gitignore` : un clone neuf ne le porte pas, et
+`check-workflows` ne s'en plaint pas. Le **dossier** dit le rangement, jamais le
+YAML : aucun champ `local` n'existe dans le modèle, sinon un fichier versionné
+pourrait désigner un fichier ignoré.
+
+Règles du rangement :
+
+- le `document` d'un modèle local reste sous `workflows/local/` ; celui d'un
+  modèle versionné reste sous `workflows/` — hors de son dossier, il est refusé
+  (`document-hors-dossier`) ;
+- une clé n'existe que dans un dossier à la fois : la création et le
+  déplacement refusent une clé ou un document déjà pris par l'autre dossier ;
+- le déplacement est un seul geste : le serveur valide, écrit la cible, puis
+  supprime la source, et réécrit `document` à la convention du dossier cible.
+  Un workflow sans document se déplace sans en créer.
