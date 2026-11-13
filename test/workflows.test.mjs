@@ -17,8 +17,12 @@ import {
   isWorkflowKey,
   retitleDocument,
   slugify,
+  expectedDocument,
+  LOCAL_MODEL_DIR,
+  LOCAL_MODELS_DIR,
   loadWorkflows,
   readHeadings,
+  scopeOf,
   readWorkflow,
   saveWorkflow,
   validateModel,
@@ -244,7 +248,6 @@ test('saveWorkflow refuse chaque édition illisible, sans toucher au modèle ni 
     ['une sortie en double', modele({ exit: ['ready', 'ready'] }), 'exit', 'etat-double'],
     ['une entrée aussi sortie', modele({ exit: ['to-refine'] }), 'exit', 'sortie-confondue'],
     ['une description de 281 caractères', modele({ description: 'x'.repeat(281) }), 'description', 'description-invalide'],
-    ['une description sur deux lignes', modele({ description: 'deux\nlignes' }), 'description', 'description-invalide'],
   ]
 
   // Then : chaque refus nomme son champ et son motif, et rien n’a bougé sur disque.
@@ -423,10 +426,12 @@ test('slugify déduit une clé lisible d’un titre libre', () => {
   assert.equal(slugify('A'.repeat(120)).endsWith('-'), false, 'la coupe ne laisse pas de tiret')
 })
 
-test('la description tient sur une ligne, en 280 caractères', () => {
+test('la description tient sur plusieurs lignes, en 280 caractères', () => {
   assert.equal(descriptionError('Les incidents du workspace.'), null)
   assert.equal(descriptionError(''), null, 'une description vide est permise')
-  assert.equal(descriptionError('deux\nlignes'), '`description` tient sur une ligne')
+  assert.equal(descriptionError('deux\nlignes'), null, 'un retour à la ligne est une description, pas un défaut')
+  assert.equal(descriptionError('deux\r\nlignes'), null)
+  assert.equal(descriptionError('\n'), null, 'des blancs seuls ne comptent pas')
   assert.ok(descriptionError('x'.repeat(281)))
   assert.equal(descriptionError('x'.repeat(280)), null)
 })
@@ -616,4 +621,212 @@ test('un fichier ajouté au dossier apparaît dans la liste, même cassé', asyn
   assert.ok(codes(workflows[0]).includes('yaml-invalide'))
   assert.equal(workflows[0].kind, 'etape')
   assert.equal(workflows[1].kind, 'statuts')
+})
+
+test('le dossier dit le rangement, et chaque rangement a son document', () => {
+  assert.equal(scopeOf(MODELS), 'model')
+  assert.equal(scopeOf(join(ROOT, 'workflows', 'local', 'model')), 'local')
+  assert.equal(scopeOf(LOCAL_MODELS_DIR), 'local', 'le dossier par défaut est local')
+  assert.equal(expectedDocument('model', 'cadrage'), 'workflows/cadrage.md')
+  assert.equal(expectedDocument('local', 'cadrage'), 'workflows/local/cadrage.md')
+  assert.equal(LOCAL_MODEL_DIR, 'workflows/local/model')
+})
+
+test('validateModel refuse un document hors du dossier de son workflow', () => {
+  const localHorsDossier = valide(modele({ document: 'workflows/cadrage.md' }), { scope: 'local' })
+  assert.deepEqual(codes(localHorsDossier), ['document-hors-dossier'])
+
+  const versionneHorsDossier = valide(modele({ document: 'workflows/local/cadrage.md' }), { scope: 'model' })
+  assert.deepEqual(codes(versionneHorsDossier), ['document-hors-dossier'])
+
+  assert.deepEqual(valide(modele({ document: 'workflows/local/cadrage.md' }), { scope: 'local' }).errors, [])
+})
+
+test('fileModel écrit une description multi-lignes en bloc YAML relisible', () => {
+  const description = 'Une première ligne.\nUne deuxième ligne.'
+  const ecrit = YAML.stringify(fileModel(modele({ description })), { lineWidth: 0 })
+  assert.match(ecrit, /description: \|-/)
+  assert.equal(YAML.parse(ecrit).description, description)
+})
+
+test('createWorkflow range un workflow local sous workflows/local/', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-local-create-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+
+  const created = await createWorkflow(models, {
+    title: 'Brouillon local',
+    description: 'deux\nlignes',
+    kind: 'etape',
+    local: true,
+  }, { states: STATES })
+
+  assert.deepEqual(created.errors, [])
+  assert.equal(created.entry.local, true)
+  assert.equal(created.entry.file, 'workflows/local/model/brouillon-local.yml')
+  assert.equal(created.entry.document, 'workflows/local/brouillon-local.md')
+
+  const modeleLocal = join(dir, 'workflows', 'local', 'model', 'brouillon-local.yml')
+  const documentLocal = join(dir, 'workflows', 'local', 'brouillon-local.md')
+  const model = parse(await readFile(modeleLocal, 'utf8'))
+  assert.equal(model.document, 'workflows/local/brouillon-local.md')
+  assert.equal(model.description, 'deux\nlignes')
+  assert.match(await readFile(modeleLocal, 'utf8'), /description: \|-/)
+  assert.equal(await readFile(documentLocal, 'utf8'), '# Brouillon local\n\n## Ce qu\'on fait\n')
+  assert.equal(await readFile(join(models, 'brouillon-local.yml'), 'utf8').catch(() => null), null, 'rien dans le dossier versionné')
+  assert.equal(await readFile(join(dir, 'workflows', 'brouillon-local.md'), 'utf8').catch(() => null), null, 'le document ne reste pas au niveau versionné')
+})
+
+test('createWorkflow refuse une clé ou un document déjà pris par l’autre dossier', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-local-collision-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+
+  assert.deepEqual((await createWorkflow(models, { title: 'Incidents', kind: 'etape' }, { states: STATES })).errors, [])
+  const localSurVersionne = await createWorkflow(models, { title: 'Incidents', kind: 'etape', local: true }, { states: STATES })
+  assert.deepEqual(codes(localSurVersionne), ['cle-double'])
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'model', 'incidents.yml'), 'utf8').catch(() => null), null, 'aucune écriture locale')
+
+  const autre = await mkdtemp(join(tmpdir(), 'workflows-local-collision-2-'))
+  t.after(() => rm(autre, { recursive: true, force: true }))
+  const autreModels = join(autre, 'workflows', 'model')
+  assert.deepEqual((await createWorkflow(autreModels, { title: 'Incidents', kind: 'etape', local: true }, { states: STATES })).errors, [])
+  const versionneSurLocal = await createWorkflow(autreModels, { title: 'Incidents', kind: 'etape' }, { states: STATES })
+  assert.deepEqual(codes(versionneSurLocal), ['cle-double'])
+  assert.equal(await readFile(join(autreModels, 'incidents.yml'), 'utf8').catch(() => null), null, 'aucune écriture versionnée')
+
+  const troisieme = await mkdtemp(join(tmpdir(), 'workflows-local-doc-collision-'))
+  t.after(() => rm(troisieme, { recursive: true, force: true }))
+  await mkdir(join(troisieme, 'workflows'), { recursive: true })
+  await writeFile(join(troisieme, 'workflows', 'incidents.md'), '# Incidents\n', 'utf8')
+  const document = await createWorkflow(join(troisieme, 'workflows', 'model'), {
+    title: 'Incidents', kind: 'etape', local: true,
+  }, { states: STATES })
+  assert.deepEqual(codes(document), ['document-double'])
+})
+
+test('createWorkflow refuse un document local qui cite le dossier versionné', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-local-document-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+
+  const created = await createWorkflow(models, {
+    workflow: 'incidents',
+    title: 'Incidents',
+    kind: 'etape',
+    local: true,
+    document: 'workflows/incidents.md',
+  }, { states: STATES })
+
+  assert.deepEqual(codes(created), ['document-hors-dossier'])
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'model', 'incidents.yml'), 'utf8').catch(() => null), null)
+})
+
+test('readWorkflow et loadWorkflows rendent le dossier local dans file et local', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-local-read-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+  await createWorkflow(models, { title: 'Local', kind: 'etape', local: true }, { states: STATES })
+  await createWorkflow(models, { title: 'Versionne', kind: 'etape' }, { states: STATES })
+
+  const local = join(dir, 'workflows', 'local', 'model')
+  const entry = await readWorkflow(local, 'local', { states: STATES })
+  assert.deepEqual(entry.errors, [])
+  assert.equal(entry.local, true)
+  assert.equal(entry.file, 'workflows/local/model/local.yml')
+  assert.equal(entry.document, 'workflows/local/local.md')
+
+  const { workflows } = await loadWorkflows(local, { states: STATES })
+  assert.deepEqual(workflows.map((item) => item.workflow), ['local'])
+  assert.equal(workflows[0].local, true)
+
+  const versionne = await readWorkflow(models, 'versionne', { states: STATES })
+  assert.equal(versionne.local, false)
+  assert.equal(versionne.file, 'workflows/model/versionne.yml')
+})
+
+test('saveWorkflow déplace modèle et document entre les deux dossiers', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-move-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+  await mkdir(models, { recursive: true })
+  await writeFile(join(dir, 'workflows', 'cadrage.md'), '# Cadrage\n\n## Ce qu\'on fait\n', 'utf8')
+  assert.deepEqual((await saveWorkflow(models, 'cadrage', modele(), { states: STATES })).errors, [])
+
+  // Vers le local : le modèle et son document partent ensemble, le champ
+  // `document` suit la convention du dossier cible.
+  const moved = await saveWorkflow(models, 'cadrage', modele({ title: 'Cadrage local', description: 'deux\nlignes' }), { states: STATES, local: true })
+  assert.deepEqual(moved.errors, [])
+  assert.equal(moved.moved, true)
+  assert.equal(moved.local, true)
+  assert.equal(moved.model.document, 'workflows/local/cadrage.md')
+  assert.equal(await readFile(join(models, 'cadrage.yml'), 'utf8').catch(() => null), null, 'le modèle source a disparu')
+  assert.equal(await readFile(join(dir, 'workflows', 'cadrage.md'), 'utf8').catch(() => null), null, 'le document source a disparu')
+  const modeleLocal = await readFile(join(dir, 'workflows', 'local', 'model', 'cadrage.yml'), 'utf8')
+  assert.match(modeleLocal, /document: workflows\/local\/cadrage\.md/)
+  assert.match(modeleLocal, /title: Cadrage local/)
+  assert.equal(
+    await readFile(join(dir, 'workflows', 'local', 'cadrage.md'), 'utf8'),
+    '# Cadrage local\n\n## Ce qu\'on fait\n',
+    'le titre a suivi le document dans le déplacement',
+  )
+
+  // Et le retour : recocher « Versionné » ramène les deux fichiers.
+  const back = await saveWorkflow(join(dir, 'workflows', 'local', 'model'), 'cadrage', moved.model, { states: STATES, local: false })
+  assert.deepEqual(back.errors, [])
+  assert.equal(back.local, false)
+  assert.equal(back.model.document, 'workflows/cadrage.md')
+  assert.ok(await readFile(join(models, 'cadrage.yml'), 'utf8'))
+  assert.ok(await readFile(join(dir, 'workflows', 'cadrage.md'), 'utf8'))
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'model', 'cadrage.yml'), 'utf8').catch(() => null), null)
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'cadrage.md'), 'utf8').catch(() => null), null)
+})
+
+test('le déplacement d’un workflow sans document n’en crée pas et ne laisse rien derrière', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-move-nodoc-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+  await mkdir(models, { recursive: true })
+  assert.deepEqual((await saveWorkflow(models, 'cadrage', modele(), { states: STATES })).errors, [])
+
+  const moved = await saveWorkflow(models, 'cadrage', modele(), { states: STATES, local: true })
+  assert.deepEqual(moved.errors, [])
+  assert.equal(await readFile(join(dir, 'workflows', 'local', 'cadrage.md'), 'utf8').catch(() => null), null, 'aucun document inventé')
+  assert.equal(await readFile(join(dir, 'workflows', 'cadrage.md'), 'utf8').catch(() => null), null, 'aucun document source')
+})
+
+test('un déplacement qui collisionne est refusé avant toute écriture', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-move-collision-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const models = join(dir, 'workflows', 'model')
+  await mkdir(join(dir, 'workflows', 'local', 'model'), { recursive: true })
+  await writeFile(join(dir, 'workflows', 'cadrage.md'), '# Cadrage\n\n## Ce qu\'on fait\n', 'utf8')
+  assert.deepEqual((await saveWorkflow(models, 'cadrage', modele(), { states: STATES })).errors, [])
+
+  // La clé cible existe déjà : rien ne bouge.
+  await writeFile(join(dir, 'workflows', 'local', 'model', 'cadrage.yml'), 'workflow: cadrage\n', 'utf8')
+  const cle = await saveWorkflow(models, 'cadrage', modele(), { states: STATES, local: true })
+  assert.equal(cle.conflict, true)
+  assert.deepEqual(codes(cle), ['cle-double'])
+  assert.ok(await readFile(join(models, 'cadrage.yml'), 'utf8'), 'la source reste')
+  assert.ok(await readFile(join(dir, 'workflows', 'cadrage.md'), 'utf8'), 'le document source reste')
+
+  // Le document cible existe déjà : la source reste aussi.
+  await rm(join(dir, 'workflows', 'local', 'model', 'cadrage.yml'))
+  await writeFile(join(dir, 'workflows', 'local', 'cadrage.md'), '# Autre\n', 'utf8')
+  const document = await saveWorkflow(models, 'cadrage', modele(), { states: STATES, local: true })
+  assert.equal(document.conflict, true)
+  assert.deepEqual(codes(document), ['document-double'])
+  assert.ok(await readFile(join(models, 'cadrage.yml'), 'utf8'))
+})
+
+test('saveWorkflow local refuse un document hors de workflows/local/', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'workflows-local-save-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const local = join(dir, 'workflows', 'local', 'model')
+  await mkdir(local, { recursive: true })
+
+  const refused = await saveWorkflow(local, 'cadrage', modele({ document: 'workflows/cadrage.md' }), { states: STATES })
+  assert.deepEqual(codes(refused), ['document-hors-dossier'])
+  assert.equal(await readFile(join(local, 'cadrage.yml'), 'utf8').catch(() => null), null, 'rien n’est écrit')
 })
