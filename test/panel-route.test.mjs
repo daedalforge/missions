@@ -1846,10 +1846,20 @@ async function mountTolgee(t, {
   source = "const greet = t('greet')\n",
   locales = { fr: { greet: 'Bonjour' }, en: {} },
   translations = true,
-  run = async () => ({ stdout: 'src/a.js' }),
+  run = null,
   fetchImpl = undefined,
 } = {}) {
-  const mounted = await mount(t, { runGit: (...args) => run(...args), fetchImpl })
+  const mounted = await mount(t, {
+    runGit: async (command, args) => {
+      if (args.includes('show')) {
+        const spec = args.at(-1)
+        const file = spec.slice(spec.indexOf(':') + 1)
+        return { stdout: await readFile(join(mounted.dir, 'repo', file), 'utf8'), stderr: '' }
+      }
+      return run ? run(command, args) : { stdout: 'src/a.js', stderr: '' }
+    },
+    fetchImpl,
+  })
   const repo = join(mounted.dir, 'repo')
   await mkdir(join(repo, 'src'), { recursive: true })
   await mkdir(join(repo, 'locales'), { recursive: true })

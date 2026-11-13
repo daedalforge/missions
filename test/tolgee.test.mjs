@@ -24,8 +24,8 @@ const TRANSLATIONS = {
   reference: 'fr',
 }
 
-/** Un dépôt factice : les fichiers de locale sur disque, le diff par un faux git. */
-async function fixture(t, { files, locales, diff }) {
+/** Un dépôt factice : les locales sur disque, le diff et la branche par un faux git. */
+async function fixture(t, { files, branchFiles = files, locales, diff }) {
   const root = await mkdtemp(join(tmpdir(), 'tolgee-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   for (const [locale, table] of Object.entries(locales)) {
@@ -40,6 +40,16 @@ async function fixture(t, { files, locales, diff }) {
   const calls = []
   const run = async (command, args) => {
     calls.push([command, ...args].join(' '))
+    if (args.includes('show')) {
+      const spec = args.at(-1)
+      const file = spec.slice(spec.indexOf(':') + 1)
+      if (!Object.hasOwn(branchFiles, file)) {
+        throw Object.assign(new Error(`path '${file}' does not exist`), {
+          stderr: `fatal: path '${file}' does not exist in '${spec.slice(0, spec.indexOf(':'))}'`,
+        })
+      }
+      return { stdout: branchFiles[file], stderr: '' }
+    }
     if (diff instanceof Error) throw Object.assign(diff, { stderr: 'fatal: bad revision' })
     return { stdout: diff, stderr: '' }
   }
@@ -134,6 +144,51 @@ test('CA4 — la clé manquante en de entre au fichier, la complète et l’hors
     },
   ])
   assert.deepEqual(plan.untranslated, [])
+})
+
+test('CA4 — les clés viennent du fichier de la branche, pas de celui du worktree', async (t) => {
+  // Given: le worktree est sur une autre révision et ne montre que `worktree.only`.
+  const { root, run, calls } = await fixture(t, {
+    files: { 'src/a.js': "t('worktree.only')\n" },
+    branchFiles: { 'src/a.js': "t('branch.key')\n" },
+    locales: {
+      fr: { 'branch.key': 'Clé' },
+      en: { 'branch.key': 'Key' },
+      de: {},
+    },
+    diff: 'src/a.js\n',
+  })
+
+  // When: le plan lit la branche.
+  const plan = await planImport({ repo: root, base: 'main', branch: 'feat/x', translations: TRANSLATIONS, run })
+
+  // Then: seule la clé de la branche est vue, avec sa ligne de la branche.
+  assert.deepEqual(plan.keys, [
+    { key: 'branch.key', value: 'Clé', missing: ['de'], occurrences: ['src/a.js:1'] },
+  ])
+  assert.deepEqual(plan.untranslated, [])
+  assert.deepEqual(plan.warnings, [])
+  assert.deepEqual(
+    calls.filter((call) => call.includes('show')),
+    [`git -C ${root} show feat/x:src/a.js`],
+  )
+})
+
+test('CA4 — un fichier supprimé par la branche est écarté avec un avertissement', async (t) => {
+  // Given: le diff liste deux fichiers, la branche n'en garde qu'un.
+  const { root, run } = await fixture(t, {
+    files: { 'src/a.js': "t('a')\n", 'src/gone.js': "t('gone')\n" },
+    branchFiles: { 'src/a.js': "t('a')\n" },
+    locales: { fr: { a: 'A' }, en: {}, de: {} },
+    diff: 'src/a.js\nsrc/gone.js\n',
+  })
+
+  // When: le plan lit la branche.
+  const plan = await planImport({ repo: root, base: 'main', branch: 'feat/x', translations: TRANSLATIONS, run })
+
+  // Then: la clé du fichier supprimé ne compte pas, le fichier est signalé.
+  assert.deepEqual(plan.keys.map((entry) => entry.key), ['a'])
+  assert.deepEqual(plan.warnings, ['src/gone.js: deleted on feat/x, skipped'])
 })
 
 test('CA5 — sans valeur fr, la clé est listée à part et n’entre pas dans le XLIFF', async (t) => {

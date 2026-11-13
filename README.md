@@ -61,11 +61,13 @@ modifié — la mission quitte Done et reste sur le disque.
 Un projet peut déclarer ses **traductions** dans
 [`missions/projects.yml`](missions/projects.yml) — `translations.locales`,
 `translations.languageFile`, `translations.reference`. Le volet d'une mission de
-ce projet gagne alors un bouton **Tolgee import** : il lit le diff de la branche
-contre sa base, repère les clés `t()` ajoutées et écrit
-`missions/<dossier>/import-tolgee.xliff`. Les clés manquantes en `fr` sont
-listées à part, jamais dans le fichier ; Tolgee n'est jamais appelé, l'import du
-fichier reste un geste manuel.
+ce projet gagne alors un bouton **Tolgee import** : il lit le contenu de la
+branche (`git show <branche>:<fichier>`) pour les fichiers que son diff change,
+relève les clés `t()` qu'ils utilisent et écrit
+`missions/<dossier>/import-tolgee.xliff` avec celles qui manquent ou sont vides
+dans au moins une locale déclarée. Les clés sans valeur dans la locale de
+référence sont listées à part, jamais dans le fichier ; Tolgee n'est jamais appelé, l'import du fichier
+reste un geste manuel.
 
 ## La barre et Settings
 
