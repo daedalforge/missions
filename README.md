@@ -102,16 +102,14 @@ reste un geste manuel.
 
 ## Les thèmes
 
-Le panneau propose trois thèmes, choisis dans le sélecteur **Theme** et retenus
-dans la session (`missions.theme`) : **Default**, **Naruto** et **Noël**. Un
-thème n'a pas sa propre copie de la mise en page : les deux thèmes illustrés
-partagent la même peau (`data-skin="paper"`) et n'apportent que leurs tokens
-`--skin-*` et leurs rares variantes de décor. Noël remplace les images de Konoha
-par un décor hivernal en CSS/SVG — nuit d'hiver, crème, sapin, rouge baie et or,
-typographie d'affichage sérif — et anime un flocon sur le rafraîchissement et
-les pastilles en attente, sauf si le système demande moins de mouvement
-(`prefers-reduced-motion: reduce`). Aucune image raster ni ressource distante
-n'entre dans ce thème ; une valeur stockée inconnue retombe sur Default.
+Le panneau propose deux thèmes, choisis dans le sélecteur **Theme** et retenus
+dans la session (`missions.theme`) : **Default** et **Naruto**. Un thème n'a pas
+sa propre copie de la mise en page : le thème illustré porte la peau
+`data-skin="paper"` et n'apporte que ses tokens `--skin-*` et ses rares
+variantes de décor. Naruto affiche la photo du village, le portrait de Konoha,
+le kicker « Konoha · mission log » et la marque 忍, en clair comme en sombre. Le
+thème par défaut garde le panneau sobre du host ; une valeur stockée inconnue,
+comme l'ancien identifiant `noel`, retombe sur Default.
 
 ## La barre et Settings
 
