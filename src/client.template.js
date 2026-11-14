@@ -962,6 +962,8 @@ window.__ModuleLoader__.load({
 .missions-tree-view { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .missions-toolbar-label { margin-right: auto; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .missions-workbench { display: grid; grid-template-columns: minmax(340px, 440px) minmax(0, 1fr); min-width: 0; flex: 1 1 auto; border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
+.missions-workbench[data-drawer="true"] { grid-template-columns: minmax(0, 1fr); }
+.missions-workbench[data-drawer="true"] > .missions-wb-preview { display: none; }
 .missions-wb-column { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
 .missions-wb-field { display: flex; align-items: center; gap: 7px; padding: 10px 14px 6px; }
 .missions-wb-kbd { flex: none; padding: 1px 5px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 4px; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 9.5px; line-height: 1.4; }
@@ -2535,6 +2537,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
      * second outline would receive its own groups and its own renders.
      */
     function Workbench({
+      drawer = false,
       groups = [],
       query = '',
       onQuery = () => {},
@@ -2579,7 +2582,14 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // What the preview shows: the highlighted mission or epic; an action
       // highlighted is a gesture, so the pane keeps the last mission it showed;
       // and at rest, before any move, the first row is already readable.
-      const resting = current === null && preview === null ? entries.find((entry) => entry.kind !== 'action') ?? null : null
+      // At rest, a lot the query named answers before a mission it contains,
+      // and a mission answers before the lot that only hosts it.
+      const resting = current === null && preview === null
+        ? entries.find((entry) => entry.kind === 'epic' && entry.group?.epic)
+          ?? entries.find((entry) => entry.kind === 'mission')
+          ?? entries.find((entry) => entry.kind !== 'action')
+          ?? null
+        : null
       const shown = current !== null && current.kind !== 'action'
         ? current
         : preview !== null && entries.some((entry) => entry.id === preview.id)
@@ -2617,7 +2627,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         }
       }
 
-      return h('div', { className: 'missions-workbench', 'data-theme': theme, onKeyDown },
+      return h('div', { className: 'missions-workbench', 'data-theme': theme, 'data-drawer': drawer ? 'true' : 'false', onKeyDown },
         h('div', { className: 'missions-wb-column' },
           h('div', { className: 'missions-wb-field' },
             h('span', { className: 'missions-wb-kbd', 'aria-hidden': 'true' }, '⌘K'),
@@ -2875,6 +2885,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
     }
 
     function MissionsView({
+      drawer = false,
       missions,
       query,
       onQuery,
@@ -3019,6 +3030,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             filtersRow,
           ),
           h(Workbench, {
+            drawer,
             groups: treeGroups,
             query,
             onQuery,
@@ -6694,6 +6706,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                   filtered, groups, onSelect: openMission, theme, loading, failed,
                   onRefresh: () => { track('list.refresh', 'open'); return load({ refresh: true }) },
                   tree: true,
+                  drawer: Boolean(selected),
                   checklists: checklistIndex,
                   actions: outlineActions,
                   onAction: runOutlineAction,
@@ -6720,7 +6733,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Repository details' },
                   h('p', { className: 'missions-drawer-hint' }, 'Select a repository to see its remote, its upstream and its last commits.'),
                 )
-            : tab === 'dashboard'
+            : tab === 'dashboard' || (tab === 'missions' && !selected)
             ? null
             : selected
             ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onArchived: applyArchive, theme })

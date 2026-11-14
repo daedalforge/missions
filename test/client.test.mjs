@@ -2164,8 +2164,7 @@ test('un chargement sans donnée rend le loader, un refresh garde les lignes', (
 })
 
 test('chaque volet garde la famille missions-drawer et son titre', () => {
-  // Given l'onglet Missions, le volet d'une mission, celui d'un dépôt.
-  const vide = findAll(monter([EMPTY_BAR, dashboardView([]), 'missions']), 'aside')[0]
+  // Given le volet d'une mission, celui d'un dépôt.
   const volet = findAll(monterVolet().tree, 'aside')[0]
   const depot = findAll(voletDepot(REPO_SCAN.repositories[0]).inner, 'aside')[0]
   const cas = [
@@ -2179,8 +2178,22 @@ test('chaque volet garde la famille missions-drawer et son titre', () => {
     assert.match(aside.props.className, /(^|\s)missions-drawer(\s|$)/)
     assert.equal(textOf(findAll(aside, 'h2')[0]), titre)
   }
-  assert.match(vide.props.className, /missions-drawer--empty/)
-  assert.match(textOf(vide), /Select a mission to see its details/)
+  // Then sous l'arbre, l'aperçu tient lieu de volet au repos : aucun aside vide.
+  const arbre = monter([EMPTY_BAR, dashboardView([]), 'missions'])
+  assert.equal(findAll(arbre, 'aside').length, 0)
+  const vue = findAll(arbre, 'MissionsView')[0]
+  const apercu = findAll(renderTree({ ...vue, props: { ...vue.props } }), 'aside')
+  assert.equal(apercu.length, 1)
+  assert.match(apercu[0].props.className, /missions-wb-preview/)
+
+  // Then Done garde son invitation.
+  const done = { loading: false, missions: [], errors: [], count: 0 }
+  const doneVide = findAll(monter([
+    EMPTY_BAR, dashboardView([]), 'done', '', EMPTY_BAR.filters, null, null, 'default', null,
+    EMPTY_BAR, done, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, 0, null, 0, null, null,
+  ]), 'aside')[0]
+  assert.match(doneVide.props.className, /missions-drawer--empty/)
+  assert.match(textOf(doneVide), /Select a mission to see its details/)
 })
 
 test('le dashboard occupe toute la largeur, sans volet à droite', () => {
