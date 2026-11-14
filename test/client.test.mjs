@@ -2219,6 +2219,31 @@ test('les chips Type, Epic et Project prennent plusieurs valeurs et la barre les
   assert.equal(inactif.props['aria-expanded'], 'false', 'le menu reste fermé tant qu’on ne l’ouvre pas')
 })
 
+test('un libellé long d’épic garde son texte complet en infobulle dans le menu', () => {
+  // Given un épic Jira dont le nom dépasse la largeur du menu
+  const longEpic = 'Epic Jira dont le nom dépasse largement la largeur du menu de la barre de filtres'
+  const missions = [{ ...DASH_MISSIONS[1], epic: longEpic }]
+  const { api, ctx, registered, queue } = charger(
+    undefined,
+    [EMPTY_BAR, dashboardView(missions), 'missions', '', EMPTY_BAR.filters, null],
+    memorySession(),
+  )
+  api.apply(ctx)
+  const tree = registered.main({})
+  const vueNode = findAll(tree, 'MissionsView')[0]
+
+  // When le menu Epic est ouvert
+  const vueOut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
+  const brut = findAll(vueOut, 'Workbench')[0].props.filters
+  const { ouvert } = cliquerCaseFiltre(brut, queue, 'Epic', 0)
+
+  // Then le nom tronqué à l'écran garde son texte complet en infobulle
+  const nom = findAll(ouvert, 'span').find((node) => node.props.className === 'missions-status-name')
+  assert.ok(nom, 'l’option porte son nom')
+  assert.equal(nom.props.title, longEpic)
+  assert.match(textOf(nom), /Epic Jira dont le nom dépasse/)
+})
+
 test('le menu Type coche les deux valeurs, en décocher une laisse l’autre', () => {
   const spy = espionUsage()
   try {

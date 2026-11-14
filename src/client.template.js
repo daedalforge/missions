@@ -2163,7 +2163,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                       checked: selected.includes(option),
                       onChange: () => toggle(option),
                     }),
-                    h('span', { className: 'missions-status-name' }, labelOf(option)),
+                    h('span', { className: 'missions-status-name', title: labelOf(option) }, labelOf(option)),
                     h('span', { className: 'missions-status-count', 'aria-hidden': 'true' }, String(counts[option] ?? 0)),
                   ),
                 )),
