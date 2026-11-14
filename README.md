@@ -165,8 +165,10 @@ un volet fermé le reste. La fiche **lit et
 son blocage et sa punaise restent ses seuls gestes ; surligner une action de
 déclaration la laisse telle quelle. La punaise est le premier bouton du pied du
 volet : elle ne dépend ni de l'état ni de la déclaration de la mission, et son
-propre refus (un `pins.yml` cassé) laisse l'affichage en place en le disant. Une ligne de mission fait 38 px et un filet sépare deux
-missions voisines, jamais avant la première ni après la dernière. Sous 900 px, le volet garde la
+propre refus (un `pins.yml` cassé) laisse l'affichage en place en le disant.
+
+Une ligne de mission fait 38 px et un filet sépare deux missions voisines,
+jamais avant la première ni après la dernière. Sous 900 px, le volet garde la
 largeur de celui de Done (`max-width: 46 %`) et la liste prend le reste : rien
 ne déborde horizontalement. Les lignes de checklist viennent de
 `GET missions/api/checklist-index`, mémorisé trente secondes (`?refresh=1` le
