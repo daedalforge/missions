@@ -8409,8 +8409,8 @@ const ARBRE_CHECKLISTS = {
  * pour le rejouer avec une autre requête ou un autre curseur sans remonter le
  * panneau ; `arbre` le résout.
  */
-function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS } = {}) {
-  const view = { loading: false, missions: ARBRE_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS, missions = ARBRE_MISSIONS } = {}) {
+  const view = { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
   const etats = [
     EMPTY_BAR,
@@ -8630,6 +8630,59 @@ test('un épic trouvé déplie ses missions et garde son compte de lot', () => {
   // répartition. Le compte de lot tient sur la ligne de l'épic.
   assert.equal(findAll(rendu, 'aside').length, 0, 'aucun volet ne s’ouvre au repos')
   assert.equal(findAll(rendu, 'div').filter((node) => node.props.className === 'missions-wb-preview-body').length, 0)
+})
+
+test('un épic composé s’affiche en clé puis titre, chacun une seule fois', () => {
+  // Given les missions du lot sous l'épic tel que les trackers le composent,
+  // et un épic dont la clé n'est pas elle-même dans la liste (le cas Jira).
+  const composees = [
+    ...ARBRE_MISSIONS.map((mission) => (
+      mission.epic === 'MIS-2' ? { ...mission, epic: 'MIS-2 · Workflows skeleton' } : mission
+    )),
+    { ...MISSION, key: 'MIS-212', title: 'Theme checklist', epic: 'MIS-6 · Theme v1' },
+  ]
+  const { arbre, noeud } = monterArbre({ missions: composees })
+
+  // When l'arbre est rendu.
+  const rendu = arbre()
+  const groupe = (text) => findAll(rendu, 'div').find((node) => node.props.className === 'missions-wb-group' && textOf(node).includes(text))
+  const ligneEpic = (text) => findAll(groupe(text), 'div').find((node) => node.props.className === 'missions-tree-epic')
+  const textes = (node, classe) => findAll(node, 'span').filter((span) => span.props.className === classe).map(textOf)
+
+  // Then la clé courte et le titre sont deux textes distincts, chacun une fois.
+  assert.deepEqual(textes(ligneEpic('Workflows skeleton'), 'missions-tree-epic-key'), ['MIS-2'])
+  assert.deepEqual(textes(ligneEpic('Workflows skeleton'), 'missions-tree-epic-name'), ['Workflows skeleton'])
+  // Le titre vient du découpage quand l'épic n'est pas lui-même dans la liste.
+  assert.deepEqual(textes(ligneEpic('Theme v1'), 'missions-tree-epic-key'), ['MIS-6'])
+  assert.deepEqual(textes(ligneEpic('Theme v1'), 'missions-tree-epic-name'), ['Theme v1'])
+  // Le compte du lot qui reste sur la ligne de l'épic.
+  assert.deepEqual(textes(ligneEpic('Workflows skeleton'), 'missions-tree-open'), ['4 open'])
+
+  // Then le curseur reste la clé courte : la ligne s'annonce `epic:MIS-2`.
+  const poses = []
+  const surEpic = renderTree(noeud({ onCursor: (entry) => poses.push(entry.id) }))
+  findAll(surEpic, 'div').find((node) => node.props.className === 'missions-tree-epic' && textOf(node).includes('Workflows skeleton')).props.onClick()
+  assert.deepEqual(poses, ['epic:MIS-2'])
+
+  // Then la clé garde sa teinte tertiaire et sa police mono, le titre son gras.
+  assert.match(regle('.missions-tree-epic-key'), /color: var\(--dsw-alias-label-tertiary/)
+  assert.match(regle('.missions-tree-epic-key'), /font-family: var\(--dsw-font-mono/)
+  assert.match(regle('.missions-tree-epic-name'), /font-weight: 650/)
+})
+
+test('un épic sans séparateur s’affiche une fois, sans clé en double', () => {
+  // Given le lot rangé sous une valeur d'épic sans séparateur (Jira sans summary).
+  const simples = ARBRE_MISSIONS.map((mission) => (
+    mission.epic === 'MIS-2' ? { ...mission, epic: 'SO-483' } : mission
+  ))
+  const { arbre } = monterArbre({ missions: simples })
+
+  // When la ligne de l'épic est rendue.
+  const rendu = arbre()
+  const ligne = findAll(rendu, 'div').find((node) => node.props.className === 'missions-tree-epic' && textOf(node).includes('SO-483'))
+
+  // Then la valeur paraît une seule fois : ni clé, ni titre en double.
+  assert.deepEqual(findAll(ligne, 'span').map(textOf), ['', 'SO-483', '4 open'])
 })
 
 test('les flèches déplacent le surlignage sans ouvrir, Entrée ouvre', () => {

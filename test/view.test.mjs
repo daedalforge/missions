@@ -32,6 +32,7 @@ import {
   doneScope,
   EMPTY_FILTERS,
   epicOptions,
+  epicParts,
   clipTitle,
   matchActions,
   matchOutline,
@@ -2203,6 +2204,50 @@ test('endPoints d’un workflow de statuts énumère les six états une fois, sa
 // titre, des lignes de checklist — pour que ces tests restent vrais même si
 // l'onglet change de rendu : la logique pure est ce qui décide.
 // ---------------------------------------------------------------------------
+
+test('epicParts rend la clé courte et le titre que les trackers composent', () => {
+  // Given la valeur composée que posent GitHub et Jira
+  const epic = 'MIS-2 · Missions v1'
+
+  // When le découpage la lit
+  const parts = epicParts(epic)
+
+  // Then la clé et le titre sont deux textes, chacun une fois
+  assert.deepEqual(parts, { key: 'MIS-2', title: 'Missions v1' })
+})
+
+test('epicParts découpe au premier séparateur et garde le reste du titre entier', () => {
+  // Given un titre qui contient lui-même le séparateur
+  const epic = 'SO-483 · Ouvrir · la réservation'
+
+  // When le découpage le lit
+  const parts = epicParts(epic)
+
+  // Then le titre garde son séparateur interne
+  assert.deepEqual(parts, { key: 'SO-483', title: 'Ouvrir · la réservation' })
+})
+
+test('epicParts rend la valeur seule comme clé quand elle n’a pas de séparateur', () => {
+  // Given un epic Jira sans summary
+  const epic = 'SO-483'
+
+  // When le découpage le lit
+  const parts = epicParts(epic)
+
+  // Then il n’y a pas de titre à côté de la clé
+  assert.deepEqual(parts, { key: 'SO-483', title: '' })
+})
+
+test('epicParts ne rend ni clé ni titre pour une valeur vide', () => {
+  // Given une valeur absente, vide ou sans texte
+  const vides = ['', '   ', null, undefined, 42]
+
+  // When le découpage les lit
+  const parts = vides.map((epic) => epicParts(epic))
+
+  // Then aucun des deux textes n’est rendu
+  assert.deepEqual(parts, vides.map(() => ({ key: '', title: '' })))
+})
 
 const OUTLINE_ROWS = [
   {
