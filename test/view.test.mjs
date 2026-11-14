@@ -39,7 +39,6 @@ import {
   outlineCount,
   outlineEntries,
   outlineFamily,
-  outlineGroups,
   outlineOpen,
   OUTLINE_ANCHORS,
   parseChecklist,
@@ -96,6 +95,7 @@ import {
   scanDuration,
   scanLabel,
   searchBucket,
+  pinnedFirst,
   sortMissions,
   sortRepositories,
   stateOptions,
@@ -324,6 +324,46 @@ test('le tri story points va du plus petit au plus grand, les sans-SP en fin', (
   const extra = [...MISSIONS, { key: 'a#0', priority: null, points: null }]
   assert.deepEqual(sortMissions(extra, 'points').map((m) => m.key), ['a#3', 'a#1', 'a#2', 'a#0'])
   assert.deepEqual(sortMissions(MISSIONS, null).map((m) => m.key), ['a#1', 'a#2', 'a#3'])
+})
+
+test('pinnedFirst remonte les épingles sans changer l’ordre relatif', () => {
+  // Given quatre missions dont deux épinglées.
+  const missions = [
+    { key: 'a#1', pinned: false },
+    { key: 'a#2', pinned: true },
+    { key: 'a#3', pinned: false },
+    { key: 'a#4', pinned: true },
+  ]
+
+  // When la partition les sépare.
+  const ordered = pinnedFirst(missions)
+
+  // Then les épingles passent devant, chacune à sa place relative, et l'entrée
+  // n'est pas mutée.
+  assert.deepEqual(ordered.map((mission) => mission.key), ['a#2', 'a#4', 'a#1', 'a#3'])
+  assert.deepEqual(missions.map((mission) => mission.key), ['a#1', 'a#2', 'a#3', 'a#4'])
+})
+
+test('pinnedFirst se compose avec le tri : deux épingles gardent l’ordre du tri', () => {
+  const missions = [
+    { key: 'a#1', priority: 'low', pinned: true },
+    { key: 'a#2', priority: 'high', pinned: false },
+    { key: 'a#3', priority: 'urgent', pinned: true },
+  ]
+
+  assert.deepEqual(
+    pinnedFirst(sortMissions(missions, 'priority')).map((mission) => mission.key),
+    ['a#3', 'a#1', 'a#2'],
+  )
+})
+
+test('pinnedFirst lit le drapeau ou un prédicat, et ne devine jamais', () => {
+  // Given des entrées dont le drapeau vit sur la ligne portée.
+  const entries = [{ row: { key: 'b', pinned: true } }, { row: { key: 'a' } }, { row: { key: 'c', pinned: true } }]
+
+  // Then le prédicat du client lit la ligne, le défaut lit le drapeau absent.
+  assert.deepEqual(pinnedFirst(entries, (entry) => entry.row.pinned === true).map((entry) => entry.row.key), ['b', 'c', 'a'])
+  assert.deepEqual(pinnedFirst([{ key: 'x' }, { key: 'y' }]).map((item) => item.key), ['x', 'y'])
 })
 
 test('le filtre Missing ne garde que les tickets à qui il manque un champ', () => {
@@ -1828,7 +1868,8 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
 
   // Les ids sont ceux des Notes techniques du ticket MIS-147, dans leur ordre ;
   // le geste d'archive, livré après par MIS-150, s'ajoute à sa place dans le
-  // volet. Le registre ne prend pas d'autre liberté avec le contrat.
+  // volet, et l'épingle de MIS-14 suit le blocage qu'elle côtoie. Le registre ne
+  // prend pas d'autre liberté avec le contrat.
   assert.deepEqual(ids, [
     'tab.dashboard', 'tab.missions', 'tab.done', 'tab.repositories', 'tab.workflows', 'tab.usage',
     'tab.playbook',
@@ -1837,7 +1878,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'search.q', 'search.family', 'preview.kind', 'mission.open',
     'dashboard.view-all', 'mission.archive.batch',
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
-    'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
+    'mission.block', 'mission.pin', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
     'mission.session', 'mission.feedback-session',
     'repository.open', 'repository.adopt', 'repository.remove', 'repository.tab.details', 'repository.tab.history', 'repository.tab.worktrees',
     'repository.branch', 'repository.more', 'repository.resolve', 'repository.squash',
@@ -2280,7 +2321,22 @@ const OUTLINE_ROWS = [
   },
 ]
 
-const OUTLINE_GROUPS = outlineGroups(OUTLINE_ROWS)
+/** Les groupes d'une liste de lignes, tels que le matcher les lit. */
+function groupRows(rows = []) {
+  const groups = new Map()
+  for (const row of rows) {
+    const id = row.group === null || row.group === undefined ? '' : String(row.group)
+    if (!groups.has(id)) groups.set(id, { id, label: String(row.groupLabel ?? id), rows: [] })
+    groups.get(id).rows.push(row)
+  }
+  return [...groups.values()].sort((left, right) => {
+    if (left.id === '' && right.id !== '') return 1
+    if (right.id === '' && left.id !== '') return -1
+    return left.label.localeCompare(right.label)
+  })
+}
+
+const OUTLINE_GROUPS = groupRows(OUTLINE_ROWS)
 
 /** Un portefeuille de douze missions, pour les comptes. */
 function twelveGroups() {
@@ -2292,7 +2348,7 @@ function twelveGroups() {
     groupLabel: 'Missions v2',
     lines: index === 0 ? [{ text: 'Session key still restores the tab', state: 'open' }] : [],
   }))
-  return outlineGroups(rows)
+  return groupRows(rows)
 }
 
 const OUTLINE_ACTIONS = [
@@ -2350,7 +2406,7 @@ test('au plus deux lignes d’ancrage par mission, le reste en +N', () => {
       { text: 'anchor trois', state: 'open' },
     ],
   }]
-  const [match] = matchOutline(outlineGroups(rows), 'anchor').matches
+  const [match] = matchOutline(groupRows(rows), 'anchor').matches
 
   assert.equal(match.anchors.length, OUTLINE_ANCHORS)
   assert.equal(match.hidden, 1)
@@ -2365,7 +2421,7 @@ test('un épic est un résultat : il déplie ses missions et compte ses ouvertes
     groupLabel: 'Workflows v1',
     lines: [],
   }))
-  const result = matchOutline(outlineGroups(rows), 'workflows')
+  const result = matchOutline(groupRows(rows), 'workflows')
   const [group] = result.groups
 
   assert.equal(result.counts.epic, 1)
@@ -2422,7 +2478,9 @@ test('le clavier parcourt la même liste que l’œil : actions, épic, puis mis
   const entries = outlineEntries(matchOutline(twelveGroups(), 'declare'), actions)
 
   assert.deepEqual(entries.map((entry) => entry.kind), ['action', 'action'])
-  assert.equal(outlineEntries(result, []).slice(0, 2).map((entry) => entry.kind).join(','), 'epic,mission')
+  // Plus de groupe : la liste ne connaît que les actions et les missions.
+  assert.deepEqual(outlineEntries(result, []).slice(0, 2).map((entry) => entry.kind), ['mission', 'mission'])
+  assert.ok(outlineEntries(result, []).every((entry) => entry.kind !== 'epic'))
 
   // La sélection est un identifiant stable : une requête qui garde la ligne
   // garde l'identifiant, donc le volet.
