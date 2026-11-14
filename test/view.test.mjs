@@ -70,6 +70,7 @@ import {
   missionAge,
   needsYou,
   parseFilterSnapshot,
+  pointsText,
   pointsTotal,
   priorityOptions,
   projectOptions,
@@ -945,6 +946,17 @@ test('le périmètre résume la file, l’ouvert et les projets ; les points sau
   // Une mission sans points compte comme une mission, pas comme zéro point.
   assert.deepEqual(pointsTotal(missions), { total: 8, counted: 2 })
   assert.deepEqual(pointsTotal([]), { total: 0, counted: 0 })
+})
+
+test('un point s’écrit « 1 pt » et une absence ne s’écrit pas', () => {
+  // Given les formes que prend le compte de points d'une mission.
+  const comptes = [5, 1, 0, null, undefined, '', 'n/a']
+
+  // When chaque compte est mis en mots.
+  const mots = comptes.map(pointsText)
+
+  // Then le pluriel suit la valeur, et une absence ne rend rien.
+  assert.deepEqual(mots, ['5 pts', '1 pt', '0 pts', '', '', '', ''])
 })
 
 test('une mission sans état connu reste dans la file, en dernier', () => {
