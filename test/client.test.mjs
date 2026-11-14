@@ -2164,8 +2164,11 @@ test('un chargement sans donnée rend le loader, un refresh garde les lignes', (
 })
 
 test('chaque volet garde la famille missions-drawer et son titre', () => {
-  // Given le volet d'une mission, celui d'un dépôt.
-  const volet = findAll(monterVolet().tree, 'aside')[0]
+  // Given le volet d'une mission, logé dans la moitié droite de l'arbre, et
+  // celui d'un dépôt, qui garde son propre panneau.
+  const arbreVolet = monterVolet().workbench
+  const apercuVolet = findAll(arbreVolet, 'aside')[0]
+  const volet = findAll(apercuVolet, 'div').find((node) => String(node.props.className ?? '').split(' ').includes('missions-drawer'))
   const depot = findAll(voletDepot(REPO_SCAN.repositories[0]).inner, 'aside')[0]
   const cas = [
     [volet, MISSION.title],
@@ -2178,6 +2181,10 @@ test('chaque volet garde la famille missions-drawer et son titre', () => {
     assert.match(aside.props.className, /(^|\s)missions-drawer(\s|$)/)
     assert.equal(textOf(findAll(aside, 'h2')[0]), titre)
   }
+  // Then la fiche de mission ne monte plus de second panneau à côté de l'aperçu.
+  assert.match(apercuVolet.props.className, /missions-wb-preview/)
+  assert.equal(findAll(arbreVolet, 'aside').length, 1)
+  assert.equal(findAll(arbreVolet, 'aside').filter((node) => /missions-drawer/.test(node.props.className)).length, 0)
   // Then sous l'arbre, l'aperçu tient lieu de volet au repos : aucun aside vide.
   const arbre = monter([EMPTY_BAR, dashboardView([]), 'missions'])
   assert.equal(findAll(arbre, 'aside').length, 0)
@@ -2228,10 +2235,17 @@ test('une mission choisie ne rouvre pas de volet sous le dashboard', () => {
   const surDashboard = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard', '', EMPTY_BAR.filters, null, MISSION])
   const surMissions = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', EMPTY_BAR.filters, null, MISSION])
 
-  // Then le dashboard reste sans volet, et l'onglet Missions garde son tiroir.
+  // Then le dashboard reste sans volet, et l'onglet Missions garde son tiroir,
+  // rendu dans la moitié droite du workbench.
   assert.equal(findAll(surDashboard, 'aside').length, 0)
   assert.equal(findAll(surDashboard, 'MissionDrawer').length, 0)
-  assert.equal(findAll(surMissions, 'MissionDrawer').length, 1)
+  const vue = findAll(surMissions, 'MissionsView')[0]
+  const rendu = renderTree(vue)
+  const fiche = findAll(rendu, 'div').find((node) => String(node.props.className ?? '').split(' ').includes('missions-drawer'))
+  assert.ok(fiche, 'la fiche de la mission choisie est rendue')
+  assert.equal(findAll(rendu, 'aside').length, 1)
+  assert.equal(findAll(rendu, 'aside')[0].props.className, 'missions-wb-preview')
+  assert.ok(findAll(findAll(rendu, 'aside')[0], 'div').includes(fiche), 'la fiche vit dans la moitié droite')
 })
 
 test('le panneau relit la barre de la session au montage', () => {
@@ -2883,19 +2897,35 @@ function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overr
   const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, [...panneau])
   api.apply(ctx)
 
-  const drawer = findAll(registered.main({}), 'MissionDrawer')[0]
-  assert.ok(drawer, 'le panneau doit monter le volet quand une mission est choisie')
-  const tree = renderTree({ ...drawer, props: { ...drawer.props, ...overrides } })
+  const enfants = (node) => (node.children.length === 1 ? node.children[0] : node.children)
+
+  const monter = () => {
+    const vue = findAll(registered.main({}), 'MissionsView')[0]
+    assert.ok(vue, 'le panneau doit monter la vue Missions quand une mission est choisie')
+    const vueOut = vue.fn({ ...vue.props, children: enfants(vue) })
+    const workbench = findAll(vueOut, 'Workbench')[0]
+    assert.ok(workbench, 'la vue Missions monte son workbench')
+    const wbOut = workbench.fn({ ...workbench.props, children: enfants(workbench) })
+    const drawer = findAll(wbOut, 'MissionDrawer')[0]
+    assert.ok(drawer, 'la moitié droite du workbench monte le volet quand une mission est choisie')
+    return { wbOut, drawer }
+  }
+
+  const premier = monter()
+  // `premier.drawer` garde le câblage du panneau ; `tree` rejoue les gestes sur
+  // le volet avec les remplacements du test (services, callbacks espions).
+  const tree = renderTree({ ...premier.drawer, props: { ...premier.drawer.props, ...overrides } })
+  const workbench = renderTree(premier.wbOut)
 
   // Le même volet, un tour plus tard : les setters du clic alimentent les états.
   const rerendre = () => {
     resetHooks()
     queue.length = 0
     queue.push(...panneau)
-    const noeud = findAll(registered.main({}), 'MissionDrawer')[0]
-    return renderTree({ ...noeud, props: { ...noeud.props, ...overrides } })
+    const suivant = monter()
+    return renderTree({ ...suivant.drawer, props: { ...suivant.drawer.props, ...overrides } })
   }
-  return { tree, drawer, setters, rerendre }
+  return { tree, drawer: premier.drawer, workbench, setters, rerendre }
 }
 
 test('le volet rend la priorité comme un select natif, plus comme une ligne morte', () => {
@@ -6586,8 +6616,10 @@ test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
     const tree = registered.main({})
     const vueNode = findAll(tree, 'MissionsView')[0]
     const view = renderTree(vueNode)
-    // Le même rendu, non résolu : les filtres à cases y sont encore des composants.
-    const brut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
+    // Le même rendu, non résolu : les filtres à cases y sont encore des composants,
+    // posés dans la colonne par le workbench.
+    const vueOut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
+    const brut = findAll(vueOut, 'Workbench')[0].props.filters
 
     const select = (label) => {
       const noeud = findAll(view, 'select').find((node) => node.props['aria-label'] === label)
@@ -6737,9 +6769,16 @@ function monterVoletAvec(mission, etatsVolet = []) {
     // L'index des checklists de l'arbre, avant le volet comme dans le panneau.
     null,
   ]
-  const { api, ctx, registered, setters, queue } = charger(undefined, [...panneau, ...etatsVolet], memorySession())
+  // La vue de l'arbre consomme ses deux états avant le volet.
+  const { api, ctx, registered, setters, queue } = charger(undefined, [...panneau, null, null, ...etatsVolet], memorySession())
   api.apply(ctx)
-  const noeud = findAll(registered.main({}), 'MissionDrawer')[0]
+  const vue = findAll(registered.main({}), 'MissionsView')[0]
+  assert.ok(vue, 'la vue Missions est montée')
+  const vueOut = vue.fn({ ...vue.props, children: vue.children.length === 1 ? vue.children[0] : vue.children })
+  const workbench = findAll(vueOut, 'Workbench')[0]
+  assert.ok(workbench, 'la vue Missions monte son workbench')
+  const wbOut = workbench.fn({ ...workbench.props, children: workbench.children.length === 1 ? workbench.children[0] : workbench.children })
+  const noeud = findAll(wbOut, 'MissionDrawer')[0]
   assert.ok(noeud, 'le volet est monté')
   return { inner: renderTree(noeud), setters, queue }
 }
@@ -8178,6 +8217,7 @@ test('l’arbre ne lit que les groupes qu’on lui donne', () => {
       rows: [{ row: { id: 'row-1', key: 'row-1', title: 'A foreign row' }, kind: 'mission', anchors: [], hidden: 0 }],
     }],
     query: '',
+    filters: null,
     renderRow: () => rang,
     renderPreview: () => ({ type: 'p', fn: null, props: {}, children: ['A foreign preview'] }),
   }))
@@ -8462,4 +8502,99 @@ test('l’arbre tient dans la largeur, le volet passe dessous et les titres sont
   // La peau papier reste lisible : le volet et l'arbre ont leurs règles.
   assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-wb-preview \{ background: var\(--skin-page-2\); \}/)
   assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-tree-epic-name \{/)
+})
+
+test('le workbench partage la largeur en deux moitiés et retombe sur une colonne sous 900 px', () => {
+  const grille = regle('.missions-workbench')
+  assert.match(grille, /grid-template-columns: minmax\(340px, 1fr\) minmax\(0, 1fr\)/)
+  assert.doesNotMatch(grille, /440px/, 'la liste ne reste plus plafonnée à 440 px')
+  assert.doesNotMatch(SOURCE, /data-drawer/, 'le workbench ne se replie plus à l’ouverture d’une fiche')
+  assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\n\s*\.missions-workbench \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+})
+
+test('les filtres vivent dans la colonne, sous le champ et au-dessus de la bande', () => {
+  const { vue } = monterArbre()
+  const rendu = renderTree(vue)
+
+  const colonne = findAll(rendu, 'div').find((node) => node.props.className === 'missions-wb-column')
+  assert.ok(colonne, 'la colonne est rendue')
+  const filtres = findAll(colonne, 'div').find((node) => node.props.className === 'missions-wb-filters')
+  assert.ok(filtres, 'la barre de filtres est dans la colonne')
+  const rang = (classe) => colonne.children.findIndex((node) => node?.props?.className === classe)
+  assert.ok(rang('missions-wb-field') < rang('missions-wb-filters'), 'les filtres passent sous le champ')
+  assert.ok(rang('missions-wb-filters') < rang('missions-band'), 'les filtres passent au-dessus de la bande')
+
+  // Les mêmes filtres, mêmes libellés : la barre du dessus n'en garde aucun.
+  const libelles = findAll(filtres, 'span')
+    .filter((node) => node.props.className === 'missions-select-label')
+    .map(textOf)
+  assert.deepEqual(libelles, ['Type', 'Epic', 'Project', 'Priority', 'Sort'])
+  assert.match(textOf(filtres), /Priority/)
+  assert.match(textOf(filtres), /Missing/)
+
+  const toolbar = findAll(rendu, 'div').find((node) => node.props.className === 'missions-toolbar')
+  assert.ok(toolbar, 'la barre du dessus reste')
+  assert.match(textOf(toolbar), /Outline/)
+  assert.ok(findAll(toolbar, 'button').some((node) => node.props['aria-label'] === 'Refresh'), 'Refresh reste au-dessus')
+  assert.equal(findAll(toolbar, 'div').filter((node) => node.props.className === 'missions-filters').length, 0)
+  assert.deepEqual(findAll(toolbar, 'select'), [], 'aucun filtre ne reste au-dessus du workbench')
+})
+
+test('les lignes de mission sont aérées et séparées par un filet, l’épic garde sa hauteur', () => {
+  const ligne = regle('.missions-tree-row')
+  assert.match(ligne, /min-height: 38px/)
+  assert.match(ligne, /box-sizing: border-box/)
+  assert.match(regle('.missions-tree-epic'), /height: 26px/)
+  // Le filet sépare deux lignes voisines : ni avant la première, ni après la dernière.
+  assert.match(SOURCE, /\.missions-wb-row \+ \.missions-wb-row > \.missions-tree-row \{ border-top: 1px solid/)
+
+  const { arbre } = monterArbre()
+  const groupe = findAll(arbre(), 'div').find((node) => node.props.className === 'missions-wb-rows' && node.children.length > 1)
+  assert.ok(groupe, 'un groupe porte au moins deux missions')
+  assert.ok(groupe.children.every((node) => node?.props?.className === 'missions-wb-row'), 'chaque rang est une ligne voisine')
+})
+
+test('ouvrir une mission monte la fiche dans la moitié droite, sans second panneau', () => {
+  const { workbench: rendu } = monterVolet(ARBRE_CHECK)
+
+  const asides = findAll(rendu, 'aside')
+  assert.equal(asides.length, 1, 'un seul panneau à droite')
+  assert.equal(asides[0].props.className, 'missions-wb-preview')
+  assert.equal(asides[0].props['aria-label'], 'Mission details')
+  assert.equal(findAll(rendu, 'aside').filter((node) => /missions-drawer/.test(String(node.props.className))).length, 0)
+
+  const fiche = findAll(asides[0], 'div').find((node) => String(node.props.className ?? '').split(' ').includes('missions-drawer'))
+  assert.ok(fiche, 'la fiche de mission est rendue')
+  assert.equal(fiche.props['data-inline'], 'true')
+  assert.equal(findAll(fiche, 'h2').length, 1)
+  assert.equal(textOf(findAll(fiche, 'h2')[0]), ARBRE_CHECK.title)
+
+  // L'arbre garde sa colonne et son champ, la fiche prend l'autre moitié.
+  const colonne = findAll(rendu, 'div').find((node) => node.props.className === 'missions-wb-column')
+  assert.ok(colonne, 'la colonne de l’arbre reste')
+  assert.equal(findAll(colonne, 'div').filter((node) => node.props.className === 'missions-tree-row').length > 0, true)
+})
+
+test('déplacer le surlignage ne remplace pas la fiche ouverte', () => {
+  const ouvert = monter([EMPTY_BAR, dashboardView([]), 'missions', '', EMPTY_BAR.filters, null, ARBRE_CHECK])
+  const vue = findAll(ouvert, 'MissionsView')[0]
+  const vueOut = vue.fn({ ...vue.props, children: vue.children })
+  const workbench = findAll(vueOut, 'Workbench')[0]
+  const deplace = renderTree({ ...workbench, props: { ...workbench.props, cursor: 'mission:MIS-201' } })
+
+  const fiches = findAll(deplace, 'div').filter((node) => String(node.props.className ?? '').split(' ').includes('missions-drawer'))
+  assert.equal(fiches.length, 1, 'une seule fiche rendue')
+  assert.equal(textOf(findAll(fiches[0], 'h2')[0]), ARBRE_CHECK.title)
+  assert.equal(findAll(deplace, 'div').filter((node) => node.props.className === 'missions-wb-preview-body').length, 0, 'l’aperçu ne reprend pas la place')
+})
+
+test('fermer la fiche rend l’aperçu de l’entrée surlignée', () => {
+  const { arbre } = monterArbre()
+  const ferme = arbre({ cursor: 'mission:MIS-206' })
+  assert.equal(findAll(ferme, 'aside').length, 1)
+  assert.equal(findAll(ferme, 'aside')[0].props['aria-label'], 'Preview')
+  assert.equal(findAll(ferme, 'aside')[0].props['aria-live'], 'polite')
+  const apercu = findAll(ferme, 'div').find((node) => node.props.className === 'missions-wb-preview-body')
+  assert.ok(apercu, 'l’aperçu reprend la moitié droite')
+  assert.equal(apercu.props['data-kind'], 'mission')
 })
