@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/jira.js'
+import { create, epics, forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/jira.js'
 
 const PROJECT = {
   id: 'alpha',
@@ -464,4 +464,105 @@ test('a comment read keeps the 401 message', async () => {
     }),
     /Jira token missing or invalid/,
   )
+})
+
+
+test('create écrit le type, la priorité, l’assignation et le parent, jamais le statut', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    const target = String(url)
+    if (target.includes('/myself')) return response({ accountId: 'acc-1' })
+    calls.push({ target, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) : null })
+    return response({ key: 'EX-9' }, { status: 201 })
+  }
+
+  const created = await create(PROJECT, {
+    title: 'Créer une mission',
+    description: 'Première ligne\n\nSeconde ligne',
+    type: 'story',
+    priority: 'high',
+    epic: 'EX-1',
+  }, { fetchImpl })
+
+  assert.deepEqual(created, {
+    key: 'EX-9',
+    tracker: 'jira',
+    reference: 'EX',
+    number: null,
+    url: 'https://example.atlassian.net/browse/EX-9',
+  })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].method, 'POST')
+  assert.match(calls[0].target, /\/rest\/api\/3\/issue$/)
+  const fields = calls[0].body.fields
+  assert.deepEqual(fields.project, { key: 'EX' })
+  assert.equal(fields.summary, 'Créer une mission')
+  assert.deepEqual(fields.issuetype, { name: 'Story' })
+  assert.deepEqual(fields.priority, { name: 'High' })
+  assert.deepEqual(fields.assignee, { accountId: 'acc-1' })
+  assert.deepEqual(fields.parent, { key: 'EX-1' })
+  assert.equal(fields.status, undefined, 'le statut initial vient du projet, jamais du panneau')
+  assert.deepEqual(fields.description, {
+    type: 'doc',
+    version: 1,
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Première ligne' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Seconde ligne' }] },
+    ],
+  })
+})
+
+test('create refuse un type ou une priorité que la carte du projet ne connaît pas', async () => {
+  let touched = 0
+  const fetchImpl = async () => {
+    touched += 1
+    return response({ accountId: 'acc-1' })
+  }
+
+  await assert.rejects(
+    create(PROJECT, { title: 'T', type: 'epic', priority: 'high' }, { fetchImpl }),
+    /no native type for epic/,
+  )
+  await assert.rejects(
+    create(PROJECT, { title: 'T', type: 'story', priority: 'critical' }, { fetchImpl }),
+    /no priority for critical/,
+  )
+  assert.equal(touched, 0)
+})
+
+test('les epics sont les tickets de type Epic, triés par création', async () => {
+  const calls = []
+  const fetchImpl = reading(async (url, init) => {
+    calls.push({ url, body: init?.body ? JSON.parse(init.body) : null })
+    return response({
+      issues: [
+        { key: 'EX-1', fields: { summary: 'Fondations' } },
+        { key: 'EX-2', fields: { summary: 'Missions v1' } },
+      ],
+    })
+  })
+
+  const listed = await epics(PROJECT, { fetchImpl })
+
+  assert.deepEqual(listed, [
+    { id: 'EX-1', label: 'EX-1 · Fondations' },
+    { id: 'EX-2', label: 'EX-2 · Missions v1' },
+  ])
+  const sent = decodeURIComponent(calls[0].url).replaceAll('+', ' ')
+  assert.match(sent, /issuetype = Epic/)
+  assert.match(sent, /ORDER BY created ASC/)
+})
+
+test('create écrit la première forme native quand la carte en accepte plusieurs', async () => {
+  const project = { ...PROJECT, map: { ...PROJECT.map, types: { bug: 'Bug', story: ['Story', 'Task'] } } }
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).includes('/myself')) return response({ accountId: 'acc-1' })
+    calls.push(JSON.parse(init.body))
+    return response({ key: 'EX-10' }, { status: 201 })
+  }
+
+  await create(project, { title: 'T', type: 'story', priority: 'normal' }, { fetchImpl })
+
+  assert.deepEqual(calls[0].fields.issuetype, { name: 'Story' })
 })

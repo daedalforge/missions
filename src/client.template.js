@@ -166,6 +166,11 @@ window.__ModuleLoader__.load({
     }
 
     const LIST_URL = 'missions/api/list'
+    // The creation form: the options one read at open, the epics of the chosen
+    // project, then the canonical payload. The host validates and the tracker
+    // writes; the panel never names a tracker field.
+    const CREATE_URL = 'missions/api/create'
+    const CREATE_EPICS_URL = 'missions/api/create/epics'
     // The Done tab's badge reads this count at mount. The closed lines stay on
     // demand, behind `?done=1` on the list route above.
     const DONE_COUNT_URL = 'missions/api/done/count'
@@ -735,6 +740,10 @@ window.__ModuleLoader__.load({
 .missions-drawer-tab[aria-selected="true"] { color: var(--dsw-alias-label-primary, #1f1f1f); border-bottom-color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
 .missions-drawer-panel { display: flex; flex-direction: column; gap: 16px; }
 .missions-drawer-panel .missions-props, .missions-drawer-panel .missions-journal, .missions-drawer-panel .missions-checklist { padding-top: 0; border-top: 0; }
+/* The creation form pairs the two short vocabularies and reuses the drawer's
+   properties grid for the two lines the host owns. */
+.missions-create-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.missions-create-pair .wf-field { margin-bottom: 9px; }
 .missions-drawer--fill .missions-drawer-panel { flex: 1; min-height: 120px; }
 .missions-drawer--fill .missions-drawer-panel > section { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .missions-drawer--fill .missions-journal-text, .missions-drawer--fill .missions-checklist-body { max-height: none; flex: 1; min-height: 0; }
@@ -2716,6 +2725,9 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       loading,
       failed,
       onRefresh,
+      // Only the Missions tab passes it: Done and the dashboard render no
+      // creation button, and no view creates a mission by accident.
+      onNew = null,
       statusOptions,
       statusFixed = false,
       emptyText = 'No open missions assigned to you.',
@@ -2749,6 +2761,15 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             disabled: loading,
             'aria-busy': loading ? 'true' : 'false',
           }, h(RefreshIcon, { theme }))
+      const newButton = onNew === null
+        ? null
+        : h('button', {
+            type: 'button',
+            className: 'missions-icon-btn',
+            'aria-label': 'Create a mission',
+            title: 'Create a mission',
+            onClick: onNew,
+          }, h(PlusIcon, { theme }))
       const archiveButton = archiveAll === null
         ? null
         : h(ArchiveBatchButton, {
@@ -2840,6 +2861,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             h('div', { className: 'missions-toolbar-top' },
               h('span', { className: 'missions-toolbar-label' }, 'Outline'),
               refreshButton,
+              newButton,
               archiveButton,
             ),
           ),
@@ -2892,6 +2914,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             }),
           ),
           refreshButton,
+          newButton,
           archiveButton,
         ),
         filtersRow,
@@ -3704,6 +3727,275 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           ),      )
     }
 
+    const CREATE_TYPE_LABELS = { bug: 'Bug', story: 'Story' }
+    const CREATE_PRIORITY_LABELS = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' }
+
+    /**
+     * The creation drawer: one form over the options the host declares, a
+     * canonical payload, and the created key back to the panel.
+     *
+     * The panel never names a tracker field. The project select carries the
+     * vocabulary its own mapping accepts, the epics are read for the chosen
+     * project alone, and the two read-only lines say what the host will write:
+     * the project's initial status, and the current account.
+     */
+    function MissionCreateDrawer({ onClose, onCreated }) {
+      const [options, setOptions] = React.useState(null)
+      const [optionsError, setOptionsError] = React.useState(null)
+      const [projectId, setProjectId] = React.useState('')
+      const [title, setTitle] = React.useState('')
+      const [description, setDescription] = React.useState('')
+      const [type, setType] = React.useState('')
+      const [priority, setPriority] = React.useState('')
+      const [epic, setEpic] = React.useState('')
+      const [epics, setEpics] = React.useState([])
+      const [epicsLoading, setEpicsLoading] = React.useState(false)
+      const [epicsError, setEpicsError] = React.useState(null)
+      const [busy, setBusy] = React.useState(false)
+      const [error, setError] = React.useState(null)
+      // One POST per click, even before React has rendered the disabled button.
+      const busyRef = React.useRef(false)
+      const project = (options?.projects ?? []).find((entry) => entry.id === projectId) ?? null
+
+      React.useEffect(() => {
+        let alive = true
+        fetch(CREATE_URL, { headers: { accept: 'application/json' } })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!alive) return
+            if (!ok || data?.error) throw new Error(data?.error ?? 'options unavailable')
+            const projects = Array.isArray(data?.projects) ? data.projects : []
+            setOptions({ ...data, projects })
+            const first = projects[0] ?? null
+            if (first) {
+              setProjectId(first.id)
+              setType(first.types?.[0] ?? '')
+              setPriority(data.defaultPriority ?? first.priorities?.[0] ?? '')
+            }
+          })
+          .catch((failure) => {
+            if (alive) setOptionsError(failure?.message ?? 'options unavailable')
+          })
+        return () => {
+          alive = false
+        }
+      }, [])
+
+      // The epics belong to the chosen project: another project's tracker is
+      // never called, and a late answer for a project already left is dropped.
+      React.useEffect(() => {
+        if (!projectId) return undefined
+        let alive = true
+        setEpicsLoading(true)
+        setEpicsError(null)
+        setEpics([])
+        fetch(`${CREATE_EPICS_URL}?project=${encodeURIComponent(projectId)}`, { headers: { accept: 'application/json' } })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!alive) return
+            if (!ok || data?.error) throw new Error(data?.error ?? 'epics unavailable')
+            setEpics(Array.isArray(data?.epics) ? data.epics : [])
+          })
+          .catch((failure) => {
+            if (alive) setEpicsError(failure?.message ?? 'epics unavailable')
+          })
+          .finally(() => {
+            if (alive) setEpicsLoading(false)
+          })
+        return () => {
+          alive = false
+        }
+      }, [projectId])
+
+      React.useEffect(() => {
+        const onKey = (event) => {
+          if (event.key === 'Escape' && !busyRef.current) onClose()
+        }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+      }, [onClose])
+
+      const chooseProject = (nextId) => {
+        const next = (options?.projects ?? []).find((entry) => entry.id === nextId) ?? null
+        const nextTypes = next?.types ?? []
+        const nextPriorities = next?.priorities ?? []
+        const wantedPriority = options?.defaultPriority ?? priority
+        setProjectId(nextId)
+        setType(nextTypes.includes(type) ? type : (nextTypes[0] ?? ''))
+        setPriority(nextPriorities.includes(priority) ? priority : (nextPriorities.includes(wantedPriority) ? wantedPriority : (nextPriorities[0] ?? '')))
+        setEpic('')
+        setEpics([])
+        setEpicsError(null)
+      }
+
+      const submit = (event) => {
+        event.preventDefault()
+        if (busyRef.current) return
+        if (!projectId) {
+          setError('Choose a project.')
+          return
+        }
+        if (!title.trim()) {
+          setError('A title is required.')
+          return
+        }
+        if (description.trim().length > 4000) {
+          setError('The description is 4000 characters at most.')
+          return
+        }
+        setError(null)
+        busyRef.current = true
+        setBusy(true)
+        fetch(CREATE_URL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({
+            project: projectId,
+            title: title.trim(),
+            description: description.trim(),
+            type,
+            priority,
+            epic: epic === '' ? null : epic,
+          }),
+        })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok || data?.error) throw new Error(data?.error ?? 'create failed')
+            onCreated(data)
+          })
+          .catch((failure) => {
+            // The form keeps what was typed: a refused creation is retried,
+            // not retyped.
+            setError(failure?.message ?? 'create failed')
+            busyRef.current = false
+            setBusy(false)
+          })
+      }
+
+      const projects = options?.projects ?? []
+      const projectTypes = project?.types ?? []
+      const projectPriorities = project?.priorities ?? []
+      const loading = options === null && optionsError === null
+      const fieldsDisabled = busy || options === null
+
+      return h('aside', {
+        className: 'missions-drawer missions-drawer--fill',
+        role: 'complementary',
+        'aria-label': 'Create a mission',
+      },
+        h('div', { className: 'missions-drawer-head' },
+          h('div', null,
+            h('div', { className: 'missions-drawer-key' }, 'New mission'),
+            h('h2', { className: 'missions-drawer-title' }, 'Create a mission'),
+          ),
+          h('button', { type: 'button', className: 'missions-drawer-close', onClick: onClose, 'aria-label': 'Close', disabled: busy }, '×'),
+        ),
+
+        optionsError
+          ? h('p', { className: 'missions-drawer-note missions-drawer-note--error', role: 'alert' }, `The creation options failed: ${optionsError}`)
+          : null,
+
+        h('form', { className: 'wf-form', onSubmit: submit },
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Project'),
+            h('select', {
+              value: projectId,
+              onChange: (event) => chooseProject(event.target.value),
+              disabled: fieldsDisabled,
+              'aria-label': 'Project',
+            },
+              projects.length === 0
+                ? h('option', { value: '' }, loading ? 'Loading…' : 'No project')
+                : projects.map((entry) => h('option', { key: entry.id, value: entry.id }, entry.name)),
+            ),
+          ),
+
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Title'),
+            h('input', {
+              type: 'text',
+              value: title,
+              maxLength: 255,
+              onChange: (event) => setTitle(event.target.value),
+              disabled: fieldsDisabled,
+              autoFocus: true,
+              'aria-label': 'Title',
+            }),
+          ),
+
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Description'),
+            h('textarea', {
+              value: description,
+              maxLength: 4000,
+              rows: 3,
+              onChange: (event) => setDescription(event.target.value),
+              disabled: fieldsDisabled,
+              'aria-label': 'Description',
+            }),
+          ),
+
+          h('div', { className: 'missions-create-pair' },
+            h('label', { className: 'wf-field' },
+              h('span', null, 'Type'),
+              h('select', {
+                value: type,
+                onChange: (event) => setType(event.target.value),
+                disabled: fieldsDisabled || projectTypes.length === 0,
+                'aria-label': 'Type',
+              },
+                projectTypes.map((entry) => h('option', { key: entry, value: entry }, CREATE_TYPE_LABELS[entry] ?? entry)),
+              ),
+            ),
+            h('label', { className: 'wf-field' },
+              h('span', null, 'Priority'),
+              h('select', {
+                value: priority,
+                onChange: (event) => setPriority(event.target.value),
+                disabled: fieldsDisabled || projectPriorities.length === 0,
+                'aria-label': 'Priority',
+              },
+                projectPriorities.map((entry) => h('option', { key: entry, value: entry }, CREATE_PRIORITY_LABELS[entry] ?? entry)),
+              ),
+            ),
+          ),
+
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Epic'),
+            h('select', {
+              value: epic,
+              onChange: (event) => setEpic(event.target.value),
+              disabled: fieldsDisabled || epicsLoading,
+              'aria-label': 'Epic',
+            },
+              h('option', { value: '' }, epicsLoading ? 'Loading epics…' : 'No epic'),
+              epics.map((entry) => h('option', { key: entry.id, value: entry.id }, entry.label)),
+            ),
+          ),
+          epicsError ? h('p', { className: 'wf-error', role: 'alert' }, `The epics failed: ${epicsError}`) : null,
+
+          h('dl', { className: 'missions-props' },
+            h('dt', null, 'Status'),
+            h('dd', null, options?.status ?? 'to-refine'),
+            h('dt', null, 'Assigned to me'),
+            h('dd', null, 'You'),
+          ),
+
+          loading ? h('p', { className: 'missions-drawer-note' }, 'Loading the options…') : null,
+          error ? h('p', { className: 'wf-error', role: 'alert' }, error) : null,
+
+          h('div', { className: 'wf-form-actions' },
+            h('button', { type: 'button', className: 'missions-btn', onClick: onClose, disabled: busy }, 'Cancel'),
+            h('button', {
+              type: 'submit',
+              className: 'missions-btn wf-primary',
+              disabled: busy || options === null || !projectId || !title.trim(),
+            }, busy ? 'Creating…' : 'Create'),
+          ),
+        ),
+      )
+    }
+
     /** Theme-specific loading indicator, shared by every view. */
     function PanelLoader({ theme }) {
       const manga = theme === 'manga'
@@ -3743,6 +4035,14 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       return h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true', className: 'missions-icon-arrow', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
         h('path', { d: 'M20.4 11.2a8.4 8.4 0 1 1-2.5-6.1' }),
         h('path', { d: 'M20.6 3.8v7.2h-7.2' }),
+      )
+    }
+
+    /** The creation drawing: a plus at 15 px; the button carries its name. */
+    function PlusIcon() {
+      return h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+        h('path', { d: 'M12 5v14' }),
+        h('path', { d: 'M5 12h14' }),
       )
     }
 
@@ -5907,6 +6207,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // says the index is not there instead of claiming an empty checklist.
       const [checklistIndex, setChecklistIndex] = React.useState(null)
 
+      // The creation drawer, beside the fiche and never with it: the tab opens
+      // one or the other, and a tab switch closes what it cannot own.
+      const [creating, setCreating] = React.useState(false)
+
       // The view's declared perimeter: a tab carries its own source, Settings
       // reads whatever its open section reads — so the banner and the tick
       // never lie about what the panel touches under Settings.
@@ -5953,6 +6257,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               workspaceId: data?.workspaceId ?? null,
               workspaceRoot: data?.workspaceRoot ?? null,
             }))
+            return missions
           })
           .catch((error) => {
             // A silent refresh that fails must not empty the list.
@@ -5966,6 +6271,18 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             }))
           })
       }, [])
+
+      // A created mission is proved by name, not by assumption: the drawer
+      // closes, the open list is read with `refresh=1`, and the row the tracker
+      // named opens. If the refreshed page does not carry it, no drawer opens.
+      const onCreated = (created) => {
+        setCreating(false)
+        setSelected(null)
+        return load({ refresh: true }).then((missions) => {
+          const found = (missions ?? []).find((mission) => mission.key === created?.key)
+          if (found) setSelected(found)
+        })
+      }
 
       // The closed read has its own perimeter and its own cache: `?done=1` asks
       // the server for the declared closed missions, and refresh keeps that
@@ -6363,6 +6680,8 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         if (next !== tab) countTab(next)
         setTab(next)
         setRepository(null)
+        // The creation form belongs to the Missions tab: another tab closes it.
+        if (creating) setCreating(false)
       }
 
       // A section switch stays on the Settings tab: it counts like a tab
@@ -6415,6 +6734,12 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const missionDrawer = selected === null
         ? null
         : h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onArchived: applyArchive, theme })
+
+      // The creation form is the Missions tab's own pane: the other tabs never
+      // render it, even if a stored selection tried to keep it open.
+      const createDrawer = tab === 'missions' && creating
+        ? h(MissionCreateDrawer, { key: 'create', onClose: () => setCreating(false), onCreated })
+        : null
 
       return h('div', { className: 'missions-panel', 'data-theme': theme, 'data-skin': theme === 'default' ? undefined : 'paper' },
         hero,
@@ -6523,6 +6848,9 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                   missions, query, onQuery, onSearchEnd, filters, onFilter, onClear, sort, onSort,
                   filtered, groups, onSelect: openMission, theme, loading, failed,
                   onRefresh: () => { track('list.refresh', 'open'); return load({ refresh: true }) },
+                  // Only this tab creates: the button opens the form in the
+                  // drawer's place, and the form closes onto the new row.
+                  onNew: () => { setSelected(null); setCreating(true) },
                   tree: true,
                   checklists: checklistIndex,
                   actions: outlineActions,
@@ -6555,8 +6883,8 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             ? null
             : tab === 'missions'
             // The tab's drawer is the pane's, not the view's: the list alone at
-            // rest, the drawer beside it once a mission is chosen.
-            ? missionDrawer
+            // rest, the form or the mission's fiche beside it once chosen.
+            ? createDrawer ?? missionDrawer
             // Done keeps its resting hint: the pane is where its drawer lives,
             // and an empty pane still says what it is waiting for.
             : missionDrawer ?? h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },

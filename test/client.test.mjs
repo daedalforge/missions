@@ -1296,7 +1296,10 @@ test('une lecture en échec ne se déguise pas en file vide', () => {
   const node = findAll(registered.main({}), 'MissionsView')[0]
   const tree = renderTree({ ...node, props: { ...node.props } })
   assert.doesNotMatch(textOf(tree), /No open missions assigned to you\./)
-  assert.equal(findAll(tree, 'button').filter((button) => button.props.className === 'missions-icon-btn').length, 0)
+  // Le rafraîchissement disparaît : il n'a rien à relire. La création, elle,
+  // reste offerte — un listage en échec ne ferme pas le formulaire.
+  assert.equal(findAll(tree, 'button').some((button) => button.props['aria-label'] === 'Refresh'), false)
+  assert.equal(findAll(tree, 'button').some((button) => button.props['aria-label'] === 'Create a mission'), true)
 })
 
 test('l’icône de rafraîchissement est servie par les deux thèmes', () => {
@@ -3113,6 +3116,8 @@ function repositoriesStates(view, repository = null, count = null) {
     { loading: true, data: null, error: null },
     // L'index des checklists de l'arbre, lu à l'ouverture de l'onglet Missions.
     null,
+    // Le tiroir de création, fermé au repos : la vue des dépôts vient après.
+    false,
     view,
   ]
 }
@@ -6259,7 +6264,8 @@ function monterUsage(releve = USAGE_LOADED) {
       { loading: true, data: null, error: null },
       // L'index des checklists de l'arbre, avant celui de `UsageTab`.
       null,
-      // Le vingtième est celui de `UsageTab`, consommé quand on la rend.
+      // Le tiroir de création, fermé : `UsageTab` vient après.
+      false,
       { loading: false, usage: releve, error: null },
     ],
     memorySession({ 'missions.tab': 'usage' }),
@@ -6772,6 +6778,8 @@ function monterVoletAvec(mission, etatsVolet = []) {
     { loading: true, data: null, error: null },
     // L'index des checklists de l'arbre, avant le volet comme dans le panneau.
     null,
+    // Le tiroir de création, fermé : la vue de l'arbre puis le volet viennent après.
+    false,
   ]
   // La vue de l'arbre consomme son état (le curseur) avant le volet.
   const { api, ctx, registered, setters, queue } = charger(undefined, [...panneau, null, ...etatsVolet], memorySession())
@@ -8643,4 +8651,234 @@ test('la fiche se ferme par sa croix, et Échap ne vide pas la requête tant qu�
   fermee.props.onKeyDown({ key: 'Escape', preventDefault() {} })
   assert.deepEqual(efface, [''])
   assert.equal(findAll(fermee, 'aside').length, 0)
+})
+
+/**
+ * Le tiroir de création, monté comme le panneau le monte : l'onglet Missions
+ * ouvert et `creating` vrai. Le panneau consomme ses vingt états, le tiroir les
+ * siens — le même ordre à chaque rendu, donc les setters retombent juste.
+ */
+const CREATE_OPTIONS = {
+  status: 'to-refine',
+  defaultPriority: 'normal',
+  projects: [
+    { id: 'missions', name: 'Workspace missions', reference: 'MIS', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+    { id: 'legacy', name: 'Legacy', reference: 'LEG', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+  ],
+}
+
+const CREATE_MISSION = {
+  key: 'MIS-42',
+  project: 'missions',
+  projectName: 'Workspace missions',
+  title: 'Créer une mission',
+  state: 'to-refine',
+  type: 'story',
+  priority: 'high',
+  updatedAt: '2026-11-14T10:00:00Z',
+}
+
+function etatsCreation({ title = '', description = '', epic = '', options = CREATE_OPTIONS } = {}) {
+  const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
+  return [
+    EMPTY_BAR,
+    { loading: false, missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w', count: 0 },
+    'missions',
+    '',
+    { ...EMPTY_BAR.filters },
+    null,
+    null,
+    'default',
+    null,
+    EMPTY_BAR,
+    vide,
+    '',
+    { ...EMPTY_BAR.filters, state: ['done'] },
+    null,
+    null,
+    'usage',
+    0,
+    { loading: true, data: null, error: null },
+    null,
+    true,
+    // Le tiroir : options lues, projet choisi, puis le formulaire.
+    options,
+    null,
+    'missions',
+    title,
+    description,
+    'story',
+    'normal',
+    epic,
+    [{ id: '1', label: 'MIS-1 · Fondations' }],
+    false,
+    null,
+    false,
+    null,
+  ]
+}
+
+function monterCreation(reglages = {}) {
+  const etats = etatsCreation(reglages)
+  const charge = charger(undefined, [...etats])
+  charge.api.apply(charge.ctx)
+  const monter = () => {
+    const rendu = charge.registered.main({})
+    const noeud = findAll(rendu, 'MissionCreateDrawer')[0]
+    assert.ok(noeud, 'le panneau monte le tiroir de création')
+    return noeud
+  }
+  const node = monter()
+  const close = []
+  const created = []
+  const inner = renderTree({ ...node, props: {
+    ...node.props,
+    onClose: () => close.push('close'),
+    // Le vrai rappel du panneau suit : c'est lui qui relit la liste.
+    onCreated: (value) => { created.push(value); node.props.onCreated(value) },
+  } })
+  const rerendre = () => {
+    charge.resetHooks()
+    charge.queue.length = 0
+    charge.queue.push(...etats)
+    return renderTree(monter())
+  }
+  return { ...charge, node, inner, close, created, rerendre, etats }
+}
+
+test('le bouton « Create a mission » vit dans la barre des Missions seulement', () => {
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'])
+  api.apply(ctx)
+  const vue = findAll(registered.main({}), 'MissionsView')[0]
+  assert.ok(vue, 'la vue Missions est montée')
+
+  const clique = []
+  const avec = renderTree({ ...vue, props: { ...vue.props, onNew: () => clique.push('new') } })
+  const bouton = findAll(avec, 'button').find((node) => node.props['aria-label'] === 'Create a mission')
+  assert.ok(bouton, 'le bouton porte son nom accessible')
+  assert.equal(bouton.props.title, 'Create a mission')
+  assert.equal(bouton.props.disabled, undefined)
+  bouton.props.onClick()
+  assert.deepEqual(clique, ['new'])
+
+  // Done et le Dashboard ne passent pas la prop : aucune vue ne crée par accident.
+  const sans = renderTree({ ...vue, props: { ...vue.props, onNew: null } })
+  assert.equal(findAll(sans, 'button').some((node) => node.props['aria-label'] === 'Create a mission'), false)
+  assert.equal((SOURCE.match(/onNew: /g) ?? []).length, 1, 'un seul onglet passe le geste')
+})
+
+test('le tiroir montre les sept champs et les deux lignes du serveur', () => {
+  const { inner, close, effects } = monterCreation()
+  const labels = findAll(inner, 'label')
+    .filter((node) => node.props.className === 'wf-field')
+    .map((node) => textOf(node.children[0]))
+  assert.deepEqual(labels, ['Project', 'Title', 'Description', 'Type', 'Priority', 'Epic'])
+  const texte = textOf(inner)
+  assert.match(texte, /Status/)
+  assert.match(texte, /to-refine/)
+  assert.match(texte, /Assigned to me/)
+  assert.match(texte, /No epic/)
+  assert.match(texte, /MIS-1 · Fondations/)
+
+  const create = findAll(inner, 'button').find((node) => textOf(node) === 'Create')
+  assert.equal(create.props.disabled, true, 'titre vide : Créer est désactivé')
+  // Même forcé, le formulaire vide ne part pas : aucun POST n'est émis.
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => { appels.push(String(url)); throw new Error('fetch inattendu') }
+  try {
+    findAll(inner, 'form')[0].props.onSubmit({ preventDefault() {} })
+    assert.deepEqual(appels, [])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+  const annuler = findAll(inner, 'button').find((node) => textOf(node) === 'Cancel')
+  annuler.props.onClick()
+  assert.deepEqual(close, ['close'])
+
+  // Échap ferme : l'effet du tiroir écoute la touche.
+  const vraiDocument = globalThis.document
+  const listeners = {}
+  globalThis.document = { addEventListener: (name, fn) => { listeners[name] = fn }, removeEventListener: () => {} }
+  try {
+    const escape = effects.find((effect) => String(effect.fn).includes("'Escape'"))
+    assert.ok(escape, 'le tiroir écoute Échap')
+    escape.fn()
+    listeners.keydown({ key: 'Escape' })
+    assert.deepEqual(close, ['close', 'close'])
+  } finally {
+    globalThis.document = vraiDocument
+  }
+})
+
+test('changer de projet recharge ses listes et remet l’epic à « No epic »', () => {
+  const { inner, setters, rerendre } = monterCreation({ epic: '1' })
+
+  const projet = findAll(inner, 'select').find((node) => node.props['aria-label'] === 'Project')
+  projet.props.onChange({ target: { value: 'legacy' } })
+  assert.ok(setters.includes('legacy'), 'le projet choisi est posé')
+  assert.ok(setters.includes(''), 'l’epic revient à « No epic »')
+
+  const apres = rerendre()
+  const projetApres = findAll(apres, 'select').find((node) => node.props['aria-label'] === 'Project')
+  assert.equal(projetApres.props.value, 'legacy')
+  const epicApres = findAll(apres, 'select').find((node) => node.props['aria-label'] === 'Epic')
+  assert.equal(epicApres.props.value, '')
+  // L'effet des épics ne part qu'une fois un projet choisi, et le redit.
+  assert.match(SOURCE, /if \(!projectId\) return undefined/)
+  assert.match(SOURCE, /CREATE_EPICS_URL\}\?project=\$\{encodeURIComponent\(projectId\)\}/)
+})
+
+test('créer envoie le canonique une seule fois, puis relit la liste et ouvre la ligne', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    const cible = String(url)
+    appels.push({ url: cible, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) : null })
+    if (cible === 'missions/api/create') {
+      return { ok: true, status: 201, json: async () => CREATE_MISSION }
+    }
+    if (cible === 'missions/api/list?refresh=1') {
+      return { ok: true, json: async () => ({ missions: [CREATE_MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+    }
+    throw new Error(`appel inattendu : ${cible}`)
+  }
+  try {
+    const { inner, setters, created } = monterCreation({ title: 'Créer une mission', description: 'Le formulaire.', epic: '1' })
+    const form = findAll(inner, 'form')[0]
+    form.props.onSubmit({ preventDefault() {} })
+    form.props.onSubmit({ preventDefault() {} })
+    await new Promise((done) => setTimeout(done, 10))
+
+    assert.equal(appels.filter((appel) => appel.method === 'POST').length, 1, 'un double clic ne crée qu’une mission')
+    assert.deepEqual(appels[0], {
+      url: 'missions/api/create',
+      method: 'POST',
+      body: { project: 'missions', title: 'Créer une mission', description: 'Le formulaire.', type: 'story', priority: 'normal', epic: '1' },
+    })
+    assert.equal(appels[1].url, 'missions/api/list?refresh=1', 'la liste est relue avant tout détail')
+    assert.deepEqual(created, [CREATE_MISSION])
+    assert.deepEqual(setters.at(-1), CREATE_MISSION, 'la mission créée est sélectionnée par sa clé')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un refus affiche son message, garde la saisie et n’ouvre aucun tiroir', async () => {
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, status: 502, json: async () => ({ error: 'GitHub: validation failed' }) })
+  try {
+    const { inner, setters, created, rerendre } = monterCreation({ title: 'Créer une mission' })
+    findAll(inner, 'form')[0].props.onSubmit({ preventDefault() {} })
+    await new Promise((done) => setTimeout(done, 10))
+
+    assert.deepEqual(created, [])
+    assert.ok(setters.includes('GitHub: validation failed'))
+    const apres = rerendre()
+    assert.match(textOf(apres), /GitHub: validation failed/)
+    assert.equal(findAll(apres, 'input').find((node) => node.props['aria-label'] === 'Title').props.value, 'Créer une mission')
+    assert.equal(findAll(apres, 'button').find((node) => textOf(node) === 'Create').props.disabled, false)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
 })

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
 import { lastLink } from '../lib/http.js'
-import { forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/github.js'
+import { create, epics, forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/github.js'
 
 const PROJECT = {
   id: 'missions',
@@ -418,4 +418,85 @@ test('a comment read needs a project with owner and repo', async () => {
     }),
     /owner and repo/,
   )
+})
+
+
+test('create écrit le titre, l’état, la priorité, le type et le milestone', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    const target = String(url)
+    calls.push({ target, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) : null })
+    if (target.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    return response({ number: 42, html_url: 'https://github.com/daedalforge/missions/issues/42' }, { status: 201 })
+  }
+
+  const created = await create(PROJECT, {
+    title: 'Créer une mission',
+    description: 'Le panneau ouvre un formulaire.',
+    type: 'story',
+    priority: 'high',
+    state: 'to-refine',
+    epic: '7',
+  }, { fetchImpl })
+
+  assert.deepEqual(created, {
+    key: 'MIS-42',
+    tracker: 'github',
+    reference: 'MIS',
+    number: 42,
+    url: 'https://github.com/daedalforge/missions/issues/42',
+  })
+  assert.equal(calls.at(-1).method, 'POST')
+  assert.equal(calls.at(-1).target, 'https://api.github.com/repos/daedalforge/missions/issues')
+  assert.deepEqual(calls.at(-1).body, {
+    title: 'Créer une mission',
+    body: 'Le panneau ouvre un formulaire.',
+    labels: ['to-refine', 'priority:high'],
+    assignees: ['slucienvauthier-so'],
+    type: 'Feature',
+    milestone: 7,
+  })
+})
+
+test('create refuse un état sans libellé et un epic qui n’est pas un milestone', async () => {
+  let touched = 0
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/user')) return response({ login: 'moi' })
+    touched += 1
+    return response({ number: 1 }, { status: 201 })
+  }
+
+  await assert.rejects(
+    create({ ...PROJECT, map: { ...PROJECT.map, states: {} } }, { title: 'T', type: 'story', priority: 'normal', state: 'to-refine' }, { fetchImpl }),
+    /no label for state to-refine/,
+  )
+  await assert.rejects(
+    create(PROJECT, { title: 'T', type: 'story', priority: 'normal', state: 'to-refine', epic: 'MIS-7' }, { fetchImpl }),
+    /the epic must be a milestone number/,
+  )
+  assert.equal(touched, 0)
+})
+
+test('les epics sont les milestones, toutes pages lues', async () => {
+  const urls = []
+  const fetchImpl = async (url) => {
+    const target = String(url)
+    urls.push(target)
+    if (target.includes('page=2')) {
+      return response([{ number: 2, title: 'Missions v1' }])
+    }
+    return response([{ number: 1, title: 'Fondations' }], {
+      link: '<https://api.github.com/repositories/1/milestones?state=all&per_page=100&page=2>; rel="next"',
+    })
+  }
+
+  const listed = await epics(PROJECT, { fetchImpl })
+
+  assert.deepEqual(listed, [
+    { id: '1', label: 'MIS-1 · Fondations' },
+    { id: '2', label: 'MIS-2 · Missions v1' },
+  ])
+  assert.equal(urls.length, 2)
+  assert.match(urls[0], /\/milestones\?state=all&per_page=100$/)
+  assert.match(urls[1], /page=2$/)
 })
