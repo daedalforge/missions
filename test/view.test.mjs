@@ -289,7 +289,7 @@ test('done garde son groupe en dernier, mais la liste ouverte ne le relit jamais
 
 test('les deux barres de session sont séparées, y compris pour done', () => {
   const storage = memoryStorage()
-  const doneBar = { query: 'close', filters: { ...EMPTY_FILTERS, state: ['done'], project: 'missions' }, sort: 'priority' }
+  const doneBar = { query: 'close', filters: { ...EMPTY_FILTERS, state: ['done'], project: 'missions' } }
   writeFilterSnapshot(storage, doneBar, DONE_FILTERS_KEY, { allowDone: true })
   writeFilterSnapshot(storage, { query: 'open' })
   assert.deepEqual([...storage.entries.keys()].sort(), [DONE_FILTERS_KEY, FILTERS_KEY].sort())
@@ -308,22 +308,45 @@ test('les deux barres de session sont séparées, y compris pour done', () => {
   assert.equal(storage.entries.has(DONE_FILTERS_KEY), false)
 })
 
-test('le tri priorité va du plus haut au plus bas, les sans-priorité en fin', () => {
-  assert.deepEqual(sortMissions(MISSIONS, 'priority').map((m) => m.key), ['a#1', 'a#2', 'a#3'])
-  const extra = [...MISSIONS, { key: 'a#0', priority: null, points: null }]
-  assert.deepEqual(sortMissions(extra, 'priority').map((m) => m.key), ['a#1', 'a#2', 'a#3', 'a#0'])
-  const tie = [
-    { key: 'b#2', priority: 'normal', points: 2 },
-    { key: 'b#1', priority: 'normal', points: 2 },
+test('l’ordre est fixe : priorité décroissante, puis points croissants, puis clé', () => {
+  // Given six missions : deux urgentes, deux normales, deux à un point.
+  const missions = [
+    { key: 'm#5', priority: 'low', points: 3 },
+    { key: 'm#1', priority: 'urgent', points: 5 },
+    { key: 'm#4', priority: 'normal', points: 1 },
+    { key: 'm#3', priority: 'high', points: 2 },
+    { key: 'm#6', priority: 'normal', points: 1 },
+    { key: 'm#2', priority: 'urgent', points: 1 },
   ]
-  assert.deepEqual(sortMissions(tie, 'priority').map((m) => m.key), ['b#1', 'b#2'])
+
+  // When la liste est triée, sans réglage à passer.
+  const ordered = sortMissions(missions)
+
+  // Then l'urgence passe devant, les points départagent dans une priorité, et
+  // la clé sépare deux missions de même priorité et de mêmes points.
+  assert.deepEqual(ordered.map((mission) => mission.key), ['m#2', 'm#1', 'm#3', 'm#4', 'm#6', 'm#5'])
+  // Then l'entrée n'est pas mutée : le tri travaille sur une copie.
+  assert.deepEqual(missions.map((mission) => mission.key), ['m#5', 'm#1', 'm#4', 'm#3', 'm#6', 'm#2'])
 })
 
-test('le tri story points va du plus petit au plus grand, les sans-SP en fin', () => {
-  assert.deepEqual(sortMissions(MISSIONS, 'points').map((m) => m.key), ['a#3', 'a#1', 'a#2'])
-  const extra = [...MISSIONS, { key: 'a#0', priority: null, points: null }]
-  assert.deepEqual(sortMissions(extra, 'points').map((m) => m.key), ['a#3', 'a#1', 'a#2', 'a#0'])
-  assert.deepEqual(sortMissions(MISSIONS, null).map((m) => m.key), ['a#1', 'a#2', 'a#3'])
+test('les missions sans priorité ni points connus ferment la liste', () => {
+  // Given une priorité absente, une priorité inconnue, des points nuls,
+  // illisibles, et zéro — qui reste un point connu.
+  const missions = [
+    { key: 'b#1', priority: 'low', points: 3 },
+    { key: 'b#3', priority: 'blocker', points: 1 },
+    { key: 'b#4', priority: 'high', points: null },
+    { key: 'b#2', priority: null, points: 1 },
+    { key: 'b#5', priority: 'high', points: 'abc' },
+    { key: 'b#6', priority: 'high', points: 0 },
+  ]
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+
+  // Then `high` ouvre sur `0 pt`, les points manquants suivent, `low` vient
+  // après, et les priorités inconnues ferment le tout.
+  assert.deepEqual(ordered, ['b#6', 'b#4', 'b#5', 'b#1', 'b#2', 'b#3'])
 })
 
 test('pinnedFirst remonte les épingles sans changer l’ordre relatif', () => {
@@ -352,7 +375,7 @@ test('pinnedFirst se compose avec le tri : deux épingles gardent l’ordre du t
   ]
 
   assert.deepEqual(
-    pinnedFirst(sortMissions(missions, 'priority')).map((mission) => mission.key),
+    pinnedFirst(sortMissions(missions)).map((mission) => mission.key),
     ['a#3', 'a#1', 'a#2'],
   )
 })
@@ -562,11 +585,10 @@ test('une checklist vide ou absente ne casse pas le rendu', () => {
   assert.equal(blocks[0].state, 'checked')
 })
 
-test('l’instantané de la barre garde recherche, filtres et tri', () => {
+test('l’instantané de la barre garde recherche et filtres', () => {
   const bar = {
     query: 'panneau',
     filters: { type: ['bug'], state: ['ready'], epic: ['Workspace'], priority: ['urgent'], project: ['missions'], missing: 'any' },
-    sort: 'points',
   }
   const snapshot = filterSnapshot(bar)
   assert.deepEqual(snapshot, {
@@ -577,9 +599,8 @@ test('l’instantané de la barre garde recherche, filtres et tri', () => {
     priority: ['urgent'],
     project: ['missions'],
     missing: 'any',
-    sort: 'points',
   })
-  // L'instantané revient en trois états : la barre telle que le panneau la tient.
+  // L'instantané revient en deux états : la barre telle que le panneau la tient.
   assert.deepEqual(filterBarState(snapshot), bar)
   // Une barre vide n'a rien d'actif : le panneau la traite comme au repos.
   assert.equal(hasActiveFilters(filterBarState(filterSnapshot({})).filters), false)
@@ -608,7 +629,6 @@ test('un instantané ne retient que ce que la barre peut sélectionner', () => {
   const snapshot = filterSnapshot({
     query: 42,
     filters: { type: 'feat', state: 'cancelled', epic: '  Workspace  ', priority: '', project: 7, missing: 'yes' },
-    sort: 'title',
   })
   // Type et état hors vocabulaire, priorité vide, projet non textuel : la barre
   // ne peut pas les afficher, ils tombent au lieu d'être restaurés.
@@ -620,10 +640,45 @@ test('un instantané ne retient que ce que la barre peut sélectionner', () => {
     priority: null,
     project: null,
     missing: null,
-    sort: null,
   })
   // L'épic d'une mission est du texte libre : il reste tel quel, en liste.
   assert.deepEqual(filterSnapshot({ filters: { epic: ['Hors périmètre'] } }).epic, ['Hors périmètre'])
+})
+
+test('une barre héritée qui porte un tri se relit sans lui', () => {
+  // Given une barre de session d'avant MIS-18, avec sa recherche, ses filtres
+  // et le tri qu'elle offrait encore.
+  const stored = JSON.stringify({
+    query: 'panneau',
+    type: ['bug'],
+    state: ['ready'],
+    project: ['missions'],
+    sort: 'points',
+  })
+  const expected = {
+    query: 'panneau',
+    type: ['bug'],
+    state: ['ready'],
+    epic: null,
+    priority: null,
+    project: ['missions'],
+    missing: null,
+  }
+
+  // When la barre est relue par la session et par le panneau.
+  assert.deepEqual(parseFilterSnapshot(stored), expected)
+  assert.deepEqual(
+    filterBarState(expected),
+    {
+      query: 'panneau',
+      filters: { type: ['bug'], state: ['ready'], epic: null, priority: null, project: ['missions'], missing: null },
+    },
+  )
+
+  // Then le tri n'a plus de clé : l'ordre est celui de la liste, pas une
+  // préférence de session.
+  assert.equal('sort' in parseFilterSnapshot(stored), false)
+  assert.deepEqual(Object.keys(filterBarState(expected)).sort(), ['filters', 'query'])
 })
 
 test('un contenu illisible redonne la barre par défaut', () => {
@@ -640,7 +695,7 @@ test('un contenu illisible redonne la barre par défaut', () => {
 
 test('la session écrit la barre et retire la clé quand elle est vide', () => {
   const storage = memoryStorage()
-  const bar = { query: 'panneau', filters: { ...EMPTY_FILTERS, project: 'missions' }, sort: 'priority' }
+  const bar = { query: 'panneau', filters: { ...EMPTY_FILTERS, project: 'missions' } }
 
   writeFilterSnapshot(storage, bar)
   assert.deepEqual([...storage.entries.keys()], [FILTERS_KEY])
@@ -649,7 +704,7 @@ test('la session écrit la barre et retire la clé quand elle est vide', () => {
 
   // Effacer la barre ne laisse pas de clé derrière elle : le prochain montage
   // repart du repos, pas d'une sélection vide.
-  writeFilterSnapshot(storage, { query: '   ', filters: { ...EMPTY_FILTERS }, sort: null })
+  writeFilterSnapshot(storage, { query: '   ', filters: { ...EMPTY_FILTERS } })
   assert.equal(storage.entries.has(FILTERS_KEY), false)
   assert.deepEqual(readFilterSnapshot(storage), filterSnapshot({}))
 })
@@ -1874,7 +1929,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'tab.dashboard', 'tab.missions', 'tab.done', 'tab.repositories', 'tab.workflows', 'tab.usage',
     'tab.playbook',
     'filter.search', 'filter.state', 'filter.type', 'filter.epic', 'filter.project', 'filter.priority',
-    'filter.sort', 'filter.missing', 'filter.clear', 'list.refresh', 'list.retry',
+    'filter.missing', 'filter.clear', 'list.refresh', 'list.retry',
     'search.q', 'search.family', 'preview.kind', 'mission.open',
     'dashboard.view-all', 'mission.archive.batch',
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
@@ -1985,6 +2040,30 @@ test('le rapport range les gestes par section et par compte, et garde les retir�
   // L'ordre du fichier ne change pas la lecture.
   const reordered = { ...usage, elements: Object.fromEntries(Object.entries(usage.elements).reverse()) }
   assert.deepEqual(usageReport(reordered, NOW).sections, report.sections)
+})
+
+test('un relevé d’avant MIS-18 garde ses clics de tri dans les retirés', () => {
+  // Given un usage.json qui compte encore le select de tri, retiré depuis.
+  const usage = {
+    version: 1,
+    startedAt: ago(10),
+    updatedAt: ago(0),
+    elements: {
+      'tab.missions': counted(3, { lastUsed: ago(0) }),
+      'filter.sort': counted(7, { values: { points: 5, priority: 2 } }),
+    },
+  }
+
+  // When le rapport le lit.
+  const report = usageReport(usage, NOW)
+
+  // Then le geste n'est plus une ligne du registre, mais son compte reste dans
+  // les retirés et dans le total : un geste disparu n'est pas un geste qui n'a
+  // jamais eu lieu.
+  assert.equal(report.rows.some((row) => row.id === 'filter.sort'), false)
+  assert.deepEqual(report.retired.map((row) => row.id), ['filter.sort'])
+  assert.equal(report.retired[0].count, 7)
+  assert.equal(report.total, 10)
 })
 
 test('le rapport est total : un relevé absent, sale ou cassé parle quand même', () => {
