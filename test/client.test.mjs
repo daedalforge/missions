@@ -1227,7 +1227,7 @@ test('l’icône de rafraîchissement suit le thème, comme le loader', () => {
     const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
     api.apply(ctx)
     const list = findAll(registered.main({}), 'MissionsView')[0]
-    const tree = renderTree({ ...list, props: { ...list.props, theme } })
+    const tree = renderTree({ ...list, props: { ...list.props, theme, onNew: null } })
     return findAll(tree, 'svg').filter((node) => String(node.props.className ?? '').startsWith('missions-icon-'))
   }
 
@@ -1240,6 +1240,83 @@ test('l’icône de rafraîchissement suit le thème, comme le loader', () => {
   assert.equal(shuriken.length, 1)
   assert.equal(shuriken[0].props.className, 'missions-icon-shuriken')
   assert.equal(shuriken[0].props['aria-hidden'], 'true')
+})
+
+test('le bouton de création déroule un parchemin en manga et garde le plus en default', () => {
+  // Given : la vue Missions montée, le geste de création branché.
+  const view = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
+  api.apply(ctx)
+  const vue = findAll(registered.main({}), 'MissionsView')[0]
+  const bouton = (theme) => {
+    const tree = renderTree({ ...vue, props: { ...vue.props, onNew: () => {}, theme } })
+    const node = findAll(tree, 'button').find((entry) => entry.props['aria-label'] === 'Create a mission')
+    assert.ok(node, 'le bouton de création est monté')
+    return node
+  }
+
+  // When : chaque thème rend son bouton.
+  const manga = bouton('manga')
+  const defaut = bouton('default')
+
+  // Then : le manga porte un parchemin au plus, un seul dessin par bouton.
+  const parchemin = findAll(manga, 'svg')
+  assert.equal(parchemin.length, 1, 'un seul svg par bouton')
+  assert.equal(parchemin[0].props.className, 'missions-icon-scroll')
+  assert.equal(parchemin[0].props.viewBox, '0 0 24 24')
+  assert.equal(parchemin[0].props.width, 15)
+  assert.equal(parchemin[0].props.height, 15)
+  assert.equal(parchemin[0].props['aria-hidden'], 'true')
+
+  const rects = findAll(parchemin[0], 'rect')
+  assert.equal(rects.length, 3, 'deux rouleaux et le corps du parchemin')
+  assert.ok(rects.every((node) => node.props.fill === 'var(--skin-page-2)'), 'le papier de la peau, aucune couleur en dur')
+  assert.ok(rects.every((node) => node.props.stroke === 'currentColor'), 'le contour prend l’encre du bouton')
+  assert.equal(rects.filter((node) => node.props.className === 'missions-scroll-body').length, 1, 'le corps du parchemin')
+
+  const plus = findAll(parchemin[0], 'g').filter((node) => node.props.className === 'missions-scroll-plus')
+  assert.equal(plus.length, 1, 'le plus du parchemin est groupé')
+  const traits = findAll(plus[0], 'path').map((node) => String(node.props.d))
+  assert.equal(traits.length, 2, 'le plus a deux traits')
+  const vertical = traits.map((d) => /^M([\d.]+) ([\d.]+)v(-?[\d.]+)$/.exec(d)).find(Boolean)
+  const horizontal = traits.map((d) => /^M([\d.]+) ([\d.]+)h(-?[\d.]+)$/.exec(d)).find(Boolean)
+  assert.ok(vertical, 'un trait vertical')
+  assert.ok(horizontal, 'un trait horizontal')
+  assert.ok(Math.abs(Number(vertical[3])) > 0, 'le trait vertical a une longueur')
+  assert.ok(Math.abs(Number(horizontal[3])) > 0, 'le trait horizontal a une longueur')
+  assert.equal(vertical[1], horizontal[2], 'les deux traits partagent l’abscisse du centre')
+  assert.equal(
+    Number(vertical[2]) + Number(vertical[3]) / 2,
+    Number(horizontal[1]) + Number(horizontal[3]) / 2,
+    'les deux traits partagent l’ordonnée du centre',
+  )
+
+  const plusSimple = findAll(defaut, 'svg')
+  assert.equal(plusSimple.length, 1, 'un seul svg par bouton')
+  assert.equal(String(plusSimple[0].props.className ?? '').startsWith('missions-icon-'), false, 'aucune classe d’icône animée')
+  assert.equal(plusSimple[0].props.viewBox, '0 0 24 24')
+  assert.deepEqual(findAll(plusSimple[0], 'path').map((node) => node.props.d), ['M12 5v14', 'M5 12h14'])
+})
+
+test('l’icône de création se déroule lentement, sauf en mouvement réduit', () => {
+  // Given : le bundle que le panneau sert et les tests lisent.
+  // When : on lit la règle du parchemin, son animation et sa variante de mouvement.
+  const css = regle('.missions-icon-scroll')
+  const animation = /animation: ([\w-]+) (\d+(?:\.\d+)?)s [\w-]+ infinite;/.exec(css)
+  const frames = SOURCE.slice(
+    SOURCE.indexOf('@keyframes missions-scroll-unroll'),
+    SOURCE.indexOf('@media (prefers-reduced-motion: reduce) { .missions-icon-scroll'),
+  )
+
+  // Then : la boucle est nommée, déclarée, lente, et n'agrandit pas le dessin.
+  assert.ok(animation, 'le parchemin déclare son animation')
+  assert.match(SOURCE, new RegExp(`@keyframes ${animation[1]} \\{`), 'le keyframes nommé est déclaré')
+  assert.ok(Number(animation[2]) >= 2, 'la boucle dure au moins 2 s')
+  assert.notEqual(animation[1], 'missions-shuriken-spin', 'le parchemin ne rejoue pas la rotation du shuriken')
+  assert.doesNotMatch(frames, /rotate\(/, 'le parchemin ne tourne pas')
+  assert.match(css, /transform-box: view-box/)
+  assert.match(css, /transform-origin: center/)
+  assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{ \.missions-icon-scroll \{ animation: none; \} \}/)
 })
 
 const PANEL_ERROR = { project: 'panel', message: 'tracker unreachable' }
