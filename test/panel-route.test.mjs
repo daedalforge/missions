@@ -118,6 +118,105 @@ test('POST vide un champ retiré, GET est refusé', async (t) => {
   assert.equal(notPost.headers.allow, 'GET')
 })
 
+test('POST épingle une mission dans pins.yml, GET est refusé', async (t) => {
+  const { dir, handler } = await mount(t)
+
+  const pinned = await call(handler, { method: 'POST', path: '/missions/api/pin', body: { key: 'MIS-14', pinned: true } })
+  assert.equal(pinned.status, 200)
+  assert.deepEqual(pinned.body, { key: 'MIS-14', pinned: true })
+  const text = await readFile(join(dir, 'missions', 'pins.yml'), 'utf8')
+  assert.match(text, /^# Épingles du poste — jamais versionné\.$/m)
+  assert.match(text, /pinned:\n  - MIS-14\n/)
+
+  const cleared = await call(handler, { method: 'POST', path: '/missions/api/pin', body: { key: 'MIS-14', pinned: false } })
+  assert.equal(cleared.status, 200)
+  assert.deepEqual(cleared.body, { key: 'MIS-14', pinned: false })
+  assert.deepEqual(parse(await readFile(join(dir, 'missions', 'pins.yml'), 'utf8')).pinned, [])
+
+  const refused = await call(handler, { method: 'GET', path: '/missions/api/pin' })
+  assert.equal(refused.status, 405)
+  assert.equal(refused.headers.allow, 'POST')
+  assert.match(refused.body.error, /method not allowed/)
+})
+
+test('une épingle sans clé ou mal typée répond 400 sans écrire', async (t) => {
+  const { dir, handler } = await mount(t)
+
+  const sansCle = await call(handler, { method: 'POST', path: '/missions/api/pin', body: { key: '  ', pinned: true } })
+  assert.equal(sansCle.status, 400)
+  assert.equal(sansCle.body.error, 'key is missing')
+
+  const malTypee = await call(handler, { method: 'POST', path: '/missions/api/pin', body: { key: 'MIS-14', pinned: 'yes' } })
+  assert.equal(malTypee.status, 400)
+  assert.equal(malTypee.body.error, 'pinned must be a boolean')
+
+  const corps = await call(handler, { method: 'POST', path: '/missions/api/pin', raw: '{' })
+  assert.equal(corps.status, 400)
+
+  await assert.rejects(readFile(join(dir, 'missions', 'pins.yml'), 'utf8'), { code: 'ENOENT' })
+})
+
+test('la lecture porte l’épingle de chaque mission et les erreurs du fichier', async (t) => {
+  clearCache()
+  t.after(() => clearCache())
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    const json = (body) => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) })
+    if (href.endsWith('/user')) return json({ login: 'me' })
+    return json([
+      { number: 2, state: 'open', title: 'Épinglée', labels: [{ name: 'ready' }] },
+      { number: 3, state: 'open', title: 'Libre', labels: [{ name: 'ready' }] },
+    ])
+  }
+  const { dir, handler } = await mount(t, { fetchImpl })
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`)
+
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    await writeFile(join(dir, 'missions', 'pins.yml'), 'pinned:\n  - MIS-2\n')
+    const avec = await call(handler, { path: '/missions/api/list' })
+    assert.equal(avec.status, 200)
+    assert.deepEqual(avec.body.missions.map((mission) => [mission.key, mission.pinned]), [['MIS-2', true], ['MIS-3', false]])
+
+    await writeFile(join(dir, 'missions', 'pins.yml'), 'pinned: [MIS-2\n')
+    const casse = await call(handler, { path: '/missions/api/list' })
+    assert.equal(casse.status, 200)
+    assert.ok(casse.body.errors.some((error) => error.project === 'pins'), 'le fichier cassé est signalé')
+    assert.ok(casse.body.missions.every((mission) => mission.pinned === false), 'aucune épingle n’est devinée')
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
 test('la lecture ouverte ignore les closes, la lecture done les demande', async (t) => {
   const appels = []
   const fetchImpl = async (url) => {
