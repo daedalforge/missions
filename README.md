@@ -132,7 +132,11 @@ ligne, à gauche de son volet droit. L'épic n'est plus un niveau de l'arbre mai
 une colonne : chaque ligne montre la clé courte de son épic (`MIS-2`), ou une
 cellule vide quand la mission n'en a pas. Le titre de l'épic n'est plus
 cherchable — une requête par nom d'épic ne déplie plus rien — mais la clé
-reste lisible en tête de ligne. La punaise d'une mission la fait passer devant
+reste lisible en tête de ligne. Chaque ligne nomme sa priorité : le repère de
+trois barres, lu par le lecteur d'écran (« Priority: High », « No priority »
+sans niveau), garde sa forme. Elle porte aussi ses story points en texte
+(« 5 pts », « 1 pt », rien quand le tracker n'en donne pas). La punaise d'une
+mission la fait passer devant
 toutes les autres, dans l'ordre du tri choisi : épingler ne réordonne pas les
 épinglées entre elles, et une requête garde ses épinglées en tête. Au repos, la
 liste et le volet vide partagent la largeur : le volet annonce ce qu'une
