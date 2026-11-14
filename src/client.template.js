@@ -441,9 +441,17 @@ window.__ModuleLoader__.load({
 .missions-icon-shuriken { animation: missions-shuriken-spin 7s linear infinite; }
 @keyframes missions-shuriken-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .missions-icon-shuriken { animation: none; } }
-.missions-icon-scroll { animation: missions-scroll-unroll 7s ease-in-out infinite; transform-box: view-box; transform-origin: center; }
-@keyframes missions-scroll-unroll { 0%, 100% { transform: scaleY(.86); } 45%, 72% { transform: scaleY(1); } }
-@media (prefers-reduced-motion: reduce) { .missions-icon-scroll { animation: none; } }
+.missions-icon-seal { animation: missions-seal-stamp 6s ease-in-out infinite; transform-box: view-box; transform-origin: center; overflow: visible; }
+@keyframes missions-seal-stamp {
+  0% { transform: scale(1.32) rotate(-10deg); }
+  6% { transform: scale(.95) rotate(0deg); }
+  12% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.32) rotate(10deg); }
+  56% { transform: scale(.95) rotate(0deg); }
+  62% { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1.32) rotate(-10deg); }
+}
+@media (prefers-reduced-motion: reduce) { .missions-icon-seal { animation: none; } }
 .missions-search { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; }
 .missions-search input::placeholder { color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -4192,20 +4200,17 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 
     /**
      * The creation drawing, chosen like `RefreshIcon` chooses its own: the
-     * manga theme rolls out the parchment the missions tab already uses, with
-     * the plus still inside it; the default theme keeps the bare plus. The
-     * scroll unrolls slowly, so it never reads as a second spinner.
+     * manga theme stamps a torn-paper seal around a brush plus, in the skin's
+     * own paper, ink and accent; the default theme keeps the bare plus. The
+     * seal stamps twice, so it never reads as a second spinner.
      */
     function PlusIcon({ theme }) {
       if (theme === 'manga') {
-        return h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true', className: 'missions-icon-scroll' },
-          h('rect', { x: 4.6, y: 3, width: 14.8, height: 3.2, rx: 1.6, fill: 'var(--skin-page-2)', stroke: 'currentColor', strokeWidth: 1.5 }),
-          h('rect', { x: 4.6, y: 17.8, width: 14.8, height: 3.2, rx: 1.6, fill: 'var(--skin-page-2)', stroke: 'currentColor', strokeWidth: 1.5 }),
-          h('rect', { className: 'missions-scroll-body', x: 6.6, y: 4.6, width: 10.8, height: 14.8, rx: 0.8, fill: 'var(--skin-page-2)', stroke: 'currentColor', strokeWidth: 1.5 }),
-          h('g', { className: 'missions-scroll-plus', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' },
-            h('path', { d: 'M12 9.4v5.2' }),
-            h('path', { d: 'M9.4 12h5.2' }),
-          ),
+        return h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true', className: 'missions-icon-seal' },
+          h('path', { d: 'M4.6 4.4 L6.9 3.95 L9.2 4.45 L11.6 4 L14 4.35 L16.5 3.9 L18.4 4.3 L19.35 4.15 L19.6 6.3 L19.25 8.6 L19.65 11 L19.3 13.4 L19.6 15.8 L19.5 18 L19.45 19.4 L17.2 19.7 L14.9 19.35 L12.6 19.75 L10.3 19.4 L8 19.75 L5.7 19.5 L4.5 19.55 L4.15 17.3 L4.55 15 L4.2 12.6 L4.5 10.2 L4.25 6.9 Z', fill: 'var(--skin-page-3)', stroke: 'currentColor', strokeWidth: 1.4, strokeLinejoin: 'round' }),
+          h('path', { d: 'M19 3.1 L19.65 3.12 L20.04 3.65 L20.35 4.25 L19.95 4.8 L19.64 5.36 L19 5.43 L18.34 5.39 L18.03 4.81 L17.74 4.25 L17.96 3.65 L18.35 3.12 Z', fill: 'var(--skin-accent-strong)' }),
+          h('path', { d: 'M10.8 5.8 L13.2 5.8 L13.35 9.9 L13.35 14.1 L13.2 18.2 L10.8 18.2 L10.65 14.1 L10.65 9.9 Z', fill: 'currentColor' }),
+          h('path', { d: 'M5.8 10.8 L5.8 13.2 L9.9 13.35 L14.1 13.35 L18.2 13.2 L18.2 10.8 L14.1 10.65 L9.9 10.65 Z', fill: 'currentColor' }),
         )
       }
       return h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
