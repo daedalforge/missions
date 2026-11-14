@@ -124,8 +124,10 @@ sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pa
 modifié — la mission quitte Done et reste sur le disque.
 
 L'onglet **Missions** est un arbre à deux niveaux : l'épic, puis ses missions,
-sur toute la largeur de l'onglet. Au repos, la liste est seule : aucun aperçu,
-aucune moitié droite permanente — le workbench n'a qu'une colonne.
+à gauche de son volet droit. Au repos, la liste et le volet vide partagent la
+largeur : le volet annonce ce qu'une mission ouvrira, comme celui de Done. Ce
+volet est monté dans les cinq onglets du panneau — seul l'onglet qui le remplit
+change ; l'arbre, lui, garde sa grille à une colonne.
 Le champ de recherche **est** la barre de l'arbre — `⌘K` l'ouvre, `↑` `↓`
 promènent le surlignage, `Entrée` ouvre la fiche, `Échap` referme le volet puis
 vide la requête, sans quitter l'arbre. Les filtres (Type, Epic, Project, Priorité,
@@ -144,9 +146,10 @@ comptes du portefeuille pendant toute requête. Un clic sur une ligne, ou
 `Entrée` sur la ligne surlignée, ouvre la fiche **dans le volet droit de
 l'onglet** : le volet de Done, la même largeur, la même fiche — la liste garde
 la place qu'elle occupe et le volet prend la sienne. `×` ou `Échap` referment
-le volet et rendent la largeur ; `Échap` ne vide la requête qu'une fois le
-volet fermé. Déplacer le surlignage ne change pas la fiche ouverte, et la
-sélection survit au changement d'onglet : revenir sur Missions rouvre la fiche,
+la fiche ; le volet reste en place, vide, à sa largeur, et la liste ne reprend
+pas la place. `Échap` ne vide la requête qu'une fois le volet fermé. Déplacer
+le surlignage ne change pas la fiche ouverte, et la sélection survit au
+changement d'onglet : revenir sur Missions rouvre la fiche,
 un volet fermé le reste. La fiche **lit et
 écrit** au même endroit — ses onglets, sa déclaration de branche, sa priorité
 et son blocage restent ses seuls gestes ; surligner une action de déclaration
@@ -175,9 +178,12 @@ quand c'est l'onglet ouvert et la page visible, jamais avec `?refresh=1` : le
 bouton **Retry** est le seul à forcer. Un scan en échec garde les lignes et
 nomme l'échec, jamais un zéro.
 
-Le **Dashboard** occupe toute la largeur : le digest seul, ses quatre cartes et
-ses sections, et chaque ligne ouvre la mission dans l'onglet Missions, sa fiche
-complète. Done et Repositories gardent leur volet latéral d'avant.
+Le **Dashboard** garde son volet droit, vide : le digest, ses quatre cartes et
+ses sections occupent la largeur restante, et chaque ligne ouvre la mission dans
+l'onglet Missions, sa fiche complète. Le volet ne s'y remplit jamais — pas même
+quand une mission est choisie ailleurs. Done et Repositories gardent leur volet,
+comme avant : la fiche de la mission close ou celle du dépôt choisi, et
+l'invitation quand rien n'est choisi.
 
 Un projet peut déclarer ses **traductions** dans sa copie locale de
 `missions/projects.yml` — `translations.locales`,
@@ -242,7 +248,12 @@ barre. Le choix ne vit que la session — `missions.repositories.filters` dans
 **Settings** range les trois vues qui ne lisent ni le tracker ni la liste des
 missions ouvertes : **Usage**, puis **Workflows**, puis **Playbook**, dans une
 navigation verticale à gauche. La section ouverte est la seule montée ; Usage
-est le défaut. Aucune clé de stockage nouvelle : `missions.tab` range la section
+est le défaut. Le volet droit reste monté, vide, et ne reçoit aucune note de
+section. Le panneau de Settings est un conteneur (`container-type:
+inline-size`) : sous 560 px de large, Workflows et Playbook passent à une
+colonne et les pages du Playbook se replient en ligne, si bien qu'un panneau
+étroit dans une large fenêtre ne déborde pas. Aucune clé de stockage nouvelle :
+`missions.tab` range la section
 (`usage`, `workflows`, `playbook`) tant que Settings est ouvert, si bien qu'une
 session restée sur l'un de ces anciens onglets rouvre Settings sur cette
 section ; une valeur inconnue retombe sur le Dashboard. La section Playbook
