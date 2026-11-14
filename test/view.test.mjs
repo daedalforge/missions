@@ -25,6 +25,7 @@ import {
   ageDays,
   assignedBugs,
   blockedReasonAfterWrite,
+  blockerKeys,
   branchesToPush,
   branchFieldValue,
   checkoutsToFix,
@@ -67,6 +68,7 @@ import {
   hasActiveFilters,
   highPriorityStories,
   inFlight,
+  isWaitingOnBlock,
   missionAge,
   needsYou,
   parseFilterSnapshot,
@@ -348,6 +350,304 @@ test('les missions sans priorité ni points connus ferment la liste', () => {
   // Then `high` ouvre sur `0 pt`, les points manquants suivent, `low` vient
   // après, et les priorités inconnues ferment le tout.
   assert.deepEqual(ordered, ['b#6', 'b#4', 'b#5', 'b#1', 'b#2', 'b#3'])
+})
+
+test('isWaitingOnBlock ignore une mission close', () => {
+  // Given une bloquée ouverte, une bloquée close et une ouverte actionnable.
+  const open = { state: 'ready', blocked: true }
+  const closed = { state: 'done', blocked: true }
+  const workable = { state: 'ready' }
+
+  // When le prédicat les lit.
+  const waiting = [open, closed, workable].map(isWaitingOnBlock)
+
+  // Then seule la bloquée ouverte attend.
+  assert.deepEqual(waiting, [true, false, false])
+})
+
+test('blockerKeys ne lit que les clés des missions bloquées visibles', () => {
+  // Given une raison qui cite une clé connue, sa propre clé et une inconnue.
+  const mission = { key: 'MIS-5', blockedReason: { state: 'found', body: 'Bloquée par mis-7 puis MIS-5, hors MIS-99' } }
+  const known = ['MIS-7', 'MIS-5']
+
+  // When les clés sont extraites pour les bloquées visibles.
+  const keys = blockerKeys(mission, known)
+  const unread = blockerKeys({ key: 'MIS-5', blockedReason: { state: 'empty' } }, known)
+
+  // Then la clé connue sort en majuscules, la sienne et l'inconnue sont
+  // écartées, et une raison non lue ne crée aucune arête.
+  assert.deepEqual(keys, ['MIS-7'])
+  assert.deepEqual(unread, [])
+})
+
+test('une mission bloquée ferme la liste', () => {
+  // Given une mission urgente bloquée et une mission basse actionnable.
+  const missions = [
+    { key: 'MIS-1', state: 'ready', priority: 'urgent', points: 1, blocked: true },
+    { key: 'MIS-2', state: 'ready', priority: 'low', points: 8 },
+  ]
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+
+  // Then l'actionnable ouvre, quels que soient l'urgence et les points de la
+  // bloquée.
+  assert.deepEqual(ordered, ['MIS-2', 'MIS-1'])
+})
+
+test('l’ordre actuel reste inchangé à l’intérieur de chaque groupe', () => {
+  // Given quatre missions actionnables et deux bloquées, dans le désordre.
+  const missions = [
+    { key: 'MIS-1', state: 'ready', priority: 'high', points: 3 },
+    { key: 'MIS-2', state: 'ready', priority: 'low', points: 1 },
+    { key: 'MIS-3', state: 'ready', priority: 'urgent', points: 5 },
+    { key: 'MIS-4', state: 'ready', priority: 'normal', points: 2 },
+    { key: 'MIS-5', state: 'ready', priority: 'low', points: 1, blocked: true },
+    { key: 'MIS-6', state: 'ready', priority: 'urgent', points: 2, blocked: true },
+  ]
+  const priorities = ['urgent', 'high', 'normal', 'low']
+  const priorityRank = (mission) => {
+    const index = priorities.indexOf(mission.priority)
+    return index === -1 ? priorities.length : index
+  }
+  const pointsRank = (mission) => {
+    if (mission.points === null || mission.points === undefined || mission.points === '') return Infinity
+    const value = Number(mission.points)
+    return Number.isFinite(value) ? value : Infinity
+  }
+  const replica = (items) =>
+    [...items].sort(
+      (a, b) => priorityRank(a) - priorityRank(b) || pointsRank(a) - pointsRank(b) || String(a.key).localeCompare(String(b.key)),
+    )
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+  const workable = missions.filter((mission) => !isWaitingOnBlock(mission))
+  const waiting = missions.filter(isWaitingOnBlock)
+
+  // Then chaque groupe garde exactement l'ordre de la réplique du comparateur.
+  assert.deepEqual(ordered, [...replica(workable), ...replica(waiting)].map((mission) => mission.key))
+})
+
+test('une mission bloquée attend celle que sa raison nomme, et la contrainte se propage', () => {
+  // Given A bloquée par B, B bloquée par C, C bloquée sans raison, toutes
+  // visibles et triées A, B, C par le comparateur actuel.
+  const missions = [
+    {
+      key: 'MIS-1',
+      state: 'ready',
+      priority: 'urgent',
+      blocked: true,
+      blockedReason: { state: 'found', body: 'Bloquée par MIS-2 : contrat non signé' },
+    },
+    {
+      key: 'MIS-2',
+      state: 'ready',
+      priority: 'high',
+      blocked: true,
+      blockedReason: { state: 'found', body: 'Bloquée par MIS-3 : maquette absente' },
+    },
+    { key: 'MIS-3', state: 'ready', priority: 'low', blocked: true },
+  ]
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+
+  // Then C passe avant B, qui passe avant A.
+  assert.deepEqual(ordered, ['MIS-3', 'MIS-2', 'MIS-1'])
+})
+
+test('une clé absente des missions bloquées visibles ne déplace rien', () => {
+  // Given une mission bloquée urgente qui cite une clé inconnue, et une basse.
+  const missions = [
+    {
+      key: 'MIS-1',
+      state: 'ready',
+      priority: 'urgent',
+      blocked: true,
+      blockedReason: { state: 'found', body: 'Bloquée par MIS-9 : hors du panneau' },
+    },
+    { key: 'MIS-2', state: 'ready', priority: 'low', blocked: true },
+  ]
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+
+  // Then la clé inconnue ne crée aucune arête et l'ordre de base demeure.
+  assert.deepEqual(ordered, ['MIS-1', 'MIS-2'])
+})
+
+test('la clé d’une mission done ne retient pas une mission bloquée', () => {
+  // Given une mission done urgente, une bloquée urgente qui la cite, et une
+  // bloquée basse.
+  const missions = [
+    {
+      key: 'MIS-1',
+      state: 'ready',
+      priority: 'urgent',
+      blocked: true,
+      blockedReason: { state: 'found', body: 'Bloquée par MIS-9 : livraison close' },
+    },
+    { key: 'MIS-2', state: 'ready', priority: 'low', blocked: true },
+    { key: 'MIS-9', state: 'done', priority: 'urgent' },
+  ]
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+
+  // Then Done reste hors du groupe bloqué, et la bloquée garde l'ordre de base.
+  assert.deepEqual(ordered, ['MIS-9', 'MIS-1', 'MIS-2'])
+})
+
+test('une mission qui cite sa propre clé garde sa place de base', () => {
+  // Given une mission bloquée urgente dont la raison la nomme elle-même, et
+  // une bloquée basse.
+  const missions = [
+    {
+      key: 'MIS-1',
+      state: 'ready',
+      priority: 'urgent',
+      blocked: true,
+      blockedReason: { state: 'found', body: 'Bloquée par MIS-1 : dépendance circulaire' },
+    },
+    { key: 'MIS-2', state: 'ready', priority: 'low', blocked: true },
+  ]
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+
+  // Then sa propre clé ne crée aucune arête.
+  assert.deepEqual(ordered, ['MIS-1', 'MIS-2'])
+})
+
+test('un cycle de blocages ne perd ni ne duplique aucune mission', () => {
+  // Given A bloquée par B, B bloquée par A, et C actionnable.
+  const missions = [
+    {
+      key: 'MIS-1',
+      state: 'ready',
+      priority: 'urgent',
+      blocked: true,
+      blockedReason: { state: 'found', body: 'Bloquée par MIS-2' },
+    },
+    {
+      key: 'MIS-2',
+      state: 'ready',
+      priority: 'normal',
+      blocked: true,
+      blockedReason: { state: 'found', body: 'Bloquée par MIS-1' },
+    },
+    { key: 'MIS-3', state: 'ready', priority: 'low' },
+  ]
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+
+  // Then C ouvre, le cycle garde l'ordre de base, et chaque clé sort une fois.
+  assert.deepEqual(ordered, ['MIS-3', 'MIS-1', 'MIS-2'])
+  assert.equal(new Set(ordered).size, ordered.length)
+})
+
+test('une raison absente, vide ou indisponible ne crée aucune arête', () => {
+  // Given trois missions bloquées sans raison lisible, une raison vide, et
+  // une actionnable.
+  const missions = [
+    { key: 'MIS-1', state: 'ready', priority: 'urgent', blocked: true },
+    { key: 'MIS-2', state: 'ready', priority: 'normal', blocked: true, blockedReason: { state: 'empty' } },
+    { key: 'MIS-3', state: 'ready', priority: 'low', blocked: true, blockedReason: { state: 'unavailable' } },
+    { key: 'MIS-5', state: 'ready', priority: 'low', blocked: true, blockedReason: { state: 'found', body: '' } },
+    { key: 'MIS-4', state: 'ready', priority: 'low' },
+  ]
+
+  // When la liste est triée.
+  const ordered = sortMissions(missions).map((mission) => mission.key)
+
+  // Then les bloquées restent dans le groupe bloqué, dans l'ordre de base, et
+  // le tri ne jette pas.
+  assert.deepEqual(ordered, ['MIS-4', 'MIS-1', 'MIS-2', 'MIS-3', 'MIS-5'])
+})
+
+test('les missions done ignorent le blocage : l’ordre de Done ne bouge pas', () => {
+  // Given deux missions closes, l'une urgente encore marquée bloquée.
+  const missions = [
+    { key: 'MIS-1', state: 'done', priority: 'low' },
+    {
+      key: 'MIS-2',
+      state: 'done',
+      priority: 'urgent',
+      blocked: true,
+      blockedReason: { state: 'found', body: 'Bloquée par MIS-1' },
+    },
+  ]
+
+  // When la liste est triée puis groupée comme l'onglet Done.
+  const ordered = sortMissions(missions)
+  const groups = groupByState(ordered)
+
+  // Then le comparateur actuel décide seul, et le groupe Done est inchangé.
+  assert.deepEqual(ordered.map((mission) => mission.key), ['MIS-2', 'MIS-1'])
+  assert.deepEqual(
+    groups.map((group) => [group.state, group.missions.map((mission) => mission.key)]),
+    [['done', ['MIS-2', 'MIS-1']]],
+  )
+})
+
+test('une mission bloquée épinglée ouvre la liste', () => {
+  // Given une mission bloquée épinglée et deux actionnables.
+  const missions = [
+    { key: 'MIS-1', state: 'ready', priority: 'urgent', blocked: true, pinned: true },
+    { key: 'MIS-2', state: 'ready', priority: 'high' },
+    { key: 'MIS-3', state: 'ready', priority: 'low' },
+  ]
+
+  // When le tri puis la partition des épingles passent.
+  const ordered = pinnedFirst(sortMissions(missions)).map((mission) => mission.key)
+
+  // Then l'épingle passe devant, même bloquée, et les autres gardent l'ordre.
+  assert.deepEqual(ordered, ['MIS-1', 'MIS-2', 'MIS-3'])
+})
+
+test('deux épinglées gardent l’ordre du tri, bloquée comprise', () => {
+  // Given une épingle actionnable, une épingle bloquée et deux non épinglées.
+  const missions = [
+    { key: 'MIS-1', state: 'ready', priority: 'urgent' },
+    { key: 'MIS-2', state: 'ready', priority: 'low', blocked: true, pinned: true },
+    { key: 'MIS-3', state: 'ready', priority: 'normal', pinned: true },
+    { key: 'MIS-4', state: 'ready', priority: 'normal', blocked: true },
+  ]
+
+  // When le tri puis la partition des épingles passent.
+  const ordered = pinnedFirst(sortMissions(missions)).map((mission) => mission.key)
+
+  // Then les épinglées passent devant dans l'ordre du tri, et les autres
+  // ferment la liste.
+  assert.deepEqual(ordered, ['MIS-3', 'MIS-2', 'MIS-1', 'MIS-4'])
+})
+
+test('le tri ne mute pas son entrée, rend une permutation et reste déterministe', () => {
+  // Given une entrée gelée dont une bloquée attend une autre.
+  const missions = Object.freeze([
+    Object.freeze({ key: 'MIS-1', state: 'ready', priority: 'low' }),
+    Object.freeze({
+      key: 'MIS-2',
+      state: 'ready',
+      priority: 'urgent',
+      blocked: true,
+      blockedReason: Object.freeze({ state: 'found', body: 'Bloquée par MIS-3' }),
+    }),
+    Object.freeze({ key: 'MIS-3', state: 'ready', priority: 'normal', blocked: true }),
+  ])
+
+  // When la liste est triée deux fois sur la même entrée.
+  const first = sortMissions(missions).map((mission) => mission.key)
+  const second = sortMissions(missions).map((mission) => mission.key)
+
+  // Then la bloquée attend, chaque clé sort une fois, et les deux appels
+  // rendent le même ordre sans toucher l'entrée.
+  assert.deepEqual(first, ['MIS-1', 'MIS-3', 'MIS-2'])
+  assert.deepEqual(second, first)
+  assert.deepEqual([...first].sort(), missions.map((mission) => mission.key).sort())
+  assert.deepEqual(missions.map((mission) => mission.key), ['MIS-1', 'MIS-2', 'MIS-3'])
 })
 
 test('pinnedFirst remonte les épingles sans changer l’ordre relatif', () => {
