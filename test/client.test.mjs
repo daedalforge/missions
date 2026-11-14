@@ -9397,6 +9397,54 @@ test('la ligne garde sa hauteur et ses titres une fois les points ajoutés', () 
   assert.ok(rangs.indexOf('missions-tree-points') < rangs.indexOf('missions-tree-age'), 'les points passent avant l’âge')
 })
 
+test('les missions épinglées gardent le haut de la liste quand elle défile', () => {
+  // La feuille : le bloc se colle au haut de la zone qui défile, et la peau
+  // papier lui donne sa page opaque pour couvrir les rangs qui passent dessous.
+  const collant = regle('.missions-wb-pins')
+  assert.match(collant, /position: sticky/)
+  assert.match(collant, /top: 0/)
+  assert.match(collant, /z-index: 2/)
+  // La bande se détache du reste de la liste : elle porte son propre air sous
+  // les épinglées, une règle plus marquée que les séparateurs de rangs et une
+  // ombre douce, au lieu de se fondre dans la première ligne du dessous.
+  assert.match(collant, /padding-bottom: 8px/, 'la bande garde son air sous les épinglées')
+  assert.match(collant, /border-bottom: 1px solid var\(--dsw-alias-border-l2/, 'une règle plus marquée ferme la bande')
+  assert.match(collant, /box-shadow: 0 8px 10px -10px/, 'la bande se soulève de la liste')
+  assert.doesNotMatch(SOURCE, /\.missions-wb-pins \.missions-tree-row:last-child/, 'la bande ne se fond plus dans les séparateurs de rangs')
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-wb-pins \{ background: var\(--skin-page\); border-bottom: 1\.5px solid var\(--skin-ink\); box-shadow: none; \}/)
+
+  // La zone qui défile n'a pas d'air en haut : cet air (2 px) est une marge
+  // hors du défilement, sinon les rangs passent dans la bande au-dessus du
+  // bloc collant.
+  const zone = regle('.missions-wb-tree')
+  assert.match(zone, /margin-top: 2px/, 'l’air du haut reste hors de la zone qui défile')
+  assert.match(zone, /padding: 0 6px 10px/, 'la zone qui défile commence à ras du bloc')
+  assert.doesNotMatch(zone, /padding: 2px/, 'aucun rang ne défile au-dessus de la bande')
+
+  // Sans épingle, aucun bloc : la liste reste une seule colonne de rangs.
+  const sans = monterArbre()
+  assert.deepEqual(
+    findAll(sans.arbre(), 'div').filter((node) => node.props.className === 'missions-wb-pins'),
+    [],
+    'aucun bloc collant sans épingle',
+  )
+
+  // Avec une épingle, le bloc ouvre la liste et ne porte qu'elle.
+  const missions = [{ ...MISSION, key: 'MIS-1', title: 'Ticket épinglé', pinned: true }, ...ARBRE_RESTE]
+  const { arbre } = monterArbre({ missions })
+  const rendu = arbre()
+  const blocs = findAll(rendu, 'div').filter((node) => node.props.className === 'missions-wb-pins')
+  assert.equal(blocs.length, 1, 'un seul bloc collant')
+  const dedans = findAll(blocs[0], 'div').filter((node) => node.props.className === 'missions-tree-row')
+  assert.equal(dedans.length, 1, 'le bloc ne porte que les épinglées')
+  assert.match(textOf(dedans[0]), /MIS-1/)
+  assert.equal(dedans[0].props.role, 'treeitem', 'la ligne reste un élément de la liste')
+  assert.equal(dedans[0].props['data-pinned'], 'true')
+  const liste = findAll(rendu, 'div').find((node) => String(node.props.className ?? '').includes('missions-wb-rows--flat'))
+  assert.ok(liste, 'la liste plate est rendue')
+  assert.equal(liste.children[0].props.className, 'missions-wb-pins', 'le bloc passe avant les autres rangs')
+})
+
 test('ouvrir une mission monte sa fiche dans le volet de l’onglet, sans second panneau', () => {
   // Given l'onglet Missions monté sur une mission choisie.
   const { tree } = monterVolet(ARBRE_CHECK)

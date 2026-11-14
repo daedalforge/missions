@@ -1006,13 +1006,18 @@ window.__ModuleLoader__.load({
 .missions-band-seg[data-active="true"] { box-shadow: inset 0 0 0 1px rgba(255,255,255,.9), 0 0 0 1px rgba(0,0,0,.16); }
 .missions-band-name, .missions-band-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .missions-band-n { flex: none; opacity: .85; font-variant-numeric: tabular-nums; }
-.missions-band-meta { display: flex; align-items: center; gap: 8px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; }
-.missions-band-blocked { padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, #cf222e 12%, transparent); color: #a40e26; font-weight: 600; white-space: nowrap; }
-.missions-band-note { white-space: nowrap; }
-.missions-wb-tree { min-height: 140px; max-height: 62vh; overflow: auto; padding: 2px 6px 10px; }
+/* The scrollport starts flush with the tree: the 2px of air above the first
+   row lives outside it, so a scrolling row cannot show through a strip above
+   the pinned band. */
+.missions-wb-tree { min-height: 140px; max-height: 62vh; overflow: auto; margin-top: 2px; padding: 0 6px 10px; }
 .missions-wb-group { display: flex; flex-direction: column; }
 .missions-wb-rows, .missions-wb-actions { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .missions-wb-row { min-width: 0; }
+/* The pinned rows hold the top of the scrollport: the list keeps them in
+   sight while the rest of the tree scrolls under them. The band brings its
+   own air, a stronger rule and a soft edge, so it reads as a section of its
+   own instead of one more row. */
+.missions-wb-pins { position: sticky; top: 0; z-index: 2; padding-bottom: 8px; background: var(--dsw-alias-bg-base, #fbfaf8); border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.16)); box-shadow: 0 8px 10px -10px rgba(0,0,0,.35); }
 .missions-wb-actions { padding: 2px 0 6px; }
 .missions-wb-actions-head { display: block; padding: 6px 8px 3px 10px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .missions-wb-action { display: flex; align-items: center; width: calc(100% - 12px); margin: 0 6px; height: 24px; padding: 0 8px; border: none; border-radius: 5px; background: none; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 11.5px; text-align: left; cursor: pointer; }
@@ -1047,8 +1052,7 @@ window.__ModuleLoader__.load({
 @media (max-width: 720px) {
   .missions-wb-field { padding: 8px 10px 4px; }
   .missions-band { padding: 0 10px 8px; }
-  .missions-band-note { display: none; }
-  .missions-wb-tree { padding: 2px 2px 8px; }
+  .missions-wb-tree { padding: 0 2px 8px; }
   .missions-tree-row { margin-left: 8px; padding: 3px 6px; }
   .missions-tree-key { width: 44px; }
 }
@@ -1073,8 +1077,7 @@ window.__ModuleLoader__.load({
 .missions-panel[data-skin="paper"] .missions-wb-input { color: var(--skin-ink); font-family: var(--skin-display); }
 .missions-panel[data-skin="paper"] .missions-wb-count { color: var(--skin-ink-3); font-family: var(--skin-mono); }
 .missions-panel[data-skin="paper"] .missions-band-seg { border: 1px solid var(--skin-ink); border-radius: 3px; }
-.missions-panel[data-skin="paper"] .missions-band-meta { color: var(--skin-ink-3); font-family: var(--skin-mono); }
-.missions-panel[data-skin="paper"] .missions-band-blocked { background: var(--skin-danger-strong); color: var(--skin-page); }
+.missions-panel[data-skin="paper"] .missions-wb-pins { background: var(--skin-page); border-bottom: 1.5px solid var(--skin-ink); box-shadow: none; }
 .missions-panel[data-skin="paper"] .missions-tree-row:hover { background: color-mix(in srgb, var(--skin-accent) 14%, var(--skin-page)); }
 .missions-panel[data-skin="paper"] .missions-tree-row[data-selected="true"] { background: var(--skin-page-3); }
 .missions-panel[data-skin="paper"] .missions-tree-epic-ref, .missions-panel[data-skin="paper"] .missions-tree-key { color: var(--skin-accent-strong); font-family: var(--skin-mono); }
@@ -2464,7 +2467,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const counts = new Map()
       for (const mission of missions) counts.set(mission.state, (counts.get(mission.state) ?? 0) + 1)
       const selected = Array.isArray(value) ? value : value ? [value] : []
-      const blocked = missions.filter((mission) => mission.blocked).length
       const toggle = (state) => {
         const next = selected.includes(state)
           ? selected.filter((entry) => entry !== state)
@@ -2488,10 +2490,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             h('span', { className: 'missions-band-name' }, STATE_LABELS[state] ?? state),
             h('span', { className: 'missions-band-n' }, String(counts.get(state) ?? 0)),
           )),
-        ),
-        h('div', { className: 'missions-band-meta' },
-          blocked > 0 ? h('span', { className: 'missions-band-blocked' }, `${blocked} blocked`) : null,
-          h('span', { className: 'missions-band-note' }, 'counts stay global'),
         ),
       )
     }
@@ -2662,25 +2660,34 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                       : null,
                     result.groups.map((group) => {
                       const key = group.id === '' ? 'no-epic' : group.id
+                      const rowItem = (row) => {
+                        const missionKey = row.row.key ?? row.row.id
+                        const entry = { id: `mission:${missionKey}`, kind: 'mission', row: row.row, anchors: row.anchors, hidden: row.hidden }
+                        return h('div', { className: 'missions-wb-row', role: 'none', key: missionKey },
+                          renderRow({
+                            entry,
+                            rowId: outlineDomId(`mission:${missionKey}`),
+                            selected: current !== null && current.id === entry.id,
+                            onSelect: () => onCursor(entry),
+                            onOpen: () => open(entry),
+                          }),
+                        )
+                      }
+                      // A pin keeps its mission in sight while the tree scrolls:
+                      // the flat list already lifts the pinned rows, so their
+                      // leading run is the one sticky block.
+                      const pinned = flat ? group.rows.filter((row) => row.row?.pinned === true) : []
+                      const loose = flat ? group.rows.filter((row) => row.row?.pinned !== true) : group.rows
                       const rows = h('div', {
                         className: flat ? 'missions-wb-rows missions-wb-rows--flat' : 'missions-wb-rows',
                         role: 'group',
                         'aria-label': group.label,
                         key,
                       },
-                        group.rows.map((row) => {
-                          const missionKey = row.row.key ?? row.row.id
-                          const entry = { id: `mission:${missionKey}`, kind: 'mission', row: row.row, anchors: row.anchors, hidden: row.hidden }
-                          return h('div', { className: 'missions-wb-row', role: 'none', key: missionKey },
-                            renderRow({
-                              entry,
-                              rowId: outlineDomId(`mission:${missionKey}`),
-                              selected: current !== null && current.id === entry.id,
-                              onSelect: () => onCursor(entry),
-                              onOpen: () => open(entry),
-                            }),
-                          )
-                        }),
+                        pinned.length > 0
+                          ? h('div', { className: 'missions-wb-pins', role: 'group', 'aria-label': 'Pinned missions', key: 'pins' }, pinned.map(rowItem))
+                          : null,
+                        loose.map(rowItem),
                       )
                       // A flat list has no group to announce: no header row, no
                       // epic entry in the keyboard's list.
@@ -2715,6 +2722,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         'aria-selected': selected ? 'true' : 'false',
         'data-state': mission.state,
         'data-selected': selected ? 'true' : 'false',
+        'data-pinned': pinned ? 'true' : 'false',
         'data-match': entry.kind,
         tabIndex: -1,
         title: `${mission.key} — ${STATE_LABELS[mission.state] ?? mission.state}`,
