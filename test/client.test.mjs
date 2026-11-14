@@ -8528,6 +8528,9 @@ test('le workbench partage la largeur en deux moitiés et retombe sur une colonn
   assert.doesNotMatch(grille, /440px/, 'la liste ne reste plus plafonnée à 440 px')
   assert.doesNotMatch(SOURCE, /data-drawer/, 'le workbench ne se replie plus à l’ouverture d’une fiche')
   assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\n\s*\.missions-workbench \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  // La peau papier retombe aussi sur une colonne : le filet de séparation
+  // passe sous la liste, il ne reste pas à droite de la colonne empilée.
+  assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\n\s*\.missions-panel\[data-skin="paper"\] \.missions-wb-column \{ border-right: 0; border-bottom: 1\.5px solid var\(--skin-ink\); \}/)
 })
 
 test('les filtres vivent dans la colonne, sous le champ et au-dessus de la bande', () => {

@@ -1105,6 +1105,9 @@ window.__ModuleLoader__.load({
 .missions-panel[data-skin="paper"] .missions-toolbar-label { color: var(--skin-ink-3); font-family: var(--skin-mono); font-size: 10px; letter-spacing: .1em; }
 .missions-panel[data-skin="paper"] .missions-workbench { border-top: 1.5px solid var(--skin-ink); }
 .missions-panel[data-skin="paper"] .missions-wb-column { border-right: 1.5px solid var(--skin-ink); }
+@media (max-width: 900px) {
+  .missions-panel[data-skin="paper"] .missions-wb-column { border-right: 0; border-bottom: 1.5px solid var(--skin-ink); }
+}
 .missions-panel[data-skin="paper"] .missions-wb-kbd { border: 1.5px solid var(--skin-ink); border-radius: 5px; background: var(--skin-page-2); color: var(--skin-ink-2); }
 .missions-panel[data-skin="paper"] .missions-wb-input { color: var(--skin-ink); font-family: var(--skin-display); }
 .missions-panel[data-skin="paper"] .missions-wb-count { color: var(--skin-ink-3); font-family: var(--skin-mono); }
