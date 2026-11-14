@@ -3523,6 +3523,56 @@ test('un refus de pin laisse la punaise en place et le dit', async () => {
   assert.match(note.text, /Pin failed: pins\.yml is broken/)
 })
 
+test('un second clic sur la punaise retire la clé et rend la ligne à son rang', async () => {
+  // Given une mission déjà épinglée, le volet monté sur elle.
+  const saved = []
+  const calls = []
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) })
+    return { ok: true, status: 200, json: async () => ({ key: 'MIS-42', pinned: false }) }
+  }
+
+  const { tree, drawer, setters } = monterVolet(
+    { ...MISSION, pinned: true, updatedAt: MISSION.updated },
+    { onPinSaved: (data) => saved.push(data) },
+  )
+  const bouton = findAll(tree, 'button').find((node) => node.props['aria-label'] === 'Unpin')
+  assert.ok(bouton, 'une mission épinglée montre le geste inverse')
+  assert.equal(bouton.props['aria-pressed'], 'true')
+  assert.equal(bouton.props['data-pinned'], 'true')
+
+  // When on clique sur la punaise déjà posée.
+  await bouton.props.onClick()
+
+  // Then la route reçoit le drapeau baissé, jamais reposé.
+  assert.deepEqual(writes(calls), [
+    { url: 'missions/api/pin', method: 'POST', body: { key: 'MIS-42', pinned: false } },
+  ])
+  assert.deepEqual(saved, [{ key: 'MIS-42', pinned: false }])
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, false)
+  assert.match(note.text, /Mission unpinned\./)
+
+  // Then le panneau baisse `pinned` dans la liste, la vue Done et le volet.
+  drawer.props.onPinSaved({ key: 'MIS-42', pinned: false })
+  const [setView, setDoneView, setSelected] = setters.slice(-3)
+  const previous = {
+    ...MISSION, updatedAt: MISSION.updated, pinned: true,
+    folder: '/w/missions/MIS-42', branch: 'fix/mis-42', base: 'main', blocked: false,
+  }
+  const view = { loading: false, missions: [previous], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const nextView = setView(view)
+  const nextDone = setDoneView(view)
+  assert.deepEqual(nextView.missions[0], { ...previous, pinned: false })
+  assert.deepEqual(nextDone.missions[0], { ...previous, pinned: false })
+  // Le reste de la ligne ne bouge pas : seule l'épingle tombe.
+  assert.deepEqual(
+    [nextView.missions[0].folder, nextView.missions[0].branch, nextView.missions[0].base, nextView.missions[0].blocked],
+    ['/w/missions/MIS-42', 'fix/mis-42', 'main', false],
+  )
+  assert.deepEqual(setSelected(previous), { ...previous, pinned: false })
+})
+
 /* Repositories: l'onglet, ses lignes, son volet. */
 
 /**
