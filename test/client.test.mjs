@@ -550,6 +550,7 @@ test('chaque geste de la rangée ne porte que son icône, nommée', () => {
   const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
   const gestes = actions.children.filter((child) => child !== null && child !== false)
   assert.deepEqual(gestes.map(nomDuGeste), [
+    'Pin',
     'Open on the tracker',
     'Check the PR feedback',
     'Start a free session',
@@ -3448,6 +3449,80 @@ test('un refus du tracker laisse l’ancienne priorité et le dit', async () => 
   assert.match(note.text, /Priority failed: tracker refused/)
 })
 
+test('la punaise du volet écrit pins.yml et ne patche que ce drapeau', async () => {
+  const saved = []
+  const calls = []
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) })
+    return { ok: true, status: 200, json: async () => ({ key: 'MIS-42', pinned: true }) }
+  }
+
+  const { tree, drawer, setters } = monterVolet(undefined, { onPinSaved: (data) => saved.push(data) })
+  const bouton = findAll(tree, 'button').find((node) => node.props['aria-label'] === 'Pin')
+  assert.ok(bouton, 'le volet offre la punaise dans toutes les missions')
+  assert.equal(bouton.props['aria-pressed'], 'false')
+  assert.equal(bouton.props['data-pinned'], 'false')
+  assert.match(bouton.props.className, /missions-action--pin/)
+
+  // La punaise est le premier geste de la rangée : elle ne prend pas la place
+  // de la session, qui reste la primaire et la dernière.
+  const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
+  assert.equal(actions.children.filter((child) => child && child.type === 'button')[0], bouton)
+
+  await bouton.props.onClick()
+
+  assert.deepEqual(writes(calls), [
+    { url: 'missions/api/pin', method: 'POST', body: { key: 'MIS-42', pinned: true } },
+  ])
+  assert.deepEqual(saved, [{ key: 'MIS-42', pinned: true }])
+  assert.ok(setters.includes(true), 'le bouton passe à épinglé')
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, false)
+  assert.match(note.text, /pinned at the top/)
+
+  // Le panneau ne touche que `pinned` : la déclaration et le blocage restent.
+  const previous = {
+    ...MISSION, updatedAt: MISSION.updated, folder: '/w/missions/MIS-42',
+    branch: 'fix/mis-42', base: 'main', blocked: false,
+  }
+  drawer.props.onPinSaved({ key: 'MIS-42', pinned: true })
+  const setView = setters.at(-2)
+  const setSelected = setters.at(-1)
+  const nextView = setView({ loading: false, missions: [previous], errors: [], workspaceId: 'w', workspaceRoot: '/w' })
+  assert.deepEqual(nextView.missions[0], { ...previous, pinned: true })
+  assert.deepEqual(
+    [nextView.missions[0].folder, nextView.missions[0].branch, nextView.missions[0].base, nextView.missions[0].blocked],
+    ['/w/missions/MIS-42', 'fix/mis-42', 'main', false],
+  )
+  assert.deepEqual(setSelected(previous), { ...previous, pinned: true })
+
+  // Le geste est compté, et son identifiant est déclaré au registre.
+  assert.match(SOURCE, /track\('mission\.pin', next \? 'pin' : 'unpin'\)/)
+  assert.ok(USAGE_ELEMENTS.some((element) => element.id === 'mission.pin'))
+})
+
+test('un refus de pin laisse la punaise en place et le dit', async () => {
+  const saved = []
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 502,
+    json: async () => ({ error: 'pins.yml is broken' }),
+  })
+
+  const { tree, setters } = monterVolet({ ...MISSION, pinned: true, updatedAt: MISSION.updated }, { onPinSaved: (data) => saved.push(data) })
+  const bouton = findAll(tree, 'button').find((node) => node.props['aria-label'] === 'Unpin')
+  assert.ok(bouton, 'une mission épinglée montre le geste inverse')
+  assert.equal(bouton.props['aria-pressed'], 'true')
+
+  await bouton.props.onClick()
+
+  assert.deepEqual(saved, [], 'le panneau ne reçoit rien : la punaise reste posée')
+  assert.equal(bouton.props['data-pinned'], 'true', 'le bouton reste dans l’état épinglé')
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, true)
+  assert.match(note.text, /Pin failed: pins\.yml is broken/)
+})
+
 /* Repositories: l'onglet, ses lignes, son volet. */
 
 /**
@@ -6320,7 +6395,8 @@ test('le volet ne propose la clôture locale qu’en ready-for-prod', () => {
   const enfants = foot.children.filter((child) => child !== null && child !== false)
   assert.deepEqual(enfants.map((child) => child.props.className), ['missions-drawer-actions'])
   const boutons = enfants[0].children.filter((child) => child.type === 'button')
-  assert.equal(nomDuGeste(boutons[0]), 'Close the local checkout', 'la clôture ouvre la rangée')
+  assert.equal(nomDuGeste(boutons[0]), 'Pin', 'la punaise ouvre la rangée')
+  assert.equal(nomDuGeste(boutons[1]), 'Close the local checkout', 'la clôture suit la punaise')
   const iSession = boutons.findIndex((node) => /^Start a session/.test(nomDuGeste(node)))
   assert.equal(iSession, boutons.length - 1, 'la session reste le dernier geste de la rangée')
 
@@ -6344,9 +6420,10 @@ test('la clôture ouvre la rangée, et la primaire la ferme', () => {
   assert.ok(actions, 'la rangée du pied est rendue')
   const gestes = actions.children.filter((child) => child && (child.type === 'button' || child.type === 'a'))
   const noms = gestes.map(nomDuGeste)
-  assert.equal(noms[0], 'Close the local checkout', 'le geste destructif ouvre la rangée')
+  assert.equal(noms[0], 'Pin', 'la punaise ouvre la rangée')
+  assert.equal(noms[1], 'Close the local checkout', 'le geste destructif suit la punaise')
   assert.match(noms.at(-1), /^Start a session/, 'la session de l’étape la ferme')
-  assert.equal(noms.length, 4, 'clôture, ticket, session libre, session de l’étape')
+  assert.equal(noms.length, 5, 'punaise, clôture, ticket, session libre, session de l’étape')
   for (const geste of gestes) {
     assert.equal(textOf(geste), '', 'aucun geste de la rangée ne porte de texte')
     assert.equal(findAll(geste, 'svg').length, 1)
@@ -6766,7 +6843,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(52\)/)
+  assert.match(texte, /Never used \(53\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -6782,7 +6859,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(55\)/)
+  assert.match(textOf(zero.inner), /Never used \(56\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -8576,7 +8653,7 @@ const ARBRE_CHECKLISTS = {
  * pour le rejouer avec une autre requête ou un autre curseur sans remonter le
  * panneau ; `arbre` le résout.
  */
-function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS, missions = ARBRE_MISSIONS } = {}) {
+function monterArbre({ query = '', filters = {}, sort = null, checklists = ARBRE_CHECKLISTS, missions = ARBRE_MISSIONS } = {}) {
   const view = { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
   const etats = [
@@ -8585,7 +8662,8 @@ function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS, 
     'missions',
     query,
     { ...EMPTY_BAR.filters, ...filters },
-    null,
+    // Le tri de l'onglet, sixième état du panneau.
+    sort,
     null,
     'default',
     null,
@@ -8635,36 +8713,38 @@ test('l’onglet Missions monte un seul arbre générique, jamais une carte', ()
   const cartes = findAll(rendu, 'div').filter((node) => String(node.props.className ?? '').split(' ').includes('missions-card'))
   assert.deepEqual(cartes, [])
 
-  // Deux niveaux : les épics ouvrent leurs missions, sans bascule de mode.
-  const epics = findAll(rendu, 'div').filter((node) => node.props.role === 'treeitem' && node.props['aria-level'] === 1)
-  const lignes = findAll(rendu, 'div').filter((node) => node.props.role === 'treeitem' && node.props['aria-level'] === 2)
-  assert.equal(epics.length, 2, 'un épic nommé et le groupe sans épic')
-  assert.equal(lignes.length, 12, 'les douze missions sont dans l’arbre')
-  assert.ok(epics.every((node) => node.props['aria-expanded'] === 'true'), 'un épic est toujours déplié')
+  // Un seul niveau : douze missions à plat, aucun en-tête de groupe.
+  const lignes = findAll(rendu, 'div').filter((node) => node.props.role === 'treeitem')
+  assert.equal(lignes.length, 12, 'les douze missions sont dans la liste')
+  assert.ok(lignes.every((node) => node.props['aria-level'] === 1), 'chaque ligne est un élément de premier niveau')
+  assert.deepEqual(
+    findAll(rendu, 'div').filter((node) => node.props.className === 'missions-wb-group'),
+    [],
+    'plus aucun groupe : l’épic est une référence, pas une section',
+  )
   assert.equal(findAll(rendu, 'button').filter((node) => node.props['data-view'] !== undefined).length, 0)
 })
 
-test('l’arbre ne lit que les groupes qu’on lui donne', () => {
+test('la liste plate ne lit que les lignes qu’on lui donne', () => {
   const { noeud } = monterArbre()
   const rang = { type: 'span', fn: null, props: { className: 'spec-row' }, children: ['A custom row'] }
   const rendu = renderTree(noeud({
     groups: [{
-      id: 'G1',
-      label: 'A foreign group',
-      epic: false,
-      open: 2,
+      id: '',
+      label: '',
       rows: [{ row: { id: 'row-1', key: 'row-1', title: 'A foreign row' }, kind: 'mission', anchors: [], hidden: 0 }],
     }],
+    flat: true,
     query: '',
     filters: null,
     renderRow: () => rang,
   }))
 
-  // Aucun champ de mission n'est lu : le groupe et la ligne sont ceux du rendu
-  // fourni, tels quels.
-  assert.match(textOf(rendu), /A foreign group/)
+  // Aucun champ de mission n'est lu : la ligne est celle du rendu fourni, telle
+  // quelle, et la liste ne fabrique pas d'en-tête.
   assert.match(textOf(rendu), /A custom row/)
   assert.doesNotMatch(textOf(rendu), /MIS-/)
+  assert.deepEqual(findAll(rendu, 'div').filter((node) => node.props.className === 'missions-wb-group'), [])
 })
 
 test('le champ est la barre de l’arbre et son compte nomme une famille, jamais un total', () => {
@@ -8779,27 +8859,25 @@ test('une clé ou une ligne de checklist trouve sa mission, deux ancres au plus'
   assert.match(textOf(findAll(ligne, 'div').find((node) => node.props.className === 'missions-tree-overflow')), /\+2/)
 })
 
-test('un épic trouvé déplie ses missions et garde son compte de lot', () => {
+test('une requête ne fait plus d’un épic un résultat : la liste reste plate', () => {
   const { arbre } = monterArbre({ query: 'workflows' })
   const rendu = arbre()
 
-  const groupe = findAll(rendu, 'div').find((node) => node.props.className === 'missions-wb-group' && textOf(node).includes('Workflows skeleton'))
-  assert.ok(groupe, 'le groupe de l’épic est rendu')
-  const epic = findAll(groupe, 'div').find((node) => node.props.className === 'missions-tree-epic')
-  assert.ok(epic, 'la ligne de l’épic est rendue')
-  assert.match(textOf(epic), /MIS-2/)
-  assert.match(textOf(epic), /4 open/)
-
-  const lot = findAll(groupe, 'div').filter((node) => node.props.className === 'missions-tree-row')
-  assert.equal(lot.length, 4, 'les quatre missions du lot sont dépliées')
-
-  // Le lot est une ligne de l'arbre : plus d'aperçu à droite, ni de tuile de
-  // répartition. Le compte de lot tient sur la ligne de l'épic.
-  assert.equal(findAll(rendu, 'aside').length, 0, 'aucun volet ne s’ouvre au repos')
-  assert.equal(findAll(rendu, 'div').filter((node) => node.props.className === 'missions-wb-preview-body').length, 0)
+  // « workflows » ne répond que par le titre de la mission épic : pas de
+  // groupe, pas d'entrée de lot, pas de compte d'épic.
+  const lignes = findAll(rendu, 'div').filter((node) => node.props.className === 'missions-tree-row')
+  assert.equal(lignes.length, 1, 'une seule mission répond')
+  assert.match(textOf(lignes[0]), /MIS-2/)
+  assert.deepEqual(
+    findAll(rendu, 'div').filter((node) => node.props.className === 'missions-wb-group'),
+    [],
+    'aucun groupe de lot n’est rendu',
+  )
+  const compte = findAll(rendu, 'span').find((node) => node.props.className === 'missions-wb-count')
+  assert.equal(textOf(compte), '1 of 12 · esc')
 })
 
-test('un épic composé s’affiche en clé puis titre, chacun une seule fois', () => {
+test('la colonne d’épic montre la clé courte, ou une cellule vide', () => {
   // Given les missions du lot sous l'épic tel que les trackers le composent,
   // et un épic dont la clé n'est pas elle-même dans la liste (le cas Jira).
   const composees = [
@@ -8808,48 +8886,84 @@ test('un épic composé s’affiche en clé puis titre, chacun une seule fois', 
     )),
     { ...MISSION, key: 'MIS-212', title: 'Theme checklist', epic: 'MIS-6 · Theme v1' },
   ]
-  const { arbre, noeud } = monterArbre({ missions: composees })
+  const { arbre } = monterArbre({ missions: composees })
 
-  // When l'arbre est rendu.
+  // When la liste est rendue.
   const rendu = arbre()
-  const groupe = (text) => findAll(rendu, 'div').find((node) => node.props.className === 'missions-wb-group' && textOf(node).includes(text))
-  const ligneEpic = (text) => findAll(groupe(text), 'div').find((node) => node.props.className === 'missions-tree-epic')
-  const textes = (node, classe) => findAll(node, 'span').filter((span) => span.props.className === classe).map(textOf)
+  const ligne = (cle) => findAll(rendu, 'div').find((node) => node.props.className === 'missions-tree-row' && textOf(node).includes(cle))
+  const ref = (cle) => findAll(ligne(cle), 'span').find((span) => span.props.className === 'missions-tree-epic-ref')
 
-  // Then la clé courte et le titre sont deux textes distincts, chacun une fois.
-  assert.deepEqual(textes(ligneEpic('Workflows skeleton'), 'missions-tree-epic-key'), ['MIS-2'])
-  assert.deepEqual(textes(ligneEpic('Workflows skeleton'), 'missions-tree-epic-name'), ['Workflows skeleton'])
-  // Le titre vient du découpage quand l'épic n'est pas lui-même dans la liste.
-  assert.deepEqual(textes(ligneEpic('Theme v1'), 'missions-tree-epic-key'), ['MIS-6'])
-  assert.deepEqual(textes(ligneEpic('Theme v1'), 'missions-tree-epic-name'), ['Theme v1'])
-  // Le compte du lot qui reste sur la ligne de l'épic.
-  assert.deepEqual(textes(ligneEpic('Workflows skeleton'), 'missions-tree-open'), ['4 open'])
+  // Then la colonne ne garde que la clé courte : le titre reste dans le groupe,
+  // et le curseur annonce déjà cette clé.
+  assert.equal(textOf(ref('MIS-201')), 'MIS-2')
+  assert.equal(textOf(ref('MIS-212')), 'MIS-6')
+  assert.doesNotMatch(textOf(ligne('MIS-201')), /Workflows skeleton/)
 
-  // Then le curseur reste la clé courte : la ligne s'annonce `epic:MIS-2`.
-  const poses = []
-  const surEpic = renderTree(noeud({ onCursor: (entry) => poses.push(entry.id) }))
-  findAll(surEpic, 'div').find((node) => node.props.className === 'missions-tree-epic' && textOf(node).includes('Workflows skeleton')).props.onClick()
-  assert.deepEqual(poses, ['epic:MIS-2'])
+  // Then une mission sans épic garde sa cellule, vide : la colonne ne se décale
+  // pas d'une ligne à l'autre.
+  assert.ok(ref('MIS-205'), 'la cellule existe même vide')
+  assert.equal(textOf(ref('MIS-205')), '')
 
-  // Then la clé garde sa teinte tertiaire et sa police mono, le titre son gras.
-  assert.match(regle('.missions-tree-epic-key'), /color: var\(--dsw-alias-label-tertiary/)
-  assert.match(regle('.missions-tree-epic-key'), /font-family: var\(--dsw-font-mono/)
-  assert.match(regle('.missions-tree-epic-name'), /font-weight: 650/)
+  // Then la clé garde sa teinte tertiaire, sa police mono et sa largeur fixe.
+  const colonne = regle('.missions-tree-epic-ref')
+  assert.match(colonne, /width: 52px/)
+  assert.match(colonne, /color: var\(--dsw-alias-label-tertiary/)
+  assert.match(colonne, /font-family: var\(--dsw-font-mono/)
+  assert.match(colonne, /text-overflow: ellipsis/)
 })
 
-test('un épic sans séparateur s’affiche une fois, sans clé en double', () => {
+test('une valeur d’épic sans séparateur s’affiche une fois, sans clé inventée', () => {
   // Given le lot rangé sous une valeur d'épic sans séparateur (Jira sans summary).
   const simples = ARBRE_MISSIONS.map((mission) => (
     mission.epic === 'MIS-2' ? { ...mission, epic: 'SO-483' } : mission
   ))
   const { arbre } = monterArbre({ missions: simples })
 
-  // When la ligne de l'épic est rendue.
+  // When la liste est rendue.
   const rendu = arbre()
-  const ligne = findAll(rendu, 'div').find((node) => node.props.className === 'missions-tree-epic' && textOf(node).includes('SO-483'))
+  const ligne = findAll(rendu, 'div').find((node) => node.props.className === 'missions-tree-row' && textOf(node).includes('SO-483'))
+  assert.ok(ligne, 'la mission du lot est rendue')
 
-  // Then la valeur paraît une seule fois : ni clé, ni titre en double.
-  assert.deepEqual(findAll(ligne, 'span').map(textOf), ['', 'SO-483', '4 open'])
+  // Then la valeur paraît une seule fois : ni titre, ni clé en double.
+  assert.equal(textOf(ligne).split('SO-483').length - 1, 1)
+})
+
+test('une mission épinglée porte sa punaise et passe devant, sous une requête aussi', () => {
+  // Given trois missions, dont une épinglée et priorités inverses.
+  const liste = [
+    { ...MISSION, key: 'MIS-301', title: 'Alpha one', priority: 'low', pinned: true },
+    { ...MISSION, key: 'MIS-302', title: 'Bravo', priority: 'normal', pinned: false },
+    { ...MISSION, key: 'MIS-303', title: 'Alpha two', priority: 'urgent', pinned: false },
+  ]
+  const { arbre } = monterArbre({ missions: liste, sort: 'priority' })
+  const cles = (rendu) => findAll(rendu, 'div')
+    .filter((node) => node.props.className === 'missions-tree-row')
+    .map((node) => textOf(findAll(node, 'span').find((span) => span.props.className === 'missions-tree-key')))
+
+  // Then l'épingle passe devant l'urgence du tri.
+  assert.deepEqual(cles(arbre()), ['MIS-301', 'MIS-303', 'MIS-302'])
+
+  // Then sous une requête qui trouve l'épingle et une autre mission, l'épingle
+  // reste devant : l'ordre est appliqué aux lignes trouvées, pas seulement au repos.
+  assert.deepEqual(cles(arbre({ query: 'alpha' })), ['MIS-301', 'MIS-303'])
+
+  // Then seule la ligne épinglée porte la punaise, décorative et non cliquable.
+  const ligne = findAll(arbre(), 'div').find((node) => node.props.className === 'missions-tree-row' && textOf(node).includes('MIS-301'))
+  const pin = findAll(ligne, 'svg').find((node) => node.props.className === 'missions-tree-pin')
+  assert.ok(pin, 'la ligne épinglée porte sa punaise')
+  assert.equal(pin.props['aria-label'], 'Pinned')
+  assert.equal(pin.props.focusable, 'false')
+  assert.equal(pin.props.onClick, undefined, 'la punaise ne prend pas le clic de la ligne')
+  const autre = findAll(arbre(), 'div').find((node) => node.props.className === 'missions-tree-row' && textOf(node).includes('MIS-303'))
+  assert.deepEqual(findAll(autre, 'svg').filter((node) => node.props.className === 'missions-tree-pin'), [])
+})
+
+test('le pied compte les missions ouvertes, sans note de groupe', () => {
+  const { arbre } = monterArbre()
+  const pied = findAll(arbre(), 'div').find((node) => node.props.className === 'missions-wb-foot')
+  assert.ok(pied, 'le pied est rendu')
+  assert.match(textOf(pied), /12 open/)
+  assert.doesNotMatch(textOf(pied), /Group by Epic/)
 })
 
 test('les flèches déplacent le surlignage sans ouvrir, Entrée ouvre', () => {
@@ -8861,15 +8975,17 @@ test('les flèches déplacent le surlignage sans ouvrir, Entrée ouvre', () => {
 
   const repos = renderTree(noeud({ onCursor: noter, onActivate: noterOuverture }))
   repos.props.onKeyDown({ key: 'ArrowDown', preventDefault() {} })
-  assert.deepEqual(deplacements, ['epic:MIS-2'])
+  assert.deepEqual(deplacements, ['mission:MIS-2'], 'la liste plate commence par la première mission')
 
-  const suivant = renderTree(noeud({ cursor: 'epic:MIS-2', onCursor: noter, onActivate: noterOuverture }))
+  const suivant = renderTree(noeud({ cursor: 'mission:MIS-2', onCursor: noter, onActivate: noterOuverture }))
   suivant.props.onKeyDown({ key: 'ArrowDown', preventDefault() {} })
   assert.equal(deplacements[1], 'mission:MIS-201')
 
   const retour = renderTree(noeud({ cursor: 'mission:MIS-201', onCursor: noter, onActivate: noterOuverture }))
   retour.props.onKeyDown({ key: 'ArrowUp', preventDefault() {} })
-  assert.equal(deplacements[2], 'epic:MIS-2')
+  assert.equal(deplacements[2], 'mission:MIS-2')
+  // Aucune flèche ne pose l'ancien curseur de lot : il n'existe plus.
+  assert.ok(deplacements.every((id) => id.startsWith('mission:') || id.startsWith('action:')))
 
   // Les flèches ne montent pas la fiche : elles déplacent le surlignage seul.
   assert.deepEqual(ouverts, [], 'surligner n’ouvre pas')
@@ -8907,8 +9023,15 @@ test('les actions passent avant les missions et se déclenchent au clavier', () 
   assert.deepEqual(actions.map(textOf), ['Declare a mission', 'Declare from a tracker key'])
 
   // Elles sont rendues avant les missions, et aucune mission ne répond.
-  const blocs = findAll(declare, 'div').filter((node) => ['missions-wb-actions', 'missions-wb-group'].includes(node.props.className))
-  assert.equal(blocs[0].props.className, 'missions-wb-actions', 'les actions passent avant les groupes')
+  // « key » trouve les deux actions et une ligne de checklist : les deux blocs
+  // sont rendus, les actions d'abord.
+  const deux = arbre({ query: 'key' })
+  const blocs = findAll(deux, 'div').filter((node) => ['missions-wb-actions', 'missions-wb-rows missions-wb-rows--flat'].includes(node.props.className))
+  assert.equal(blocs[0].props.className, 'missions-wb-actions', 'les actions passent avant la liste')
+  assert.equal(blocs[1].props.className, 'missions-wb-rows missions-wb-rows--flat', 'la liste suit, à plat')
+  assert.ok(findAll(blocs[1], 'div').some((node) => node.props.className === 'missions-tree-row'), 'la liste porte ses lignes')
+  assert.deepEqual(findAll(declare, 'div').filter((node) => node.props.className === 'missions-wb-group'), [],
+    'plus de groupe : la liste est plate même quand une action répond')
   assert.equal(findAll(declare, 'div').filter((node) => node.props.className === 'missions-tree-row').length, 0)
   assert.equal(
     textOf(findAll(declare, 'span').find((node) => node.props.className === 'missions-wb-count')),
@@ -8952,8 +9075,9 @@ test('la bande garde les comptes du portefeuille sous toute requête', () => {
   // Un compte de mission n'est jamais additionné à un compte de lot.
   const label = (rendu) => textOf(findAll(rendu, 'span').find((node) => node.props.className === 'missions-wb-count'))
   assert.equal(label(arbre({ query: 'session' })), '1 of 12 · esc')
-  // La mission épic répond aussi par son titre : deux familles, deux comptes.
-  assert.equal(label(arbre({ query: 'workflows' })), '1 of 12 · 1 epic · esc')
+  // La mission épic répond par son titre seul : une famille, un compte, et
+  // plus d'entrée de lot.
+  assert.equal(label(arbre({ query: 'workflows' })), '1 of 12 · esc')
   assert.doesNotMatch(label(arbre({ query: 'workflows' })), /open/)
 })
 
@@ -8967,8 +9091,11 @@ test('l’arbre tient dans la largeur et ses titres sont ellipsés', () => {
   assert.match(titre, /text-overflow: ellipsis/)
   assert.match(titre, /white-space: nowrap/)
 
-  // La peau papier reste lisible : l'arbre et sa bande ont leurs règles.
-  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-tree-epic-name \{/)
+  // La peau papier reste lisible : la référence d'épic prend la teinte du thème.
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-tree-epic-ref,/)
+  // Plus aucune règle ne nomme l'épic d'autrefois.
+  assert.doesNotMatch(SOURCE, /\.missions-tree-epic-name/)
+  assert.doesNotMatch(SOURCE, /\.missions-tree-epic \{/)
 })
 
 test('au repos, la grille du workbench n’a qu’une colonne', () => {
@@ -9021,16 +9148,15 @@ test('les filtres vivent dans la colonne, sous le champ et au-dessus de la bande
   assert.deepEqual(findAll(toolbar, 'select'), [], 'aucun filtre ne reste au-dessus du workbench')
 })
 
-test('les lignes de mission sont aérées et séparées par un filet, l’épic garde sa hauteur', () => {
+test('les lignes de mission sont aérées et séparées par un filet', () => {
   const ligne = regle('.missions-tree-row')
   assert.match(ligne, /min-height: 38px/)
   assert.match(ligne, /box-sizing: border-box/)
-  assert.match(regle('.missions-tree-epic'), /height: 26px/)
   // Le filet sépare deux lignes voisines : ni avant la première, ni après la dernière.
   assert.match(SOURCE, /\.missions-wb-row \+ \.missions-wb-row > \.missions-tree-row \{ border-top: 1px solid/)
 
   const { arbre } = monterArbre()
-  const groupe = findAll(arbre(), 'div').find((node) => node.props.className === 'missions-wb-rows' && node.children.length > 1)
+  const groupe = findAll(arbre(), 'div').find((node) => /missions-wb-rows/.test(String(node.props.className ?? '')) && node.children.length > 1)
   assert.ok(groupe, 'un groupe porte au moins deux missions')
   assert.ok(groupe.children.every((node) => node?.props?.className === 'missions-wb-row'), 'chaque rang est une ligne voisine')
 })

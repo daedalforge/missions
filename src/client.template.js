@@ -180,6 +180,12 @@ window.__ModuleLoader__.load({
     const CHECKLIST_INDEX_URL = 'missions/api/checklist-index'
     const BLOCKED_URL = 'missions/api/blocked'
     const PRIORITY_URL = 'missions/api/priority'
+    // A pin is this checkout's reading order, not a tracker field: the host
+    // writes `missions/pins.yml` and the list lifts the mission to the top.
+    const PIN_URL = 'missions/api/pin'
+    // The pushpin of a pinned row: a crossbar, a stem, the body, the point.
+    // The drawer's button draws its own, wider, from `ActionIcon`.
+    const PIN_MARK_PATH = 'M6 2h4M8 2v4M5.3 6h5.4l-1.1 3.4H6.4L5.3 6ZM8 9.4V14'
     // The one gesture that deletes a branch: it sends a key and the host owns
     // the proof, the refusals, and every writing command.
     const LOCAL_CLOSE_URL = 'missions/api/local-close'
@@ -780,6 +786,7 @@ window.__ModuleLoader__.load({
 .missions-action--danger-armed { border-color: transparent; background: var(--dsw-alias-label-danger, #b42318); color: #fff; }
 .missions-action--danger-armed:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 86%, #000); }
 .missions-action--armed { border-color: transparent; background: var(--dsw-alias-label-primary, #1f1f1f); color: #fff; }
+.missions-action--pinned { border-color: transparent; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.06)); color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-drawer-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-drawer-note--blocked { color: var(--dsw-alias-label-secondary, #5c534b); }
@@ -1006,18 +1013,14 @@ window.__ModuleLoader__.load({
 .missions-wb-actions-head { display: block; padding: 6px 8px 3px 10px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .missions-wb-action { display: flex; align-items: center; width: calc(100% - 12px); margin: 0 6px; height: 24px; padding: 0 8px; border: none; border-radius: 5px; background: none; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 11.5px; text-align: left; cursor: pointer; }
 .missions-wb-action:hover, .missions-wb-action[aria-selected="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05)); }
-.missions-tree-epic { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 5px; color: var(--dsw-alias-label-secondary, #4a4a4a); cursor: pointer; }
-.missions-tree-epic[data-selected="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.06)); color: var(--dsw-alias-label-primary, #1f1f1f); }
-.missions-tree-caret { flex: none; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 3px solid transparent; border-bottom: 3px solid transparent; opacity: .5; transform: rotate(90deg); }
-.missions-tree-epic-key { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 9.5px; }
-.missions-tree-epic-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.missions-tree-open { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .missions-tree-row { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; min-height: 38px; margin-left: 12px; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
 .missions-wb-row + .missions-wb-row > .missions-tree-row { border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
 .missions-tree-row:hover { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.04)); }
 .missions-tree-row[data-selected="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.07)); }
 .missions-tree-prio { flex: none; display: inline-flex; width: 14px; }
+.missions-tree-pin { flex: none; color: var(--dsw-alias-label-secondary, #4a4a4a); }
 .missions-tree-key { flex: none; width: 48px; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 9.5px; }
+.missions-tree-epic-ref { flex: none; width: 52px; overflow: hidden; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
 .missions-tree-title { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .missions-tree-blocked { flex: none; padding: 0 5px; border-radius: 999px; background: color-mix(in srgb, #cf222e 12%, transparent); color: #a40e26; font-size: 9px; font-weight: 600; }
 .missions-tree-age { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1064,12 +1067,11 @@ window.__ModuleLoader__.load({
 .missions-panel[data-skin="paper"] .missions-band-seg { border: 1px solid var(--skin-ink); border-radius: 3px; }
 .missions-panel[data-skin="paper"] .missions-band-meta { color: var(--skin-ink-3); font-family: var(--skin-mono); }
 .missions-panel[data-skin="paper"] .missions-band-blocked { background: var(--skin-danger-strong); color: var(--skin-page); }
-.missions-panel[data-skin="paper"] .missions-tree-epic:hover, .missions-panel[data-skin="paper"] .missions-tree-row:hover { background: color-mix(in srgb, var(--skin-accent) 14%, var(--skin-page)); }
-.missions-panel[data-skin="paper"] .missions-tree-epic[data-selected="true"], .missions-panel[data-skin="paper"] .missions-tree-row[data-selected="true"] { background: var(--skin-page-3); }
-.missions-panel[data-skin="paper"] .missions-tree-epic-name { color: var(--skin-ink); font-family: var(--skin-display); }
-.missions-panel[data-skin="paper"] .missions-tree-epic-key, .missions-panel[data-skin="paper"] .missions-tree-key { color: var(--skin-accent-strong); font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-tree-row:hover { background: color-mix(in srgb, var(--skin-accent) 14%, var(--skin-page)); }
+.missions-panel[data-skin="paper"] .missions-tree-row[data-selected="true"] { background: var(--skin-page-3); }
+.missions-panel[data-skin="paper"] .missions-tree-epic-ref, .missions-panel[data-skin="paper"] .missions-tree-key { color: var(--skin-accent-strong); font-family: var(--skin-mono); }
 .missions-panel[data-skin="paper"] .missions-tree-title { color: var(--skin-ink); }
-.missions-panel[data-skin="paper"] .missions-tree-age, .missions-panel[data-skin="paper"] .missions-tree-open, .missions-panel[data-skin="paper"] .missions-tree-anchor-count { color: var(--skin-ink-3); }
+.missions-panel[data-skin="paper"] .missions-tree-age, .missions-panel[data-skin="paper"] .missions-tree-anchor-count { color: var(--skin-ink-3); }
 .missions-panel[data-skin="paper"] .missions-tree-anchor { color: var(--skin-ink-2); }
 .missions-panel[data-skin="paper"] .missions-tree-anchor-mark { color: var(--skin-ink-3); }
 .missions-panel[data-skin="paper"] .missions-tree-blocked { background: var(--skin-danger-strong); color: var(--skin-page); }
@@ -2555,6 +2557,12 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       footer = null,
       renderRow = () => null,
       renderGroup = () => null,
+      // A flat list renders its rows straight under the tree, with no group
+      // header: the Missions tab is one list since the pins arrived.
+      flat = false,
+      // The order of the rows inside each group, applied after the match: a
+      // pinned mission stays first under a query too (D4).
+      orderRows = null,
     }) {
       const field = React.useRef(null)
       // The field is reachable from anywhere in the panel: the platform's own
@@ -2570,7 +2578,12 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         return () => document.removeEventListener('keydown', onShortcut)
       }, [])
 
-      const result = matchOutline(groups, query)
+      const matched = matchOutline(groups, query)
+      // The rows a query keeps are still ordered by their group's own order:
+      // the pins are lifted here, after the match, so the count never changes.
+      const result = orderRows === null
+        ? matched
+        : { ...matched, groups: matched.groups.map((group) => ({ ...group, rows: orderRows(group.rows) })) }
       const offered = matchActions(actions, query)
       const entries = outlineEntries(result, offered)
       const count = outlineCount(result, { esc: String(query ?? '').trim() !== '', actions: offered.length })
@@ -2671,29 +2684,41 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                           }, action.label)),
                         )
                       : null,
-                    result.groups.map((group) => h('div', { className: 'missions-wb-group', key: group.id === '' ? 'no-epic' : group.id },
-                      renderGroup({
-                        group,
-                        rowId: outlineDomId(`epic:${group.id}`),
-                        selected: current !== null && current.id === `epic:${group.id}`,
-                        onSelect: () => onCursor({ id: `epic:${group.id}`, kind: 'epic', group, anchors: [], hidden: 0 }),
-                      }),
-                      h('div', { className: 'missions-wb-rows', role: 'group', 'aria-label': group.label },
+                    result.groups.map((group) => {
+                      const key = group.id === '' ? 'no-epic' : group.id
+                      const rows = h('div', {
+                        className: flat ? 'missions-wb-rows missions-wb-rows--flat' : 'missions-wb-rows',
+                        role: 'group',
+                        'aria-label': group.label,
+                        key,
+                      },
                         group.rows.map((row) => {
-                          const key = row.row.key ?? row.row.id
-                          const entry = { id: `mission:${key}`, kind: 'mission', row: row.row, anchors: row.anchors, hidden: row.hidden }
-                          return h('div', { className: 'missions-wb-row', role: 'none', key },
+                          const missionKey = row.row.key ?? row.row.id
+                          const entry = { id: `mission:${missionKey}`, kind: 'mission', row: row.row, anchors: row.anchors, hidden: row.hidden }
+                          return h('div', { className: 'missions-wb-row', role: 'none', key: missionKey },
                             renderRow({
                               entry,
-                              rowId: outlineDomId(`mission:${key}`),
+                              rowId: outlineDomId(`mission:${missionKey}`),
                               selected: current !== null && current.id === entry.id,
                               onSelect: () => onCursor(entry),
                               onOpen: () => open(entry),
                             }),
                           )
                         }),
-                      ),
-                    )),
+                      )
+                      // A flat list has no group to announce: no header row, no
+                      // epic entry in the keyboard's list.
+                      if (flat) return rows
+                      return h('div', { className: 'missions-wb-group', key: `${key}-group` },
+                        renderGroup({
+                          group,
+                          rowId: outlineDomId(`epic:${group.id}`),
+                          selected: current !== null && current.id === `epic:${group.id}`,
+                          onSelect: () => onCursor({ id: `epic:${group.id}`, kind: 'epic', group, anchors: [], hidden: 0 }),
+                        }),
+                        rows,
+                      )
+                    }),
                   ),
           footer,
         ),
@@ -2703,12 +2728,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
     /** One mission in the tree: key, title, age, and the lines that matched. */
     function MissionOutlineRow({ entry, rowId, selected, onSelect = () => {}, onOpen = () => {} }) {
       const mission = entry.row.mission ?? entry.row
+      const pinned = entry.row.pinned === true || mission.pinned === true
       const counts = entry.row.counts ?? { total: 0, checked: 0 }
       return h('div', {
         className: 'missions-tree-row',
         id: rowId,
         role: 'treeitem',
-        'aria-level': 2,
+        'aria-level': 1,
         'aria-selected': selected ? 'true' : 'false',
         'data-state': mission.state,
         'data-selected': selected ? 'true' : 'false',
@@ -2724,7 +2750,30 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       },
         h('span', { className: 'missions-tree-prio', 'aria-hidden': 'true' },
           h(PriorityMark, { priority: mission.priority })),
+        // A pin is a local preference, not a field: the mark says it without
+        // taking the click or the focus from the row.
+        pinned
+          ? h('svg', {
+              className: 'missions-tree-pin',
+              viewBox: '0 0 16 16',
+              width: 9,
+              height: 9,
+              role: 'img',
+              'aria-label': 'Pinned',
+              focusable: 'false',
+            }, h('path', {
+              d: PIN_MARK_PATH,
+              fill: 'none',
+              stroke: 'currentColor',
+              strokeWidth: 1.8,
+              strokeLinecap: 'round',
+              strokeLinejoin: 'round',
+            }))
+          : null,
         h('span', { className: 'missions-tree-key' }, mission.key),
+        // The epic is a reference cell, not a group: its key only, empty when
+        // the mission has none, so the column never disappears from a row.
+        h('span', { className: 'missions-tree-epic-ref' }, epicParts(mission.epic).key),
         h('span', { className: 'missions-tree-title' }, clipTitle(mission.title)),
         mission.blocked ? h('span', { className: 'missions-tree-blocked' }, 'blocked') : null,
         h('span', { className: 'missions-tree-age' }, relativeAge(mission.updatedAt)),
@@ -2740,33 +2789,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             )
           : null,
         entry.hidden > 0 ? h('div', { className: 'missions-tree-overflow' }, `+${entry.hidden}`) : null,
-      )
-    }
-
-    /** One epic in the tree: its key, its name, and how many it holds open. */
-    function EpicOutlineRow({ group, rowId, selected, onSelect = () => {} }) {
-      const showKey = group.id !== '' && group.id !== group.label
-      return h('div', {
-        className: 'missions-tree-epic',
-        id: rowId,
-        role: 'treeitem',
-        'aria-level': 1,
-        'aria-expanded': 'true',
-        'aria-selected': selected ? 'true' : 'false',
-        'data-selected': selected ? 'true' : 'false',
-        'data-matched': group.epic ? 'true' : 'false',
-        tabIndex: -1,
-        onClick: onSelect,
-        onKeyDown: (event) => {
-          if (event.key !== 'Enter' && event.key !== ' ') return
-          event.preventDefault()
-          onSelect()
-        },
-      },
-        h('span', { className: 'missions-tree-caret', 'aria-hidden': 'true' }),
-        showKey ? h('span', { className: 'missions-tree-epic-key' }, group.id) : null,
-        h('span', { className: 'missions-tree-epic-name' }, group.label),
-        h('span', { className: 'missions-tree-open' }, outlineOpen(group.open)),
       )
     }
 
@@ -2885,27 +2907,28 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       )
 
       if (tree) {
-        // The tree's rows: every filter but the query — the field has its own
+        // The list is flat: every filter but the query — the field has its own
         // matcher, and that matcher crosses the checklist, which is not a
-        // mission field. The epic's title names its group when the epic itself
-        // is in the list.
-        const titles = new Map(missions.map((mission) => [mission.key, mission.title]))
+        // mission field. The epic is a reference cell now, not a group.
         const scoped = sortMissions(filterMissions(missions, { ...filters, query: '', allowDone: false }), sort)
-        const rows = scoped.map((mission) => {
+        const rows = pinnedFirst(scoped.map((mission) => {
           const index = checklists === null ? null : checklists[mission.key] ?? null
-          const parts = epicParts(mission.epic)
           return {
             id: mission.key,
             key: mission.key,
             title: mission.title,
-            group: parts.key,
-            groupLabel: parts.key === '' ? 'No epic' : titles.get(parts.key) ?? (parts.title || parts.key),
+            group: '',
+            groupLabel: '',
+            pinned: mission.pinned === true,
             mission,
             lines: index?.lines ?? [],
             counts: index?.counts ?? { total: 0, checked: 0, partial: 0, open: 0 },
           }
-        })
-        const treeGroups = outlineGroups(rows)
+        }))
+        // One anonymous group: no label, so no epic ever answers as a result
+        // and no mission is context. The pins are lifted again by `orderRows`,
+        // under a query as well.
+        const treeGroups = [{ id: '', label: '', rows }]
 
         const trackQuery = (value) => {
           const text = String(value ?? '')
@@ -2920,9 +2943,9 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         const moveCursor = (entry) => {
           setCursor(entry.id)
           // An action is a gesture, not a place: it takes the cursor and
-          // leaves the rest of the tree where it was.
-          if (entry.kind === 'action') return
-          track('preview.kind', entry.kind === 'epic' ? 'epic' : 'mission')
+          // leaves the rest of the list where it was.
+          if (entry.kind !== 'mission') return
+          track('preview.kind', 'mission')
         }
 
         const activate = (entry) => {
@@ -2940,6 +2963,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           ),
           h(Workbench, {
             groups: treeGroups,
+            // The epic no longer heads a group: the rows sit straight under
+            // the tree, and a pin keeps them first under a query too.
+            flat: true,
+            orderRows: (entries) => pinnedFirst(entries, (entry) => entry.row?.pinned === true),
             query,
             onQuery,
             onQueryEnd: trackQuery,
@@ -2957,10 +2984,8 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             header: h(StateBand, { missions, value: filters.state, onChange: (value) => onFilter('state', value) }),
             footer: h('div', { className: 'missions-wb-foot' },
               h('span', null, `${scoped.length} open`),
-              h('span', { className: 'missions-wb-foot-note' }, 'Group by Epic'),
             ),
             renderRow: (props) => h(MissionOutlineRow, props),
-            renderGroup: (props) => h(EpicOutlineRow, props),
           }),
         )
       }
@@ -3066,7 +3091,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       )
     }
 
-    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, onPrioritySaved, onArchived, theme }) {
+    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, onPrioritySaved, onPinSaved, onArchived, theme }) {
       const [note, setNote] = React.useState(null)
       // A declared branch always wins; otherwise show the convention's name.
       // It stays a suggestion: only Save writes it to mission.yml.
@@ -3097,6 +3122,12 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const [priorityNow, setPriorityNow] = React.useState(mission.priority ?? null)
       const [writingPriority, setWritingPriority] = React.useState(false)
       const [priorityNote, setPriorityNote] = React.useState(null)
+      // A pin is a reading preference of this checkout, not a tracker field:
+      // the button shows the last answer and the write goes through the host,
+      // which owns `missions/pins.yml`.
+      const [pinnedNow, setPinnedNow] = React.useState(mission.pinned === true)
+      const [writingPin, setWritingPin] = React.useState(false)
+      const [pinNote, setPinNote] = React.useState(null)
       // Closing the local checkout deletes the branch: the first click only
       // arms it, the second one sends the key. The host re-checks everything.
       const [armedClose, setArmedClose] = React.useState(false)
@@ -3154,6 +3185,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         setPriorityNow(mission.priority ?? null)
         setPriorityNote(null)
       }, [mission.key, mission.priority])
+
+      // The pinned flag is the host's answer too: a refreshed list repaints
+      // the button, and another mission is another pin.
+      React.useEffect(() => {
+        setPinnedNow(mission.pinned === true)
+        setPinNote(null)
+      }, [mission.key, mission.pinned])
 
       // The archive guard follows the mission shown: a refreshed row must not
       // carry the previous mission's armed click.
@@ -3307,6 +3345,32 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           setPriorityNote({ error: true, text: `Priority failed: ${error?.message ?? error}` })
         } finally {
           setWritingPriority(false)
+        }
+      }
+
+      // The pin is local: one POST writes `pins.yml`, and the panel's list
+      // moves the mission to the top without a new tracker read.
+      const writePin = async () => {
+        if (writingPin) return
+        const next = !pinnedNow
+        track('mission.pin', next ? 'pin' : 'unpin')
+        setWritingPin(true)
+        setPinNote(null)
+        try {
+          const response = await fetch(PIN_URL, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ key: mission.key, pinned: next }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `pin failed (${response.status})`)
+          setPinnedNow(next)
+          setPinNote({ error: false, text: next ? 'Mission pinned at the top of the list.' : 'Mission unpinned.' })
+          onPinSaved?.({ key: mission.key, pinned: next })
+        } catch (error) {
+          setPinNote({ error: true, text: `Pin failed: ${error?.message ?? error}` })
+        } finally {
+          setWritingPin(false)
         }
       }
 
@@ -3694,6 +3758,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           note ? h('p', { className: 'missions-drawer-note' }, note) : null,
           closeNote ? h('p', { className: closeNote.error ? 'missions-drawer-note missions-drawer-note--error' : 'missions-drawer-note' }, closeNote.text) : null,
           archiveNote ? h('p', { className: archiveNote.error ? 'missions-drawer-note missions-drawer-note--error' : 'missions-drawer-note' }, archiveNote.text) : null,
+          pinNote ? h('p', { className: pinNote.error ? 'missions-drawer-note missions-drawer-note--error' : 'missions-drawer-note' }, pinNote.text) : null,
           doneNote
             ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note' }, doneNote)
             : blocker ? h('p', { id: 'missions-session-blocked', className: 'missions-drawer-note missions-drawer-note--blocked' }, `Session blocked: ${blocker}.`) : null,
@@ -3702,6 +3767,20 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             // Every action of the foot shares one row: icon only, its name in
             // `title` for the pointer and in `aria-label` for the screen reader.
             h('div', { className: 'missions-drawer-actions' },
+              // A pin is this checkout's reading order, not the tracker's: the
+              // button is offered in every state and says where it stands.
+              h('button', {
+                type: 'button',
+                className: pinnedNow
+                  ? 'missions-action missions-action--icon missions-action--pin missions-action--pinned'
+                  : 'missions-action missions-action--icon missions-action--pin',
+                onClick: writePin,
+                disabled: writingPin,
+                'aria-pressed': pinnedNow ? 'true' : 'false',
+                'data-pinned': pinnedNow ? 'true' : 'false',
+                title: writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
+                'aria-label': writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
+              }, h(ActionIcon, { name: 'pin' })),
               // Only the step that follows the merge may delete the branch: the
               // panel shows the gesture there and nowhere else, and the host
               // re-reads the state before touching anything. It opens the row so
@@ -4207,6 +4286,16 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           h('circle', { cx: 8, cy: 8, r: 6 }),
           h('path', { d: 'M6.1 6.1a1.9 1.9 0 1 1 2.8 1.7c-.6.4-1 .9-1 1.5' }),
           h('circle', { cx: 8, cy: 11.5, r: 0.8, fill: 'currentColor', stroke: 'none' }),
+        )
+      }
+      if (name === 'pin') {
+        // A pushpin: the row stays at the top of this list, nothing moves in
+        // the tracker.
+        return h('svg', common,
+          h('path', { d: 'M6 2h4' }),
+          h('path', { d: 'M8 2v4' }),
+          h('path', { d: 'M5.3 6h5.4l-1.1 3.4H6.4L5.3 6Z' }),
+          h('path', { d: 'M8 9.4V14' }),
         )
       }
       if (name === 'resolve') {
@@ -6614,6 +6703,26 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           previous && previous.key === saved.key ? { ...previous, priority: saved.priority } : previous
         ))
       }
+      // A pin touches one flag only: the tracker list's copy, the Done copy and
+      // the drawer all move together, without a new read.
+      const applyPin = (saved) => {
+        const pinned = saved.pinned === true
+        setView((previous) => ({
+          ...previous,
+          missions: previous.missions.map((mission) => (
+            mission.key === saved.key ? { ...mission, pinned } : mission
+          )),
+        }))
+        setDoneView((previous) => ({
+          ...previous,
+          missions: previous.missions.map((mission) => (
+            mission.key === saved.key ? { ...mission, pinned } : mission
+          )),
+        }))
+        setSelected((previous) => (
+          previous && previous.key === saved.key ? { ...previous, pinned } : previous
+        ))
+      }
       // Archiving takes the folders out of Done: the rows leave both copies at
       // once, the badge drops them without waiting, a drawer showing one of
       // them closes, and the closed read refreshes without asking the tracker
@@ -6831,7 +6940,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 
       const missionDrawer = selected === null
         ? null
-        : h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onArchived: applyArchive, theme })
+        : h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onPinSaved: applyPin, onArchived: applyArchive, theme })
 
       const createDrawer = tab === 'missions' && creating
         ? h(MissionCreateDrawer, { key: 'create', onClose: () => setCreating(false), onCreated })
