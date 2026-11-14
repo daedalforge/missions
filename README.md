@@ -76,6 +76,10 @@ identité :
 - `$DSH_HOME/missions/projects.yml` — la déclaration des dépôts et trackers du
   poste. Copier `missions/projects.example.yml` à cet emplacement, puis
   l'adapter. Le fichier est ignoré par git ; le panneau le lit au démarrage.
+- `$DSH_HOME/missions/pins.yml` — les missions épinglées de ce poste, écrites
+  par la punaise du volet. Le fichier est ignoré par git : une épingle range la
+  liste pour soi, elle ne se partage pas. Le panneau le crée au premier geste ;
+  absent, le fichier vaut « rien d'épinglé ».
 - `$DSH_HOME/playbook/` — les pages de méthode propres à une équipe ou à une
   entreprise. Le panneau les lit sur le poste ; elles ne partent pas avec le
   clone.
@@ -123,24 +127,30 @@ Depuis cet onglet, une mission close peut être **archivée** : son dossier pass
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
 modifié — la mission quitte Done et reste sur le disque.
 
-L'onglet **Missions** est un arbre à deux niveaux : l'épic, puis ses missions,
-à gauche de son volet droit. Au repos, la liste et le volet vide partagent la
-largeur : le volet annonce ce qu'une mission ouvrira, comme celui de Done. Ce
-volet est monté dans les cinq onglets du panneau — seul l'onglet qui le remplit
-change ; l'arbre, lui, garde sa grille à une colonne.
-Le champ de recherche **est** la barre de l'arbre — `⌘K` l'ouvre, `↑` `↓`
+L'onglet **Missions** est une liste plate : les missions ouvertes, une par
+ligne, à gauche de son volet droit. L'épic n'est plus un niveau de l'arbre mais
+une colonne : chaque ligne montre la clé courte de son épic (`MIS-2`), ou une
+cellule vide quand la mission n'en a pas. Le titre de l'épic n'est plus
+cherchable — une requête par nom d'épic ne déplie plus rien — mais la clé
+reste lisible en tête de ligne. La punaise d'une mission la fait passer devant
+toutes les autres, dans l'ordre du tri choisi : épingler ne réordonne pas les
+épinglées entre elles, et une requête garde ses épinglées en tête. Au repos, la
+liste et le volet vide partagent la largeur : le volet annonce ce qu'une
+mission ouvrira, comme celui de Done. Ce volet est monté dans les cinq onglets
+du panneau — seul l'onglet qui le remplit change ; la liste, elle, garde sa
+grille à une colonne.
+Le champ de recherche **est** la barre de la liste — `⌘K` l'ouvre, `↑` `↓`
 promènent le surlignage, `Entrée` ouvre la fiche, `Échap` referme le volet puis
-vide la requête, sans quitter l'arbre. Les filtres (Type, Epic, Project, Priorité,
+vide la requête, sans quitter la liste. Les filtres (Type, Epic, Project, Priorité,
 Sort, Clear, Missing) vivent dans cette colonne, sous le champ et au-dessus de
 la bande d'états ; Type, Epic et Project s'ouvrent sur une liste de cases à
 cocher — cocher plusieurs valeurs les réunit en OU dans la dimension, les
 dimensions restant combinées en ET — et la barre du dessus ne garde que le
-libellé Outline et Refresh. Un même matcher répond sur trois familles : la clé (`206`
-trouve `MIS-206`), le titre, la ligne de checklist — une mission trouvée par sa
+libellé Outline et Refresh. Un même matcher répond sur la clé (`206`
+trouve `MIS-206`), le titre et la ligne de checklist — une mission trouvée par sa
 checklist montre au plus deux ancres puis `+N`, avec son compte
-`checklist 3 / 5`. Une requête peut aussi nommer un épic : la ligne d'épic
-affiche `4 open` et déplie ses missions. Le compte du champ
-nomme **une** famille (`1 of 12`, puis `1 epic`) : il n'est jamais additionné à
+`checklist 3 / 5`. Le compte du champ
+nomme **une** famille (`1 of 12`, `2 actions`) : il n'est jamais additionné à
 un compte de lot. La bande d'états remplace le select Statut et garde les
 comptes du portefeuille pendant toute requête. Un clic sur une ligne, ou
 `Entrée` sur la ligne surlignée, ouvre la fiche **dans le volet droit de
@@ -151,17 +161,19 @@ pas la place. `Échap` ne vide la requête qu'une fois le volet fermé. Déplace
 le surlignage ne change pas la fiche ouverte, et la sélection survit au
 changement d'onglet : revenir sur Missions rouvre la fiche,
 un volet fermé le reste. La fiche **lit et
-écrit** au même endroit — ses onglets, sa déclaration de branche, sa priorité
-et son blocage restent ses seuls gestes ; surligner une action de déclaration
-la laisse telle quelle. Une ligne de mission fait 38 px et un filet sépare deux
-missions voisines d'un même épic, jamais avant la première ni après la
-dernière ; la ligne d'épic garde ses 26 px. Sous 900 px, le volet garde la
+écrit** au même endroit — ses onglets, sa déclaration de branche, sa priorité,
+son blocage et sa punaise restent ses seuls gestes ; surligner une action de
+déclaration la laisse telle quelle. La punaise est le premier bouton du pied du
+volet : elle ne dépend ni de l'état ni de la déclaration de la mission, et son
+propre refus (un `pins.yml` cassé) laisse l'affichage en place en le disant. Une ligne de mission fait 38 px et un filet sépare deux
+missions voisines, jamais avant la première ni après la dernière. Sous 900 px, le volet garde la
 largeur de celui de Done (`max-width: 46 %`) et la liste prend le reste : rien
 ne déborde horizontalement. Les lignes de checklist viennent de
 `GET missions/api/checklist-index`, mémorisé trente secondes (`?refresh=1` le
 paie à nouveau) : une lecture disque par ouverture de panneau, pas une par
 frappe. Les gestes comptent `search.q` (palier de longueur), `search.family`,
-`preview.kind` et `mission.open` avec son `from` (`row`). **Done**
+`preview.kind` (`mission` seulement), `mission.open` avec son `from` (`row`) et
+`mission.pin` (`pin` ou `unpin`). **Done**
 garde le chemin cartes, inchangé.
 
 Le **Dashboard** ajoute deux sections à son périmètre. **Repositories**
