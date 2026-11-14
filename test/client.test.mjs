@@ -8043,3 +8043,347 @@ test('Informations rend la description en textarea et le versionnement en switch
   const switchLocal = findAll(local, 'button').find((node) => node.props.role === 'switch')
   assert.equal(switchLocal.props['aria-checked'], 'false', 'un local n’est pas coché versionné')
 })
+
+// ---------------------------------------------------------------------------
+// L'arbre de l'onglet Missions : douze missions, un épic et une checklist.
+// ---------------------------------------------------------------------------
+
+const ARBRE_EPIC = { ...MISSION, key: 'MIS-2', title: 'Workflows skeleton', type: 'epic', state: 'in-progress', epic: null }
+const ARBRE_LOT = ['MIS-201', 'MIS-202', 'MIS-203', 'MIS-204'].map((key, index) => ({
+  ...MISSION,
+  key,
+  title: `Lot step ${index + 1}`,
+  epic: 'MIS-2',
+  state: ['in-progress', 'in-review', 'ready', 'in-progress'][index],
+}))
+const ARBRE_CHECK = { ...MISSION, key: 'MIS-206', title: 'Tab restore after reload', epic: null, state: 'in-review' }
+const ARBRE_RESTE = [
+  ['MIS-205', 'Mission list keyboard'],
+  ['MIS-207', 'Cold checkout'],
+  ['MIS-208', 'Usage ledger'],
+  ['MIS-209', 'Repository scan'],
+  ['MIS-210', 'Playbook reader'],
+  ['MIS-211', 'Card extraction'],
+].map(([key, title]) => ({ ...MISSION, key, title, epic: null }))
+const ARBRE_MISSIONS = [ARBRE_EPIC, ...ARBRE_LOT, ARBRE_CHECK, ...ARBRE_RESTE]
+const ARBRE_CHECKLISTS = {
+  'MIS-206': {
+    counts: { total: 5, checked: 3, partial: 0, open: 2 },
+    lines: [
+      { text: 'The session key still restores the tab', state: 'open' },
+      { text: 'A session timeout is documented', state: 'checked' },
+      { text: 'Session writes one journal line', state: 'checked' },
+      { text: 'Session store is shared', state: 'checked' },
+      { text: 'Keyboard shortcuts are tested', state: 'open' },
+    ],
+  },
+}
+
+/**
+ * Le panneau monté sur l'onglet Missions, avec ses dix-neuf états puis les deux
+ * hooks de la vue : le curseur et l'aperçu. `noeud` rend l'arbre non résolu,
+ * pour le rejouer avec une autre requête ou un autre curseur sans remonter le
+ * panneau ; `arbre` le résout.
+ */
+function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS } = {}) {
+  const view = { loading: false, missions: ARBRE_MISSIONS, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
+  const etats = [
+    EMPTY_BAR,
+    view,
+    'missions',
+    query,
+    { ...EMPTY_BAR.filters, ...filters },
+    null,
+    null,
+    'default',
+    null,
+    EMPTY_BAR,
+    vide,
+    '',
+    { ...EMPTY_BAR.filters, state: ['done'] },
+    null,
+    null,
+    'usage',
+    0,
+    { loading: true, data: null, error: null },
+    checklists,
+    null,
+    null,
+  ]
+  const harness = charger(undefined, etats, memorySession())
+  harness.api.apply(harness.ctx)
+  const tree = harness.registered.main({})
+  const vue = findAll(tree, 'MissionsView')[0]
+  assert.ok(vue, 'la vue Missions est montée')
+
+  const noeud = (patch = {}, vuePatch = {}) => {
+    const brut = vue.fn({ ...vue.props, ...vuePatch })
+    const wb = findAll(brut, 'Workbench')[0]
+    assert.ok(wb, "l'arbre est monté")
+    // Le curseur et l'aperçu sont des états : sans patch, le rendu part du
+    // repos, ce qui garde un test indépendant du rendu précédent.
+    return { ...wb, props: { ...wb.props, cursor: null, preview: null, ...patch } }
+  }
+  const arbre = (patch = {}, vuePatch = {}) => renderTree(noeud(patch, vuePatch))
+  return { ...harness, tree, vue, noeud, arbre }
+}
+
+test('l’onglet Missions monte un seul arbre générique, jamais une carte', () => {
+  // Un seul Workbench dans la source, monté une seule fois : le composant est
+  // générique, il n'a qu'un usage et pas de jumeau.
+  assert.equal((SOURCE.match(/function Workbench\(/g) ?? []).length, 1)
+  assert.equal((SOURCE.match(/h\(Workbench, \{/g) ?? []).length, 1)
+
+  const { arbre } = monterArbre()
+  const rendu = arbre()
+
+  // Aucune carte ne vient doubler l'arbre : le chemin cartes est celui de Done.
+  assert.deepEqual(findAll(rendu, 'MissionCard'), [])
+  assert.deepEqual(findAll(rendu, 'Card'), [])
+  const cartes = findAll(rendu, 'div').filter((node) => String(node.props.className ?? '').split(' ').includes('missions-card'))
+  assert.deepEqual(cartes, [])
+
+  // Deux niveaux : les épics ouvrent leurs missions, sans bascule de mode.
+  const epics = findAll(rendu, 'div').filter((node) => node.props.role === 'treeitem' && node.props['aria-level'] === 1)
+  const lignes = findAll(rendu, 'div').filter((node) => node.props.role === 'treeitem' && node.props['aria-level'] === 2)
+  assert.equal(epics.length, 2, 'un épic nommé et le groupe sans épic')
+  assert.equal(lignes.length, 12, 'les douze missions sont dans l’arbre')
+  assert.ok(epics.every((node) => node.props['aria-expanded'] === 'true'), 'un épic est toujours déplié')
+  assert.equal(findAll(rendu, 'button').filter((node) => node.props['data-view'] !== undefined).length, 0)
+})
+
+test('l’arbre ne lit que les groupes qu’on lui donne', () => {
+  const { noeud } = monterArbre()
+  const rang = { type: 'span', fn: null, props: { className: 'spec-row' }, children: ['A custom row'] }
+  const rendu = renderTree(noeud({
+    groups: [{
+      id: 'G1',
+      label: 'A foreign group',
+      epic: false,
+      open: 2,
+      rows: [{ row: { id: 'row-1', key: 'row-1', title: 'A foreign row' }, kind: 'mission', anchors: [], hidden: 0 }],
+    }],
+    query: '',
+    renderRow: () => rang,
+    renderPreview: () => ({ type: 'p', fn: null, props: {}, children: ['A foreign preview'] }),
+  }))
+
+  // Aucun champ de mission n'est lu : le groupe, la ligne et l'aperçu sont ceux
+  // du rendu fourni, tels quels.
+  assert.match(textOf(rendu), /A foreign group/)
+  assert.match(textOf(rendu), /A custom row/)
+  assert.match(textOf(rendu), /A foreign preview/)
+  assert.doesNotMatch(textOf(rendu), /MIS-/)
+})
+
+test('le champ est la barre de l’arbre et son compte nomme une famille, jamais un total', () => {
+  const { arbre } = monterArbre({ query: '206' })
+  const rendu = arbre()
+
+  const champ = findAll(rendu, 'input').find((node) => node.props.type === 'search')
+  assert.ok(champ, 'le champ de l’arbre est rendu')
+  const colonne = findAll(rendu, 'div').find((node) => node.props.className === 'missions-wb-column')
+  assert.ok(colonne, "la colonne de l'arbre est rendue")
+  assert.ok(findAll(colonne, 'input').includes(champ), 'le champ vit dans la colonne de l’arbre')
+
+  // La barre de l'ancienne liste ne double plus le champ.
+  assert.deepEqual(findAll(rendu, 'label').filter((node) => node.props.className === 'missions-search'), [])
+  assert.equal(textOf(findAll(rendu, 'span').find((node) => node.props.className === 'missions-wb-kbd')), '⌘K')
+
+  // Une famille, un compte : la clé répond, le compte dit « 1 of 12 ».
+  const compte = findAll(rendu, 'span').find((node) => node.props.className === 'missions-wb-count')
+  assert.equal(textOf(compte), '1 of 12 · esc')
+
+  // Échap vide la requête sans quitter l'arbre ni ouvrir quoi que ce soit.
+  const efface = []
+  const ouverts = []
+  const vide = arbre({ query: 'abc', onQuery: (value) => efface.push(value) }, { onSelect: (...args) => ouverts.push(args) })
+  vide.props.onKeyDown({ key: 'Escape', preventDefault() {} })
+  assert.deepEqual(efface, [''])
+  assert.deepEqual(ouverts, [])
+})
+
+test('une clé ou une ligne de checklist trouve sa mission, deux ancres au plus', () => {
+  const { arbre } = monterArbre()
+
+  // « 206 » : la clé sans son préfixe, et rien d'autre.
+  const cle = arbre({ query: '206' })
+  const lignesCle = findAll(cle, 'div').filter((node) => node.props.className === 'missions-tree-row')
+  assert.equal(lignesCle.length, 1)
+  assert.match(textOf(lignesCle[0]), /MIS-206/)
+
+  // « session » : la ligne de checklist porte la mission, avec son ancre et ses
+  // comptes. Trois lignes répondent, deux sont montrées, la troisième est « +1 ».
+  const session = arbre({ query: 'session' })
+  const ligne = findAll(session, 'div').find((node) => node.props.className === 'missions-tree-row')
+  assert.ok(ligne, 'la mission de la ligne trouvée est dans l’arbre')
+  assert.match(textOf(ligne), /MIS-206/)
+  const ancres = findAll(ligne, 'div').filter((node) => node.props.className === 'missions-tree-anchor')
+  assert.equal(ancres.length, 2)
+  assert.match(textOf(ancres[0]), /The session key still restores the tab/)
+  assert.match(textOf(ligne), /checklist 3 \/ 5/)
+  assert.match(textOf(findAll(ligne, 'div').find((node) => node.props.className === 'missions-tree-overflow')), /\+2/)
+})
+
+test('un épic trouvé déplie ses missions et garde son compte de lot', () => {
+  const { arbre } = monterArbre({ query: 'workflows' })
+  const rendu = arbre()
+
+  const groupe = findAll(rendu, 'div').find((node) => node.props.className === 'missions-wb-group' && textOf(node).includes('Workflows skeleton'))
+  assert.ok(groupe, 'le groupe de l’épic est rendu')
+  const epic = findAll(groupe, 'div').find((node) => node.props.className === 'missions-tree-epic')
+  assert.ok(epic, 'la ligne de l’épic est rendue')
+  assert.match(textOf(epic), /MIS-2/)
+  assert.match(textOf(epic), /4 open/)
+
+  const lot = findAll(groupe, 'div').filter((node) => node.props.className === 'missions-tree-row')
+  assert.equal(lot.length, 4, 'les quatre missions du lot sont dépliées')
+
+  // Le volet lit le lot : ses comptes, sa répartition et ses missions.
+  const volet = findAll(rendu, 'div').find((node) => node.props.className === 'missions-wb-preview-body')
+  assert.ok(volet, 'le volet est en mode épic')
+  assert.equal(volet.props['data-kind'], 'epic')
+  assert.match(textOf(volet), /Missions of the lot/)
+  assert.equal(findAll(volet, 'li').filter((node) => node.props.className === 'missions-wb-lot-row').length, 4)
+  assert.equal(findAll(volet, 'span').filter((node) => node.props.className === 'missions-wb-spread-seg').length, 3)
+})
+
+test('les flèches déplacent l’aperçu, Entrée ouvre, l’aperçu n’écrit rien', () => {
+  const { noeud, arbre } = monterArbre()
+  const deplacements = []
+  const noter = (entry) => deplacements.push(entry.id)
+
+  const repos = renderTree(noeud({ onCursor: noter }))
+  repos.props.onKeyDown({ key: 'ArrowDown', preventDefault() {} })
+  assert.deepEqual(deplacements, ['epic:MIS-2'])
+
+  const suivant = renderTree(noeud({ cursor: 'epic:MIS-2', onCursor: noter }))
+  suivant.props.onKeyDown({ key: 'ArrowDown', preventDefault() {} })
+  assert.equal(deplacements[1], 'mission:MIS-201')
+
+  const retour = renderTree(noeud({ cursor: 'mission:MIS-201', onCursor: noter }))
+  retour.props.onKeyDown({ key: 'ArrowUp', preventDefault() {} })
+  assert.equal(deplacements[2], 'epic:MIS-2')
+
+  // Le déplacement ne lit pas le tiroir : l'aperçu suit, rien ne s'ouvre.
+  const ouverts = []
+  const apercu = arbre({ cursor: 'mission:MIS-201' }, { onSelect: (...args) => ouverts.push(args) })
+  const volet = findAll(apercu, 'div').find((node) => node.props.className === 'missions-wb-preview-body')
+  assert.equal(volet.props['data-kind'], 'mission')
+  assert.match(textOf(volet), /Lot step 1/)
+  assert.deepEqual(ouverts, [], 'survoler n’ouvre pas')
+
+  // L'aperçu ne porte aucun champ : un seul bouton, celui qui ouvre le tiroir.
+  const aside = findAll(apercu, 'aside')[0]
+  assert.deepEqual(findAll(aside, 'input').concat(findAll(aside, 'select'), findAll(aside, 'textarea')), [])
+  assert.deepEqual(findAll(aside, 'button').map((node) => node.props.className), ['missions-wb-open'])
+
+  // Entrée, elle, ouvre la mission surlignée — et seule la ligne l'ouvre.
+  const entrees = []
+  const arbreEntree = arbre({ cursor: 'mission:MIS-201' }, { onSelect: (mission, from) => entrees.push([mission.key, from]) })
+  arbreEntree.props.onKeyDown({ key: 'Enter', preventDefault() {} })
+  assert.deepEqual(entrees, [['MIS-201', 'row']])
+
+  // Une requête qui ne retire pas la sélection la conserve.
+  const garde = arbre({ query: '20', cursor: 'mission:MIS-201' })
+  assert.match(textOf(findAll(garde, 'div').find((node) => node.props.className === 'missions-wb-preview-body')), /Lot step 1/)
+})
+
+test('les actions passent avant les missions et ne prennent jamais le volet', () => {
+  const { arbre, noeud } = monterArbre()
+
+  const declare = arbre({ query: 'declare' })
+  const actions = findAll(declare, 'button').filter((node) => node.props.className === 'missions-wb-action')
+  assert.deepEqual(actions.map(textOf), ['Declare a mission', 'Declare from a tracker key'])
+
+  // Elles sont rendues avant les missions, et aucune mission ne répond.
+  const blocs = findAll(declare, 'div').filter((node) => ['missions-wb-actions', 'missions-wb-group'].includes(node.props.className))
+  assert.equal(blocs[0].props.className, 'missions-wb-actions', 'les actions passent avant les groupes')
+  assert.equal(findAll(declare, 'div').filter((node) => node.props.className === 'missions-tree-row').length, 0)
+  assert.equal(
+    textOf(findAll(declare, 'span').find((node) => node.props.className === 'missions-wb-count')),
+    '0 of 12 · 2 actions · esc',
+  )
+
+  // Une action ne se montre que si elle correspond : la requête d'un épic n'en
+  // offre aucune, et le repos non plus.
+  assert.equal(findAll(arbre({ query: 'workflows' }), 'button').filter((node) => node.props.className === 'missions-wb-action').length, 0)
+  assert.equal(findAll(arbre(), 'button').filter((node) => node.props.className === 'missions-wb-action').length, 0)
+
+  // Surligner une action ne change pas le volet : il garde la dernière mission.
+  const captures = []
+  const surEpic = renderTree(noeud({ query: 'mission', cursor: 'epic:', onCursor: (entry) => captures.push(entry) }))
+  surEpic.props.onKeyDown({ key: 'ArrowDown', preventDefault() {} })
+  const missionEntry = captures[0]
+  assert.equal(missionEntry.kind, 'mission')
+
+  const surAction = arbre({ query: 'mission', cursor: 'action:declare-mission', preview: missionEntry })
+  const volet = findAll(surAction, 'div').find((node) => node.props.className === 'missions-wb-preview-body')
+  assert.equal(volet.props['data-kind'], 'mission')
+  assert.match(textOf(volet), /Mission list keyboard/)
+})
+
+test('la bande garde les comptes du portefeuille sous toute requête', () => {
+  const { arbre } = monterArbre()
+  const comptes = (rendu) => findAll(rendu, 'span')
+    .filter((node) => node.props.className === 'missions-band-n')
+    .map((node) => textOf(node))
+
+  const repos = arbre()
+  assert.ok(comptes(repos).length > 0, 'la bande porte un segment par état')
+  assert.deepEqual(comptes(arbre({ query: 'session' })), comptes(repos), 'la requête ne recalcule pas la bande')
+  assert.deepEqual(comptes(arbre({ query: 'workflows' })), comptes(repos))
+
+  // Un compte de mission n'est jamais additionné à un compte de lot.
+  const label = (rendu) => textOf(findAll(rendu, 'span').find((node) => node.props.className === 'missions-wb-count'))
+  assert.equal(label(arbre({ query: 'session' })), '1 of 12 · esc')
+  // La mission épic répond aussi par son titre : deux familles, deux comptes.
+  assert.equal(label(arbre({ query: 'workflows' })), '1 of 12 · 1 epic · esc')
+  assert.doesNotMatch(label(arbre({ query: 'workflows' })), /open/)
+})
+
+test('l’ouverture depuis l’aperçu compte le geste du volet', () => {
+  const spy = espionUsage()
+  try {
+    const { arbre } = monterArbre()
+    const entry = {
+      id: 'mission:MIS-206',
+      kind: 'mission',
+      row: {
+        id: 'MIS-206',
+        key: 'MIS-206',
+        title: ARBRE_CHECK.title,
+        mission: ARBRE_CHECK,
+        lines: ARBRE_CHECKLISTS['MIS-206'].lines,
+        counts: ARBRE_CHECKLISTS['MIS-206'].counts,
+      },
+      anchors: [],
+      hidden: 0,
+    }
+    const rendu = arbre({ preview: entry })
+    const bouton = findAll(rendu, 'button').find((node) => node.props.className === 'missions-wb-open')
+    assert.ok(bouton, 'le volet offre « Open mission »')
+    bouton.props.onClick()
+    spy.geste('mission.open', 'preview')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('l’arbre tient dans la largeur, le volet passe dessous et les titres sont ellipsés', () => {
+  const colonne = regle('.missions-wb-column')
+  assert.match(colonne, /min-width: 0/)
+
+  // L'indentation de l'arbre est de 12 px, une ligne de titre ne se coupe pas.
+  assert.match(regle('.missions-tree-row'), /margin-left: 12px/)
+  const titre = regle('.missions-tree-title')
+  assert.match(titre, /text-overflow: ellipsis/)
+  assert.match(titre, /white-space: nowrap/)
+
+  // À 900 px, le volet passe sous l'arbre : une seule colonne.
+  assert.match(SOURCE, /@media \(max-width: 900px\) \{\s*\n\s*\.missions-workbench \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  // La peau papier reste lisible : le volet et l'arbre ont leurs règles.
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-wb-preview \{ background: var\(--skin-page-2\); \}/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-tree-epic-name \{/)
+})
