@@ -2684,6 +2684,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 
     /** One epic in the tree: its key, its name, and how many it holds open. */
     function EpicOutlineRow({ group, rowId, selected, onSelect = () => {} }) {
+      const showKey = group.id !== '' && group.id !== group.label
       return h('div', {
         className: 'missions-tree-epic',
         id: rowId,
@@ -2702,7 +2703,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         },
       },
         h('span', { className: 'missions-tree-caret', 'aria-hidden': 'true' }),
-        group.id ? h('span', { className: 'missions-tree-epic-key' }, group.id) : null,
+        showKey ? h('span', { className: 'missions-tree-epic-key' }, group.id) : null,
         h('span', { className: 'missions-tree-epic-name' }, group.label),
         h('span', { className: 'missions-tree-open' }, outlineOpen(group.open)),
       )
@@ -2821,12 +2822,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         const scoped = sortMissions(filterMissions(missions, { ...filters, query: '', allowDone: false }), sort)
         const rows = scoped.map((mission) => {
           const index = checklists === null ? null : checklists[mission.key] ?? null
+          const parts = epicParts(mission.epic)
           return {
             id: mission.key,
             key: mission.key,
             title: mission.title,
-            group: mission.epic ?? '',
-            groupLabel: mission.epic ? titles.get(mission.epic) ?? mission.epic : 'No epic',
+            group: parts.key,
+            groupLabel: parts.key === '' ? 'No epic' : titles.get(parts.key) ?? (parts.title || parts.key),
             mission,
             lines: index?.lines ?? [],
             counts: index?.counts ?? { total: 0, checked: 0, partial: 0, open: 0 },
