@@ -930,7 +930,8 @@ test('une carte de mission est un bouton qui se tape, sans état pressé', () =>
   const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
   api.apply(ctx)
   const list = findAll(registered.main({}), 'MissionsView')[0]
-  const tree = renderTree({ ...list, props: list.props })
+  // Le chemin cartes est celui de Done : l'onglet Missions, lui, passe par l'arbre.
+  const tree = renderTree({ ...list, props: { ...list.props, tree: false } })
   const carte = findAll(tree, 'article').find((node) => /missions-card--mission/.test(node.props.className ?? ''))
   assert.ok(carte, 'la carte de mission est rendue')
   assert.equal(carte.props.role, 'button')
@@ -984,7 +985,7 @@ test('les trois listes passent par la même carte', () => {
   const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
   api.apply(ctx)
   const list = findAll(registered.main({}), 'MissionsView')[0]
-  const mission = renderTree({ ...list, props: list.props })
+  const mission = renderTree({ ...list, props: { ...list.props, tree: false } })
   const missionCard = findAll(mission, 'article').find((node) => /missions-card--mission/.test(node.props.className ?? ''))
   assert.ok(missionCard, 'la liste des missions passe par Card')
 
@@ -1131,7 +1132,16 @@ test('un refresh garde la vue montée : le châssis et le loader, jamais un écr
   assert.equal(loader[0].props.role, 'status')
   const toolbar = findAll(tree, 'div').filter((node) => node.props.className === 'missions-toolbar')
   assert.equal(toolbar.length, 1)
-  assert.equal(findAll(toolbar[0], 'input').length, 1)
+  // Le champ n'est plus dans la barre : il est la première ligne de l'arbre,
+  // qui garde sa place pendant la lecture.
+  assert.equal(findAll(toolbar[0], 'input').length, 0)
+  const champ = findAll(tree, 'input').find((node) => node.props.className === 'missions-wb-input')
+  assert.ok(champ, 'le champ de l’arbre reste rendu pendant la lecture')
+  assert.equal(
+    findAll(tree, 'div').filter((node) => node.props.className === 'missions-loader').length,
+    1,
+    'le corps porte le loader, le champ reste',
+  )
 
   // Le bouton-icône est là, désactivé et annoncé occupé, mais sans texte : le
   // nom accessible porte tout le libellé.
@@ -2039,7 +2049,7 @@ test('le statut montre « 2 selected » quand le panneau en porte deux', () => {
 
   // Rejouer la vue avec une barre à deux états : la session ne peut pas porter
   // une barre à plusieurs valeurs au montage, la vue se rend donc seule.
-  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, filters }, children: [] })
+  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, tree: false, filters }, children: [] })
   const chip = (node) => findAll(node, 'button').find((button) => button.props.className === 'missions-select')
 
   const both = chip(rerender({ ...view.props.filters, state: ['ready', 'in-review'] }))
@@ -2065,7 +2075,7 @@ test('la priorité prend plusieurs valeurs et la barre les montre', () => {
   const view = findAll(registered.main({}), 'MissionsView')[0]
   assert.ok(view, 'le panneau doit rendre la liste')
 
-  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, filters }, children: [] })
+  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, tree: false, filters }, children: [] })
   const chip = (node) => findAll(node, 'button').find((button) => button.props.className === 'missions-select' && textOf(button).startsWith('Priority'))
 
   // Le lien du widget transporte deux niveaux : la barre les compte et reste
@@ -3055,6 +3065,8 @@ function repositoriesStates(view, repository = null, count = null) {
     0,
     // Le résumé du Dashboard : lu à l'ouverture de l'onglet, gardé en mémoire.
     { loading: true, data: null, error: null },
+    // L'index des checklists de l'arbre, lu à l'ouverture de l'onglet Missions.
+    null,
     view,
   ]
 }
@@ -6199,7 +6211,9 @@ function monterUsage(releve = USAGE_LOADED) {
       0,
       // Le dix-huitième est le résumé du Dashboard, lu à l'ouverture du sien.
       { loading: true, data: null, error: null },
-      // Le dix-neuvième est celui de `UsageTab`, consommé quand on la rend.
+      // L'index des checklists de l'arbre, avant celui de `UsageTab`.
+      null,
+      // Le vingtième est celui de `UsageTab`, consommé quand on la rend.
       { loading: false, usage: releve, error: null },
     ],
     memorySession({ 'missions.tab': 'usage' }),
@@ -6294,7 +6308,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(49\)/)
+  assert.match(texte, /Never used \(52\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -6310,7 +6324,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(52\)/)
+  assert.match(textOf(zero.inner), /Never used \(55\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -6372,8 +6386,14 @@ test('la recherche se compte quand on la quitte, pas à chaque frappe', () => {
     input.props.onChange({ target: { value: 'mis' } })
     assert.deepEqual(calls, [], 'aucun POST par frappe')
 
+    // Trois mesures, une par question : le geste, la longueur de la requête et
+    // la famille qu'elle a trouvée.
     input.props.onBlur({ target: { value: 'mis' } })
-    assert.deepEqual(calls, [{ url: 'missions/api/usage', body: { element: 'filter.search', detail: 'mis' } }])
+    assert.deepEqual(calls, [
+      { url: 'missions/api/usage', body: { element: 'filter.search', detail: 'mis' } },
+      { url: 'missions/api/usage', body: { element: 'search.q', detail: '2-3' } },
+      { url: 'missions/api/usage', body: { element: 'search.family', detail: 'mission' } },
+    ])
   } finally {
     globalThis.fetch = vraiFetch
   }
@@ -6397,8 +6417,10 @@ test('le montage et le tick de rafraîchissement ne comptent rien', async () => 
     for (const effect of effects) effect.fn()
     await new Promise((done) => setTimeout(done, 0))
     // Le montage lit la liste et les deux comptes de pastilles, et ne compte rien.
-    assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET', 'GET'], 'le montage lit la liste et les comptes, sans compter')
-    assert.deepEqual(calls.map((call) => call.url), ['missions/api/list', 'missions/api/done/count', 'missions/api/repositories/count'])
+    // L'onglet Missions lit en plus l'index des checklists de l'arbre : quatre
+    // lectures au montage, aucune n'est un geste compté.
+    assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET', 'GET', 'GET'], 'le montage lit la liste, les comptes et l’index, sans compter')
+    assert.deepEqual(calls.map((call) => call.url), ['missions/api/list', 'missions/api/done/count', 'missions/api/repositories/count', 'missions/api/checklist-index'])
 
     assert.ok(tick, 'le tick de 60 s est armé')
     calls.length = 0
@@ -6454,6 +6476,15 @@ function espionUsage() {
         detail === undefined ? { element } : { element, detail },
         `le corps de ${element} nomme le geste et son détail`,
       )
+      appels.length = 0
+    },
+    /** Un clic qui compte plusieurs mesures : la liste exacte, dans l'ordre. */
+    gestes(paires) {
+      const postes = this.postes()
+      assert.deepEqual(postes.map((poste) => poste.body.element), paires.map(([element]) => element))
+      paires.forEach(([element, detail], index) => {
+        assert.equal(postes[index].body.detail, detail, `le détail de ${element}`)
+      })
       appels.length = 0
     },
     /** Un clic que le relevé ne compte pas. */
@@ -6563,11 +6594,13 @@ test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
     select('Filter by sort').props.onChange({ target: { value: 'oldest' } })
     spy.geste('filter.sort', 'oldest')
 
-    // Les deux filtres à cases passent par leur menu, ouvert explicitement.
-    const etat = cliquerCaseFiltre(brut, queue, 'Status')
-    const optionEtat = findAll(etat.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
-    etat.caisse.props.onChange()
-    spy.geste('filter.state', optionEtat.props['data-state'])
+    // L'onglet Missions filtre par état par sa bande : un segment par état,
+    // jamais une somme — le clic envoie la liste ordonnée.
+    const bande = findAll(view, 'div').find((node) => node.props.className === 'missions-band')
+    assert.ok(bande, 'la bande d’états est rendue')
+    const segment = findAll(bande, 'button').find((node) => node.props['data-state'] === 'in-progress')
+    segment.props.onClick()
+    spy.geste('filter.state', 'in-progress')
 
     const priorite = cliquerCaseFiltre(brut, queue, 'Priority')
     const optionPriorite = findAll(priorite.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
@@ -6612,18 +6645,20 @@ test('thème, recherche, rafraîchissement, reprise et ouverture de mission comp
     const recherche = findAll(view, 'input').find((node) => node.props.type === 'search')
     recherche.props.onChange({ target: { value: 'mi' } })
     spy.aucunGeste('aucun POST par frappe')
+    // La requête se mesure en trois questions : le geste, sa longueur, la
+    // famille trouvée.
     recherche.props.onBlur({ target: { value: 'mis' } })
-    spy.geste('filter.search', 'mis')
+    spy.gestes([['filter.search', 'mis'], ['search.q', '2-3'], ['search.family', 'mission']])
 
     const rafraichir = findAll(view, 'button').find((node) => node.props['aria-label'] === 'Refresh')
     assert.ok(rafraichir, 'le bouton de rafraîchissement est rendu')
     await rafraichir.props.onClick()
     spy.geste('list.refresh', 'open')
 
-    const carte = findAll(view, 'article').find((node) => node.props.className === 'missions-card missions-card--mission')
-    assert.ok(carte, 'les cartes de mission sont rendues')
-    carte.props.onClick()
-    spy.geste('mission.open')
+    const ligne = findAll(view, 'div').find((node) => node.props.className === 'missions-tree-row')
+    assert.ok(ligne, 'les lignes de l’arbre sont rendues')
+    ligne.props.onClick()
+    spy.geste('preview.kind', 'mission')
   } finally {
     spy.restore()
   }
@@ -6686,6 +6721,8 @@ function monterVoletAvec(mission, etatsVolet = []) {
     0,
     // Le résumé du Dashboard, avant le volet comme dans le panneau.
     { loading: true, data: null, error: null },
+    // L'index des checklists de l'arbre, avant le volet comme dans le panneau.
+    null,
   ]
   const { api, ctx, registered, setters, queue } = charger(undefined, [...panneau, ...etatsVolet], memorySession())
   api.apply(ctx)
@@ -6909,7 +6946,7 @@ test('le dashboard compte l’ouverture d’une ligne et le « View all » de se
     const ligne = findAll(dash, 'button').find((node) => node.props.className === 'missions-row')
     assert.ok(ligne, 'une ligne de mission est rendue')
     ligne.props.onClick()
-    spy.geste('mission.open')
+    spy.geste('mission.open', 'row')
   } finally {
     spy.restore()
   }
