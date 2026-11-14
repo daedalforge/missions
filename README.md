@@ -77,10 +77,12 @@ affiche `4 open`, déplie ses missions et le volet lit le lot. Le compte du cham
 nomme **une** famille (`1 of 12`, puis `1 epic`) : il n'est jamais additionné à
 un compte de lot. La bande d'états remplace le select Statut et garde les
 comptes du portefeuille pendant toute requête. La moitié droite montre
-l'aperçu de l'entrée surlignée ; un seul geste (Entrée, clic ou « Open
-mission ») y monte la fiche de la mission, qui remplace l'aperçu sans replier
-l'arbre ni déplacer la colonne. Déplacer le surlignage ne change pas la fiche
-ouverte ; la fermer rend l'aperçu de l'entrée courante. La fiche **lit et
+l'aperçu de l'entrée surlignée ; `Entrée` sur une ligne, ou le bouton
+« Open mission » de l'aperçu, y monte la fiche de la mission, qui remplace
+l'aperçu sans replier l'arbre ni déplacer la colonne. Un clic sur une ligne ne
+fait que la surligner — l'aperçu montre la mission, la fiche ne s'ouvre pas.
+Déplacer le surlignage ne change pas la fiche ouverte ; la fermer rend l'aperçu
+de l'entrée courante. La fiche **lit et
 écrit** au même endroit — ses onglets, sa déclaration de branche, sa priorité
 et son blocage restent ses seuls gestes ; surligner une action de déclaration
 la laisse telle quelle. Une ligne de mission fait 38 px et un filet sépare deux

@@ -8395,7 +8395,7 @@ test('les flèches déplacent l’aperçu, Entrée ouvre, l’aperçu n’écrit
   assert.deepEqual(findAll(aside, 'input').concat(findAll(aside, 'select'), findAll(aside, 'textarea')), [])
   assert.deepEqual(findAll(aside, 'button').map((node) => node.props.className), ['missions-wb-open'])
 
-  // Entrée, elle, ouvre la mission surlignée — et seule la ligne l'ouvre.
+  // Entrée, elle, ouvre la mission surlignée ; l'aperçu reste une lecture.
   const entrees = []
   const arbreEntree = arbre({ cursor: 'mission:MIS-201' }, { onSelect: (mission, from) => entrees.push([mission.key, from]) })
   arbreEntree.props.onKeyDown({ key: 'Enter', preventDefault() {} })
@@ -8404,6 +8404,24 @@ test('les flèches déplacent l’aperçu, Entrée ouvre, l’aperçu n’écrit
   // Une requête qui ne retire pas la sélection la conserve.
   const garde = arbre({ query: '20', cursor: 'mission:MIS-201' })
   assert.match(textOf(findAll(garde, 'div').find((node) => node.props.className === 'missions-wb-preview-body')), /Lot step 1/)
+})
+
+test('un clic sur une ligne ne fait que la surligner, la fiche ne s’ouvre pas', () => {
+  // Given l'arbre monté, l'ouverture du panneau espionnée.
+  const { arbre, setters } = monterArbre()
+  const ouverts = []
+  const rendu = arbre({}, { onSelect: (...args) => ouverts.push(args) })
+  const ligne = findAll(rendu, 'div').find((node) => node.props.className === 'missions-tree-row' && textOf(node).includes('MIS-206'))
+  assert.ok(ligne, 'la ligne de la mission est rendue')
+
+  // When le clic tombe sur la ligne.
+  ligne.props.onClick()
+
+  // Then le curseur et l'aperçu la suivent, la fiche ne se monte pas : seuls
+  // Entrée et « Open mission » ouvrent, comme le dit le README.
+  assert.equal(setters[0], 'mission:MIS-206', 'le clic déplace le surlignage')
+  assert.equal(setters[1]?.kind, 'mission', 'le clic pose l’aperçu de la mission')
+  assert.deepEqual(ouverts, [], 'le clic ne monte pas la fiche')
 })
 
 test('les actions passent avant les missions et ne prennent jamais le volet', () => {
