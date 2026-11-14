@@ -8882,3 +8882,50 @@ test('un refus affiche son message, garde la saisie et n’ouvre aucun tiroir', 
     globalThis.fetch = vraiFetch
   }
 })
+
+test('une réponse de liste périmée ne retire pas la ligne créée', async () => {
+  const vraiFetch = globalThis.fetch
+  let liberer = null
+  const retenue = new Promise((resolve) => { liberer = resolve })
+  let lectures = 0
+  globalThis.fetch = async (url, init = {}) => {
+    const cible = String(url)
+    if (cible === 'missions/api/done/count') return { ok: true, json: async () => ({ count: 0, errors: [] }) }
+    if (cible === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 0 }) }
+    if (cible === 'missions/api/create') return { ok: true, status: 201, json: async () => CREATE_MISSION }
+    if (cible === 'missions/api/list' || cible === 'missions/api/list?refresh=1') {
+      lectures += 1
+      // La première lecture, celle du montage, reste en vol : elle répond la
+      // page d'avant la création quand le test la libère.
+      if (lectures === 1) {
+        await retenue
+        return { ok: true, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+      }
+      return { ok: true, json: async () => ({ missions: [CREATE_MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+    }
+    throw new Error(`appel inattendu : ${cible}`)
+  }
+  try {
+    // Given un panneau monté dont la lecture de liste est retenue
+    const { inner, setters, effects, created } = monterCreation({ title: 'Créer une mission' })
+    const montage = effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()'))
+    montage.fn()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.equal(lectures, 1, 'la lecture de montage est en vol')
+
+    // When la création répond, puis la liste rafraîchie porte la clé
+    findAll(inner, 'form')[0].props.onSubmit({ preventDefault() {} })
+    await new Promise((done) => setTimeout(done, 10))
+    assert.deepEqual(created, [CREATE_MISSION])
+
+    // Then la réponse périmée arrive sans retirer la ligne, et le tiroir reste
+    // ouvert : la lecture neuve garde la main sur la vue.
+    liberer()
+    await new Promise((done) => setTimeout(done, 10))
+    const vue = vuesPubliees(setters, vueSansReponse()).at(-1)
+    assert.deepEqual(vue.missions.map((mission) => mission.key), ['MIS-42'])
+    assert.deepEqual(setters.at(-1), CREATE_MISSION, 'le tiroir reste ouvert sur la ligne créée')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})

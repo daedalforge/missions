@@ -6238,12 +6238,22 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // mount would pay the whole tracker round-trip on every return to
       // Missions. The server cache (60 s) is read instead; only the explicit
       // Refresh button and the 60 s tick ask for a fresh read.
+      //
+      // Each read takes a generation: a list answer that left before a newer
+      // read cannot overwrite the newer view when it lands late (a slow mount
+      // read coming back after a creation, for instance).
+      const readGeneration = React.useRef(0)
       const load = React.useCallback(({ silent = false, refresh = false } = {}) => {
         if (!silent) setView((previous) => ({ ...previous, loading: true }))
+        readGeneration.current += 1
+        const generation = readGeneration.current
         const url = refresh ? `${LIST_URL}?refresh=1` : LIST_URL
         return fetch(url, { headers: { accept: 'application/json' } })
           .then((response) => response.json())
           .then((data) => {
+            // A stale answer says nothing about the current list: the newer
+            // read owns the view, and the created row stays with it.
+            if (generation !== readGeneration.current) return data?.missions ?? []
             if (data?.error) throw new Error(data.error)
             const missions = data?.missions ?? []
             const errors = data?.errors ?? []
@@ -6260,6 +6270,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             return missions
           })
           .catch((error) => {
+            if (generation !== readGeneration.current) return []
             // A silent refresh that fails must not empty the list.
             setView((previous) => ({
               loading: false,
