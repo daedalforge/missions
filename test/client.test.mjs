@@ -9054,6 +9054,57 @@ test('une ligne dit ses points, et rien quand la mission n’en porte pas', () =
   assert.doesNotMatch(textOf(ligne('MIS-403')), /\d+ pt/)
 })
 
+test('la ligne lit ses points entre la priorité et la clé', () => {
+  // Given deux missions de l'onglet, l'une à cinq points, l'autre sans point.
+  const liste = [
+    { ...MISSION, key: 'MIS-431', title: 'Cinq points', points: 5 },
+    { ...MISSION, key: 'MIS-432', title: 'Sans point', points: null },
+  ]
+  const { arbre } = monterArbre({ missions: liste })
+
+  // When la liste plate est rendue.
+  const rendu = arbre()
+  const rangs = (cle) => findAll(rendu, 'div')
+    .find((node) => node.props.className === 'missions-tree-row' && textOf(node).includes(cle))
+    .children.map((node) => node?.props?.className)
+
+  // Then les points se lisent entre la priorité et la clé, dans l'ordre où la
+  // liste se trie.
+  const avecPoints = rangs('MIS-431')
+  assert.ok(avecPoints.indexOf('missions-tree-prio') < avecPoints.indexOf('missions-tree-points'), 'la priorité précède les points')
+  assert.ok(avecPoints.indexOf('missions-tree-points') < avecPoints.indexOf('missions-tree-key'), 'les points précèdent la clé')
+  assert.deepEqual(avecPoints.slice(0, 3), ['missions-tree-prio', 'missions-tree-points', 'missions-tree-key'])
+
+  // Then sans point, la clé suit la priorité : aucune cellule vide ne
+  // s'intercale.
+  const sansPoints = rangs('MIS-432')
+  assert.deepEqual(sansPoints.slice(0, 2), ['missions-tree-prio', 'missions-tree-key'])
+  assert.equal(sansPoints.includes('missions-tree-points'), false, 'aucun nœud de points sans point')
+})
+
+test('la ligne épinglée et bloquée garde l’ordre de ses cellules', () => {
+  // Given une mission de l'onglet, épinglée, bloquée et porteuse de points.
+  const liste = [{ ...MISSION, key: 'MIS-441', title: 'Épinglée', pinned: true, blocked: true, points: 3 }]
+  const { arbre } = monterArbre({ missions: liste })
+
+  // When la ligne est rendue.
+  const ligne = findAll(arbre(), 'div').find((node) => node.props.className === 'missions-tree-row')
+  assert.ok(ligne, 'la ligne est rendue')
+
+  // Then l'ordre des cellules reste priorité, punaise, points, clé, épic, titre,
+  // blocked, âge : la punaise reste une préférence locale, collée à la priorité.
+  assert.deepEqual(ligne.children.map((node) => node?.props?.className), [
+    'missions-tree-prio',
+    'missions-tree-pin',
+    'missions-tree-points',
+    'missions-tree-key',
+    'missions-tree-epic-ref',
+    'missions-tree-title',
+    'missions-tree-blocked',
+    'missions-tree-age',
+  ])
+})
+
 test('la priorité de la ligne parvient au lecteur d’écran', () => {
   // Given deux missions de l'onglet, l'une de priorité haute, l'autre sans
   // priorité connue.

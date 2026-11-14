@@ -135,8 +135,9 @@ cherchable — une requête par nom d'épic ne déplie plus rien — mais la cl�
 reste lisible en tête de ligne. Chaque ligne nomme sa priorité : le repère de
 trois barres, lu par le lecteur d'écran (« Priority: High », « No priority »
 sans niveau), garde sa forme. Elle porte aussi ses story points en texte
-(« 5 pts », « 1 pt », rien quand le tracker n'en donne pas). L'ordre de la
-liste est fixe : priorité décroissante, puis story points croissants, puis clé
+(« 5 pts », « 1 pt », rien quand le tracker n'en donne pas),
+entre le repère de priorité et la clé de la mission. L'ordre de la liste
+est fixe : priorité décroissante, puis story points croissants, puis clé
 de la mission. La punaise d'une mission la fait passer devant toutes les
 autres, sans changer cet ordre : épingler ne réordonne pas les épinglées entre
 elles, et une requête garde ses épinglées en tête. Au repos, la
