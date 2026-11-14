@@ -8217,6 +8217,46 @@ test('le champ est la barre de l’arbre et son compte nomme une famille, jamais
   assert.deepEqual(ouverts, [])
 })
 
+test('⌘K met le focus dans le champ, la touche seule ne prend rien', () => {
+  // Given: l'arbre monté, son effet de raccourci collecté.
+  const { arbre, effects } = monterArbre()
+  arbre()
+  const ecoutes = new Map()
+  const fauxDocument = {
+    addEventListener: (type, callback) => { ecoutes.set(type, callback) },
+    removeEventListener: (type) => { ecoutes.delete(type) },
+  }
+  const vraiDocument = globalThis.document
+  globalThis.document = fauxDocument
+  try {
+    const raccourcis = effects.filter((effect) => /addEventListener\('keydown'/.test(String(effect.fn)) && /toLowerCase\(\) !== 'k'/.test(String(effect.fn)))
+    assert.equal(raccourcis.length, 1, 'un seul effet arme ⌘K')
+
+    // When: l'effet s'arme, comme au montage du composant.
+    const retirer = raccourcis[0].fn()
+    assert.equal(typeof retirer, 'function', 'le raccourci rend son désabonnement')
+    const touche = ecoutes.get('keydown')
+    assert.ok(touche, 'le raccourci écoute le document')
+
+    // Then: avec un modificateur, la touche est prise à la page...
+    let empeche = 0
+    touche({ key: 'k', metaKey: true, preventDefault: () => { empeche += 1 } })
+    assert.equal(empeche, 1, '⌘K prend la touche')
+    touche({ key: 'K', ctrlKey: true, preventDefault: () => { empeche += 1 } })
+    assert.equal(empeche, 2, 'Ctrl+K prend la touche, quelle que soit la casse')
+    // ...sans modificateur ou sur une autre touche, elle reste à la page.
+    touche({ key: 'k', preventDefault: () => { empeche += 1 } })
+    assert.equal(empeche, 2, 'la touche seule ne prend rien')
+    touche({ key: 'j', metaKey: true, preventDefault: () => { empeche += 1 } })
+    assert.equal(empeche, 2, 'une autre touche modifiée ne prend rien')
+    retirer()
+    assert.equal(ecoutes.has('keydown'), false, 'le raccourci ne survit pas au composant')
+  } finally {
+    if (vraiDocument === undefined) delete globalThis.document
+    else globalThis.document = vraiDocument
+  }
+})
+
 test('la ligne active est annoncée par le champ focalisé, pas par l’arbre', () => {
   // Given: le curseur posé sur une mission, tel que le clavier le déplace.
   const { arbre } = monterArbre()
