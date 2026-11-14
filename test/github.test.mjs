@@ -427,7 +427,15 @@ test('create écrit le titre, l’état, la priorité, le type et le milestone',
     const target = String(url)
     calls.push({ target, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) : null })
     if (target.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
-    return response({ number: 42, html_url: 'https://github.com/daedalforge/missions/issues/42' }, { status: 201 })
+    return response({
+      number: 42,
+      title: 'Créer une mission',
+      labels: [{ name: 'to-refine' }, { name: 'priority:high' }],
+      milestone: { number: 7, title: 'Fondations' },
+      type: { name: 'Feature' },
+      html_url: 'https://github.com/daedalforge/missions/issues/42',
+      updated_at: '2026-11-14T10:00:00Z',
+    }, { status: 201 })
   }
 
   const created = await create(PROJECT, {
@@ -445,6 +453,26 @@ test('create écrit le titre, l’état, la priorité, le type et le milestone',
     reference: 'MIS',
     number: 42,
     url: 'https://github.com/daedalforge/missions/issues/42',
+    // Le 201 est la preuve de la ligne : le panneau la reçoit normalisée, pour
+    // la montrer dans la liste ouverte sans une seconde lecture du tracker.
+    mission: {
+      project: 'missions',
+      projectName: 'Workspace missions',
+      key: 'MIS-42',
+      number: 42,
+      title: 'Créer une mission',
+      state: 'to-refine',
+      stateConflict: [],
+      blocked: false,
+      type: 'story',
+      priority: 'high',
+      points: null,
+      repo: null,
+      translations: null,
+      epic: 'MIS-7 · Fondations',
+      url: 'https://github.com/daedalforge/missions/issues/42',
+      updatedAt: '2026-11-14T10:00:00Z',
+    },
   })
   assert.equal(calls.at(-1).method, 'POST')
   assert.equal(calls.at(-1).target, 'https://api.github.com/repos/daedalforge/missions/issues')
