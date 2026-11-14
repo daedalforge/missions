@@ -63,6 +63,25 @@ Depuis cet onglet, une mission close peut être **archivée** : son dossier pass
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
 modifié — la mission quitte Done et reste sur le disque.
 
+L'onglet **Missions** est un arbre à deux niveaux : l'épic, puis ses missions.
+Le champ de recherche **est** la barre de l'arbre — `⌘K` l'ouvre, `↑` `↓`
+promènent le surlignage, `Entrée` ouvre le tiroir, `Échap` vide la requête sans
+quitter l'arbre. Un même matcher répond sur trois familles : la clé (`206`
+trouve `MIS-206`), le titre, la ligne de checklist — une mission trouvée par sa
+checklist montre au plus deux ancres puis `+N`, avec son compte
+`checklist 3 / 5`. Une requête peut aussi nommer un épic : la ligne d'épic
+affiche `4 open`, déplie ses missions et le volet lit le lot. Le compte du champ
+nomme **une** famille (`1 of 12`, puis `1 epic`) : il n'est jamais additionné à
+un compte de lot. La bande d'états remplace le select Statut et garde les
+comptes du portefeuille pendant toute requête. Le volet **lit** — un seul
+geste y ouvre le tiroir, qui reste le seul lieu d'écriture ; surligner une
+action de déclaration le laisse tel quel. Les lignes de checklist viennent de
+`GET missions/api/checklist-index`, mémorisé trente secondes (`?refresh=1` le
+paie à nouveau) : une lecture disque par ouverture de panneau, pas une par
+frappe. Les gestes comptent `search.q` (palier de longueur), `search.family`,
+`preview.kind` et `mission.open` avec son `from` (`row` ou `preview`). **Done**
+garde le chemin cartes, inchangé.
+
 Le **Dashboard** ajoute deux sections à son périmètre. **Repositories**
 croise les missions ouvertes avec le scan des dépôts — la route
 `missions/api/repositories/summary`, mémorisée cinq minutes

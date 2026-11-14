@@ -170,6 +170,9 @@ window.__ModuleLoader__.load({
     // demand, behind `?done=1` on the list route above.
     const DONE_COUNT_URL = 'missions/api/done/count'
     const DECLARE_URL = 'missions/api/branches'
+    // The outline reads every declared checklist once, when the tab opens: a
+    // short cache on the host serves the second open, not the first keystroke.
+    const CHECKLIST_INDEX_URL = 'missions/api/checklist-index'
     const BLOCKED_URL = 'missions/api/blocked'
     const PRIORITY_URL = 'missions/api/priority'
     // The one gesture that deletes a branch: it sends a key and the host owns
@@ -955,6 +958,134 @@ window.__ModuleLoader__.load({
 .missions-usage-empty { display: grid; gap: 6px; padding: 26px 0; }
 .missions-usage-empty p { margin: 0; }
 .missions-usage-empty-hint { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; }
+/* The outline: a field, a two-level tree, a read-only preview. */
+.missions-tree-view { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.missions-toolbar-label { margin-right: auto; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.missions-workbench { display: grid; grid-template-columns: minmax(340px, 440px) minmax(0, 1fr); min-width: 0; flex: 1 1 auto; border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
+.missions-workbench[data-drawer="true"] { grid-template-columns: minmax(0, 1fr); }
+.missions-workbench[data-drawer="true"] > .missions-wb-preview { display: none; }
+.missions-wb-column { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
+.missions-wb-field { display: flex; align-items: center; gap: 7px; padding: 10px 14px 6px; }
+.missions-wb-kbd { flex: none; padding: 1px 5px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 4px; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 9.5px; line-height: 1.4; }
+.missions-wb-input { flex: 1 1 auto; min-width: 0; height: 26px; border: none; outline: none; background: none; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; }
+.missions-wb-input::placeholder { color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-wb-count { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.missions-wb-count[data-query="true"] { color: var(--dsw-alias-label-secondary, #4a4a4a); font-weight: 600; }
+.missions-band { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; padding: 0 14px 9px; }
+.missions-band-track { display: flex; flex: 1 1 180px; gap: 2px; min-width: 0; }
+.missions-band-seg { display: inline-flex; flex: 0 1 auto; align-items: center; justify-content: center; gap: 4px; min-width: 16px; height: 15px; padding: 0 4px; border: none; border-radius: 2.5px; color: #ffffff; font: inherit; font-size: 8.5px; font-weight: 650; overflow: hidden; cursor: pointer; }
+.missions-band-seg[data-state="to-refine"] { background: #8250df; }
+.missions-band-seg[data-state="ready"] { background: #1a7f37; }
+.missions-band-seg[data-state="in-progress"] { background: #bf8700; }
+.missions-band-seg[data-state="in-review"] { background: #0969da; }
+.missions-band-seg[data-state="ready-for-prod"] { background: #0e7c86; }
+.missions-band-seg[data-state="done"] { background: #57606a; }
+.missions-band-seg[data-active="false"] { opacity: .4; }
+.missions-band-seg[data-active="true"] { box-shadow: inset 0 0 0 1px rgba(255,255,255,.9), 0 0 0 1px rgba(0,0,0,.16); }
+.missions-band-name, .missions-band-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.missions-band-n { flex: none; opacity: .85; font-variant-numeric: tabular-nums; }
+.missions-band-meta { display: flex; align-items: center; gap: 8px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; }
+.missions-band-blocked { padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, #cf222e 12%, transparent); color: #a40e26; font-weight: 600; white-space: nowrap; }
+.missions-band-note { white-space: nowrap; }
+.missions-wb-tree { min-height: 140px; max-height: 62vh; overflow: auto; padding: 2px 6px 10px; }
+.missions-wb-group { display: flex; flex-direction: column; }
+.missions-wb-rows, .missions-wb-actions { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.missions-wb-row { min-width: 0; }
+.missions-wb-actions { padding: 2px 0 6px; }
+.missions-wb-actions-head { display: block; padding: 6px 8px 3px 10px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.missions-wb-action { display: flex; align-items: center; width: calc(100% - 12px); margin: 0 6px; height: 24px; padding: 0 8px; border: none; border-radius: 5px; background: none; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 11.5px; text-align: left; cursor: pointer; }
+.missions-wb-action:hover, .missions-wb-action[aria-selected="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05)); }
+.missions-tree-epic { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 5px; color: var(--dsw-alias-label-secondary, #4a4a4a); cursor: pointer; }
+.missions-tree-epic[data-selected="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.06)); color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-tree-caret { flex: none; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 3px solid transparent; border-bottom: 3px solid transparent; opacity: .5; transform: rotate(90deg); }
+.missions-tree-epic-key { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 9.5px; }
+.missions-tree-epic-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.missions-tree-open { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.missions-tree-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; min-height: 30px; margin-left: 12px; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+.missions-tree-row:hover { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.04)); }
+.missions-tree-row[data-selected="true"] { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.07)); }
+.missions-tree-prio { flex: none; display: inline-flex; width: 14px; }
+.missions-tree-key { flex: none; width: 48px; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 9.5px; }
+.missions-tree-title { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.missions-tree-blocked { flex: none; padding: 0 5px; border-radius: 999px; background: color-mix(in srgb, #cf222e 12%, transparent); color: #a40e26; font-size: 9px; font-weight: 600; }
+.missions-tree-age { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.missions-tree-anchors { flex: 1 1 100%; display: flex; flex-direction: column; gap: 1px; padding: 1px 0 2px 60px; }
+.missions-tree-anchor { display: flex; align-items: baseline; gap: 5px; min-width: 0; color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 10px; }
+.missions-tree-anchor-mark { flex: none; width: 9px; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-tree-anchor-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.missions-tree-anchor-count { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.missions-tree-overflow { flex: 1 1 100%; padding-left: 60px; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 10px; font-weight: 700; }
+.missions-wb-preview { min-width: 0; overflow: auto; padding: 16px 20px; }
+.missions-wb-preview-body { display: flex; flex-direction: column; gap: 10px; }
+.missions-wb-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.missions-wb-key { color: var(--dsw-alias-label-secondary, #4a4a4a); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 10.5px; font-weight: 650; }
+.missions-wb-state { padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, currentColor 10%, transparent); color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 9.5px; font-weight: 600; white-space: nowrap; }
+.missions-wb-state[data-state="to-refine"] { color: #8250df; }
+.missions-wb-state[data-state="ready"] { color: #1a7f37; }
+.missions-wb-state[data-state="in-progress"] { color: #8a5a00; }
+.missions-wb-state[data-state="in-review"] { color: #0969da; }
+.missions-wb-state[data-state="ready-for-prod"] { color: #0e7c86; }
+.missions-wb-state--lot { background: color-mix(in srgb, currentColor 8%, transparent); color: var(--dsw-alias-label-tertiary, #7a7168); font-variant-numeric: tabular-nums; }
+.missions-wb-project { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10px; }
+.missions-wb-title { margin: 0; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 15px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.missions-wb-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.missions-wb-tag { padding: 1px 6px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 4px; color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 9.5px; white-space: nowrap; }
+.missions-wb-blocked { margin: 0; padding: 6px 9px; border-left: 3px solid #cf222e; background: color-mix(in srgb, #cf222e 8%, transparent); color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 11px; }
+.missions-wb-section { display: flex; flex-direction: column; gap: 5px; padding-top: 7px; border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
+.missions-wb-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; }
+.missions-wb-section-head > span:first-child { flex: none; }
+.missions-wb-section-count { flex: none; font-size: 9.5px; font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; }
+.missions-wb-lines, .missions-wb-lot-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.missions-wb-line { display: flex; gap: 6px; min-width: 0; color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 11px; }
+.missions-wb-line::before { content: '☐'; flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-wb-line[data-state="checked"]::before { content: '✓'; color: #1a7f37; }
+.missions-wb-line[data-state="partial"]::before { content: '◐'; color: #8a5a00; }
+.missions-wb-line[data-state="heading"] { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10px; font-weight: 650; }
+.missions-wb-line[data-state="heading"]::before { content: ''; }
+.missions-wb-quiet { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; }
+.missions-wb-preview-foot { display: flex; gap: 8px; padding-top: 2px; }
+.missions-wb-open { height: 28px; padding: 0 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 7px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.missions-wb-open:hover { border-color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-wb-spread { display: flex; gap: 2px; height: 8px; overflow: hidden; border-radius: 3px; }
+.missions-wb-spread-seg { min-width: 3px; height: 100%; }
+.missions-wb-spread-seg[data-state="to-refine"] { background: #8250df; }
+.missions-wb-spread-seg[data-state="ready"] { background: #1a7f37; }
+.missions-wb-spread-seg[data-state="in-progress"] { background: #bf8700; }
+.missions-wb-spread-seg[data-state="in-review"] { background: #0969da; }
+.missions-wb-spread-seg[data-state="ready-for-prod"] { background: #0e7c86; }
+.missions-wb-spread-seg[data-state="done"] { background: #57606a; }
+.missions-wb-lot { display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 3px 6px; margin: 0; font-size: 10.5px; }
+.missions-wb-lot dt { color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-wb-lot dd { margin: 0; color: var(--dsw-alias-label-primary, #1f1f1f); font-variant-numeric: tabular-nums; }
+.missions-wb-lot-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 11px; }
+.missions-wb-lot-key { flex: none; width: 48px; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, Menlo, monospace); font-size: 9.5px; }
+.missions-wb-lot-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.missions-wb-lot-age { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; }
+.missions-wb-hint { display: grid; gap: 6px; align-content: start; color: var(--dsw-alias-label-tertiary, #7a7168); }
+.missions-wb-hint-title { margin: 0; color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 12px; font-weight: 600; }
+.missions-wb-hint-text { margin: 0; font-size: 11px; line-height: 1.5; }
+.missions-wb-hint-clear { justify-self: start; width: auto; height: 26px; padding: 0 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 7px; background: none; color: var(--dsw-alias-label-secondary, #4a4a4a); font: inherit; font-size: 11px; cursor: pointer; }
+.missions-wb-empty, .missions-wb-failed { margin: 0; padding: 12px 14px; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
+.missions-wb-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 14px; border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10px; font-variant-numeric: tabular-nums; }
+.missions-wb-foot-note { text-transform: uppercase; letter-spacing: .06em; }
+@media (max-width: 900px) {
+  .missions-workbench { grid-template-columns: minmax(0, 1fr); }
+  .missions-wb-column { border-right: none; border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
+  .missions-wb-preview { padding: 14px 16px; }
+}
+@media (max-width: 860px) {
+  .missions-tree-anchors, .missions-tree-overflow { padding-left: 12px; }
+}
+@media (max-width: 720px) {
+  .missions-wb-field { padding: 8px 10px 4px; }
+  .missions-band { padding: 0 10px 8px; }
+  .missions-band-note { display: none; }
+  .missions-wb-tree { padding: 2px 2px 8px; }
+  .missions-tree-row { margin-left: 8px; padding: 3px 6px; }
+  .missions-tree-key, .missions-wb-lot-key { width: 44px; }
+  .missions-wb-preview { padding: 12px 12px 16px; }
+  .missions-wb-title { font-size: 14px; }
+}
 @media (max-width: 860px) {
   .missions-repo-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) 78px 52px; }
   .missions-col-commit { display: none; }
@@ -969,6 +1100,48 @@ window.__ModuleLoader__.load({
   .wf-toolbar { align-items: flex-start; }
   .wf-list { grid-template-columns: minmax(0, 1fr); }
 }
+/* The outline dressed in paper: the same rows, ink and rules. */
+.missions-panel[data-skin="paper"] .missions-toolbar-label { color: var(--skin-ink-3); font-family: var(--skin-mono); font-size: 10px; letter-spacing: .1em; }
+.missions-panel[data-skin="paper"] .missions-workbench { border-top: 1.5px solid var(--skin-ink); }
+.missions-panel[data-skin="paper"] .missions-wb-column { border-right: 1.5px solid var(--skin-ink); }
+.missions-panel[data-skin="paper"] .missions-wb-kbd { border: 1.5px solid var(--skin-ink); border-radius: 5px; background: var(--skin-page-2); color: var(--skin-ink-2); }
+.missions-panel[data-skin="paper"] .missions-wb-input { color: var(--skin-ink); font-family: var(--skin-display); }
+.missions-panel[data-skin="paper"] .missions-wb-count { color: var(--skin-ink-3); font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-band-seg { border: 1px solid var(--skin-ink); border-radius: 3px; }
+.missions-panel[data-skin="paper"] .missions-band-meta { color: var(--skin-ink-3); font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-band-blocked { background: var(--skin-danger-strong); color: var(--skin-page); }
+.missions-panel[data-skin="paper"] .missions-tree-epic:hover, .missions-panel[data-skin="paper"] .missions-tree-row:hover { background: color-mix(in srgb, var(--skin-accent) 14%, var(--skin-page)); }
+.missions-panel[data-skin="paper"] .missions-tree-epic[data-selected="true"], .missions-panel[data-skin="paper"] .missions-tree-row[data-selected="true"] { background: var(--skin-page-3); }
+.missions-panel[data-skin="paper"] .missions-tree-epic-name { color: var(--skin-ink); font-family: var(--skin-display); }
+.missions-panel[data-skin="paper"] .missions-tree-epic-key, .missions-panel[data-skin="paper"] .missions-tree-key { color: var(--skin-accent-strong); font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-tree-title { color: var(--skin-ink); }
+.missions-panel[data-skin="paper"] .missions-tree-age, .missions-panel[data-skin="paper"] .missions-tree-open, .missions-panel[data-skin="paper"] .missions-tree-anchor-count { color: var(--skin-ink-3); }
+.missions-panel[data-skin="paper"] .missions-tree-anchor { color: var(--skin-ink-2); }
+.missions-panel[data-skin="paper"] .missions-tree-anchor-mark { color: var(--skin-ink-3); }
+.missions-panel[data-skin="paper"] .missions-tree-blocked { background: var(--skin-danger-strong); color: var(--skin-page); }
+.missions-panel[data-skin="paper"] .missions-tree-overflow { color: var(--skin-ink-3); }
+.missions-panel[data-skin="paper"] .missions-wb-action { color: var(--skin-ink); font-family: var(--skin-display); }
+.missions-panel[data-skin="paper"] .missions-wb-action:hover, .missions-panel[data-skin="paper"] .missions-wb-action[aria-selected="true"] { background: color-mix(in srgb, var(--skin-accent) 16%, var(--skin-page)); }
+.missions-panel[data-skin="paper"] .missions-wb-actions-head { color: var(--skin-ink-3); font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-wb-preview { background: var(--skin-page-2); }
+.missions-panel[data-skin="paper"] .missions-wb-key { color: var(--skin-accent-strong); font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-wb-project, .missions-panel[data-skin="paper"] .missions-wb-section-head { color: var(--skin-ink-3); }
+.missions-panel[data-skin="paper"] .missions-wb-title { color: var(--skin-ink); font-family: var(--skin-display); }
+.missions-panel[data-skin="paper"] .missions-wb-tag { border-color: var(--skin-line-strong); color: var(--skin-ink-2); }
+.missions-panel[data-skin="paper"] .missions-wb-blocked { border-left-color: var(--skin-danger-strong); background: color-mix(in srgb, var(--skin-danger) 12%, var(--skin-page-2)); color: var(--skin-ink); }
+.missions-panel[data-skin="paper"] .missions-wb-section { border-top: 1px dashed var(--skin-line); }
+.missions-panel[data-skin="paper"] .missions-wb-line { color: var(--skin-ink-2); }
+.missions-panel[data-skin="paper"] .missions-wb-line[data-state="checked"]::before { color: var(--skin-good-strong); }
+.missions-panel[data-skin="paper"] .missions-wb-line[data-state="heading"] { color: var(--skin-ink-3); font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-wb-open { border: 1.5px solid var(--skin-ink); border-radius: 7px; background: var(--skin-page-2); color: var(--skin-ink); box-shadow: 2px 2px 0 var(--skin-shadow); }
+.missions-panel[data-skin="paper"] .missions-wb-open:hover { background: var(--skin-page-3); }
+.missions-panel[data-skin="paper"] .missions-wb-foot { border-top: 1px solid var(--skin-line); color: var(--skin-ink-3); font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-wb-hint { color: var(--skin-ink-2); }
+.missions-panel[data-skin="paper"] .missions-wb-hint-title { color: var(--skin-ink); font-family: var(--skin-display); }
+.missions-panel[data-skin="paper"] .missions-wb-hint-clear { border: 1.5px solid var(--skin-ink); border-radius: 7px; color: var(--skin-ink-2); }
+.missions-panel[data-skin="paper"] .missions-wb-lot dd { color: var(--skin-ink); }
+.missions-panel[data-skin="paper"] .missions-wb-lot-key { color: var(--skin-accent-strong); font-family: var(--skin-mono); }
+
 `
 
     const THEME_CSS = `
@@ -2304,10 +2477,590 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       )
     }
 
-    function MissionsView({ missions, query, onQuery, onSearchEnd = () => {}, filters, onFilter, onClear, sort, onSort, filtered, groups, onSelect, theme, loading, failed, onRefresh, statusOptions, statusFixed = false, emptyText = 'No open missions assigned to you.', archiveAll = null }) {
+    /**
+     * The band: the portfolio's counts, one segment per open state.
+     *
+     * It *is* the tab's Status filter — the outline has no room for a select —
+     * and it reads the whole list, never the query's results, so a keystroke
+     * cannot move the numbers. A click toggles one state; the values keep the
+     * workflow's order, which is what the drawer and the rest of the panel read.
+     */
+    function StateBand({ missions = [], value = null, onChange = () => {} }) {
+      const options = stateOptions(missions, { allowDone: false })
+      if (options.length === 0) return null
+      const counts = new Map()
+      for (const mission of missions) counts.set(mission.state, (counts.get(mission.state) ?? 0) + 1)
+      const selected = Array.isArray(value) ? value : value ? [value] : []
+      const blocked = missions.filter((mission) => mission.blocked).length
+      const toggle = (state) => {
+        const next = selected.includes(state)
+          ? selected.filter((entry) => entry !== state)
+          : [...selected, state]
+        const ordered = stateOptions(missions, { allowDone: false }).filter((entry) => next.includes(entry))
+        onChange(ordered.length === 0 ? null : ordered)
+      }
+      return h('div', { className: 'missions-band' },
+        h('div', { className: 'missions-band-track', role: 'group', 'aria-label': 'Open missions by state' },
+          options.map((state) => h('button', {
+            type: 'button',
+            key: state,
+            className: 'missions-band-seg',
+            'data-state': state,
+            'data-active': selected.includes(state) ? 'true' : 'false',
+            'aria-pressed': selected.includes(state) ? 'true' : 'false',
+            style: { flexGrow: String(counts.get(state) ?? 1) },
+            title: `${STATE_LABELS[state] ?? state} — ${counts.get(state) ?? 0} open`,
+            onClick: () => toggle(state),
+          },
+            h('span', { className: 'missions-band-name' }, STATE_LABELS[state] ?? state),
+            h('span', { className: 'missions-band-n' }, String(counts.get(state) ?? 0)),
+          )),
+        ),
+        h('div', { className: 'missions-band-meta' },
+          blocked > 0 ? h('span', { className: 'missions-band-blocked' }, `${blocked} blocked`) : null,
+          h('span', { className: 'missions-band-note' }, 'counts stay global'),
+        ),
+      )
+    }
+
+    /** The DOM id an ARIA attribute can name: `mission:MIS-2` is not one. */
+    function outlineDomId(id) {
+      return `missions-wb-${String(id ?? '').replace(/[^a-zA-Z0-9_-]+/g, '-')}`
+    }
+
+    /**
+     * The workbench: one field, one two-level tree, one preview.
+     *
+     * It is generic on purpose: it receives groups of rows, a cursor, the
+     * actions and four renders, and reads no mission's fields. What is a
+     * result, in what order, and with which count belongs to `lib/view.js`; a
+     * second outline would receive its own groups and its own renders.
+     */
+    function Workbench({
+      drawer = false,
+      groups = [],
+      query = '',
+      onQuery = () => {},
+      onQueryEnd = () => {},
+      cursor = null,
+      onCursor = () => {},
+      onActivate = () => {},
+      onAction = () => {},
+      actions = [],
+      preview = null,
+      theme = 'default',
+      label = 'Missions outline',
+      placeholder = 'Search a key, a title, a checklist line…',
+      loading = false,
+      failed = false,
+      emptyText = 'No mission matches these filters.',
+      header = null,
+      footer = null,
+      renderRow = () => null,
+      renderGroup = () => null,
+      renderPreview = () => null,
+    }) {
+      const field = React.useRef(null)
+      // The field is reachable from anywhere in the panel: the platform's own
+      // shortcut opens it, and the browser keeps its find-in-page untouched.
+      React.useEffect(() => {
+        if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return undefined
+        const onShortcut = (event) => {
+          if (!(event.metaKey || event.ctrlKey) || String(event.key).toLowerCase() !== 'k') return
+          event.preventDefault()
+          field.current?.focus()
+        }
+        document.addEventListener('keydown', onShortcut)
+        return () => document.removeEventListener('keydown', onShortcut)
+      }, [])
+
+      const result = matchOutline(groups, query)
+      const offered = matchActions(actions, query)
+      const entries = outlineEntries(result, offered)
+      const count = outlineCount(result, { esc: String(query ?? '').trim() !== '', actions: offered.length })
+      const current = entries.find((entry) => entry.id === cursor) ?? null
+      // What the preview shows: the highlighted mission or epic; an action
+      // highlighted is a gesture, so the pane keeps the last mission it showed;
+      // and at rest, before any move, the first row is already readable.
+      // At rest, a lot the query named answers before a mission it contains,
+      // and a mission answers before the lot that only hosts it.
+      const resting = current === null && preview === null
+        ? entries.find((entry) => entry.kind === 'epic' && entry.group?.epic)
+          ?? entries.find((entry) => entry.kind === 'mission')
+          ?? entries.find((entry) => entry.kind !== 'action')
+          ?? null
+        : null
+      const shown = current !== null && current.kind !== 'action'
+        ? current
+        : preview !== null && entries.some((entry) => entry.id === preview.id)
+          ? preview
+          : resting
+
+      const move = (delta) => {
+        if (entries.length === 0) return
+        const at = current === null ? -1 : entries.indexOf(current)
+        const next = at < 0
+          ? (delta > 0 ? 0 : entries.length - 1)
+          : Math.max(0, Math.min(entries.length - 1, at + delta))
+        onCursor(entries[next])
+      }
+
+      // Arrow keys walk the visible rows, Enter opens the highlighted one and
+      // Escape empties the query without leaving the tree.
+      const onKeyDown = (event) => {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault()
+          move(1)
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault()
+          move(-1)
+        } else if (event.key === 'Escape') {
+          if (String(query ?? '') !== '') {
+            event.preventDefault()
+            onQuery('')
+            onQueryEnd('')
+          }
+        } else if (event.key === 'Enter' && current !== null) {
+          event.preventDefault()
+          if (current.kind === 'action') onAction(current.action, shown)
+          else onActivate(current)
+        }
+      }
+
+      return h('div', { className: 'missions-workbench', 'data-theme': theme, 'data-drawer': drawer ? 'true' : 'false', onKeyDown },
+        h('div', { className: 'missions-wb-column' },
+          h('div', { className: 'missions-wb-field' },
+            h('span', { className: 'missions-wb-kbd', 'aria-hidden': 'true' }, '⌘K'),
+            h('input', {
+              ref: field,
+              type: 'search',
+              className: 'missions-wb-input',
+              value: query,
+              placeholder,
+              spellCheck: false,
+              autoComplete: 'off',
+              'aria-label': label,
+              'aria-describedby': 'missions-wb-count',
+              'aria-controls': 'missions-outline',
+              'aria-activedescendant': current === null ? undefined : outlineDomId(current.id),
+              onChange: (event) => onQuery(event.target.value),
+              onBlur: (event) => onQueryEnd(event.target.value),
+            }),
+            h('span', {
+              className: 'missions-wb-count',
+              id: 'missions-wb-count',
+              'aria-live': 'polite',
+              'data-query': String(query ?? '') === '' ? 'false' : 'true',
+            }, count),
+          ),
+          header,
+          loading
+            ? h(PanelLoader, { theme })
+            : failed
+              ? h('p', { className: 'missions-wb-failed' }, 'The read failed. The tree keeps what it had.')
+              : entries.length === 0
+                ? h('p', { className: 'missions-wb-empty' }, emptyText)
+                : h('div', {
+                    className: 'missions-wb-tree',
+                    id: 'missions-outline',
+                    role: 'tree',
+                    'aria-label': `${label}: results`,
+                  },
+                    offered.length > 0
+                      ? h('div', { className: 'missions-wb-actions', role: 'group', 'aria-label': 'Actions' },
+                          h('span', { className: 'missions-wb-actions-head' }, 'Actions'),
+                          offered.map((action) => h('button', {
+                            type: 'button',
+                            key: action.id,
+                            id: outlineDomId(`action:${action.id}`),
+                            className: 'missions-wb-action',
+                            role: 'treeitem',
+                            'aria-level': 1,
+                            'aria-selected': current !== null && current.id === `action:${action.id}` ? 'true' : 'false',
+                            onClick: () => onAction(action, shown),
+                          }, action.label)),
+                        )
+                      : null,
+                    result.groups.map((group) => h('div', { className: 'missions-wb-group', key: group.id === '' ? 'no-epic' : group.id },
+                      renderGroup({
+                        group,
+                        rowId: outlineDomId(`epic:${group.id}`),
+                        selected: current !== null && current.id === `epic:${group.id}`,
+                        onSelect: () => onCursor({ id: `epic:${group.id}`, kind: 'epic', group, anchors: [], hidden: 0 }),
+                      }),
+                      h('div', { className: 'missions-wb-rows', role: 'group', 'aria-label': group.label },
+                        group.rows.map((entry) => {
+                          const key = entry.row.key ?? entry.row.id
+                          return h('div', { className: 'missions-wb-row', role: 'none', key },
+                            renderRow({
+                              entry,
+                              rowId: outlineDomId(`mission:${key}`),
+                              selected: current !== null && current.id === `mission:${key}`,
+                              onSelect: () => onCursor({ id: `mission:${key}`, kind: 'mission', row: entry.row, anchors: entry.anchors, hidden: entry.hidden }),
+                            }),
+                          )
+                        }),
+                      ),
+                    )),
+                  ),
+          footer,
+        ),
+        h('aside', { className: 'missions-wb-preview', 'aria-label': 'Preview', 'aria-live': 'polite' },
+          renderPreview(shown),
+        ),
+      )
+    }
+
+    /** One mission in the tree: key, title, age, and the lines that matched. */
+    function MissionOutlineRow({ entry, rowId, selected, onSelect = () => {} }) {
+      const mission = entry.row.mission ?? entry.row
+      const counts = entry.row.counts ?? { total: 0, checked: 0 }
+      return h('div', {
+        className: 'missions-tree-row',
+        id: rowId,
+        role: 'treeitem',
+        'aria-level': 2,
+        'aria-selected': selected ? 'true' : 'false',
+        'data-state': mission.state,
+        'data-selected': selected ? 'true' : 'false',
+        'data-match': entry.kind,
+        tabIndex: -1,
+        title: `${mission.key} — ${STATE_LABELS[mission.state] ?? mission.state}`,
+        onClick: onSelect,
+        onKeyDown: (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          onSelect()
+        },
+      },
+        h('span', { className: 'missions-tree-prio', 'aria-hidden': 'true' },
+          h(PriorityMark, { priority: mission.priority })),
+        h('span', { className: 'missions-tree-key' }, mission.key),
+        h('span', { className: 'missions-tree-title' }, clipTitle(mission.title)),
+        mission.blocked ? h('span', { className: 'missions-tree-blocked' }, 'blocked') : null,
+        h('span', { className: 'missions-tree-age' }, relativeAge(mission.updatedAt)),
+        entry.anchors.length > 0
+          ? h('div', { className: 'missions-tree-anchors' },
+              entry.anchors.map((line, index) => h('div', { className: 'missions-tree-anchor', key: index },
+                h('span', { className: 'missions-tree-anchor-mark', 'aria-hidden': 'true' }, line.state === 'checked' ? '✓' : '·'),
+                h('span', { className: 'missions-tree-anchor-text' }, line.text),
+                index === 0 && counts.total > 0
+                  ? h('span', { className: 'missions-tree-anchor-count' }, `checklist ${counts.checked} / ${counts.total}`)
+                  : null,
+              )),
+            )
+          : null,
+        entry.hidden > 0 ? h('div', { className: 'missions-tree-overflow' }, `+${entry.hidden}`) : null,
+      )
+    }
+
+    /** One epic in the tree: its key, its name, and how many it holds open. */
+    function EpicOutlineRow({ group, rowId, selected, onSelect = () => {} }) {
+      return h('div', {
+        className: 'missions-tree-epic',
+        id: rowId,
+        role: 'treeitem',
+        'aria-level': 1,
+        'aria-expanded': 'true',
+        'aria-selected': selected ? 'true' : 'false',
+        'data-selected': selected ? 'true' : 'false',
+        'data-matched': group.epic ? 'true' : 'false',
+        tabIndex: -1,
+        onClick: onSelect,
+        onKeyDown: (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          onSelect()
+        },
+      },
+        h('span', { className: 'missions-tree-caret', 'aria-hidden': 'true' }),
+        group.id ? h('span', { className: 'missions-tree-epic-key' }, group.id) : null,
+        h('span', { className: 'missions-tree-epic-name' }, group.label),
+        h('span', { className: 'missions-tree-open' }, outlineOpen(group.open)),
+      )
+    }
+
+    /**
+     * The preview: what the highlighted row is, read — never written.
+     *
+     * A mission shows the checklist the index carries; an epic shows the lot's
+     * counts, its spread and its missions. The only control opens the drawer
+     * that already owns every gesture.
+     */
+    function OutlinePreview({ entry, checklists, onOpen = () => {}, onClearQuery = () => {} }) {
+      if (!entry) {
+        return h('div', { className: 'missions-wb-hint' },
+          h('p', { className: 'missions-wb-hint-title' }, 'Nothing highlighted'),
+          h('p', { className: 'missions-wb-hint-text' },
+            'Type a key, a title or a word from a checklist. ⌘K focuses the field, ↑ ↓ moves the preview, Enter opens the row.'),
+          h('button', { type: 'button', className: 'missions-wb-hint-clear', onClick: onClearQuery }, 'Clear the query'),
+        )
+      }
+      if (entry.kind === 'epic') return h(EpicPreview, { group: entry.group })
+      const mission = entry.row.mission ?? entry.row
+      const lines = entry.row.lines ?? []
+      const counts = entry.row.counts ?? { total: 0, checked: 0 }
+      const tag = (key, text) => h('span', { className: 'missions-wb-tag', key }, text)
+      return h('div', { className: 'missions-wb-preview-body', 'data-kind': 'mission' },
+        h('div', { className: 'missions-wb-eyebrow' },
+          h('span', { className: 'missions-wb-key' }, mission.key),
+          h('span', { className: 'missions-wb-state', 'data-state': mission.state }, STATE_LABELS[mission.state] ?? mission.state),
+          mission.projectName ? h('span', { className: 'missions-wb-project' }, mission.projectName) : null,
+        ),
+        h('h3', { className: 'missions-wb-title' }, mission.title),
+        h('div', { className: 'missions-wb-tags' },
+          mission.epic ? tag('epic', mission.epic) : null,
+          mission.type ? tag('type', TYPE_LABELS[mission.type] ?? mission.type) : null,
+          mission.priority ? tag('priority', PRIORITY_LABELS[mission.priority] ?? mission.priority) : null,
+          mission.points ? tag('points', `${mission.points} pts`) : null,
+          mission.branch ? tag('branch', mission.branch) : null,
+          mission.updatedAt ? tag('age', relativeAge(mission.updatedAt)) : null,
+        ),
+        mission.blocked
+          ? h('p', { className: 'missions-wb-blocked' }, `Blocked — ${mission.blockedReason ?? 'waiting on someone'}`)
+          : null,
+        h('div', { className: 'missions-wb-section' },
+          h('div', { className: 'missions-wb-section-head' },
+            h('span', null, 'Checklist'),
+            counts.total > 0
+              ? h('span', { className: 'missions-wb-section-count' }, `checklist ${counts.checked} / ${counts.total}`)
+              : null,
+          ),
+          lines.length > 0
+            ? h('ul', { className: 'missions-wb-lines' },
+                lines.slice(0, 10).map((line, index) => h('li', {
+                  key: index,
+                  className: 'missions-wb-line',
+                  'data-state': line.state ?? 'heading',
+                }, line.text)),
+              )
+            : h('p', { className: 'missions-wb-quiet' },
+                checklists === null ? 'The checklist index is still loading.' : 'No checklist on disk for this mission.'),
+        ),
+        h('div', { className: 'missions-wb-preview-foot' },
+          h('button', { type: 'button', className: 'missions-wb-open', onClick: () => onOpen(mission) }, 'Open mission'),
+        ),
+      )
+    }
+
+    /** The preview of a lot: what the epic holds, split by state, never summed. */
+    function EpicPreview({ group }) {
+      const missions = group.rows.map((entry) => entry.row.mission ?? entry.row)
+      const counts = new Map()
+      for (const mission of missions) counts.set(mission.state, (counts.get(mission.state) ?? 0) + 1)
+      const states = stateOptions(missions, { allowDone: true })
+      const bugs = missions.filter((mission) => mission.type === 'bug').length
+      const points = missions.reduce((sum, mission) => sum + (Number(mission.points) || 0), 0)
+      return h('div', { className: 'missions-wb-preview-body', 'data-kind': 'epic' },
+        h('div', { className: 'missions-wb-eyebrow' },
+          h('span', { className: 'missions-wb-key' }, group.id || 'EPIC'),
+          h('span', { className: 'missions-wb-state missions-wb-state--lot' }, outlineOpen(missions.length)),
+        ),
+        h('h3', { className: 'missions-wb-title' }, group.label),
+        h('div', { className: 'missions-wb-spread' },
+          states.map((state) => h('span', {
+            key: state,
+            className: 'missions-wb-spread-seg',
+            'data-state': state,
+            style: { flexGrow: String(counts.get(state) ?? 1) },
+            title: `${STATE_LABELS[state] ?? state} — ${counts.get(state) ?? 0}`,
+          })),
+        ),
+        h('dl', { className: 'missions-wb-lot' },
+          h('dt', null, 'Missions'), h('dd', null, String(missions.length)),
+          h('dt', null, 'Bugs'), h('dd', null, String(bugs)),
+          h('dt', null, 'Points'), h('dd', null, String(points)),
+        ),
+        h('div', { className: 'missions-wb-section' },
+          h('div', { className: 'missions-wb-section-head' }, h('span', null, 'Missions of the lot')),
+          h('ul', { className: 'missions-wb-lot-list' },
+            missions.map((mission) => h('li', { key: mission.key, className: 'missions-wb-lot-row', 'data-state': mission.state },
+              h('span', { className: 'missions-wb-lot-key' }, mission.key),
+              h('span', { className: 'missions-wb-lot-title' }, clipTitle(mission.title, 48)),
+              h('span', { className: 'missions-wb-lot-age' }, relativeAge(mission.updatedAt)),
+            )),
+          ),
+        ),
+      )
+    }
+
+    function MissionsView({
+      drawer = false,
+      missions,
+      query,
+      onQuery,
+      onSearchEnd = () => {},
+      filters,
+      onFilter,
+      onClear,
+      sort,
+      onSort,
+      filtered,
+      groups,
+      onSelect,
+      theme,
+      loading,
+      failed,
+      onRefresh,
+      statusOptions,
+      statusFixed = false,
+      emptyText = 'No open missions assigned to you.',
+      archiveAll = null,
+      tree = false,
+      checklists = null,
+      actions = [],
+      onAction = () => {},
+    }) {
+      // The tree's one selection: the cursor names the highlighted row by id,
+      // and the preview keeps the last mission it showed even when the cursor
+      // moves onto an action. The cursor never follows the query by itself, so
+      // a query that still shows the row does not move it.
+      const [cursor, setCursor] = React.useState(null)
+      const [preview, setPreview] = React.useState(null)
+
       const epics = epicOptions(missions)
       const projects = projectOptions(missions)
       const active = hasActiveFilters(filters)
+
+      const refreshButton = failed
+        ? null
+        : h('button', {
+            type: 'button',
+            className: 'missions-icon-btn',
+            'aria-label': 'Refresh',
+            title: 'Refresh',
+            onClick: onRefresh,
+            disabled: loading,
+            'aria-busy': loading ? 'true' : 'false',
+          }, h(RefreshIcon, { theme }))
+      const archiveButton = archiveAll === null
+        ? null
+        : h(ArchiveBatchButton, {
+            keys: archiveAll.keys,
+            signature: archiveAll.signature,
+            onConfirm: archiveAll.onConfirm,
+          })
+      const filtersRow = h('div', { className: 'missions-filters' },
+        // The band is the tree's status filter: a select would say the same
+        // thing, wider, above a list that already shows every state.
+        tree
+          ? null
+          : h(StatusFilter, {
+              missions,
+              value: filters.state,
+              options: statusOptions,
+              allLabel: statusFixed ? null : 'All open states',
+              onChange: statusFixed ? () => {} : (value) => onFilter('state', value),
+            }),
+        h(FilterSelect, { label: 'Type', value: filters.type, options: TYPE_OPTIONS, onChange: (value) => onFilter('type', value) }),
+        h(FilterSelect, { label: 'Epic', value: filters.epic, options: epics, onChange: (value) => onFilter('epic', value) }),
+        h(FilterSelect, { label: 'Project', value: filters.project, options: projects, onChange: (value) => onFilter('project', value) }),
+        h(PriorityFilter, {
+          missions,
+          value: filters.priority,
+          onChange: (value) => onFilter('priority', value),
+        }),
+        h(FilterSelect, {
+          label: 'Sort',
+          value: sort,
+          options: SORT_OPTIONS,
+          allLabel: 'Default',
+          onChange: onSort,
+        }),
+        active ? h('button', { type: 'button', className: 'missions-clear', onClick: onClear }, 'Clear') : null,
+        h(Switch, {
+          label: 'Missing',
+          checked: filters.missing === 'any',
+          onChange: (checked) => onFilter('missing', checked ? 'any' : null),
+        }),
+      )
+
+      if (tree) {
+        // The tree's rows: every filter but the query — the field has its own
+        // matcher, and that matcher crosses the checklist, which is not a
+        // mission field. The epic's title names its group when the epic itself
+        // is in the list.
+        const titles = new Map(missions.map((mission) => [mission.key, mission.title]))
+        const scoped = sortMissions(filterMissions(missions, { ...filters, query: '', allowDone: false }), sort)
+        const rows = scoped.map((mission) => {
+          const index = checklists === null ? null : checklists[mission.key] ?? null
+          return {
+            id: mission.key,
+            key: mission.key,
+            title: mission.title,
+            group: mission.epic ?? '',
+            groupLabel: mission.epic ? titles.get(mission.epic) ?? mission.epic : 'No epic',
+            mission,
+            lines: index?.lines ?? [],
+            counts: index?.counts ?? { total: 0, checked: 0, partial: 0, open: 0 },
+          }
+        })
+        const treeGroups = outlineGroups(rows)
+
+        const trackQuery = (value) => {
+          const text = String(value ?? '')
+          onSearchEnd(text)
+          if (text.trim() === '') return
+          const result = matchOutline(treeGroups, text)
+          track('search.q', searchBucket(text))
+          track('search.family', outlineFamily(result, matchActions(actions, text).length))
+          if (outlineEntries(result, []).length === 0) track('preview.kind', 'none')
+        }
+
+        const moveCursor = (entry) => {
+          setCursor(entry.id)
+          // An action is a gesture, not a place: the preview stays where the
+          // last mission left it.
+          if (entry.kind === 'action') return
+          setPreview(entry)
+          track('preview.kind', entry.kind === 'epic' ? 'epic' : 'mission')
+        }
+
+        const activate = (entry) => {
+          if (entry.kind === 'mission') onSelect(entry.row.mission, 'row')
+        }
+
+        return h('div', { className: 'missions-tree-view' },
+          h('div', { className: 'missions-toolbar', 'data-tree': 'true' },
+            h('div', { className: 'missions-toolbar-top' },
+              h('span', { className: 'missions-toolbar-label' }, 'Outline'),
+              refreshButton,
+              archiveButton,
+            ),
+            filtersRow,
+          ),
+          h(Workbench, {
+            drawer,
+            groups: treeGroups,
+            query,
+            onQuery,
+            onQueryEnd: trackQuery,
+            cursor,
+            onCursor: moveCursor,
+            onActivate: activate,
+            onAction,
+            actions,
+            preview,
+            theme,
+            loading,
+            failed,
+            emptyText,
+            header: h(StateBand, { missions, value: filters.state, onChange: (value) => onFilter('state', value) }),
+            footer: h('div', { className: 'missions-wb-foot' },
+              h('span', null, `${scoped.length} open`),
+              h('span', { className: 'missions-wb-foot-note' }, 'Group by Epic'),
+            ),
+            renderRow: (props) => h(MissionOutlineRow, props),
+            renderGroup: (props) => h(EpicOutlineRow, props),
+            renderPreview: (entry) => h(OutlinePreview, {
+              entry,
+              checklists,
+              onOpen: (mission) => onSelect(mission, 'preview'),
+              onClearQuery: () => { onQuery(''); onSearchEnd('') },
+            }),
+          }),
+        )
+      }
 
       const toolbar = h('div', { className: 'missions-toolbar' },
         h('div', { className: 'missions-toolbar-top' },
@@ -2330,55 +3083,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               },
             }),
           ),
-          failed
-            ? null
-            : h('button', {
-                type: 'button',
-                className: 'missions-icon-btn',
-                'aria-label': 'Refresh',
-                title: 'Refresh',
-                onClick: onRefresh,
-                disabled: loading,
-                'aria-busy': loading ? 'true' : 'false',
-              }, h(RefreshIcon, { theme })),
-          archiveAll === null
-            ? null
-            : h(ArchiveBatchButton, {
-                keys: archiveAll.keys,
-                signature: archiveAll.signature,
-                onConfirm: archiveAll.onConfirm,
-              }),
+          refreshButton,
+          archiveButton,
         ),
-        h('div', { className: 'missions-filters' },
-          h(StatusFilter, {
-            missions,
-            value: filters.state,
-            options: statusOptions,
-            allLabel: statusFixed ? null : 'All open states',
-            onChange: statusFixed ? () => {} : (value) => onFilter('state', value),
-          }),
-          h(FilterSelect, { label: 'Type', value: filters.type, options: TYPE_OPTIONS, onChange: (value) => onFilter('type', value) }),
-          h(FilterSelect, { label: 'Epic', value: filters.epic, options: epics, onChange: (value) => onFilter('epic', value) }),
-          h(FilterSelect, { label: 'Project', value: filters.project, options: projects, onChange: (value) => onFilter('project', value) }),
-          h(PriorityFilter, {
-            missions,
-            value: filters.priority,
-            onChange: (value) => onFilter('priority', value),
-          }),
-          h(FilterSelect, {
-            label: 'Sort',
-            value: sort,
-            options: SORT_OPTIONS,
-            allLabel: 'Default',
-            onChange: onSort,
-          }),
-          active ? h('button', { type: 'button', className: 'missions-clear', onClick: onClear }, 'Clear') : null,
-          h(Switch, {
-            label: 'Missing',
-            checked: filters.missing === 'any',
-            onChange: (checked) => onFilter('missing', checked ? 'any' : null),
-          }),
-        ),
+        filtersRow,
       )
 
       if (loading) {
@@ -5381,6 +6089,11 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // digest reads the host's five-minute memory instead, so it is the only
       // read a minute of ticks can afford.
       const [summaryView, setSummaryView] = React.useState({ loading: true, data: null, error: null })
+      // The outline's checklist index: one read per opening of the Missions
+      // tab, keyed by mission. Last in the order, so the states above keep the
+      // session slot they restore. A failed read leaves `null` — the tree then
+      // says the index is not there instead of claiming an empty checklist.
+      const [checklistIndex, setChecklistIndex] = React.useState(null)
 
       // The view's declared perimeter: a tab carries its own source, Settings
       // reads whatever its open section reads — so the banner and the tick
@@ -5576,6 +6289,24 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         }, REFRESH_MS)
         return () => clearInterval(timer)
       }, [load, loadDone, tab, trackerTab, loadRepositoryCount, loadSummary])
+
+      // The outline reads the checklists when the Missions tab opens, not on
+      // every keystroke: the host keeps a 30 s cache, and the field matches
+      // in memory. Leaving the tab drops the read; coming back asks again.
+      React.useEffect(() => {
+        if (tab !== 'missions') return undefined
+        let live = true
+        fetch(CHECKLIST_INDEX_URL, { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => {
+            if (!live || !data || Array.isArray(data.errors) && data.errors.length > 0) return
+            const index = {}
+            for (const mission of data.missions ?? []) index[mission.key] = mission
+            setChecklistIndex(index)
+          })
+          .catch(() => { /* the tree shows no lines until the next opening */ })
+        return () => { live = false }
+      }, [tab])
 
       const { count, loading, missions, errors, workspaceId, workspaceRoot } = view
       // Done is a perimeter, not a tab looking at the open list: its rows, its
@@ -5779,9 +6510,28 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 
       // Opening a mission is one gesture wherever the row lives: the list, the
       // Done list and a dashboard widget all come through here.
-      const openMission = (mission) => {
-        track('mission.open')
+      // `from` names the gesture, not the row: the tree's Enter opens from a
+      // row, the preview's own button from the preview, and every other caller
+      // (a dashboard widget, the Done list) is a row.
+      const openMission = (mission, from = 'row') => {
+        track('mission.open', from)
         setSelected(mission)
+      }
+
+      // The outline offers two ways into the declaration the drawer already
+      // owns: the mission it is looking at, and the key the field types. Both
+      // open that drawer — no second form, no second route.
+      const outlineActions = [
+        { id: 'declare-mission', label: 'Declare a mission', keywords: ['declare', 'branch', 'base'] },
+        { id: 'declare-tracker', label: 'Declare from a tracker key', keywords: ['declare', 'tracker', 'key'] },
+      ]
+      const runOutlineAction = (action, entry) => {
+        const typed = String(query ?? '').trim()
+        const target = action.id === 'declare-tracker'
+          ? activeMissions.find((mission) => mission.key.toLowerCase() === typed.toLowerCase())
+            ?? activeMissions.find((mission) => outlineQuery(mission.key) === outlineQuery(typed))
+          : entry?.row?.mission ?? entry?.row ?? null
+        if (target && target.key) openMission(target, 'row')
       }
 
       // A view gesture counts the view it opens. Settings counts the section it
@@ -5955,6 +6705,11 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                   missions, query, onQuery, onSearchEnd, filters, onFilter, onClear, sort, onSort,
                   filtered, groups, onSelect: openMission, theme, loading, failed,
                   onRefresh: () => { track('list.refresh', 'open'); return load({ refresh: true }) },
+                  tree: true,
+                  drawer: Boolean(selected),
+                  checklists: checklistIndex,
+                  actions: outlineActions,
+                  onAction: runOutlineAction,
                 }),
           ),
           tab === 'settings'
@@ -5978,7 +6733,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Repository details' },
                   h('p', { className: 'missions-drawer-hint' }, 'Select a repository to see its remote, its upstream and its last commits.'),
                 )
-            : tab === 'dashboard'
+            : tab === 'dashboard' || (tab === 'missions' && !selected)
             ? null
             : selected
             ? h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onArchived: applyArchive, theme })

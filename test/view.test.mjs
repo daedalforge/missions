@@ -32,6 +32,15 @@ import {
   doneScope,
   EMPTY_FILTERS,
   epicOptions,
+  clipTitle,
+  matchActions,
+  matchOutline,
+  outlineCount,
+  outlineEntries,
+  outlineFamily,
+  outlineGroups,
+  outlineOpen,
+  OUTLINE_ANCHORS,
   parseChecklist,
   dashboardScope,
   executionBlocker,
@@ -85,6 +94,7 @@ import {
   writeRepositoryFilters,
   scanDuration,
   scanLabel,
+  searchBucket,
   sortMissions,
   sortRepositories,
   stateOptions,
@@ -1796,7 +1806,8 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'tab.dashboard', 'tab.missions', 'tab.done', 'tab.repositories', 'tab.workflows', 'tab.usage',
     'tab.playbook',
     'filter.search', 'filter.state', 'filter.type', 'filter.epic', 'filter.project', 'filter.priority',
-    'filter.sort', 'filter.missing', 'filter.clear', 'list.refresh', 'list.retry', 'mission.open',
+    'filter.sort', 'filter.missing', 'filter.clear', 'list.refresh', 'list.retry',
+    'search.q', 'search.family', 'preview.kind', 'mission.open',
     'dashboard.view-all', 'mission.archive.batch',
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
     'mission.block', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
@@ -2157,4 +2168,216 @@ test('endPoints d’un workflow de statuts énumère les six états une fois, sa
   const points = endPoints(STATUTS)
 
   assert.deepEqual(points, STATUTS.nodes.map((node) => ({ id: node.id, kind: 'etat' })))
+})
+
+// ---------------------------------------------------------------------------
+// L'arbre de l'onglet Missions : le matcher, ses familles, ses comptes.
+//
+// La fixture ne porte que ce que le composant générique exige — une clé, un
+// titre, des lignes de checklist — pour que ces tests restent vrais même si
+// l'onglet change de rendu : la logique pure est ce qui décide.
+// ---------------------------------------------------------------------------
+
+const OUTLINE_ROWS = [
+  {
+    id: 'MIS-206',
+    key: 'MIS-206',
+    title: 'Supprimer le panneau droit et son contenu',
+    group: 'MIS-4',
+    groupLabel: 'Missions v2',
+    lines: [
+      { text: 'Remove the right pane from the dashboard', state: 'checked' },
+      { text: 'Session key still restores the tab', state: 'checked' },
+      { text: 'Tests for the empty right pane', state: 'open' },
+    ],
+  },
+  {
+    id: 'MIS-207',
+    key: 'MIS-207',
+    title: 'Playbook : éditer une page sans la perdre',
+    group: 'MIS-4',
+    groupLabel: 'Missions v2',
+    lines: [{ text: 'Relire la page avant de la fermer', state: 'open' }],
+  },
+  {
+    id: 'MIS-214',
+    key: 'MIS-214',
+    title: 'Afficher les workflows non versionnés',
+    group: 'MIS-2',
+    groupLabel: 'Workflows v1',
+    lines: [],
+  },
+]
+
+const OUTLINE_GROUPS = outlineGroups(OUTLINE_ROWS)
+
+/** Un portefeuille de douze missions, pour les comptes. */
+function twelveGroups() {
+  const rows = Array.from({ length: 12 }, (_, index) => ({
+    id: `MIS-${200 + index}`,
+    key: `MIS-${200 + index}`,
+    title: `Mission ${index + 1}`,
+    group: 'MIS-4',
+    groupLabel: 'Missions v2',
+    lines: index === 0 ? [{ text: 'Session key still restores the tab', state: 'open' }] : [],
+  }))
+  return outlineGroups(rows)
+}
+
+const OUTLINE_ACTIONS = [
+  { id: 'declare-mission', label: 'Declare a mission', keywords: ['declare', 'new', 'create'] },
+  { id: 'declare-tracker', label: 'Declare from a tracker key', keywords: ['declare', 'tracker', 'key'] },
+  { id: 'refresh', label: 'Refresh the list', keywords: ['refresh', 'reload'] },
+]
+
+test('le matcher lit la clé, le titre, puis la checklist — dans cet ordre', () => {
+  const result = matchOutline(OUTLINE_GROUPS, 'workflows')
+
+  // « workflows » est dans un titre de mission et dans un libellé d'épic : les
+  // deux familles répondent, et la mission passe devant l'épic.
+  assert.deepEqual(result.matches.map((match) => match.kind), ['mission', 'epic'])
+  assert.equal(result.matches[0].id, 'MIS-214')
+  assert.equal(result.counts.mission, 1)
+  assert.equal(result.counts.epic, 1)
+})
+
+test('un nombre trouve la clé qu’il désigne, et pas une clé qui l’allonge', () => {
+  const byNumber = matchOutline(OUTLINE_GROUPS, '206')
+  assert.equal(byNumber.matches[0].kind, 'mission')
+  assert.equal(byNumber.matches[0].id, 'MIS-206')
+
+  // Le nombre est lu comme la clé, pas comme un préfixe : 2060 ne trouve rien.
+  const longer = matchOutline(OUTLINE_GROUPS, '2060')
+  assert.deepEqual(longer.matches, [])
+})
+
+test('« session » trouve une mission par sa checklist, avec sa ligne d’ancrage', () => {
+  const result = matchOutline(OUTLINE_GROUPS, 'session')
+
+  assert.equal(result.counts.mission, 0)
+  assert.equal(result.counts.checklist, 1)
+  const [match] = result.matches
+  assert.equal(match.kind, 'checklist')
+  assert.equal(match.id, 'MIS-206')
+  assert.match(match.anchors[0].text, /Session key/)
+  assert.equal(match.hidden, 0)
+  // L'arbre ne garde que la mission trouvée : les autres sont hors résultat.
+  assert.equal(result.groups.length, 1)
+  assert.deepEqual(result.groups[0].rows.map((entry) => entry.row.id), ['MIS-206'])
+})
+
+test('au plus deux lignes d’ancrage par mission, le reste en +N', () => {
+  const rows = [{
+    id: 'MIS-9',
+    key: 'MIS-9',
+    title: 'Trois fois le même mot',
+    group: 'MIS-2',
+    groupLabel: 'Workflows v1',
+    lines: [
+      { text: 'anchor un', state: 'open' },
+      { text: 'anchor deux', state: 'open' },
+      { text: 'anchor trois', state: 'open' },
+    ],
+  }]
+  const [match] = matchOutline(outlineGroups(rows), 'anchor').matches
+
+  assert.equal(match.anchors.length, OUTLINE_ANCHORS)
+  assert.equal(match.hidden, 1)
+})
+
+test('un épic est un résultat : il déplie ses missions et compte ses ouvertes', () => {
+  const rows = Array.from({ length: 4 }, (_, index) => ({
+    id: `MIS-2${index}`,
+    key: `MIS-2${index}`,
+    title: `Tâche ${index + 1}`,
+    group: 'MIS-2',
+    groupLabel: 'Workflows v1',
+    lines: [],
+  }))
+  const result = matchOutline(outlineGroups(rows), 'workflows')
+  const [group] = result.groups
+
+  assert.equal(result.counts.epic, 1)
+  assert.equal(group.epic, true)
+  assert.equal(group.rows.length, 4)
+  assert.equal(outlineOpen(group.open), '4 open')
+  // Quatre lignes de contexte, aucune mission trouvée par elle-même : le
+  // compte des missions reste à zéro, et n'est pas additionné à l'épic.
+  assert.equal(result.counts.mission, 0)
+  assert.equal(result.matches.at(-1).kind, 'epic')
+})
+
+test('le compte du champ dit une seule unité par famille, jamais un total', () => {
+  const rest = matchOutline(twelveGroups(), '')
+  assert.equal(outlineCount(rest), '12 missions')
+
+  const one = matchOutline(twelveGroups(), 'session')
+  assert.equal(outlineCount(one, { esc: true }), '1 of 12 · esc')
+
+  const checklist = matchOutline(twelveGroups(), 'session')
+  assert.equal(outlineFamily(checklist), 'checklist')
+
+  const epic = matchOutline(twelveGroups(), 'missions v2')
+  assert.equal(outlineCount(epic, { esc: true }), '0 of 12 · 1 epic · esc')
+
+  // Deux familles, deux libellés : jamais « 2 résultats ».
+  assert.ok(!outlineCount(epic, { esc: true }).startsWith('2 '))
+})
+
+test('« declare » ne rend aucune mission et deux actions, avant tout le reste', () => {
+  const result = matchOutline(OUTLINE_GROUPS, 'declare')
+  const actions = matchActions(OUTLINE_ACTIONS, 'declare')
+
+  assert.equal(actions.length, 2)
+  assert.deepEqual(actions.map((action) => action.id), ['declare-mission', 'declare-tracker'])
+  assert.equal(result.counts.mission, 0)
+  assert.equal(result.counts.epic, 0)
+  assert.deepEqual(result.groups, [])
+  assert.equal(outlineFamily(result, actions.length), 'action')
+  assert.equal(outlineCount(result, { esc: true, actions: actions.length }), '0 of 3 · 2 actions · esc')
+
+  // Au repos, aucune action : elles ne sont pas une barre d'outils.
+  assert.deepEqual(matchActions(OUTLINE_ACTIONS, ''), [])
+})
+
+test('les trois familles ne dépassent jamais trois actions', () => {
+  const crowded = [...OUTLINE_ACTIONS, { id: 'a4', label: 'Declare one more', keywords: ['declare'] }]
+  assert.equal(matchActions(crowded, 'declare').length, 3)
+})
+
+test('le clavier parcourt la même liste que l’œil : actions, épic, puis missions', () => {
+  const result = matchOutline(OUTLINE_GROUPS, '')
+  const actions = matchActions(OUTLINE_ACTIONS, 'declare')
+  const entries = outlineEntries(matchOutline(twelveGroups(), 'declare'), actions)
+
+  assert.deepEqual(entries.map((entry) => entry.kind), ['action', 'action'])
+  assert.equal(outlineEntries(result, []).slice(0, 2).map((entry) => entry.kind).join(','), 'epic,mission')
+
+  // La sélection est un identifiant stable : une requête qui garde la ligne
+  // garde l'identifiant, donc le volet.
+  const before = outlineEntries(result, []).find((entry) => entry.kind === 'mission')
+  const after = outlineEntries(matchOutline(OUTLINE_GROUPS, 'session'), []).find((entry) => entry.kind === 'mission')
+  assert.equal(before.id, 'mission:MIS-206')
+  assert.equal(after.id, 'mission:MIS-206')
+})
+
+test('une recherche est comptée par sa longueur, jamais par son texte', () => {
+  assert.equal(searchBucket(''), '0')
+  assert.equal(searchBucket('a'), '1')
+  assert.equal(searchBucket('mis'), '2-3')
+  assert.equal(searchBucket('declare'), '4-7')
+  assert.equal(searchBucket('  a long search term '), '8+')
+})
+
+test('un titre long se coupe sur un espace, pas au milieu d’un mot', () => {
+  const title = 'Attendre une décision de design avant de supprimer le panneau droit'
+  const clipped = clipTitle(title, 30)
+
+  assert.ok(clipped.endsWith('…'))
+  const kept = clipped.slice(0, -1)
+  assert.ok(title.startsWith(kept))
+  assert.ok(!kept.endsWith(' '))
+  assert.ok(title[kept.length] === ' ')
+  // Un titre qui tient ne bouge pas.
+  assert.equal(clipTitle('Court', 30), 'Court')
 })

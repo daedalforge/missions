@@ -619,6 +619,68 @@ test('GET checklist ne lève pas sur une clé inconnue et refuse une autre méth
   assert.equal(refused.headers.allow, 'GET')
 })
 
+test('GET checklist-index rend les lignes des missions déclarées, une fois', async (t) => {
+  const { dir, handler } = await mount(t)
+  for (const [key, folder] of [['MIS-70', 'MIS-70'], ['MIS-71', 'MIS-71']]) {
+    await mkdir(join(dir, 'missions', folder), { recursive: true })
+    await writeFile(join(dir, 'missions', folder, MISSION_FILE), `key: ${key}\nbranch: feat/${key.toLowerCase()}\nbase: main\n`)
+  }
+  await writeFile(join(dir, 'missions', 'MIS-70', 'checklist.md'), [
+    '# Checklist — MIS-70',
+    '',
+    '## Left',
+    '- [x] Les tests passent.',
+    '- [ ] Le README est à jour.',
+    '',
+  ].join('\n'))
+
+  const response = await call(handler, { path: '/missions/api/checklist-index' })
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body.errors, [])
+  assert.deepEqual(response.body.missions.map((mission) => mission.key), ['MIS-70', 'MIS-71'])
+
+  const [first, second] = response.body.missions
+  assert.equal(first.folder, 'MIS-70')
+  assert.equal(first.exists, true)
+  assert.deepEqual(first.counts, { total: 2, checked: 1, partial: 0, open: 1 })
+  assert.deepEqual(first.lines, [
+    { text: 'Checklist — MIS-70', state: null, heading: true },
+    { text: 'Left', state: null, heading: true },
+    { text: 'Les tests passent.', state: 'checked' },
+    { text: 'Le README est à jour.', state: 'open' },
+  ])
+
+  // Le dossier déclaré sans checklist reste dans l'index, en forme vide.
+  assert.equal(second.exists, false)
+  assert.deepEqual(second.lines, [])
+  assert.deepEqual(second.counts, { total: 0, checked: 0, partial: 0, open: 0 })
+})
+
+test('GET checklist-index tient un cache court et le paie sur refresh', async (t) => {
+  const { dir, handler } = await mount(t)
+  await mkdir(join(dir, 'missions', 'MIS-70'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'MIS-70', MISSION_FILE), 'key: MIS-70\nbranch: feat/mis-70\nbase: main\n')
+  await writeFile(join(dir, 'missions', 'MIS-70', 'checklist.md'), '- [ ] Un.\n')
+
+  const first = await call(handler, { path: '/missions/api/checklist-index' })
+  assert.equal(first.body.missions[0].counts.total, 1)
+
+  // Le fichier change entre deux frappes : le cache le sert encore, sans lire.
+  await writeFile(join(dir, 'missions', 'MIS-70', 'checklist.md'), '- [x] Un.\n- [ ] Deux.\n')
+  const cached = await call(handler, { path: '/missions/api/checklist-index' })
+  assert.equal(cached.body.missions[0].counts.total, 1)
+  assert.equal(cached.body.missions[0].counts.checked, 0)
+
+  // Le geste qui paie à nouveau.
+  const refreshed = await call(handler, { path: '/missions/api/checklist-index?refresh=1' })
+  assert.equal(refreshed.body.missions[0].counts.total, 2)
+  assert.equal(refreshed.body.missions[0].counts.checked, 1)
+
+  const refused = await call(handler, { method: 'POST', path: '/missions/api/checklist-index' })
+  assert.equal(refused.status, 405)
+  assert.equal(refused.headers.allow, 'GET')
+})
+
 test('une route inconnue répond 404, un appel non local répond 403', async (t) => {
   const { handler } = await mount(t)
 
