@@ -38,7 +38,6 @@ globalThis.document = {
 const EMPTY_BAR = {
   query: '',
   filters: { type: null, state: null, epic: null, priority: null, project: null, missing: null },
-  sort: null,
 }
 
 function charger(storage, initialStates = [], session = undefined) {
@@ -750,14 +749,12 @@ test('l’onglet Done rend sa liste, son vide et son statut figé', () => {
     '',
     { ...EMPTY_BAR.filters },
     null,
-    null,
     'default',
     null,
     EMPTY_BAR,
     { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' },
     '',
     { ...EMPTY_BAR.filters, state: ['done'] },
-    null,
   ]
 
   // Une liste mêlant ouverte et close : l’onglet Done ne garde que la close,
@@ -772,6 +769,14 @@ test('l’onglet Done rend sa liste, son vide et son statut figé', () => {
   assert.deepEqual(view.props.statusOptions, ['done'])
   assert.equal(view.props.statusFixed, true)
   assert.equal(view.props.emptyText, 'No done mission declared on this machine.')
+  // La barre de Done est la même, au select de tri près : l'ordre y est fixe
+  // aussi, et aucun select de tri n'y reste.
+  assert.equal(
+    findAll(view, 'select').filter((node) => /^Filter by /.test(node.props['aria-label'] ?? '')).length,
+    0,
+    'aucun select de tri dans la barre de Done',
+  )
+  assert.doesNotMatch(textOf(view), /Sort/)
 
   const text = textOf(renderTree(panel))
   assert.match(text, /mission close/)
@@ -2071,14 +2076,12 @@ test('un résumé en échec nomme l’échec au panneau, et le Retry force le sc
     '',
     { ...EMPTY_BAR.filters },
     null,
-    null,
     'default',
     null,
     EMPTY_BAR,
     { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null },
     '',
     { ...EMPTY_BAR.filters, state: ['done'] },
-    null,
     null,
     'usage',
     0,
@@ -2271,7 +2274,7 @@ test('un libellé long d’épic garde son texte complet en infobulle dans le me
   const missions = [{ ...DASH_MISSIONS[1], epic: longEpic }]
   const { api, ctx, registered, queue } = charger(
     undefined,
-    [EMPTY_BAR, dashboardView(missions), 'missions', '', EMPTY_BAR.filters, null],
+    [EMPTY_BAR, dashboardView(missions), 'missions', '', EMPTY_BAR.filters],
     memorySession(),
   )
   api.apply(ctx)
@@ -2301,7 +2304,6 @@ test('le menu Type coche les deux valeurs, en décocher une laisse l’autre', (
         'missions',
         '',
         { ...EMPTY_BAR.filters, type: ['bug', 'story'] },
-        null,
       ],
       memorySession(),
     )
@@ -2335,7 +2337,6 @@ test('cocher une valeur avant une autre range la liste dans l’ordre du panneau
         'missions',
         '',
         { ...EMPTY_BAR.filters, type: ['story'] },
-        null,
       ],
       memorySession(),
     )
@@ -2366,7 +2367,6 @@ test('décocher la dernière case vide la dimension, sans détail publié', () =
         'missions',
         '',
         { ...EMPTY_BAR.filters, type: ['bug'] },
-        null,
       ],
       memorySession(),
     )
@@ -2480,8 +2480,8 @@ test('le volet est monté dans les cinq onglets, même vide', () => {
   const onglets = ['dashboard', 'missions', 'done', 'repositories', 'settings']
   const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
   const etats = (onglet) => [
-    EMPTY_BAR, vide, onglet, '', { ...EMPTY_BAR.filters }, null, null, 'default', null,
-    EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, 0, 'usage', 0, { loading: true, data: null, error: null }, null,
+    EMPTY_BAR, vide, onglet, '', { ...EMPTY_BAR.filters }, null, 'default', null,
+    EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, 0, 'usage', 0, { loading: true, data: null, error: null }, null,
   ]
 
   for (const onglet of onglets) {
@@ -2577,8 +2577,8 @@ test('sous le Dashboard, missions-content porte le corps puis son volet vide', (
 
 test('une mission choisie ne monte pas sa fiche sous le Dashboard', () => {
   // Given la même mission choisie, sous le Dashboard puis sous Missions.
-  const surDashboard = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard', '', EMPTY_BAR.filters, null, MISSION])
-  const surMissions = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', EMPTY_BAR.filters, null, MISSION])
+  const surDashboard = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard', '', EMPTY_BAR.filters, MISSION])
+  const surMissions = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', EMPTY_BAR.filters, MISSION])
 
   // Then le Dashboard garde son volet vide : la fiche ne s'invite pas dans un
   // onglet qui ne la porte pas.
@@ -2608,7 +2608,7 @@ test('une mission choisie ne monte pas sa fiche sous le Dashboard', () => {
 test('fermer la fiche laisse le volet vide et la largeur au volet', () => {
   // Given le panneau monté sur une mission choisie, dont le volet porte la
   // fermeture que le panneau lui a passée.
-  const panneau = [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', EMPTY_BAR.filters, null, MISSION]
+  const panneau = [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', EMPTY_BAR.filters, MISSION]
   const { api, ctx, registered, queue, resetHooks } = charger(undefined, [...panneau])
   api.apply(ctx)
   const ouvert = registered.main({})
@@ -2699,23 +2699,44 @@ test('Settings passe ses sous-layouts à une colonne sous 560 px de panneau', ()
   assert.match(SOURCE, /@media \(max-width: 900px\) \{[\s\S]*?\.wf-layout/)
 })
 
-test('le panneau relit la barre de la session au montage', () => {
+test('une barre héritée garde sa recherche et ses filtres, sans son tri', () => {
   const reads = []
+  // Given une session d'avant MIS-18 : la barre y porte encore `sort`.
+  const barre = {
+    query: 'panneau', type: 'bug', state: 'ready', epic: 'Workspace',
+    priority: 'urgent', project: 'missions', missing: 'any', sort: 'points',
+  }
   const session = {
     getItem: (key) => {
       reads.push(key)
-      return JSON.stringify({
-        query: 'panneau', type: 'bug', state: 'ready', epic: 'Workspace',
-        priority: 'urgent', project: 'missions', missing: 'any', sort: 'points',
-      })
+      // `missions.tab` garde le nom de l'onglet tel quel ; la barre, son JSON.
+      if (key === 'missions.tab') return 'missions'
+      if (key === 'missions.filters') return JSON.stringify(barre)
+      return null
     },
     setItem: () => {},
     removeItem: () => {},
   }
+
+  // When le panneau monte sur cette session.
   const { api, ctx, registered } = charger(undefined, [], session)
   api.apply(ctx)
+  let tree = null
+  assert.doesNotThrow(() => { tree = registered.main({}) })
 
-  assert.doesNotThrow(() => registered.main({}))
+  // Then elle reprend la recherche et les filtres, et le tri qu'elle ignore ne
+  // casse rien : la barre ne rend plus de select de tri.
+  const vue = findAll(tree, 'MissionsView')[0]
+  assert.ok(vue, 'l’onglet Missions est monté')
+  assert.equal(vue.props.query, 'panneau')
+  assert.deepEqual(vue.props.filters, {
+    type: ['bug'], state: ['ready'], epic: ['Workspace'],
+    priority: ['urgent'], project: ['missions'], missing: 'any',
+  })
+  const select = findAll(vue, 'select').find((node) => /^Filter by /.test(node.props['aria-label'] ?? ''))
+  assert.equal(select, undefined, 'aucun select de tri n’est rendu')
+  assert.doesNotMatch(textOf(vue), /Filter by sort/)
+
   // Trois lectures au montage, dans cet ordre : la barre ouverte, l'onglet,
   // puis la barre de Done. Le montage reprend la session telle qu'elle a été
   // laissée, sans jamais mélanger les deux périmètres.
@@ -2745,13 +2766,17 @@ test('la barre est restaurée au montage et réécrite à chaque changement', ()
   assert.match(SOURCE, /const \[restored\] = React\.useState\(\(\) => filterBarState\(readFilterSnapshot\(filterStorage\(\)\)\)\)/)
   assert.match(SOURCE, /const \[query, setQuery\] = React\.useState\(restored\.query\)/)
   assert.match(SOURCE, /const \[filters, setFilters\] = React\.useState\(restored\.filters\)/)
-  assert.match(SOURCE, /const \[sort, setSort\] = React\.useState\(restored\.sort\)/)
+  // Le tri a quitté la barre : plus d'état de tri, et plus de tri dans la session.
+  assert.doesNotMatch(SOURCE, /const \[sort, setSort\]/)
+  assert.doesNotMatch(SOURCE, /sort: restored\.sort/)
   // Done a sa propre clé, relue avec son périmètre.
   assert.match(SOURCE, /const \[doneRestored\] = React\.useState\(\(\) => filterBarState\(readFilterSnapshot\(filterStorage\(\), DONE_FILTERS_KEY, \{ allowDone: true \}\), \{ allowDone: true \}\)\)/)
   assert.match(SOURCE, /const \[doneFilters, setDoneFilters\] = React\.useState\(\{ \.\.\.doneRestored\.filters, state: \['done'\] \}\)/)
-  assert.match(SOURCE, /writeFilterSnapshot\(filterStorage\(\), \{ query, filters, sort \}\)/)
-  assert.match(SOURCE, /writeFilterSnapshot\(filterStorage\(\), \{ query: doneQuery, filters: doneFilters, sort: doneSort \}, DONE_FILTERS_KEY, \{ allowDone: true \}\)/)
-  assert.match(SOURCE, /\}, \[query, filters, sort\]\)/)
+  assert.match(SOURCE, /writeFilterSnapshot\(filterStorage\(\), \{ query, filters \}\)/)
+  assert.doesNotMatch(SOURCE, /writeFilterSnapshot\(filterStorage\(\), \{ query, filters, sort \}\)/)
+  assert.match(SOURCE, /writeFilterSnapshot\(filterStorage\(\), \{ query: doneQuery, filters: doneFilters \}, DONE_FILTERS_KEY, \{ allowDone: true \}\)/)
+  assert.match(SOURCE, /\}, \[query, filters\]\)/)
+  assert.doesNotMatch(SOURCE, /\}, \[query, filters, sort\]\)/)
   // `Clear` rend un objet neuf : il vide les filtres sans partager l'état vide,
   // et garde le statut fixé de Done dans son propre périmètre.
   assert.match(SOURCE, /if \(doneTab\) setDoneFilters\(\{ \.\.\.EMPTY_FILTERS, state: \['done'\] \}\)/)
@@ -3344,7 +3369,7 @@ test('un blocage Jira ouvre la carte sur le ticket, jamais sur l’API', async (
 /** Le volet monté sur une mission choisie : le panneau le crée, on le rend seul. */
 function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overrides = {}) {
   const view = { loading: false, missions: [mission], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const panneau = [EMPTY_BAR, view, 'missions', '', EMPTY_BAR.filters, null, mission]
+  const panneau = [EMPTY_BAR, view, 'missions', '', EMPTY_BAR.filters, mission]
   const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, [...panneau])
   api.apply(ctx)
 
@@ -3669,16 +3694,14 @@ function repositoriesStates(view, repository = null, count = null) {
     '',
     { ...EMPTY_BAR.filters },
     null,
-    null,
     'default',
     repository,
     EMPTY_BAR,
     { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null },
     '',
     { ...EMPTY_BAR.filters, state: ['done'] },
-    null,
     count,
-    // La seizième état est la section de Settings, restaurée avec l'onglet.
+    // La quatorzième état est la section de Settings, restaurée avec l'onglet.
     'usage',
     // Le compteur de relecture de la liste Repositories, après une suppression.
     0,
@@ -3797,7 +3820,7 @@ test('l’icône d’un onglet se redessine quand le thème change', () => {
   const dessins = (theme) => {
     const { api, ctx, registered } = charger(
       undefined,
-      [EMPTY_BAR, vueSansReponse(), 'missions', '', { ...EMPTY_BAR.filters }, null, null, theme],
+      [EMPTY_BAR, vueSansReponse(), 'missions', '', { ...EMPTY_BAR.filters }, null, theme],
       memorySession(),
     )
     api.apply(ctx)
@@ -4621,14 +4644,12 @@ function doneCountStates(count, { tab = 'dashboard', missions = [], errors = [] 
     '',
     { ...EMPTY_BAR.filters },
     null,
-    null,
     'default',
     null,
     EMPTY_BAR,
     { loading: false, missions, errors, workspaceId: 'w', workspaceRoot: '/w', count },
     '',
     { ...EMPTY_BAR.filters, state: ['done'] },
-    null,
     null,
     'usage',
   ]
@@ -6823,7 +6844,6 @@ function monterUsage(releve = USAGE_LOADED, selected = null) {
       'settings',
       '',
       { ...EMPTY_BAR.filters },
-      null,
       selected,
       'default',
       null,
@@ -6831,14 +6851,13 @@ function monterUsage(releve = USAGE_LOADED, selected = null) {
       { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null },
       '',
       { ...EMPTY_BAR.filters, state: ['done'] },
-      null,
       // Le compte des dépôts de la pastille, lu au montage et gardé dans le panneau.
       null,
-      // Le seizième état est la section de Settings, restaurée avec l'onglet.
+      // Le quatorzième état est la section de Settings, restaurée avec l'onglet.
       'usage',
-      // Le dix-septième est le compteur de relecture de la liste Repositories.
+      // Le quinzième est le compteur de relecture de la liste Repositories.
       0,
-      // Le dix-huitième est le résumé du Dashboard, lu à l'ouverture du sien.
+      // Le seizième est le résumé du Dashboard, lu à l'ouverture du sien.
       { loading: true, data: null, error: null },
       // L'index des checklists de l'arbre, avant celui de `UsageTab`.
       null,
@@ -6938,7 +6957,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(53\)/)
+  assert.match(texte, /Never used \(52\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -6954,7 +6973,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(56\)/)
+  assert.match(textOf(zero.inner), /Never used \(55\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -7208,7 +7227,6 @@ test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
         'missions',
         '',
         { ...EMPTY_BAR.filters, type: 'bug' },
-        null,
       ],
       memorySession(),
     )
@@ -7220,12 +7238,6 @@ test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
     // posés dans la colonne par le workbench.
     const vueOut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
     const brut = findAll(vueOut, 'Workbench')[0].props.filters
-
-    const select = (label) => {
-      const noeud = findAll(view, 'select').find((node) => node.props['aria-label'] === label)
-      assert.ok(noeud, `le sélecteur ${label} est rendu`)
-      return noeud
-    }
 
     // Cocher une deuxième valeur laisse la première cochée : le POST porte la
     // liste entière, pas la dernière case cliquée.
@@ -7242,9 +7254,6 @@ test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
     const optionProject = findAll(project.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
     project.caisse.props.onChange()
     spy.geste('filter.project', optionProject.props['data-state'])
-
-    select('Filter by sort').props.onChange({ target: { value: 'oldest' } })
-    spy.geste('filter.sort', 'oldest')
 
     // L'onglet Missions filtre par état par sa bande : un segment par état,
     // jamais une somme — le clic envoie la liste ordonnée.
@@ -7325,7 +7334,7 @@ test('une liste en échec offre une reprise qui compte le geste, dans les deux o
       const etats = onglet === 'missions'
         ? [EMPTY_BAR, echec(DASH_MISSIONS), 'missions']
         : [
-            EMPTY_BAR, dashboardView(DASH_MISSIONS), 'done', '', { ...EMPTY_BAR.filters }, null, null, 'default', null,
+            EMPTY_BAR, dashboardView(DASH_MISSIONS), 'done', '', { ...EMPTY_BAR.filters }, null, 'default', null,
             EMPTY_BAR, echec([]), '',
           ]
       const { api, ctx, registered } = charger(undefined, etats, memorySession())
@@ -7361,13 +7370,13 @@ test('sans `fetch`, le panneau ne compte rien et le geste passe quand même', ()
   }
 })
 
-/** Le volet avec ses vingt états, préremplis si le test en a besoin. */
+/** Le volet avec ses dix-huit états, préremplis si le test en a besoin. */
 function monterVoletAvec(mission, etatsVolet = []) {
   const view = { loading: false, missions: [mission], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
   const panneau = [
-    EMPTY_BAR, view, 'missions', '', { ...EMPTY_BAR.filters }, null, mission,
-    'default', null, EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, null,
+    EMPTY_BAR, view, 'missions', '', { ...EMPTY_BAR.filters }, mission,
+    'default', null, EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, null,
     // La section de Settings, restaurée avec l'onglet : le volet vient après.
     'usage',
     // Le compteur de relecture de la liste Repositories.
@@ -8316,8 +8325,8 @@ function monterDoneBatch(missions, { count = missions.length, selected = null, q
   const view = { loading: false, missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const doneView = { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w', count }
   const panneau = [
-    EMPTY_BAR, view, 'done', '', EMPTY_BAR.filters, null, selected, 'default', null,
-    EMPTY_BAR, doneView, '', { ...EMPTY_BAR.filters, state: ['done'] }, null,
+    EMPTY_BAR, view, 'done', '', EMPTY_BAR.filters, selected, 'default', null,
+    EMPTY_BAR, doneView, '', { ...EMPTY_BAR.filters, state: ['done'] },
   ]
   const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, [...panneau])
   api.apply(ctx)
@@ -8325,10 +8334,10 @@ function monterDoneBatch(missions, { count = missions.length, selected = null, q
     resetHooks()
     queue.length = 0
     queue.push(...panneau)
-    // Done reads its own query and filters: index 11 is `doneQuery`, not the
+    // Done reads its own query and filters: index 10 is `doneQuery`, not the
     // open list's query at index 3. A silent refresh only replaces the read.
-    queue[10] = { ...doneView, missions: nextMissions }
-    queue[11] = nextQuery
+    queue[9] = { ...doneView, missions: nextMissions }
+    queue[10] = nextQuery
     return findAll(registered.main({}), 'MissionsView')[0]
   }
   const arbre = (options) => renderTree(rendu(options))
@@ -8743,12 +8752,12 @@ const ARBRE_CHECKLISTS = {
 }
 
 /**
- * Le panneau monté sur l'onglet Missions, avec ses dix-neuf états puis les deux
+ * Le panneau monté sur l'onglet Missions, avec ses dix-huit états puis les deux
  * hooks de la vue : le curseur et l'aperçu. `noeud` rend l'arbre non résolu,
  * pour le rejouer avec une autre requête ou un autre curseur sans remonter le
  * panneau ; `arbre` le résout.
  */
-function monterArbre({ query = '', filters = {}, sort = null, checklists = ARBRE_CHECKLISTS, missions = ARBRE_MISSIONS } = {}) {
+function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS, missions = ARBRE_MISSIONS } = {}) {
   const view = { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
   const etats = [
@@ -8757,8 +8766,6 @@ function monterArbre({ query = '', filters = {}, sort = null, checklists = ARBRE
     'missions',
     query,
     { ...EMPTY_BAR.filters, ...filters },
-    // Le tri de l'onglet, sixième état du panneau.
-    sort,
     null,
     'default',
     null,
@@ -8766,7 +8773,6 @@ function monterArbre({ query = '', filters = {}, sort = null, checklists = ARBRE
     vide,
     '',
     { ...EMPTY_BAR.filters, state: ['done'] },
-    null,
     null,
     'usage',
     0,
@@ -9231,7 +9237,10 @@ test('les filtres vivent dans la colonne, sous le champ et au-dessus de la bande
   const libelles = findAll(filtres, 'span')
     .filter((node) => node.props.className === 'missions-select-label')
     .map(textOf)
-  assert.deepEqual(libelles, ['Type', 'Epic', 'Project', 'Priority', 'Sort'])
+  assert.deepEqual(libelles, ['Type', 'Epic', 'Project', 'Priority'])
+  // L'ordre est fixe : plus aucun select de tri dans la barre.
+  assert.deepEqual(findAll(filtres, 'select'), [], 'la barre ne porte plus de select de tri')
+  assert.doesNotMatch(textOf(filtres), /Sort/)
   assert.match(textOf(filtres), /Priority/)
   assert.match(textOf(filtres), /Missing/)
 
@@ -9396,14 +9405,12 @@ function etatsCreation({ title = '', description = '', epic = '', options = CREA
     '',
     { ...EMPTY_BAR.filters },
     null,
-    null,
     'default',
     null,
     EMPTY_BAR,
     vide,
     '',
     { ...EMPTY_BAR.filters, state: ['done'] },
-    null,
     null,
     'usage',
     0,

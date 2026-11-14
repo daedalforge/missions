@@ -283,10 +283,6 @@ window.__ModuleLoader__.load({
       { x: 4.5, y: 4, height: 7.5 },
       { x: 8.5, y: 1, height: 10.5 },
     ]
-    const SORT_OPTIONS = [
-      { id: 'priority', name: 'Priority (high → low)' },
-      { id: 'points', name: 'Story points (low → high)' },
-    ]
 
     // Each tab declares what it reads: the tracker tabs share one read, so one
     // failure speaks for both. `badge` names the count the tab carries: the
@@ -2069,35 +2065,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       })
     }
 
-    /** A native select under a styled label: the value can be truncated. */
-    function FilterSelect({ label, value, options, format, allLabel = 'All', onChange }) {
-      const entries = options.map((option) => {
-        if (option && typeof option === 'object') return { value: option.id, label: option.name ?? option.id }
-        return { value: option, label: format ? format(option) : String(option) }
-      })
-      if (value !== null && value !== undefined && !entries.some((entry) => entry.value === value)) {
-        entries.push({ value, label: format ? format(value) : String(value) })
-      }
-      const current = entries.find((entry) => entry.value === value)
-      const display = current ? current.label : allLabel
-      const active = value !== null && value !== undefined
-      return h('label', { className: 'missions-select', 'data-active': active ? 'true' : 'false' },
-        h('span', { className: 'missions-select-label' }, label),
-        h('span', { className: 'missions-select-value', title: display }, display),
-        h('svg', { width: 9, height: 9, viewBox: '0 0 10 10', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, 'aria-hidden': 'true' },
-          h('path', { d: 'M2.5 4 5 6.5 7.5 4' }),
-        ),
-        h('select', {
-          'aria-label': `Filter by ${label.toLowerCase()}`,
-          value: value ?? '',
-          onChange: (event) => onChange(event.target.value === '' ? null : event.target.value),
-        },
-          h('option', { value: '' }, allLabel),
-          entries.map((entry) => h('option', { key: String(entry.value), value: entry.value }, entry.label)),
-        ),
-      )
-    }
-
     /**
      * A filter with several values, as a list of check boxes.
      *
@@ -2808,8 +2775,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       filters,
       onFilter,
       onClear,
-      sort,
-      onSort,
       filtered,
       groups,
       onSelect,
@@ -2899,13 +2864,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           value: filters.priority,
           onChange: (value) => onFilter('priority', value),
         }),
-        h(FilterSelect, {
-          label: 'Sort',
-          value: sort,
-          options: SORT_OPTIONS,
-          allLabel: 'Default',
-          onChange: onSort,
-        }),
         active ? h('button', { type: 'button', className: 'missions-clear', onClick: onClear }, 'Clear') : null,
         h(Switch, {
           label: 'Missing',
@@ -2918,7 +2876,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         // The list is flat: every filter but the query — the field has its own
         // matcher, and that matcher crosses the checklist, which is not a
         // mission field. The epic is a reference cell now, not a group.
-        const scoped = sortMissions(filterMissions(missions, { ...filters, query: '', allowDone: false }), sort)
+        const scoped = sortMissions(filterMissions(missions, { ...filters, query: '', allowDone: false }))
         const rows = pinnedFirst(scoped.map((mission) => {
           const index = checklists === null ? null : checklists[mission.key] ?? null
           return {
@@ -6337,8 +6295,8 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 
     function MissionsPanel({ services }) {
       // The bar comes back from the session: the panel is remounted on every
-      // view switch, and a reload must not lose the search, the filters or the
-      // order. Nothing outlives the app: session storage dies with the window.
+      // view switch, and a reload must not lose the search or the filters.
+      // Nothing outlives the app: session storage dies with the window.
       const [restored] = React.useState(() => filterBarState(readFilterSnapshot(filterStorage())))
       const [view, setView] = React.useState({ loading: true, count: null, missions: [], errors: [], workspaceId: null, workspaceRoot: null })
       // The open view is remembered the same way, and opens on the dashboard:
@@ -6351,7 +6309,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const [tab, setTab] = React.useState(() => initialView.current.tab)
       const [query, setQuery] = React.useState(restored.query)
       const [filters, setFilters] = React.useState(restored.filters)
-      const [sort, setSort] = React.useState(restored.sort)
       const [selected, setSelected] = React.useState(null)
       const [theme, setTheme] = React.useState(readTheme)
       // The repository whose drawer is open, and only while the repositories
@@ -6367,7 +6324,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // The status of Done is not a choice: the view is closed work, and its bar
       // fixes the value instead of offering the other states.
       const [doneFilters, setDoneFilters] = React.useState({ ...doneRestored.filters, state: ['done'] })
-      const [doneSort, setDoneSort] = React.useState(doneRestored.sort)
       // How many repositories the root holds, for the tab badge: null until the
       // first read, so the tab shows no number it cannot prove.
       const [repositoryCount, setRepositoryCount] = React.useState(null)
@@ -6403,13 +6359,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 
       // One write per change, the clear included: an empty bar drops its key.
       React.useEffect(() => {
-        writeFilterSnapshot(filterStorage(), { query, filters, sort })
-      }, [query, filters, sort])
+        writeFilterSnapshot(filterStorage(), { query, filters })
+      }, [query, filters])
 
       // Done keeps its own key, and its snapshot accepts the fixed status.
       React.useEffect(() => {
-        writeFilterSnapshot(filterStorage(), { query: doneQuery, filters: doneFilters, sort: doneSort }, DONE_FILTERS_KEY, { allowDone: true })
-      }, [doneQuery, doneFilters, doneSort])
+        writeFilterSnapshot(filterStorage(), { query: doneQuery, filters: doneFilters }, DONE_FILTERS_KEY, { allowDone: true })
+      }, [doneQuery, doneFilters])
 
       // The session keeps the view: the tab, and the section standing in for
       // Settings. The resting dashboard still drops the key.
@@ -6773,10 +6729,9 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       )
       const activeQuery = doneTab ? doneQuery : query
       const activeFilters = doneTab ? doneFilters : filters
-      const activeSort = doneTab ? doneSort : sort
       // Done keeps closed rows, so it is the only view that passes `allowDone`.
       const filtered = filterMissions(activeMissions, { query: activeQuery, ...activeFilters, allowDone: doneTab })
-      const groups = groupByState(sortMissions(filtered, activeSort))
+      const groups = groupByState(sortMissions(filtered))
 
       // The batch gesture is one request for the rendered keys: the child owns
       // the two-click state, this function pays the read and applies the result.
@@ -6821,11 +6776,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         if (doneTab) setDoneFilters({ ...EMPTY_FILTERS, state: ['done'] })
         else setFilters({ ...EMPTY_FILTERS })
       }
-      const onSort = (next) => {
-        track('filter.sort', next ?? 'default')
-        if (doneTab) setDoneSort(next)
-        else setSort(next)
-      }
       const onQuery = (next) => {
         if (doneTab) setDoneQuery(next)
         else setQuery(next)
@@ -6838,14 +6788,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       }
 
       // A widget's link opens the list on exactly the rows the widget showed:
-      // its states, its type, its priority — no search, no order, no other
-      // filter. The bar is reset rather than completed, so the count the widget
-      // announced is the count the list shows.
+      // its states, its type, its priority — no search, no other filter. The
+      // bar is reset rather than completed, so the count the widget announced
+      // is the count the list shows.
       const onViewAll = (filters = {}) => {
         track('dashboard.view-all', Object.keys(filters).join(','))
         setSelected(null)
         setQuery('')
-        setSort(null)
         setFilters({ ...EMPTY_FILTERS, ...filters })
         setTab('missions')
         setRepository(null)
@@ -7049,7 +6998,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                 })
               : tab === 'done'
               ? h(MissionsView, {
-                  missions: doneMissions, query: doneQuery, onQuery, onSearchEnd, filters: doneFilters, onFilter, onClear, sort: doneSort, onSort,
+                  missions: doneMissions, query: doneQuery, onQuery, onSearchEnd, filters: doneFilters, onFilter, onClear,
                   filtered, groups, onSelect: openMission, theme, loading: doneView.loading, failed,
                   onRefresh: () => { track('list.refresh', 'done'); return loadDone({ refresh: true }) },
                   statusOptions: ['done'], statusFixed: true,
@@ -7084,7 +7033,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                   onRetrySummary: () => { track('list.retry', 'summary'); return loadSummary({ refresh: true }) },
                 })
               : h(MissionsView, {
-                  missions, query, onQuery, onSearchEnd, filters, onFilter, onClear, sort, onSort,
+                  missions, query, onQuery, onSearchEnd, filters, onFilter, onClear,
                   filtered, groups, onSelect: openMission, theme, loading, failed,
                   onRefresh: () => { track('list.refresh', 'open'); return load({ refresh: true }) },
                   // Only this tab creates: the button opens the form in the
