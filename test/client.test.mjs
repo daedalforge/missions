@@ -8217,6 +8217,29 @@ test('le champ est la barre de l’arbre et son compte nomme une famille, jamais
   assert.deepEqual(ouverts, [])
 })
 
+test('la ligne active est annoncée par le champ focalisé, pas par l’arbre', () => {
+  // Given: le curseur posé sur une mission, tel que le clavier le déplace.
+  const { arbre } = monterArbre()
+
+  // When: l'arbre est rendu.
+  const rendu = arbre({ cursor: 'mission:MIS-206' })
+
+  // Then: le champ porte la référence de la ligne active, vers un nœud qui
+  // existe ; le conteneur de l'arbre, lui, ne la porte plus.
+  const champ = findAll(rendu, 'input').find((node) => node.props.type === 'search')
+  assert.equal(champ.props['aria-activedescendant'], 'missions-wb-mission-MIS-206')
+  const arbreDiv = findAll(rendu, 'div').find((node) => node.props.role === 'tree')
+  assert.ok(arbreDiv, "l'arbre est rendu")
+  assert.equal(arbreDiv.props['aria-activedescendant'], undefined, "l'arbre ne porte pas l'annonce")
+  const ligne = findAll(rendu, 'div').find((node) => node.props.id === champ.props['aria-activedescendant'])
+  assert.ok(ligne, 'la référence désigne une ligne rendue')
+  assert.equal(ligne.props.role, 'treeitem', 'la ligne annoncée est un élément d’arbre')
+
+  // Sans curseur, aucune ligne n'est annoncée.
+  const repos = findAll(arbre({ cursor: null }), 'input').find((node) => node.props.type === 'search')
+  assert.equal(repos.props['aria-activedescendant'], undefined)
+})
+
 test('une clé ou une ligne de checklist trouve sa mission, deux ancres au plus', () => {
   const { arbre } = monterArbre()
 

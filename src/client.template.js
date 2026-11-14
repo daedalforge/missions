@@ -2642,6 +2642,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               'aria-label': label,
               'aria-describedby': 'missions-wb-count',
               'aria-controls': 'missions-outline',
+              'aria-activedescendant': current === null ? undefined : outlineDomId(current.id),
               onChange: (event) => onQuery(event.target.value),
               onBlur: (event) => onQueryEnd(event.target.value),
             }),
@@ -2664,7 +2665,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                     id: 'missions-outline',
                     role: 'tree',
                     'aria-label': `${label}: results`,
-                    'aria-activedescendant': current === null ? undefined : outlineDomId(current.id),
                   },
                     offered.length > 0
                       ? h('div', { className: 'missions-wb-actions', role: 'group', 'aria-label': 'Actions' },
