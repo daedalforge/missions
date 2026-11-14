@@ -2178,6 +2178,168 @@ test('la priorité prend plusieurs valeurs et la barre les montre', () => {
   assert.match(SOURCE, /allLabel: 'All priorities'/)
   assert.match(SOURCE, /type: 'checkbox'/)
 })
+test('les chips Type, Epic et Project prennent plusieurs valeurs et la barre les montre', () => {
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
+  api.apply(ctx)
+  const view = findAll(registered.main({}), 'MissionsView')[0]
+  assert.ok(view, 'le panneau doit rendre la liste')
+
+  // La session ne porte pas les nouvelles dimensions au montage : la vue se
+  // rend seule avec la barre que l'on veut montrer.
+  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, tree: false, filters }, children: [] })
+  const chip = (node, label) => findAll(node, 'button')
+    .find((button) => button.props.className === 'missions-select' && textOf(button).startsWith(label))
+  const montrer = (label, filters) => {
+    const node = chip(rerender({ ...view.props.filters, ...filters }), label)
+    assert.ok(node, `le chip ${label} est rendu`)
+    return node
+  }
+
+  // Chaque dimension se lit dans trois états : aucune valeur, une, deux.
+  assert.match(textOf(montrer('Type', { type: null })), /TypeAll/)
+  const unType = montrer('Type', { type: ['bug'] })
+  assert.equal(unType.props['data-active'], 'true')
+  assert.match(textOf(unType), /TypeBug/)
+  const deuxTypes = montrer('Type', { type: ['bug', 'story'] })
+  assert.equal(deuxTypes.props['aria-label'], 'Filter by type (2 selected)')
+  assert.match(textOf(deuxTypes), /Type2 selected/)
+
+  assert.match(textOf(montrer('Epic', { epic: null })), /EpicAll/)
+  assert.match(textOf(montrer('Epic', { epic: ['Socle'] })), /EpicSocle/)
+  assert.equal(montrer('Epic', { epic: ['Socle', 'Workspace'] }).props['aria-label'], 'Filter by epic (2 selected)')
+
+  assert.match(textOf(montrer('Project', { project: null })), /ProjectAll/)
+  // Le chip nomme le projet par son nom, comme la barre le faisait.
+  assert.match(textOf(montrer('Project', { project: ['missions'] })), /ProjectMissions/)
+  assert.equal(montrer('Project', { project: ['missions', 'socle'] }).props['aria-label'], 'Filter by project (2 selected)')
+
+  const inactif = montrer('Type', { type: null })
+  assert.equal(inactif.props['data-active'], 'false')
+  assert.equal(inactif.props['aria-expanded'], 'false', 'le menu reste fermé tant qu’on ne l’ouvre pas')
+})
+
+test('un libellé long d’épic garde son texte complet en infobulle dans le menu', () => {
+  // Given un épic Jira dont le nom dépasse la largeur du menu
+  const longEpic = 'Epic Jira dont le nom dépasse largement la largeur du menu de la barre de filtres'
+  const missions = [{ ...DASH_MISSIONS[1], epic: longEpic }]
+  const { api, ctx, registered, queue } = charger(
+    undefined,
+    [EMPTY_BAR, dashboardView(missions), 'missions', '', EMPTY_BAR.filters, null],
+    memorySession(),
+  )
+  api.apply(ctx)
+  const tree = registered.main({})
+  const vueNode = findAll(tree, 'MissionsView')[0]
+
+  // When le menu Epic est ouvert
+  const vueOut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
+  const brut = findAll(vueOut, 'Workbench')[0].props.filters
+  const { ouvert } = cliquerCaseFiltre(brut, queue, 'Epic', 0)
+
+  // Then le nom tronqué à l'écran garde son texte complet en infobulle
+  const nom = findAll(ouvert, 'span').find((node) => node.props.className === 'missions-status-name')
+  assert.ok(nom, 'l’option porte son nom')
+  assert.equal(nom.props.title, longEpic)
+  assert.match(textOf(nom), /Epic Jira dont le nom dépasse/)
+})
+
+test('le menu Type coche les deux valeurs, en décocher une laisse l’autre', () => {
+  const spy = espionUsage()
+  try {
+    const { api, ctx, registered, queue } = charger(
+      undefined,
+      [
+        EMPTY_BAR,
+        dashboardView(DASH_MISSIONS),
+        'missions',
+        '',
+        { ...EMPTY_BAR.filters, type: ['bug', 'story'] },
+        null,
+      ],
+      memorySession(),
+    )
+    api.apply(ctx)
+    const tree = registered.main({})
+    const vueNode = findAll(tree, 'MissionsView')[0]
+    const vueOut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
+    const brut = findAll(vueOut, 'Workbench')[0].props.filters
+
+    // Le menu ouvert coche exactement les valeurs de la barre : deux cases.
+    const { ouvert, caisse } = cliquerCaseFiltre(brut, queue, 'Type', 0)
+    const cases = findAll(ouvert, 'input').filter((node) => node.props.type === 'checkbox')
+    assert.deepEqual(cases.map((node) => node.props.checked), [true, true])
+
+    // Décocher la première valeur publie la seconde, seule.
+    caisse.props.onChange()
+    spy.geste('filter.type', 'story')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('cocher une valeur avant une autre range la liste dans l’ordre du panneau', () => {
+  const spy = espionUsage()
+  try {
+    const { api, ctx, registered, queue } = charger(
+      undefined,
+      [
+        EMPTY_BAR,
+        dashboardView(DASH_MISSIONS),
+        'missions',
+        '',
+        { ...EMPTY_BAR.filters, type: ['story'] },
+        null,
+      ],
+      memorySession(),
+    )
+    api.apply(ctx)
+    const tree = registered.main({})
+    const vueNode = findAll(tree, 'MissionsView')[0]
+    const vueOut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
+    const brut = findAll(vueOut, 'Workbench')[0].props.filters
+
+    // « story » était cochée ; cocher « bug » publie la liste à l'ordre du
+    // panneau, pas celui du clic.
+    const { caisse } = cliquerCaseFiltre(brut, queue, 'Type', 0)
+    caisse.props.onChange()
+    spy.geste('filter.type', 'bug,story')
+  } finally {
+    spy.restore()
+  }
+})
+
+test('décocher la dernière case vide la dimension, sans détail publié', () => {
+  const spy = espionUsage()
+  try {
+    const { api, ctx, registered, queue } = charger(
+      undefined,
+      [
+        EMPTY_BAR,
+        dashboardView(DASH_MISSIONS),
+        'missions',
+        '',
+        { ...EMPTY_BAR.filters, type: ['bug'] },
+        null,
+      ],
+      memorySession(),
+    )
+    api.apply(ctx)
+    const tree = registered.main({})
+    const vueNode = findAll(tree, 'MissionsView')[0]
+    const vueOut = vueNode.fn({ ...vueNode.props, children: vueNode.children })
+    const brut = findAll(vueOut, 'Workbench')[0].props.filters
+
+    const { caisse } = cliquerCaseFiltre(brut, queue, 'Type', 0)
+    // La barre reçoit null ; le relevé nomme le geste sans détail, comme pour
+    // toute dimension remise à zéro.
+    caisse.props.onChange()
+    spy.geste('filter.type', undefined)
+  } finally {
+    spy.restore()
+  }
+})
+
 test('une mission qui dort est signalée, sa ligne le dit aussi', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
@@ -6632,7 +6794,14 @@ function cliquerCaseFiltre(brut, queue, label, index = 0) {
   // `StatusFilter` et `PriorityFilter` ne sont pas encore résolus : on rend le
   // composant une fois pour obtenir son `ChecklistFilter`, que l'on rend ensuite
   // menu ouvert, comme le clic du chip l'aurait posé.
-  const conteneur = findAll(brut, label === 'Status' ? 'StatusFilter' : 'PriorityFilter')[0]
+  const nom = {
+    Status: 'StatusFilter',
+    Priority: 'PriorityFilter',
+    Type: 'TypeFilter',
+    Epic: 'EpicFilter',
+    Project: 'ProjectFilter',
+  }[label]
+  const conteneur = findAll(brut, nom)[0]
   assert.ok(conteneur, `le filtre ${label} est monté`)
   const filtre = conteneur.fn({ ...conteneur.props, children: conteneur.children })
   assert.equal(filtre.type, 'ChecklistFilter', `le filtre ${label} passe par le menu à cases`)
@@ -6686,11 +6855,17 @@ test('chaque onglet de la barre compte son geste, sauf celui déjà ouvert', () 
 test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
   const spy = espionUsage()
   try {
+    // Les chips Epic et Project ont besoin de valeurs à offrir : chaque mission
+    // reçoit l'épic de son groupe, comme la vraie lecture le ferait.
+    const missions = DASH_MISSIONS.map((mission) => ({
+      ...mission,
+      epic: mission.state === 'ready' ? 'Missions v1' : 'Socle',
+    }))
     const { api, ctx, registered, queue } = charger(
       undefined,
       [
         EMPTY_BAR,
-        dashboardView(DASH_MISSIONS),
+        dashboardView(missions),
         'missions',
         '',
         { ...EMPTY_BAR.filters, type: 'bug' },
@@ -6713,14 +6888,21 @@ test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
       return noeud
     }
 
-    select('Filter by type').props.onChange({ target: { value: 'story' } })
-    spy.geste('filter.type', 'story')
+    // Cocher une deuxième valeur laisse la première cochée : le POST porte la
+    // liste entière, pas la dernière case cliquée.
+    const type = cliquerCaseFiltre(brut, queue, 'Type', 1)
+    type.caisse.props.onChange()
+    spy.geste('filter.type', 'bug,story')
 
-    select('Filter by epic').props.onChange({ target: { value: 'socle' } })
-    spy.geste('filter.epic', 'socle')
+    const epic = cliquerCaseFiltre(brut, queue, 'Epic')
+    const optionEpic = findAll(epic.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
+    epic.caisse.props.onChange()
+    spy.geste('filter.epic', optionEpic.props['data-state'])
 
-    select('Filter by project').props.onChange({ target: { value: 'missions' } })
-    spy.geste('filter.project', 'missions')
+    const project = cliquerCaseFiltre(brut, queue, 'Project')
+    const optionProject = findAll(project.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
+    project.caisse.props.onChange()
+    spy.geste('filter.project', optionProject.props['data-state'])
 
     select('Filter by sort').props.onChange({ target: { value: 'oldest' } })
     spy.geste('filter.sort', 'oldest')
@@ -9008,6 +9190,53 @@ test('un refus affiche son message, garde la saisie et n’ouvre aucun tiroir', 
     assert.match(textOf(apres), /GitHub: validation failed/)
     assert.equal(findAll(apres, 'input').find((node) => node.props['aria-label'] === 'Title').props.value, 'Créer une mission')
     assert.equal(findAll(apres, 'button').find((node) => textOf(node) === 'Create').props.disabled, false)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('une réponse de liste périmée ne retire pas la ligne créée', async () => {
+  const vraiFetch = globalThis.fetch
+  let liberer = null
+  const retenue = new Promise((resolve) => { liberer = resolve })
+  let lectures = 0
+  globalThis.fetch = async (url, init = {}) => {
+    const cible = String(url)
+    if (cible === 'missions/api/done/count') return { ok: true, json: async () => ({ count: 0, errors: [] }) }
+    if (cible === 'missions/api/repositories/count') return { ok: true, json: async () => ({ count: 0 }) }
+    if (cible === 'missions/api/create') return { ok: true, status: 201, json: async () => CREATE_MISSION }
+    if (cible === 'missions/api/list' || cible === 'missions/api/list?refresh=1') {
+      lectures += 1
+      // La première lecture, celle du montage, reste en vol : elle répond la
+      // page d'avant la création quand le test la libère.
+      if (lectures === 1) {
+        await retenue
+        return { ok: true, json: async () => ({ missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+      }
+      return { ok: true, json: async () => ({ missions: [CREATE_MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+    }
+    throw new Error(`appel inattendu : ${cible}`)
+  }
+  try {
+    // Given un panneau monté dont la lecture de liste est retenue
+    const { inner, setters, effects, created } = monterCreation({ title: 'Créer une mission' })
+    const montage = effects.find((effect) => String(effect.fn).includes('loadDoneCount()') && String(effect.fn).includes('loadRepositoryCount()'))
+    montage.fn()
+    await new Promise((done) => setTimeout(done, 0))
+    assert.equal(lectures, 1, 'la lecture de montage est en vol')
+
+    // When la création répond, puis la liste rafraîchie porte la clé
+    findAll(inner, 'form')[0].props.onSubmit({ preventDefault() {} })
+    await new Promise((done) => setTimeout(done, 10))
+    assert.deepEqual(created, [CREATE_MISSION])
+
+    // Then la réponse périmée arrive sans retirer la ligne, et le tiroir reste
+    // ouvert : la lecture neuve garde la main sur la vue.
+    liberer()
+    await new Promise((done) => setTimeout(done, 10))
+    const vue = vuesPubliees(setters, vueSansReponse()).at(-1)
+    assert.deepEqual(vue.missions.map((mission) => mission.key), ['MIS-42'])
+    assert.deepEqual(setters.at(-1), CREATE_MISSION, 'le tiroir reste ouvert sur la ligne créée')
   } finally {
     globalThis.fetch = vraiFetch
   }

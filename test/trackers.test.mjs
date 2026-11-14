@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { clearCache, listAll, setPriority } from '../lib/trackers/index.js'
+import { clearCache, forget, listAll, setPriority } from '../lib/trackers/index.js'
 import { forgetToken as forgetJiraToken } from '../lib/trackers/jira.js'
 
 const MAP = {
@@ -428,4 +428,43 @@ test('l’historique done ne demande pas de raison', async () => {
   assert.equal(missions.length, 1)
   assert.equal(missions[0].blockedReason, undefined)
   assert.equal(calls.filter((url) => url.includes('/comments')).length, 0)
+})
+
+test('une lecture ouverte en vol pendant forget ne réécrit pas le mémo', async () => {
+  // Given une lecture de liste commencée, et le tracker retenu avant sa réponse
+  let calls = 0
+  let release
+  let entered
+  const gate = new Promise((resolve) => { entered = resolve })
+  const hold = new Promise((resolve) => { release = resolve })
+  let first = true
+  const issues = [{ number: 2, title: 'Mission 2', labels: [{ name: 'ready' }] }]
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    calls += 1
+    if (first) {
+      first = false
+      entered()
+      await hold
+    }
+    return response(issues)
+  }
+  const pending = listAll([PROJECT_OK], { fetchImpl })
+  await gate
+
+  // When la création invalide la liste ouverte, puis la lecture en vol revient
+  forget(PROJECT_OK, 'open')
+  release()
+  const stale = await pending
+  assert.deepEqual(stale.missions.map((mission) => mission.key), ['MIS-2'])
+
+  // Then la lecture suivante sans refresh rappelle le tracker, et son mémo
+  // n'est plus la page d'avant la création.
+  issues.push({ number: 3, title: 'Mission 3', labels: [{ name: 'ready' }] })
+  const next = await listAll([PROJECT_OK], { fetchImpl })
+  assert.equal(calls, 2)
+  assert.deepEqual(next.missions.map((mission) => mission.key), ['MIS-2', 'MIS-3'])
+
+  await listAll([PROJECT_OK], { fetchImpl })
+  assert.equal(calls, 2, 'la lecture neuve est celle qui reste en cache')
 })

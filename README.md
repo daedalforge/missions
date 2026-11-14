@@ -128,9 +128,12 @@ sur toute la largeur de l'onglet. Au repos, la liste est seule : aucun aperçu,
 aucune moitié droite permanente — le workbench n'a qu'une colonne.
 Le champ de recherche **est** la barre de l'arbre — `⌘K` l'ouvre, `↑` `↓`
 promènent le surlignage, `Entrée` ouvre la fiche, `Échap` referme le volet puis
-vide la requête, sans quitter l'arbre. Les filtres (Type, Epic, Project, Priorité, Sort, Clear,
-Missing) vivent dans cette colonne, sous le champ et au-dessus de la bande
-d'états ; la barre du dessus ne garde que le libellé Outline et Refresh. Un même matcher répond sur trois familles : la clé (`206`
+vide la requête, sans quitter l'arbre. Les filtres (Type, Epic, Project, Priorité,
+Sort, Clear, Missing) vivent dans cette colonne, sous le champ et au-dessus de
+la bande d'états ; Type, Epic et Project s'ouvrent sur une liste de cases à
+cocher — cocher plusieurs valeurs les réunit en OU dans la dimension, les
+dimensions restant combinées en ET — et la barre du dessus ne garde que le
+libellé Outline et Refresh. Un même matcher répond sur trois familles : la clé (`206`
 trouve `MIS-206`), le titre, la ligne de checklist — une mission trouvée par sa
 checklist montre au plus deux ancres puis `+N`, avec son compte
 `checklist 3 / 5`. Une requête peut aussi nommer un épic : la ligne d'épic

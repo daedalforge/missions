@@ -191,6 +191,25 @@ test('les filtres epic, priorité et projet se combinent en ET', () => {
   assert.deepEqual(filterMissions(MISSIONS, { project: 'alpha', type: 'bug' }), [])
 })
 
+test('les filtres type, epic et projet prennent plusieurs valeurs, réunies en OU', () => {
+  // Cocher deux valeurs dans une dimension élargit au lieu de restreindre : la
+  // mission doit porter l'une ou l'autre, et les dimensions restent en ET.
+  assert.deepEqual(filterMissions(MISSIONS, { type: ['bug', 'story'] }).map((m) => m.key), ['a#1', 'a#2', 'a#3'])
+  assert.deepEqual(filterMissions(MISSIONS, { type: ['bug'] }).map((m) => m.key), ['a#1'])
+  assert.deepEqual(filterMissions(MISSIONS, { epic: ['Workspace'] }).map((m) => m.key), ['a#1', 'a#3'])
+  // Un épic nul n'est pas « une valeur » : cocher un épic ne ramène pas les
+  // missions sans épic.
+  assert.deepEqual(filterMissions(MISSIONS, { epic: ['Workspace', 'Autre'] }).map((m) => m.key), ['a#1', 'a#3'])
+  assert.deepEqual(filterMissions(MISSIONS, { project: ['missions', 'alpha'] }).map((m) => m.key), ['a#1', 'a#2', 'a#3'])
+  assert.deepEqual(
+    filterMissions(MISSIONS, { project: ['missions'], type: ['story'], priority: ['urgent', 'low'] }).map((m) => m.key),
+    ['a#3'],
+  )
+  assert.deepEqual(filterMissions(MISSIONS, { epic: ['Workspace'], query: 'cartes' }).map((m) => m.key), ['a#3'])
+  // Une liste vide ne filtre rien, comme pour la priorité et le statut.
+  assert.deepEqual(filterMissions(MISSIONS, { type: [], epic: [], project: [] }).map((m) => m.key), ['a#1', 'a#2', 'a#3'])
+})
+
 test('la priorité prend plusieurs valeurs, et un tableau vide ne filtre rien', () => {
   const withHigh = [...MISSIONS, { key: 'a#4', state: 'ready', type: 'story', priority: 'high', points: 1 }]
   assert.deepEqual(filterMissions(withHigh, { priority: ['urgent', 'high'] }).map((m) => m.key), ['a#1', 'a#4'])
@@ -506,17 +525,17 @@ test('une checklist vide ou absente ne casse pas le rendu', () => {
 test('l’instantané de la barre garde recherche, filtres et tri', () => {
   const bar = {
     query: 'panneau',
-    filters: { type: 'bug', state: ['ready'], epic: 'Workspace', priority: ['urgent'], project: 'missions', missing: 'any' },
+    filters: { type: ['bug'], state: ['ready'], epic: ['Workspace'], priority: ['urgent'], project: ['missions'], missing: 'any' },
     sort: 'points',
   }
   const snapshot = filterSnapshot(bar)
   assert.deepEqual(snapshot, {
     query: 'panneau',
-    type: 'bug',
+    type: ['bug'],
     state: ['ready'],
-    epic: 'Workspace',
+    epic: ['Workspace'],
     priority: ['urgent'],
-    project: 'missions',
+    project: ['missions'],
     missing: 'any',
     sort: 'points',
   })
@@ -530,12 +549,19 @@ test('une valeur unique rangée par une barre d’avant la liste se relit en lis
   // La session d'avant MIS-94 garde un statut seul, et celle d'avant MIS-99 une
   // priorité seule : les relire ne doit ni les perdre ni les rendre en texte,
   // sinon le menu ne les cocherait pas.
-  const legacy = filterSnapshot({ filters: { state: 'ready' } })
+  const legacy = filterSnapshot({ filters: { type: 'story', state: 'ready', epic: 'Workspace', project: 'missions' } })
+  assert.deepEqual(legacy.type, ['story'])
   assert.deepEqual(legacy.state, ['ready'])
+  assert.deepEqual(legacy.epic, ['Workspace'])
+  assert.deepEqual(legacy.project, ['missions'])
   assert.deepEqual(filterBarState({ state: 'ready' }).filters.state, ['ready'])
   const legacyPriority = filterSnapshot({ filters: { priority: 'high' } })
   assert.deepEqual(legacyPriority.priority, ['high'])
   assert.deepEqual(filterBarState({ priority: 'high' }).filters.priority, ['high'])
+  // Une liste relue est rangée selon le panneau, pas selon l'ordre du clic :
+  // deux sessions qui ont coché les mêmes cases gardent le même instantané.
+  assert.deepEqual(filterSnapshot({ filters: { type: ['story', 'bug'], state: ['ready', 'to-refine'] } }).type, ['bug', 'story'])
+  assert.deepEqual(filterSnapshot({ filters: { state: ['ready', 'to-refine'] } }).state, ['to-refine', 'ready'])
 })
 
 test('un instantané ne retient que ce que la barre peut sélectionner', () => {
@@ -550,14 +576,14 @@ test('un instantané ne retient que ce que la barre peut sélectionner', () => {
     query: '',
     type: null,
     state: null,
-    epic: 'Workspace',
+    epic: ['Workspace'],
     priority: null,
     project: null,
     missing: null,
     sort: null,
   })
-  // L'épic d'une mission est du texte libre : il reste tel quel.
-  assert.equal(filterSnapshot({ filters: { epic: 'Hors périmètre' } }).epic, 'Hors périmètre')
+  // L'épic d'une mission est du texte libre : il reste tel quel, en liste.
+  assert.deepEqual(filterSnapshot({ filters: { epic: ['Hors périmètre'] } }).epic, ['Hors périmètre'])
 })
 
 test('un contenu illisible redonne la barre par défaut', () => {
@@ -568,7 +594,7 @@ test('un contenu illisible redonne la barre par défaut', () => {
   // Un instantané partiel garde ce qu'il porte et complète le reste.
   assert.deepEqual(
     parseFilterSnapshot(JSON.stringify({ query: 'abc', type: 'story' })),
-    { ...empty, query: 'abc', type: 'story' },
+    { ...empty, query: 'abc', type: ['story'] },
   )
 })
 

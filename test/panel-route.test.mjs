@@ -2958,8 +2958,8 @@ projects:
         low: priority:low
 `
 
-async function mountCreate(t, fetchImpl) {
-  const mounted = await mount(t, { fetchImpl })
+async function mountCreate(t, fetchImpl, config = {}) {
+  const mounted = await mount(t, { fetchImpl, ...config })
   await mkdir(join(mounted.dir, 'missions'), { recursive: true })
   await writeFile(join(mounted.dir, 'missions', 'projects.yml'), CREATE_PROJECTS)
   return mounted
@@ -3070,7 +3070,15 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
     if (init.method === 'POST') {
       posted.push({ url: target, body: JSON.parse(init.body) })
       createdFlag = true
-      return trackerResponse({ number: 42, html_url: 'https://github.com/daedalforge/missions/issues/42' }, { status: 201 })
+      return trackerResponse({
+        number: 42,
+        title: 'Créer une mission',
+        labels: [{ name: 'to-refine' }, { name: 'priority:high' }],
+        milestone: { number: 3, title: 'Fondations' },
+        type: { name: 'Feature' },
+        html_url: 'https://github.com/daedalforge/missions/issues/42',
+        updated_at: '2026-11-14T10:00:00Z',
+      }, { status: 201 })
     }
     if (target.includes('/repos/daedalforge/legacy/')) return trackerResponse([])
     reads += 1
@@ -3110,6 +3118,26 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
     reference: 'MIS',
     number: 42,
     url: 'https://github.com/daedalforge/missions/issues/42',
+    // Le 201 prouve la ligne : le panneau la reçoit déjà normalisée, comme la
+    // lirait une liste, pour l'afficher sans une seconde lecture du tracker.
+    mission: {
+      project: 'missions',
+      projectName: 'Workspace missions',
+      key: 'MIS-42',
+      number: 42,
+      title: 'Créer une mission',
+      state: 'to-refine',
+      stateConflict: [],
+      blocked: false,
+      type: 'story',
+      priority: 'high',
+      points: null,
+      repo: null,
+      translations: null,
+      epic: 'MIS-3 · Fondations',
+      url: 'https://github.com/daedalforge/missions/issues/42',
+      updatedAt: '2026-11-14T10:00:00Z',
+    },
     project: 'missions',
   })
   assert.deepEqual(posted[0].body, {
@@ -3144,4 +3172,101 @@ test('POST /create nomme un refus du tracker en 502', async (t) => {
 
   assert.equal(response.status, 502)
   assert.match(response.body.error, /GitHub/)
+})
+
+/** Le 201 que GitHub rend pour une mission créée, réduit à ce que la ligne lit. */
+const CREATED_ISSUE_42 = {
+  number: 42,
+  title: 'Créer une mission',
+  labels: [{ name: 'to-refine' }, { name: 'priority:high' }],
+  milestone: null,
+  type: { name: 'Feature' },
+  html_url: 'https://github.com/daedalforge/missions/issues/42',
+  updated_at: '2026-11-14T10:00:00Z',
+}
+
+test('la liste rafraîchie porte la mission créée même quand le tracker ne la liste pas encore', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  clearCache()
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'slucienvauthier-so' })
+    if (init.method === 'POST') return trackerResponse(CREATED_ISSUE_42, { status: 201 })
+    // Le tracker sert encore la page d'avant la création : la preuve est le 201.
+    return trackerResponse([])
+  }
+  const { handler } = await mountCreate(t, fetchImpl)
+
+  const created = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/create',
+    body: { project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high', epic: '3' },
+  })
+  assert.equal(created.status, 201)
+
+  const reloaded = await call(handler, { path: '/missions/api/list?refresh=1' })
+
+  assert.equal(reloaded.status, 200)
+  assert.deepEqual(reloaded.body.missions.map((mission) => mission.key), ['MIS-42'])
+  assert.equal(reloaded.body.missions[0].state, 'to-refine')
+  assert.equal(reloaded.body.missions[0].priority, 'high')
+})
+
+test('la ligne créée ne se double pas et disparaît dès que le tracker porte la clé', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  clearCache()
+  let listed = false
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'slucienvauthier-so' })
+    if (init.method === 'POST') return trackerResponse(CREATED_ISSUE_42, { status: 201 })
+    if (String(url).includes('/repos/daedalforge/legacy/')) return trackerResponse([])
+    return trackerResponse(listed ? [CREATED_ISSUE_42] : [])
+  }
+  const { handler } = await mountCreate(t, fetchImpl)
+
+  await call(handler, {
+    method: 'POST',
+    path: '/missions/api/create',
+    body: { project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high' },
+  })
+  const before = await call(handler, { path: '/missions/api/list?refresh=1' })
+  assert.deepEqual(before.body.missions.map((mission) => mission.key), ['MIS-42'])
+
+  // Then la page du tracker porte enfin la clé : une seule ligne.
+  listed = true
+  const after = await call(handler, { path: '/missions/api/list?refresh=1' })
+  assert.deepEqual(after.body.missions.map((mission) => mission.key), ['MIS-42'])
+
+  // Then la ligne créée est retirée, pas recollée : une page qui cesse de la
+  // porter n'est pas masquée par la preuve de création.
+  listed = false
+  const gone = await call(handler, { path: '/missions/api/list?refresh=1' })
+  assert.deepEqual(gone.body.missions, [])
+})
+
+test('la ligne créée ne survit pas à la fenêtre courte', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  clearCache()
+  let clock = 1_000
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'slucienvauthier-so' })
+    if (init.method === 'POST') return trackerResponse(CREATED_ISSUE_42, { status: 201 })
+    return trackerResponse([])
+  }
+  const { handler } = await mountCreate(t, fetchImpl, { now: () => clock })
+
+  await call(handler, {
+    method: 'POST',
+    path: '/missions/api/create',
+    body: { project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high' },
+  })
+  const present = await call(handler, { path: '/missions/api/list?refresh=1' })
+  assert.deepEqual(present.body.missions.map((mission) => mission.key), ['MIS-42'])
+
+  // When la fenêtre est passée, Then le tracker seul décide.
+  clock += 5 * 60_000
+  const expired = await call(handler, { path: '/missions/api/list?refresh=1' })
+  assert.deepEqual(expired.body.missions, [])
 })

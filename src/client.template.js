@@ -2089,7 +2089,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
      * count per value and a shortcut to clear, and every choice is a real
      * checkbox: the keyboard reaches it without a custom key handler.
      */
-    function ChecklistFilter({ label, value, options, labels, counts, allLabel, onChange }) {
+    function ChecklistFilter({ label, value, options, labels = {}, counts = {}, allLabel, onChange }) {
       const [open, setOpen] = React.useState(false)
       const box = React.useRef(null)
       const selected = Array.isArray(value) ? value : value === null || value === undefined ? [] : [value]
@@ -2163,7 +2163,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                       checked: selected.includes(option),
                       onChange: () => toggle(option),
                     }),
-                    h('span', { className: 'missions-status-name' }, labelOf(option)),
+                    h('span', { className: 'missions-status-name', title: labelOf(option) }, labelOf(option)),
                     h('span', { className: 'missions-status-count', 'aria-hidden': 'true' }, String(counts[option] ?? 0)),
                   ),
                 )),
@@ -2211,6 +2211,56 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         labels: PRIORITY_LABELS,
         counts,
         allLabel: 'All priorities',
+        onChange,
+      })
+    }
+
+    function TypeFilter({ missions, value, onChange }) {
+      const counts = {}
+      for (const mission of missions) {
+        if (mission.type) counts[mission.type] = (counts[mission.type] ?? 0) + 1
+      }
+      return h(ChecklistFilter, {
+        label: 'Type',
+        value,
+        options: TYPE_OPTIONS.map((option) => option.id),
+        labels: TYPE_LABELS,
+        counts,
+        allLabel: 'All types',
+        onChange,
+      })
+    }
+
+    function EpicFilter({ missions, value, onChange }) {
+      const counts = {}
+      for (const mission of missions) {
+        if (mission.epic) counts[mission.epic] = (counts[mission.epic] ?? 0) + 1
+      }
+      return h(ChecklistFilter, {
+        label: 'Epic',
+        value,
+        options: epicOptions(missions),
+        counts,
+        allLabel: 'All epics',
+        onChange,
+      })
+    }
+
+    function ProjectFilter({ missions, value, onChange }) {
+      const counts = {}
+      const labels = {}
+      for (const mission of missions) {
+        if (!mission.project) continue
+        counts[mission.project] = (counts[mission.project] ?? 0) + 1
+        labels[mission.project] = mission.projectName ?? mission.project
+      }
+      return h(ChecklistFilter, {
+        label: 'Project',
+        value,
+        options: projectOptions(missions).map((project) => project.id),
+        labels,
+        counts,
+        allLabel: 'All projects',
         onChange,
       })
     }
@@ -2750,8 +2800,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // not move it.
       const [cursor, setCursor] = React.useState(null)
 
-      const epics = epicOptions(missions)
-      const projects = projectOptions(missions)
       const active = hasActiveFilters(filters)
 
       const refreshButton = failed
@@ -2793,9 +2841,21 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               allLabel: statusFixed ? null : 'All open states',
               onChange: statusFixed ? () => {} : (value) => onFilter('state', value),
             }),
-        h(FilterSelect, { label: 'Type', value: filters.type, options: TYPE_OPTIONS, onChange: (value) => onFilter('type', value) }),
-        h(FilterSelect, { label: 'Epic', value: filters.epic, options: epics, onChange: (value) => onFilter('epic', value) }),
-        h(FilterSelect, { label: 'Project', value: filters.project, options: projects, onChange: (value) => onFilter('project', value) }),
+        h(TypeFilter, {
+          missions,
+          value: filters.type,
+          onChange: (value) => onFilter('type', value),
+        }),
+        h(EpicFilter, {
+          missions,
+          value: filters.epic,
+          onChange: (value) => onFilter('epic', value),
+        }),
+        h(ProjectFilter, {
+          missions,
+          value: filters.project,
+          onChange: (value) => onFilter('project', value),
+        }),
         h(PriorityFilter, {
           missions,
           value: filters.priority,
@@ -6259,12 +6319,22 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // mount would pay the whole tracker round-trip on every return to
       // Missions. The server cache (60 s) is read instead; only the explicit
       // Refresh button and the 60 s tick ask for a fresh read.
+      //
+      // Each read takes a generation: a list answer that left before a newer
+      // read cannot overwrite the newer view when it lands late (a slow mount
+      // read coming back after a creation, for instance).
+      const readGeneration = React.useRef(0)
       const load = React.useCallback(({ silent = false, refresh = false } = {}) => {
         if (!silent) setView((previous) => ({ ...previous, loading: true }))
+        readGeneration.current += 1
+        const generation = readGeneration.current
         const url = refresh ? `${LIST_URL}?refresh=1` : LIST_URL
         return fetch(url, { headers: { accept: 'application/json' } })
           .then((response) => response.json())
           .then((data) => {
+            // A stale answer says nothing about the current list: the newer
+            // read owns the view, and the created row stays with it.
+            if (generation !== readGeneration.current) return data?.missions ?? []
             if (data?.error) throw new Error(data.error)
             const missions = data?.missions ?? []
             const errors = data?.errors ?? []
@@ -6281,6 +6351,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             return missions
           })
           .catch((error) => {
+            if (generation !== readGeneration.current) return []
             // A silent refresh that fails must not empty the list.
             setView((previous) => ({
               loading: false,
