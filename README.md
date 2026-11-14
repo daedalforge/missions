@@ -63,19 +63,30 @@ Depuis cet onglet, une mission close peut être **archivée** : son dossier pass
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
 modifié — la mission quitte Done et reste sur le disque.
 
-L'onglet **Missions** est un arbre à deux niveaux : l'épic, puis ses missions.
+L'onglet **Missions** est un arbre à deux niveaux : l'épic, puis ses missions,
+dans la moitié gauche d'un workbench à deux moitiés égales (plancher 340 px).
 Le champ de recherche **est** la barre de l'arbre — `⌘K` l'ouvre, `↑` `↓`
-promènent le surlignage, `Entrée` ouvre le tiroir, `Échap` vide la requête sans
-quitter l'arbre. Un même matcher répond sur trois familles : la clé (`206`
+promènent le surlignage, `Entrée` ouvre la fiche, `Échap` vide la requête sans
+quitter l'arbre. Les filtres (Type, Epic, Project, Priorité, Sort, Clear,
+Missing) vivent dans cette colonne, sous le champ et au-dessus de la bande
+d'états ; la barre du dessus ne garde que le libellé Outline et Refresh. Un même matcher répond sur trois familles : la clé (`206`
 trouve `MIS-206`), le titre, la ligne de checklist — une mission trouvée par sa
 checklist montre au plus deux ancres puis `+N`, avec son compte
 `checklist 3 / 5`. Une requête peut aussi nommer un épic : la ligne d'épic
 affiche `4 open`, déplie ses missions et le volet lit le lot. Le compte du champ
 nomme **une** famille (`1 of 12`, puis `1 epic`) : il n'est jamais additionné à
 un compte de lot. La bande d'états remplace le select Statut et garde les
-comptes du portefeuille pendant toute requête. Le volet **lit** — un seul
-geste y ouvre le tiroir, qui reste le seul lieu d'écriture ; surligner une
-action de déclaration le laisse tel quel. Les lignes de checklist viennent de
+comptes du portefeuille pendant toute requête. La moitié droite montre
+l'aperçu de l'entrée surlignée ; un seul geste (Entrée, clic ou « Open
+mission ») y monte la fiche de la mission, qui remplace l'aperçu sans replier
+l'arbre ni déplacer la colonne. Déplacer le surlignage ne change pas la fiche
+ouverte ; la fermer rend l'aperçu de l'entrée courante. La fiche **lit et
+écrit** au même endroit — ses onglets, sa déclaration de branche, sa priorité
+et son blocage restent ses seuls gestes ; surligner une action de déclaration
+la laisse telle quelle. Une ligne de mission fait 38 px et un filet sépare deux
+missions voisines d'un même épic, jamais avant la première ni après la
+dernière ; la ligne d'épic garde ses 26 px. Sous 900 px, le workbench retombe
+sur une seule colonne : la fiche passe sous l'arbre. Les lignes de checklist viennent de
 `GET missions/api/checklist-index`, mémorisé trente secondes (`?refresh=1` le
 paie à nouveau) : une lecture disque par ouverture de panneau, pas une par
 frappe. Les gestes comptent `search.q` (palier de longueur), `search.family`,
@@ -97,9 +108,8 @@ bouton **Retry** est le seul à forcer. Un scan en échec garde les lignes et
 nomme l'échec, jamais un zéro.
 
 Le **Dashboard** occupe toute la largeur : le digest seul, ses quatre cartes et
-ses sections, et chaque ligne ouvre la mission dans l'onglet Missions, son
-volet complet. Sous Missions, Done et Repositories, le volet garde son contenu
-d'avant.
+ses sections, et chaque ligne ouvre la mission dans l'onglet Missions, sa fiche
+complète. Done et Repositories gardent leur volet latéral d'avant.
 
 Un projet peut déclarer ses **traductions** dans
 [`missions/projects.yml`](missions/projects.yml) — `translations.locales`,
