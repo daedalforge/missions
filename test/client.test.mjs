@@ -1242,7 +1242,25 @@ test('l’icône de rafraîchissement suit le thème, comme le loader', () => {
   assert.equal(shuriken[0].props['aria-hidden'], 'true')
 })
 
-test('le bouton de création déroule un parchemin en manga et garde le plus en default', () => {
+/** Les sommets d'un tracé SVG, dans l'ordre du document. */
+function sommets(d) {
+  const nombres = String(d).match(/-?\d+(?:\.\d+)?/g).map(Number)
+  const points = []
+  for (let i = 0; i < nombres.length; i += 2) points.push({ x: nombres[i], y: nombres[i + 1] })
+  return points
+}
+
+/** La boîte d'un tracé : sa largeur, sa hauteur et le centre de ses deux extrêmes. */
+function boite(d) {
+  const points = sommets(d)
+  const xs = points.map((point) => point.x)
+  const ys = points.map((point) => point.y)
+  const [x1, x2] = [Math.min(...xs), Math.max(...xs)]
+  const [y1, y2] = [Math.min(...ys), Math.max(...ys)]
+  return { largeur: x2 - x1, hauteur: y2 - y1, centreX: (x1 + x2) / 2, centreY: (y1 + y2) / 2 }
+}
+
+test('le bouton de création tamponne un sceau au plus en manga et garde le plus nu en default', () => {
   // Given : la vue Missions montée, le geste de création branché.
   const view = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
@@ -1259,64 +1277,81 @@ test('le bouton de création déroule un parchemin en manga et garde le plus en 
   const manga = bouton('manga')
   const defaut = bouton('default')
 
-  // Then : le manga porte un parchemin au plus, un seul dessin par bouton.
-  const parchemin = findAll(manga, 'svg')
-  assert.equal(parchemin.length, 1, 'un seul svg par bouton')
-  assert.equal(parchemin[0].props.className, 'missions-icon-scroll')
-  assert.equal(parchemin[0].props.viewBox, '0 0 24 24')
-  assert.equal(parchemin[0].props.width, 15)
-  assert.equal(parchemin[0].props.height, 15)
-  assert.equal(parchemin[0].props['aria-hidden'], 'true')
+  // Then : le manga porte un sceau de papier, une tache d'accent et deux traits.
+  const sceau = findAll(manga, 'svg')
+  assert.equal(sceau.length, 1, 'un seul svg par bouton')
+  assert.equal(sceau[0].props.className, 'missions-icon-seal')
+  assert.equal(sceau[0].props.viewBox, '0 0 24 24')
+  assert.equal(sceau[0].props.width, 15)
+  assert.equal(sceau[0].props.height, 15)
+  assert.equal(sceau[0].props['aria-hidden'], 'true')
+  assert.equal(findAll(sceau[0], 'rect').length, 0, 'aucun rect : le sceau n’est pas un rouleau')
 
-  const rects = findAll(parchemin[0], 'rect')
-  assert.equal(rects.length, 3, 'deux rouleaux et le corps du parchemin')
-  assert.ok(rects.every((node) => node.props.fill === 'var(--skin-page-2)'), 'le papier de la peau, aucune couleur en dur')
-  assert.ok(rects.every((node) => node.props.stroke === 'currentColor'), 'le contour prend l’encre du bouton')
-  assert.equal(rects.filter((node) => node.props.className === 'missions-scroll-body').length, 1, 'le corps du parchemin')
-
-  const plus = findAll(parchemin[0], 'g').filter((node) => node.props.className === 'missions-scroll-plus')
-  assert.equal(plus.length, 1, 'le plus du parchemin est groupé')
-  const traits = findAll(plus[0], 'path').map((node) => String(node.props.d))
-  assert.equal(traits.length, 2, 'le plus a deux traits')
-  const vertical = traits.map((d) => /^M([\d.]+) ([\d.]+)v(-?[\d.]+)$/.exec(d)).find(Boolean)
-  const horizontal = traits.map((d) => /^M([\d.]+) ([\d.]+)h(-?[\d.]+)$/.exec(d)).find(Boolean)
-  assert.ok(vertical, 'un trait vertical')
-  assert.ok(horizontal, 'un trait horizontal')
-  assert.ok(Math.abs(Number(vertical[3])) > 0, 'le trait vertical a une longueur')
-  assert.ok(Math.abs(Number(horizontal[3])) > 0, 'le trait horizontal a une longueur')
-  assert.equal(vertical[1], horizontal[2], 'les deux traits partagent l’abscisse du centre')
-  assert.equal(
-    Number(vertical[2]) + Number(vertical[3]) / 2,
-    Number(horizontal[1]) + Number(horizontal[3]) / 2,
-    'les deux traits partagent l’ordonnée du centre',
+  const dessins = findAll(sceau[0], 'path')
+  assert.equal(dessins.length, 4, 'le papier, la tache et les deux traits du plus')
+  const [papier, tache] = dessins
+  assert.ok(sommets(papier.props.d).length >= 20, 'le papier est un chemin d’au moins 20 sommets')
+  assert.equal(papier.props.fill, 'var(--skin-page-3)', 'le papier de la peau')
+  assert.equal(papier.props.stroke, 'currentColor', 'le contour prend l’encre du bouton')
+  assert.equal(papier.props.strokeWidth, 1.4)
+  assert.equal(tache.props.fill, 'var(--skin-accent-strong)', 'la tache prend l’accent de la peau')
+  const teintes = dessins.flatMap((node) => [node.props.fill, node.props.stroke]).filter(Boolean)
+  assert.ok(
+    teintes.every((teinte) => teinte === 'currentColor' || /^var\(--skin-[a-z0-9-]+\)$/.test(teinte)),
+    'aucune couleur en dur',
   )
+
+  // Then : les deux traits du plus sont peints en dernier, longs, épais et centrés.
+  const traits = dessins.slice(2)
+  assert.deepEqual(traits.map((node) => node.props.fill), ['currentColor', 'currentColor'], 'aucun autre nœud ne recouvre les traits')
+  const boites = traits.map((node) => boite(node.props.d))
+  assert.equal(boites.filter((box) => box.hauteur > box.largeur).length, 1, 'un trait vertical')
+  assert.equal(boites.filter((box) => box.largeur > box.hauteur).length, 1, 'un trait horizontal')
+  for (const box of boites) {
+    assert.ok(Math.max(box.largeur, box.hauteur) >= 11, 'le trait mesure au moins 11 unités de long')
+    assert.ok(Math.min(box.largeur, box.hauteur) >= 2.4, 'le trait mesure au moins 2,4 unités d’épaisseur')
+    assert.ok(Math.abs(box.centreX - 12) <= 0.5, 'le trait est centré sur l’abscisse du milieu')
+    assert.ok(Math.abs(box.centreY - 12) <= 0.5, 'le trait est centré sur l’ordonnée du milieu')
+  }
+  assert.doesNotMatch(SOURCE, /missions-icon-scroll|missions-scroll-body/, 'aucun reste du parchemin')
 
   const plusSimple = findAll(defaut, 'svg')
   assert.equal(plusSimple.length, 1, 'un seul svg par bouton')
   assert.equal(String(plusSimple[0].props.className ?? '').startsWith('missions-icon-'), false, 'aucune classe d’icône animée')
   assert.equal(plusSimple[0].props.viewBox, '0 0 24 24')
+  assert.equal(plusSimple[0].props.strokeWidth, 2)
   assert.deepEqual(findAll(plusSimple[0], 'path').map((node) => node.props.d), ['M12 5v14', 'M5 12h14'])
 })
 
-test('l’icône de création se déroule lentement, sauf en mouvement réduit', () => {
+test('le sceau se tamponne des deux côtés, sauf en mouvement réduit', () => {
   // Given : le bundle que le panneau sert et les tests lisent.
-  // When : on lit la règle du parchemin, son animation et sa variante de mouvement.
-  const css = regle('.missions-icon-scroll')
+  // When : on lit la règle du sceau, son animation et sa variante de mouvement.
+  const css = regle('.missions-icon-seal')
   const animation = /animation: ([\w-]+) (\d+(?:\.\d+)?)s [\w-]+ infinite;/.exec(css)
   const frames = SOURCE.slice(
-    SOURCE.indexOf('@keyframes missions-scroll-unroll'),
-    SOURCE.indexOf('@media (prefers-reduced-motion: reduce) { .missions-icon-scroll'),
+    SOURCE.indexOf('@keyframes missions-seal-stamp'),
+    SOURCE.indexOf('@media (prefers-reduced-motion: reduce) { .missions-icon-seal'),
   )
 
-  // Then : la boucle est nommée, déclarée, lente, et n'agrandit pas le dessin.
-  assert.ok(animation, 'le parchemin déclare son animation')
-  assert.match(SOURCE, new RegExp(`@keyframes ${animation[1]} \\{`), 'le keyframes nommé est déclaré')
-  assert.ok(Number(animation[2]) >= 2, 'la boucle dure au moins 2 s')
-  assert.notEqual(animation[1], 'missions-shuriken-spin', 'le parchemin ne rejoue pas la rotation du shuriken')
-  assert.doesNotMatch(frames, /rotate\(/, 'le parchemin ne tourne pas')
+  // Then : la boucle est nommée, déclarée, de 6 s, et tamponne des deux côtés sans tourner.
+  assert.ok(animation, 'le sceau déclare son animation')
+  assert.equal(animation[1], 'missions-seal-stamp')
+  assert.equal(Number(animation[2]), 6, 'la boucle dure 6 s')
+  assert.match(SOURCE, /@keyframes missions-seal-stamp \{/, 'le keyframes nommé est déclaré')
+  assert.match(frames, /scale\(1\.32\) rotate\(-10deg\)/, 'le premier tampon part à gauche')
+  assert.match(frames, /scale\(1\.32\) rotate\(10deg\)/, 'le second tampon part à droite')
+  assert.match(frames, /scale\(\.95\) rotate\(0deg\)/, 'chaque tampon s’écrase de 5 %')
+  const echelles = [...frames.matchAll(/scale\(([\d.]+)\)/g)].map((match) => Number(match[1]))
+  assert.equal(Math.round((Math.max(...echelles) - 1) * 100), 32, 'l’amplitude est de 32 %')
+  assert.doesNotMatch(frames, /rotate\(360deg\)/, 'le sceau ne tourne pas en continu')
+  assert.match(css, /overflow: visible/, 'le sceau levé n’est pas rogné')
   assert.match(css, /transform-box: view-box/)
   assert.match(css, /transform-origin: center/)
-  assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{ \.missions-icon-scroll \{ animation: none; \} \}/)
+  assert.match(
+    SOURCE,
+    /@media \(prefers-reduced-motion: reduce\) \{ \.missions-icon-seal \{ animation: none; \} \}/,
+    'le mouvement réduit coupe l’animation',
+  )
 })
 
 const PANEL_ERROR = { project: 'panel', message: 'tracker unreachable' }
