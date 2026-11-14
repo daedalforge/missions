@@ -2423,60 +2423,125 @@ test('chaque volet garde la famille missions-drawer et son titre', () => {
     assert.equal(textOf(findAll(aside, 'h2')[0]), titre)
   }
 
-  // Then la fiche n'est plus rendue dans l'arbre : le panneau la tient seul et
-  // l'onglet Missions au repos ne monte aucun aside.
+  // Then la fiche n'est plus rendue dans l'arbre : le panneau la tient seul.
   const arbre = monterVolet().workbench
   assert.equal(findAll(arbre, 'aside').length, 0)
   assert.equal(findAll(arbre, 'MissionDrawer').length, 0)
-  const repos = monter([EMPTY_BAR, dashboardView([]), 'missions'])
-  assert.equal(findAll(repos, 'aside').length, 0)
-
-  // Then Done garde son invitation.
-  const done = { loading: false, missions: [], errors: [], count: 0 }
-  const doneVide = findAll(monter([
-    EMPTY_BAR, dashboardView([]), 'done', '', EMPTY_BAR.filters, null, null, 'default', null,
-    EMPTY_BAR, done, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, 0, null, 0, null, null,
-  ]), 'aside')[0]
-  assert.match(doneVide.props.className, /missions-drawer--empty/)
-  assert.match(textOf(doneVide), /Select a mission to see its details/)
 })
 
-test('le dashboard occupe toute la largeur, sans volet à droite', () => {
-  // Given le panneau monté sur le dashboard.
+test('le volet est monté dans les cinq onglets, même vide', () => {
+  // Given chaque onglet du panneau, monté au repos, sans mission choisie.
+  const onglets = ['dashboard', 'missions', 'done', 'repositories', 'settings']
+  const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
+  const etats = (onglet) => [
+    EMPTY_BAR, vide, onglet, '', { ...EMPTY_BAR.filters }, null, null, 'default', null,
+    EMPTY_BAR, vide, '', { ...EMPTY_BAR.filters, state: ['done'] }, null, 0, 'usage', 0, { loading: true, data: null, error: null }, null,
+  ]
+
+  for (const onglet of onglets) {
+    // Then l'onglet monte un volet et un seul, dans la famille des volets.
+    const tree = monter(etats(onglet))
+    const asides = findAll(tree, 'aside')
+    assert.equal(asides.length, 1, `${onglet} : un volet et un seul`)
+    assert.match(asides[0].props.className, /(^|\s)missions-drawer(\s|$)/, `${onglet} : la famille du volet`)
+
+    // Then chaque volet dit ce qu'il attend : la fiche d'un dépôt, sinon celle
+    // d'une mission ; sous Settings comme sous le Dashboard, il reste vide.
+    if (onglet === 'repositories') {
+      assert.equal(asides[0].props['aria-label'], 'Repository details')
+      assert.equal(textOf(asides[0]), 'Select a repository to see its remote, its upstream and its last commits.')
+    } else {
+      assert.equal(asides[0].props['aria-label'], 'Mission details')
+      assert.equal(asides[0].props.className, 'missions-drawer missions-drawer--empty')
+      assert.equal(textOf(asides[0]), 'Select a mission to see its details and act on it.')
+    }
+
+    // Then le corps passe en premier et le volet occupe la seconde place.
+    const contenu = findAll(tree, 'div').find((node) => node.props.className === 'missions-content')
+    assert.ok(contenu, `${onglet} : missions-content est monté`)
+    const enfants = contenu.children.filter((enfant) => enfant !== null && enfant !== undefined)
+    assert.equal(enfants.length, 2, `${onglet} : le corps et son volet`)
+    assert.equal(enfants[0].props.className, 'missions-body')
+    assert.equal(enfants[1].props['aria-label'], asides[0].props['aria-label'])
+  }
+})
+
+test('le volet vide garde la classe et l’invitation de Done', () => {
+  // Given le panneau monté sur Missions sans sélection.
+  const tree = monter([EMPTY_BAR, dashboardView([]), 'missions'])
+
+  // Then le volet est celui de Done, à la classe et au texte près.
+  const volet = findAll(tree, 'aside')[0]
+  assert.equal(volet.props.className, 'missions-drawer missions-drawer--empty')
+  assert.equal(volet.props['aria-label'], 'Mission details')
+  assert.equal(textOf(volet), 'Select a mission to see its details and act on it.')
+
+  // Then son centrage et son filet viennent de la règle du volet vide, et la
+  // peau papier garde son filet plus épais et son encre 3.
+  assert.match(regle('.missions-drawer--empty'), /justify-content: center/)
+  assert.match(regle('.missions-drawer--empty'), /align-items: center/)
+  assert.match(regle('.missions-drawer--empty'), /border-left: 1px dashed/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-drawer--empty \{ border-left: 1\.5px dashed var\(--skin-line-strong\); \}/)
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-drawer-hint \{ color: var\(--skin-ink-3\); \}/)
+})
+
+test('le Dashboard monte son digest et un volet vide, jamais une fiche', () => {
+  // Given le panneau monté sur le dashboard, avec des missions ouvertes.
   const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'])
 
-  // Then le digest est seul : aucun aside, aucun poste de décision.
-  assert.equal(findAll(tree, 'aside').length, 0)
+  // Then le digest est là, et le volet droit reste monté, vide : le Dashboard
+  // pleine largeur de MIS-206 est retourné par MIS-11.
   assert.equal(findAll(tree, 'DashboardView').length, 1)
   assert.doesNotMatch(JSON.stringify(tree), /DashboardQueue/)
+  const asides = findAll(tree, 'aside')
+  assert.equal(asides.length, 1, 'un volet vide et un seul')
+  assert.equal(asides[0].props.className, 'missions-drawer missions-drawer--empty')
+  assert.equal(asides[0].props['aria-label'], 'Mission details')
+  assert.equal(textOf(asides[0]), 'Select a mission to see its details and act on it.')
 
-  // Then une file sans rien à décider ne monte pas non plus de volet vide.
-  const vide = monter([EMPTY_BAR, dashboardView([MISSION]), 'dashboard'])
-  assert.equal(findAll(vide, 'aside').length, 0)
+  // Then le volet ne dépend pas des lignes : un Dashboard sans mission garde
+  // le même volet, au lieu de rétrécir à zéro.
+  const vide = monter([EMPTY_BAR, dashboardView([]), 'dashboard'])
+  assert.equal(findAll(vide, 'aside').length, 1)
 })
 
-test('sous le dashboard, le corps est le seul occupant de missions-content', () => {
+test('sous le Dashboard, missions-content porte le corps puis son volet vide', () => {
   // Given le panneau monté sur le dashboard.
   const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'])
 
-  // Then missions-content ne porte que le corps, qui prend la largeur.
+  // Then missions-content porte deux enfants, le corps puis le volet vide, et
+  // le corps garde la largeur restante.
   const contenu = findAll(tree, 'div').find((node) => node.props.className === 'missions-content')
   assert.ok(contenu, 'missions-content est monté')
   const enfants = contenu.children.filter((enfant) => enfant !== null && enfant !== undefined)
-  assert.equal(enfants.length, 1)
+  assert.equal(enfants.length, 2)
   assert.equal(enfants[0].props.className, 'missions-body')
+  assert.equal(enfants[1].props['aria-label'], 'Mission details')
   assert.match(regle('.missions-body'), /flex: 1/)
+  assert.match(regle('.missions-body'), /min-width: 0/)
+
+  // Then les deux colonnes tiennent : le volet a sa largeur fixe et aucune
+  // règle ne le cache.
+  assert.match(regle('.missions-content'), /display: flex/)
+  assert.match(regle('.missions-drawer'), /flex: none/)
+  assert.match(regle('.missions-drawer'), /width: 380px/)
+  assert.match(regle('.missions-drawer'), /max-width: 46%/)
+  assert.doesNotMatch(SOURCE, /\.missions-drawer[^{}]*\{[^}]*display: none/)
 })
 
-test('une mission choisie ne rouvre pas de volet sous le dashboard', () => {
-  // Given la même mission choisie, sous le dashboard puis sous Missions.
+test('une mission choisie ne monte pas sa fiche sous le Dashboard', () => {
+  // Given la même mission choisie, sous le Dashboard puis sous Missions.
   const surDashboard = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard', '', EMPTY_BAR.filters, null, MISSION])
   const surMissions = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', EMPTY_BAR.filters, null, MISSION])
 
-  // Then le dashboard reste sans volet, et l'onglet Missions monte la fiche
-  // choisie dans le panneau droit de l'onglet, pas dans l'arbre.
-  assert.equal(findAll(surDashboard, 'aside').length, 0)
+  // Then le Dashboard garde son volet vide : la fiche ne s'invite pas dans un
+  // onglet qui ne la porte pas.
   assert.equal(findAll(surDashboard, 'MissionDrawer').length, 0)
+  const asides = findAll(surDashboard, 'aside')
+  assert.equal(asides.length, 1)
+  assert.equal(asides[0].props.className, 'missions-drawer missions-drawer--empty')
+
+  // Then Missions monte la fiche choisie dans le volet, une seule fois.
   const fiche = findAll(surMissions, 'MissionDrawer')
   assert.equal(fiche.length, 1, 'la fiche de la mission choisie est rendue une fois')
   const contenu = findAll(surMissions, 'div').find((node) => node.props.className === 'missions-content')
@@ -2484,12 +2549,108 @@ test('une mission choisie ne rouvre pas de volet sous le dashboard', () => {
   assert.equal(enfants.length, 2, 'le corps et son volet')
   assert.equal(enfants[1].type, 'MissionDrawer')
   assert.equal(enfants[1].props.mission.key, MISSION.key)
-  // Au repos, le corps est seul : la liste prend la largeur des deux moitiés.
+
+  // Then au repos, le volet vide reste : la largeur ne revient pas au corps.
   const repos = findAll(monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions']), 'div')
     .find((node) => node.props.className === 'missions-content')
   const seuls = repos.children.filter((enfant) => enfant !== null && enfant !== undefined)
-  assert.equal(seuls.length, 1)
+  assert.equal(seuls.length, 2)
   assert.equal(seuls[0].props.className, 'missions-body')
+  assert.equal(seuls[1].props.className, 'missions-drawer missions-drawer--empty')
+})
+
+test('fermer la fiche laisse le volet vide et la largeur au volet', () => {
+  // Given le panneau monté sur une mission choisie, dont le volet porte la
+  // fermeture que le panneau lui a passée.
+  const panneau = [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', EMPTY_BAR.filters, null, MISSION]
+  const { api, ctx, registered, queue, resetHooks } = charger(undefined, [...panneau])
+  api.apply(ctx)
+  const ouvert = registered.main({})
+  assert.equal(findAll(ouvert, 'MissionDrawer').length, 1)
+
+  // When la fiche demande sa fermeture par son `onClose`.
+  findAll(ouvert, 'MissionDrawer')[0].props.onClose()
+  resetHooks()
+  queue.length = 0
+  queue.push(...panneau)
+  const ferme = registered.main({})
+
+  // Then le volet reste monté, vide, à sa largeur : la liste ne reprend pas la
+  // moitié droite que MIS-220 lui rendait à la fermeture.
+  assert.equal(findAll(ferme, 'MissionDrawer').length, 0)
+  const asides = findAll(ferme, 'aside')
+  assert.equal(asides.length, 1, 'le volet reste monté après la fermeture')
+  assert.equal(asides[0].props.className, 'missions-drawer missions-drawer--empty')
+  const contenu = findAll(ferme, 'div').find((node) => node.props.className === 'missions-content')
+  const enfants = contenu.children.filter((enfant) => enfant !== null && enfant !== undefined)
+  assert.equal(enfants.length, 2, 'le corps et son volet vide')
+  assert.equal(enfants[1].props['aria-label'], 'Mission details')
+})
+
+test('Settings monte ses trois sections avec le volet vide', () => {
+  // Given Settings ouvert sur Usage, que le panneau monte dans son corps.
+  const { tree } = monterUsage()
+  const settings = renderTree(findAll(tree, 'SettingsView')[0])
+  const nav = findAll(settings, 'div').find((node) => node.props.className === 'missions-settings-nav')
+  assert.ok(nav, 'la navigation de Settings est montée')
+
+  // Then les trois vues sont offertes, dans l'ordre, et une seule est montée.
+  const onglets = findAll(nav, 'button').map((node) => node.props['aria-controls'])
+  assert.deepEqual(onglets, [
+    'missions-settings-panel-usage',
+    'missions-settings-panel-workflows',
+    'missions-settings-panel-playbook',
+  ])
+  const panneau = findAll(settings, 'section').find((node) => node.props.className === 'missions-settings-panel')
+  assert.equal(panneau.props['data-section'], 'usage')
+
+  // Then le volet droit est monté, vide, et ne porte aucune note de section :
+  // la note d'usage reste dans le corps, sous la section qu'elle commente.
+  const asides = findAll(tree, 'aside')
+  assert.equal(asides.length, 1)
+  assert.equal(asides[0].props.className, 'missions-drawer missions-drawer--empty')
+  assert.equal(textOf(asides[0]), 'Select a mission to see its details and act on it.')
+  assert.doesNotMatch(textOf(asides[0]), /Every gesture the panel counted/)
+
+  // Then une fiche choisie ne s'ouvre pas sous Settings : le volet reste vide.
+  const { tree: choisi } = monterUsage(USAGE_LOADED, MISSION)
+  assert.equal(findAll(choisi, 'MissionDrawer').length, 0)
+  assert.equal(findAll(choisi, 'aside').length, 1)
+  assert.equal(findAll(choisi, 'aside')[0].props.className, 'missions-drawer missions-drawer--empty')
+})
+
+test('Settings passe ses sous-layouts à une colonne sous 560 px de panneau', () => {
+  // Given la query de conteneur posée sur le panneau de Settings, et non sur
+  // la fenêtre : un panneau étroit dans une large fenêtre doit se replier.
+  assert.match(regle('.missions-settings-panel'), /container-type: inline-size/)
+  const bloc = SOURCE.match(/@container \(max-width: 560px\) \{\n([\s\S]*?)\n\}/)
+  assert.ok(bloc, 'la query de conteneur est déclarée')
+
+  // Then Workflows et Playbook passent à une piste, et les pages du Playbook
+  // forment une ligne qui se replie.
+  assert.match(bloc[1], /\.wf-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  assert.match(bloc[1], /\.pb-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  assert.match(bloc[1], /\.pb-pages \{ flex-direction: row; flex-wrap: wrap; \}/)
+  assert.match(bloc[1], /\.pb-page \{ width: auto; \}/)
+  assert.match(bloc[1], /\.wf-list \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  assert.match(bloc[1], /\.wf-prop code, \.wf-pick-title \{ overflow-wrap: anywhere; \}/)
+
+  // Then la query passe après les règles de base et après le palier viewport de
+  // 720 px, sinon la règle de base l'emporterait à spécificité égale.
+  const at = SOURCE.indexOf('@container (max-width: 560px)')
+  assert.ok(at > SOURCE.indexOf('.wf-layout {'), 'la query suit la règle de base de Workflows')
+  assert.ok(at > SOURCE.indexOf('.pb-layout {'), 'la query suit la règle de base du Playbook')
+  assert.ok(at > SOURCE.indexOf('@media (max-width: 720px)'), 'la query suit le palier de 720 px')
+
+  // Then l'éditeur du Playbook compte ses marges dans sa largeur : à 100 %
+  // plus 26 px de padding et de filet, il pousserait le panneau étroit
+  // au-delà de son clientWidth.
+  assert.match(regle('.pb-text'), /box-sizing: border-box/)
+
+  // Then le palier viewport de 860 px reste : il gère la fenêtre, la query
+  // gère le panneau.
+  assert.match(SOURCE, /@media \(max-width: 860px\) \{/)
+  assert.match(SOURCE, /@media \(max-width: 900px\) \{[\s\S]*?\.wf-layout/)
 })
 
 test('le panneau relit la barre de la session au montage', () => {
@@ -6475,7 +6636,13 @@ const USAGE_LOADED = {
  * les états de la barre, l'onglet, la section, puis celui que `UsageTab`
  * consomme en se montant.
  */
-function monterUsage(releve = USAGE_LOADED) {
+/**
+ * Le panneau monté sur Settings, avec le relevé déjà lu : les états de la
+ * barre, l'onglet, la section, puis ceux que la vue consomme en se montant.
+ * `selected` garde une mission choisie hors de l'onglet, pour prouver qu'elle
+ * n'ouvre pas de fiche sous Settings.
+ */
+function monterUsage(releve = USAGE_LOADED, selected = null) {
   const { api, ctx, registered, setters, effects } = charger(
     undefined,
     [
@@ -6485,7 +6652,7 @@ function monterUsage(releve = USAGE_LOADED) {
       '',
       { ...EMPTY_BAR.filters },
       null,
-      null,
+      selected,
       'default',
       null,
       EMPTY_BAR,
@@ -8804,13 +8971,14 @@ test('l’arbre tient dans la largeur et ses titres sont ellipsés', () => {
   assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-tree-epic-name \{/)
 })
 
-test('au repos, le workbench n’a qu’une colonne : la liste prend toute la largeur', () => {
+test('au repos, la grille du workbench n’a qu’une colonne', () => {
   // Given la grille du workbench et l'onglet Missions monté au repos.
   const grille = regle('.missions-workbench')
   const { arbre } = monterArbre()
   const rendu = arbre()
 
-  // Then une seule piste, pleine largeur : plus de moitié droite permanente.
+  // Then une seule piste, pleine largeur : le workbench ne porte pas de moitié
+  // droite, son volet vit à côté de lui, dans le panneau (MIS-11).
   assert.match(grille, /grid-template-columns: minmax\(0, 1fr\)/)
   assert.doesNotMatch(grille, /minmax\(340px, 1fr\)/, 'la liste ne partage plus la largeur')
   assert.doesNotMatch(SOURCE, /data-preview/, 'plus de grille à deux colonnes selon l’aperçu')
@@ -8893,21 +9061,26 @@ test('ouvrir une mission monte sa fiche dans le volet de l’onglet, sans second
   assert.equal(findAll(workbench, 'aside').length, 0, 'l’arbre ne rend aucun volet')
 })
 
-test('au repos, l’onglet Missions ne monte que sa liste', () => {
+test('au repos, l’onglet Missions monte sa liste et son volet vide', () => {
   // Given l'onglet Missions monté sans sélection.
   const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions'])
 
-  // Then aucun aside : ni fiche, ni aperçu. Le code de l'aperçu a quitté l'arbre.
-  assert.equal(findAll(tree, 'aside').length, 0)
+  // Then la liste est seule à porter des lignes, la fiche ne se monte pas, et
+  // le volet vide reprend la place du volet de Done (MIS-11).
   assert.equal(findAll(tree, 'MissionDrawer').length, 0)
+  const asides = findAll(tree, 'aside')
+  assert.equal(asides.length, 1)
+  assert.equal(asides[0].props.className, 'missions-drawer missions-drawer--empty')
+  assert.equal(textOf(asides[0]), 'Select a mission to see its details and act on it.')
   const restes = findAll(tree, 'div').filter((node) => /missions-wb-preview/.test(String(node.props.className ?? '')))
   assert.deepEqual(restes, [])
 
-  // Then le corps est le seul occupant : la liste prend la largeur des deux
-  // anciennes moitiés.
+  // Then le corps passe avant le volet, et garde la largeur restante.
   const contenu = findAll(tree, 'div').find((node) => node.props.className === 'missions-content')
   const enfants = contenu.children.filter((enfant) => enfant !== null && enfant !== undefined)
-  assert.equal(enfants.length, 1)
+  assert.equal(enfants.length, 2)
+  assert.equal(enfants[0].props.className, 'missions-body')
+  assert.equal(enfants[1].props.className, 'missions-drawer missions-drawer--empty')
 
   // Then l'arbre rend ses lignes dans une grille à une piste.
   const rendu = renderTree(findAll(tree, 'MissionsView')[0])
@@ -8931,10 +9104,13 @@ test('la fiche garde la largeur du volet Done, 380 px et 404 px en papier', () =
     /\.missions-panel\[data-skin="paper"\] \.missions-drawer \{ position: relative; width: 404px; max-width: 46%;/,
   )
 
-  // Then volet fermé, la liste est seule et prend la largeur : une colonne.
+  // Then volet fermé, la même largeur lui reste et le corps prend le reste :
+  // le volet vide reprend la place de la fiche (MIS-11).
   assert.match(regle('.missions-content'), /display: flex/)
   assert.match(regle('.missions-body'), /flex: 1/)
   assert.match(regle('.missions-body'), /min-width: 0/)
+  assert.match(regle('.missions-drawer--empty'), /justify-content: center/)
+  assert.match(regle('.missions-drawer--empty'), /border-left: 1px dashed/)
 })
 
 test('la fiche se ferme par sa croix, et Échap ne vide pas la requête tant qu’elle est ouverte', () => {

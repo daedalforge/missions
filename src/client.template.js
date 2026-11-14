@@ -402,7 +402,7 @@ window.__ModuleLoader__.load({
 .missions-settings-tab:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-settings-tab[aria-selected="true"] { background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 8%, transparent); color: var(--dsw-alias-label-primary, #1f1f1f); font-weight: 600; }
 .missions-settings-tab:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 45%, transparent); outline-offset: 1px; }
-.missions-settings-panel { min-width: 0; }
+.missions-settings-panel { min-width: 0; container-type: inline-size; }
 /* The Usage tab's note moves inside its section: a note under the report, not
    a second column that would steal the width of the graph next door. */
 .missions-settings-note { margin-top: 18px; padding: 10px 12px; border: 1px dashed var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 9px; }
@@ -595,7 +595,7 @@ window.__ModuleLoader__.load({
 .pb-dirty { flex: none; padding: 1px 7px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 999px; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .pb-field { display: flex; flex-direction: column; gap: 6px; }
 .pb-field > span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); }
-.pb-text { width: 100%; min-height: 420px; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 10px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: inherit; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; line-height: 1.55; resize: vertical; }
+.pb-text { box-sizing: border-box; width: 100%; min-height: 420px; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 10px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: inherit; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; line-height: 1.55; resize: vertical; }
 .pb-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .pb-primary { background: var(--dsw-alias-label-primary, #1f1f1f); border-color: transparent; color: var(--dsw-alias-bg-base, #fbfaf8); }
 .pb-primary:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 86%, var(--dsw-alias-bg-base, #fbfaf8)); color: var(--dsw-alias-bg-base, #fbfaf8); }
@@ -1079,6 +1079,14 @@ window.__ModuleLoader__.load({
 .missions-panel[data-skin="paper"] .missions-wb-actions-head { color: var(--skin-ink-3); font-family: var(--skin-mono); }
 .missions-panel[data-skin="paper"] .missions-wb-foot { border-top: 1px solid var(--skin-line); color: var(--skin-ink-3); font-family: var(--skin-mono); }
 
+@container (max-width: 560px) {
+  .wf-layout { grid-template-columns: minmax(0, 1fr); }
+  .pb-layout { grid-template-columns: minmax(0, 1fr); }
+  .pb-pages { flex-direction: row; flex-wrap: wrap; }
+  .pb-page { width: auto; }
+  .wf-list { grid-template-columns: minmax(0, 1fr); }
+  .wf-prop code, .wf-pick-title { overflow-wrap: anywhere; }
+}
 `
 
     const THEME_CSS = `
@@ -6821,17 +6829,42 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         }),
       )
 
-      // One drawer element, one mount: the tab decides whether its pane exists
-      // at all, never whether the fiche is rendered twice.
       const missionDrawer = selected === null
         ? null
         : h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onArchived: applyArchive, theme })
 
-      // The creation form is the Missions tab's own pane: the other tabs never
-      // render it, even if a stored selection tried to keep it open.
       const createDrawer = tab === 'missions' && creating
         ? h(MissionCreateDrawer, { key: 'create', onClose: () => setCreating(false), onCreated })
         : null
+
+      const emptyDrawer = h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },
+        h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),
+      )
+
+      const tabDrawer = tab === 'settings'
+        ? emptyDrawer
+        : tab === 'repositories'
+        ? repository
+          ? h(RepositoryDrawer, {
+              key: repository.name,
+              repository,
+              services,
+              workspaceId,
+              onClose: () => setRepository(null),
+              onRemoved: (worktree) => {
+                if (repository && repository.name === worktree.name) setRepository(null)
+                setRepositoryRefresh((value) => value + 1)
+              },
+              theme,
+            })
+          : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Repository details' },
+              h('p', { className: 'missions-drawer-hint' }, 'Select a repository to see its remote, its upstream and its last commits.'),
+            )
+        : tab === 'dashboard'
+        ? emptyDrawer
+        : tab === 'missions'
+        ? createDrawer ?? missionDrawer ?? emptyDrawer
+        : missionDrawer ?? emptyDrawer
 
       return h('div', { className: 'missions-panel', 'data-theme': theme, 'data-skin': theme === 'default' ? undefined : 'paper' },
         hero,
@@ -6886,7 +6919,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                     : settingsSection.id === 'workflows' ? h(WorkflowsView, null)
                     : h(PlaybookView, null),
                   settingsSection.id === 'usage'
-                    ? h('aside', { className: 'missions-settings-note', 'aria-label': 'Usage details' },
+                    ? h('div', { className: 'missions-settings-note', role: 'note', 'aria-label': 'Usage details' },
                         h('p', { className: 'missions-settings-note-text' },
                           'Every gesture the panel counted, in a file this machine keeps. A recommendation is a reading of the counts, not an order: the panel never deletes anything.'),
                       )
@@ -6950,38 +6983,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                   selected,
                 }),
           ),
-          tab === 'settings'
-            ? null
-            : tab === 'repositories'
-            ? repository
-              ? h(RepositoryDrawer, {
-                  key: repository.name,
-                  repository,
-                  services,
-                  workspaceId,
-                  onClose: () => setRepository(null),
-                  // The drawer's removal gesture: a drawer open on the removed
-                  // folder closes, and the list reads the workspace again.
-                  onRemoved: (worktree) => {
-                    if (repository && repository.name === worktree.name) setRepository(null)
-                    setRepositoryRefresh((value) => value + 1)
-                  },
-                  theme,
-                })
-              : h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Repository details' },
-                  h('p', { className: 'missions-drawer-hint' }, 'Select a repository to see its remote, its upstream and its last commits.'),
-                )
-            : tab === 'dashboard'
-            ? null
-            : tab === 'missions'
-            // The tab's drawer is the pane's, not the view's: the list alone at
-            // rest, the form or the mission's fiche beside it once chosen.
-            ? createDrawer ?? missionDrawer
-            // Done keeps its resting hint: the pane is where its drawer lives,
-            // and an empty pane still says what it is waiting for.
-            : missionDrawer ?? h('aside', { className: 'missions-drawer missions-drawer--empty', 'aria-label': 'Mission details' },
-                h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),
-              ),
+          tabDrawer,
         ),
       )
     }
