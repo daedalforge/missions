@@ -1227,7 +1227,7 @@ test('l’icône de rafraîchissement suit le thème, comme le loader', () => {
     const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
     api.apply(ctx)
     const list = findAll(registered.main({}), 'MissionsView')[0]
-    const tree = renderTree({ ...list, props: { ...list.props, theme } })
+    const tree = renderTree({ ...list, props: { ...list.props, theme, onNew: null } })
     return findAll(tree, 'svg').filter((node) => String(node.props.className ?? '').startsWith('missions-icon-'))
   }
 
