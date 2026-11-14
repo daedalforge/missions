@@ -1,0 +1,7 @@
+links:
+  - source: test/fixtures/config/ghostty/config-darwin
+    target: ~/Library/Application Support/com.mitchellh.ghostty/config
+    platform: darwin
+  - source: test/fixtures/config/ghostty/config-linux
+    target: ~/.config/ghostty/config
+    platform: linux

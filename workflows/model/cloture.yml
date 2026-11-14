@@ -1,0 +1,104 @@
+workflow: cloture
+title: Clôture
+document: workflows/cloture.md
+entry: ready-for-prod
+exit:
+  - done
+nodes:
+  - id: preparer-livraison
+    label: Préparer la livraison
+    section: Ce qu'on fait
+    writer: session
+    gate: la PR est approuvée et chaque critère porte sa preuve
+    artifact: le ticket prêt à partir
+  - id: rendre-la-main
+    label: Rendre la main au demandeur
+    section: Garde-fous
+    writer: session
+    gate: aucun merge, aucune écriture sur main, aucun force — même sur demande explicite
+  - id: merger
+    label: Merger la PR
+    section: Ce qu'on fait
+    writer: demandeur
+    gate: la méthode du projet est suivie
+    artifact: le commit de merge
+  - id: fermer-ticket
+    label: Fermer le ticket avec les preuves
+    section: Sur le tracker
+    writer: demandeur
+    artifact: l'issue fermée avec le lien du merge
+  - id: supprimer-branche
+    label: Supprimer la branche
+    section: Ce qu'on fait
+    writer: demandeur
+  - id: fermer-epic
+    label: Fermer l'epic s'il est complet
+    section: Ce qu'on fait
+    writer: demandeur
+    condition: c'était la dernière mission de l'epic
+  - id: constater
+    label: Constater la livraison
+    section: Ce qu'on fait
+    writer: session
+    condition: le demandeur a dit explicitement que c'est mergé
+    gate: la PR est mergée, le ticket fermé, la branche absente
+  - id: clore-journal
+    label: Clore le journal
+    section: Ce qu'on fait
+    writer: session
+    artifact: la section de clôture du journal
+  - id: solder-checklist
+    label: Solder la checklist
+    section: Ce qu'on fait
+    writer: session
+    gate: toutes les cases cochées, ou nommées comme suite
+  - id: noter-suites
+    label: Noter les suites
+    section: Ce qu'on fait
+    writer: session
+  - id: verifier-sortie
+    label: Vérifier la condition de sortie
+    section: Condition de sortie — la mission est « terminée »
+    writer: session
+    gate: les sept cases sont cochées
+  - id: laisser-ouverte
+    label: Laisser la mission ouverte
+    section: Cas particuliers
+    writer: demandeur
+    condition: la mission est abandonnée ou partielle
+    gate: le motif est écrit dans le ticket
+edges:
+  - from: ready-for-prod
+    to: preparer-livraison
+  - from: preparer-livraison
+    to: rendre-la-main
+  - from: rendre-la-main
+    to: merger
+  - from: merger
+    to: fermer-ticket
+  - from: fermer-ticket
+    to: supprimer-branche
+  - from: supprimer-branche
+    to: fermer-epic
+  - from: fermer-epic
+    to: constater
+  - from: constater
+    to: clore-journal
+  - from: clore-journal
+    to: solder-checklist
+  - from: solder-checklist
+    to: noter-suites
+  - from: noter-suites
+    to: verifier-sortie
+  - from: verifier-sortie
+    to: done
+    when: les sept cases sont cochées
+  - from: verifier-sortie
+    to: clore-journal
+    when: une case n'est pas cochée
+  - from: rendre-la-main
+    to: laisser-ouverte
+    when: la mission est abandonnée ou partielle
+  - from: laisser-ouverte
+    to: done
+    when: le motif est écrit dans le ticket

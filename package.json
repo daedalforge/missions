@@ -1,0 +1,47 @@
+{
+  "name": "@daedalforge/dsh-missions",
+  "version": "0.1.35",
+  "private": true,
+  "description": "Missions panel for the DSH sidebar: reads the projects declared in a local missions/projects.yml",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "missions/projects.example.yml",
+    "workflows/model",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [],
+      "immediately": true
+    }
+  },
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "build": "node tools/build.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daedalforge/missions.git"
+  },
+  "bugs": {
+    "url": "https://github.com/daedalforge/missions/issues"
+  },
+  "homepage": "https://github.com/daedalforge/missions#readme"
+}

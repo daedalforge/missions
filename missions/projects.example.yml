@@ -1,0 +1,103 @@
+# Gabarit de déclaration des projets.
+#
+# Copiez ce fichier en `missions/projects.yml` — ignoré par git — puis adaptez
+# les projets à votre poste. Aucun projet réel n'est versionné : chaque poste
+# déclare ses dépôts, ses trackers et le vocabulaire de son équipe.
+#
+# Le workspace a un vocabulaire canonique, fixé par le workflow : les états
+# `to-refine`, `ready`, `in-progress`, `in-review`, `ready-for-prod`, `done`,
+# les types `bug`, `story` et les priorités `urgent`, `high`, `normal`, `low`.
+# Chaque projet les projette sur son tracker par le bloc `map`.
+#
+# Règles de la projection :
+#   - la clé est le nom canonique, la valeur est le nom exact dans le tracker ;
+#   - une valeur `null` signifie « pas de représentation » : l'état se traduit
+#     par autre chose que le vocabulaire (fermeture de l'issue, par exemple) ;
+#   - quand le workflow du tracker a moins d'états que le canonique, on garde le
+#     statut le plus proche et on ajoute un libellé pour la nuance ;
+#   - quand il en a plus, la valeur peut être une liste : plusieurs statuts du
+#     tracker disent le même état canonique. Un statut ne peut appartenir qu'à un
+#     seul état, et un statut absent de la table reste « inconnu » — jamais
+#     rabattu sur un voisin.
+#
+# Champs d'un projet :
+#   id         identifiant court du workspace (minuscules)
+#   name       nom lisible
+#   reference  référence courte obligatoire, en majuscules et unique entre
+#              projets : elle préfixe les clés de mission (EX-52) et les
+#              epics (EX-1 · …) ; côté Jira, c'est aussi la clé du projet
+#              interrogé par la JQL
+#   repo       chemin du clone sur le poste
+#   tracker    jira | github
+#   jira       site, cloud_id (facultatif, résolu depuis le site sinon), adresse
+#              du compte et champ des story points (tracker: jira) ; le jeton
+#              vient du Trousseau (service `atlassian-token`) ou de
+#              JIRA_API_TOKEN, jamais de ce fichier
+#   github     owner et repo du dépôt distant (tracker: github)
+#   translations  facultatif : locales Tolgee à vérifier, fichier de chaque
+#              locale et locale de référence
+#   map        correspondance canonique -> tracker (obligatoire)
+
+canonical:
+  states: [to-refine, ready, in-progress, in-review, ready-for-prod, done]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+
+# Facultatif : libellés Jira -> nom de produit affiché dans le panneau.
+# products:
+#   example: Example
+
+projects:
+  - id: example
+    name: Example (GitHub)
+    reference: EX
+    repo: ~/projects/example
+    tracker: github
+    github:
+      owner: your-github-org
+      repo: example
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+        ready-for-prod: ready-for-prod
+        done: null
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+      points: "sp:"
+
+  # Projet Jira : décommentez ce bloc et remplacez les valeurs.
+  # - id: example-jira
+  #   name: Example (Jira)
+  #   reference: EXJ
+  #   repo: ~/projects/example-jira
+  #   tracker: jira
+  #   jira:
+  #     site: https://your-site.atlassian.net
+  #     cloud_id: 00000000-0000-0000-0000-000000000000
+  #     email: you@example.com
+  #     story_points_field: customfield_10016
+  #   map:
+  #     states:
+  #       to-refine: To Do
+  #       ready: To Do
+  #       in-progress: In Progress
+  #       in-review: In Review
+  #       ready-for-prod: Ready for prod
+  #       done: Done
+  #     types:
+  #       bug: Bug
+  #       story: [Story, Task]
+  #     priorities:
+  #       urgent: Highest
+  #       high: High
+  #       normal: Medium
+  #       low: Low

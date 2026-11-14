@@ -1,0 +1,467 @@
+import assert from 'node:assert/strict'
+import test, { beforeEach } from 'node:test'
+
+import { forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/jira.js'
+
+const PROJECT = {
+  id: 'alpha',
+  name: 'Alpha',
+  reference: 'EX',
+  tracker: 'jira',
+  jira: {
+    site: 'https://example.atlassian.net',
+    cloud_id: 'cloud-1',
+    email: 'me@example.test',
+  },
+  map: {
+    states: {
+      'to-refine': 'To Refine',
+      ready: 'Ready to Dev',
+      'in-progress': 'In Progress',
+      'in-review': 'Code review',
+      done: 'Released',
+    },
+    types: { bug: 'Bug', story: 'Story' },
+    priorities: { urgent: 'Highest', high: 'High', normal: 'Medium', low: 'Low' },
+    labels: { alpha: 'Alpha', shop: 'Shop' },
+  },
+}
+
+function response(body, { status = 200 } = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: {
+      get: (name) => {
+        const key = String(name).toLowerCase()
+        if (key === 'x-ratelimit-remaining') return null
+        return null
+      },
+    },
+    text: async () => (body === undefined ? '' : JSON.stringify(body)),
+  }
+}
+
+function issue(key, { status = 'In Progress', type = 'Story', hierarchyLevel = 0, parent = null, labels = [] } = {}) {
+  return {
+    key,
+    fields: {
+      summary: `Mission ${key}`,
+      status: { name: status },
+      issuetype: { name: type, hierarchyLevel },
+      priority: { name: 'High' },
+      customfield_10016: 5,
+      parent: parent ? { key: parent, fields: { summary: `Épic ${parent}` } } : undefined,
+      labels,
+      updated: '2026-11-10T10:00:00.000+0000',
+    },
+  }
+}
+
+/** Answer the identity check apart, so each test only sees the search calls. */
+function reading(handler) {
+  return async (url, init) =>
+    String(url).includes('/myself') ? response({ accountId: 'me' }) : handler(String(url), init)
+}
+
+beforeEach(() => {
+  process.env.JIRA_API_TOKEN = 'test-token'
+  process.env.JIRA_EMAIL = 'me@example.test'
+  forgetToken()
+})
+
+test('the JQL is scoped to the current assignee', async () => {
+  const calls = []
+  const fetchImpl = reading(async (url) => {
+    calls.push(url)
+    return response({ issues: [] })
+  })
+
+  await list(PROJECT, { fetchImpl })
+
+  const jql = decodeURIComponent(calls[0]).replaceAll('+', ' ')
+  assert.match(jql, /project = "EX"/)
+  assert.match(jql, /assignee = currentUser\(\)/)
+})
+
+test('reads go through the Atlassian gateway, never the site', async () => {
+  const calls = []
+  const fetchImpl = reading(async (url) => {
+    calls.push(url)
+    return response({ issues: [] })
+  })
+
+  await list(PROJECT, { fetchImpl })
+
+  assert.equal(calls.length, 1)
+  assert.ok(calls.every((url) => url.startsWith('https://api.atlassian.com/ex/jira/cloud-1/')))
+})
+
+test('the cloudId is discovered from the site when the project does not declare one', async () => {
+  const calls = []
+  const { cloud_id: _ignored, ...jira } = PROJECT.jira
+  const project = { ...PROJECT, jira }
+  const fetchImpl = reading(async (url) => {
+    calls.push(url)
+    if (url.includes('/_edge/tenant_info')) return response({ cloudId: 'cloud-9' })
+    return response({ issues: [] })
+  })
+
+  await list(project, { fetchImpl })
+
+  assert.match(calls[0], /^https:\/\/example\.atlassian\.net\/_edge\/tenant_info$/)
+  assert.match(calls[1], /^https:\/\/api\.atlassian\.com\/ex\/jira\/cloud-9\/rest\/api\/3\/search\/jql/)
+})
+
+test('Jira issues are normalized through the project map', async () => {
+  const fetchImpl = reading(async () => response({ issues: [issue('EX-1207', { parent: 'EX-1000', labels: ['shop', 'feature-x'] })] }))
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.deepEqual(missions[0], {
+    project: 'shop',
+    projectName: 'Shop',
+    key: 'EX-1207',
+    number: null,
+    title: 'Mission EX-1207',
+    state: 'in-progress',
+    stateConflict: [],
+    blocked: false,
+    type: 'story',
+    priority: 'high',
+    points: 5,
+    repo: null,
+    translations: null,
+    epic: 'EX-1000 · Épic EX-1000',
+    url: 'https://example.atlassian.net/browse/EX-1207',
+    updatedAt: '2026-11-10T10:00:00.000+0000',
+  })
+})
+
+test('a Task issue is read as a story', async () => {
+  const project = {
+    ...PROJECT,
+    map: { ...PROJECT.map, types: { bug: 'Bug', story: ['Story', 'Task'] } },
+  }
+  const fetchImpl = reading(async () => response({ issues: [issue('EX-1208', { type: 'Task' })] }))
+
+  const missions = await list(project, { fetchImpl })
+
+  assert.equal(missions[0].type, 'story')
+})
+
+test('an epic is not a mission', async () => {
+  const fetchImpl = reading(async () =>
+    response({
+      issues: [
+        issue('EX-483', { type: 'Epic', hierarchyLevel: 1 }),
+        issue('EX-1208'),
+        issue('EX-1209', { type: 'Epic', hierarchyLevel: 2 }),
+      ],
+    }),
+  )
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.deepEqual(missions.map((m) => m.key), ['EX-1208'])
+})
+
+test('a ticket without hierarchyLevel stays a mission', async () => {
+  const fetchImpl = reading(async () =>
+    response({
+      issues: [
+        {
+          key: 'EX-1',
+          fields: {
+            summary: 'Mission sans niveau',
+            status: { name: 'In Progress' },
+            issuetype: { name: 'Story' },
+          },
+        },
+      ],
+    }),
+  )
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.deepEqual(missions.map((m) => m.key), ['EX-1'])
+  assert.equal(missions[0].type, 'story')
+})
+
+test('epics stay in the JQL: they are read, then dropped', async () => {
+  const calls = []
+  const fetchImpl = reading(async (url) => {
+    calls.push(String(url))
+    return response({ issues: [] })
+  })
+
+  await list(PROJECT, { fetchImpl })
+
+  assert.doesNotMatch(new URL(calls[0]).searchParams.get('jql'), /issuetype/)
+})
+
+test('a status outside the mapping leaves the state null', async () => {
+  const fetchImpl = reading(async () => response({ issues: [issue('EX-1', { status: 'Waiting for client' })] }))
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.equal(missions[0].state, null)
+})
+
+test('pagination follows nextPageToken', async () => {
+  let searches = 0
+  const calls = []
+  const fetchImpl = reading(async (url) => {
+    calls.push(url)
+    searches += 1
+    if (searches === 1) return response({ issues: [issue('EX-1')], nextPageToken: 'page-2' })
+    return response({ issues: [issue('EX-2')] })
+  })
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.equal(searches, 2)
+  assert.match(calls[1], /nextPageToken=page-2/)
+  assert.deepEqual(missions.map((m) => m.key), ['EX-1', 'EX-2'])
+})
+
+test('a 404 on /search/jql falls back to the legacy endpoint', async () => {
+  let searches = 0
+  const calls = []
+  const fetchImpl = reading(async (url) => {
+    calls.push(url)
+    searches += 1
+    if (searches === 1) return response({ errorMessages: ['gone'] }, { status: 404 })
+    return response({ issues: [issue('EX-3')], total: 1 })
+  })
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.equal(searches, 2)
+  assert.match(calls[1], /\/rest\/api\/3\/search\?/)
+  assert.equal(missions[0].key, 'EX-3')
+})
+
+test('an invalid token raises before any search, naming the token', async () => {
+  const calls = []
+  const fetchImpl = async (url) => {
+    calls.push(String(url))
+    return response({ message: 'Unauthorized' }, { status: 401 })
+  }
+
+  await assert.rejects(() => list(PROJECT, { fetchImpl }), /Jira token missing or invalid/)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0], /\/myself$/)
+})
+
+test('a project without site or reference is rejected', async () => {
+  await assert.rejects(
+    () => list({ ...PROJECT, jira: {} }, { fetchImpl: async () => response({}) }),
+    /jira\.site/,
+  )
+  const { reference: _ignored, ...withoutReference } = PROJECT
+  await assert.rejects(
+    () => list({ ...withoutReference, jira: { site: 'https://x' } }, { fetchImpl: async () => response({}) }),
+    /reference is required/,
+  )
+})
+
+test('a 403 keeps its own message: permissions are not a dead token', async () => {
+  const fetchImpl = async () => response({ message: 'Forbidden' }, { status: 403 })
+
+  await assert.rejects(() => list(PROJECT, { fetchImpl }), /Jira access denied/)
+})
+
+test('blocking updates the labels and posts the reason as ADF', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null, auth: init.headers?.authorization })
+    return String(url).endsWith('/comment')
+      ? response({ id: '10001', self: 'https://example.atlassian.net/rest/api/3/issue/EX-1/comment/10001' })
+      : response(undefined, { status: 204 })
+  }
+
+  const result = await setBlocked(PROJECT, 'EX-1', {
+    blocked: true,
+    message: 'Attente du contrat.\nDépend de l’API.',
+    fetchImpl,
+  })
+
+  assert.equal(result.key, 'EX-1')
+  assert.equal(result.blocked, true)
+  // Le panneau affiche ce lien dans la carte : c'est la permalink de navigation,
+  // pas l'URL REST du commentaire.
+  assert.equal(result.comment, 'https://example.atlassian.net/browse/EX-1?focusedCommentId=10001')
+  assert.equal(calls.length, 2)
+  // `update.labels` ajoute ou retire un label sans renvoyer les autres.
+  assert.equal(calls[0].method, 'PUT')
+  assert.match(calls[0].url, /\/rest\/api\/3\/issue\/EX-1$/)
+  assert.deepEqual(JSON.parse(calls[0].body), { update: { labels: [{ add: 'blocked' }] } })
+  // Un commentaire v3 est de l'ADF : un paragraphe par ligne, jamais une chaîne.
+  assert.equal(calls[1].method, 'POST')
+  assert.match(calls[1].url, /\/issue\/EX-1\/comment$/)
+  const body = JSON.parse(calls[1].body)
+  assert.equal(body.body.type, 'doc')
+  assert.equal(body.body.content.length, 2)
+  assert.deepEqual(body.body.content[0], { type: 'paragraph', content: [{ type: 'text', text: 'Attente du contrat.' }] })
+  assert.match(calls[1].auth, /^Basic /)
+})
+
+test('unblocking removes the label without a comment', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${String(url)}`)
+    return response(undefined, { status: 204 })
+  }
+
+  const result = await setBlocked(PROJECT, 'EX-1', { blocked: false, fetchImpl })
+
+  assert.deepEqual(result, { key: 'EX-1', blocked: false, comment: null })
+  assert.equal(calls.length, 1)
+  assert.match(calls[0], /^PUT /)
+})
+
+test('a block whose answer has no comment id still links to the ticket', async () => {
+  const fetchImpl = async (url) =>
+    String(url).endsWith('/comment')
+      ? response({ self: 'https://example.atlassian.net/rest/api/3/issue/EX-1/comment/10001' })
+      : response(undefined, { status: 204 })
+
+  const result = await setBlocked(PROJECT, 'EX-1', { blocked: true, message: 'Attente.', fetchImpl })
+
+  assert.equal(result.comment, 'https://example.atlassian.net/browse/EX-1')
+})
+
+test('the blocked label comes back as a flag, without touching the state', async () => {
+  const fetchImpl = reading(async () => response({ issues: [issue('EX-1', { labels: ['blocked'] })] }))
+
+  const [mission] = await list(PROJECT, { fetchImpl })
+
+  assert.equal(mission.blocked, true)
+  assert.equal(mission.state, 'in-progress')
+})
+
+test('changing the priority puts fields.priority.name', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null, auth: init.headers?.authorization })
+    return response(undefined, { status: 204 })
+  }
+
+  const result = await setPriority(PROJECT, 'EX-1', { value: 'Highest', fetchImpl })
+
+  assert.deepEqual(result, { key: 'EX-1', value: 'Highest' })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].method, 'PUT')
+  assert.match(calls[0].url, /\/rest\/api\/3\/issue\/EX-1$/)
+  assert.deepEqual(JSON.parse(calls[0].body), { fields: { priority: { name: 'Highest' } } })
+  assert.match(calls[0].auth, /^Basic /)
+})
+
+test('a priority write keeps the refusal message', async () => {
+  const fetchImpl = async () => response({ message: 'Forbidden' }, { status: 403 })
+
+  await assert.rejects(() => setPriority(PROJECT, 'EX-1', { value: 'High', fetchImpl }), /Jira access denied/)
+})
+
+test('a priority write needs jira.email and a value', async () => {
+  const saved = process.env.JIRA_EMAIL
+  delete process.env.JIRA_EMAIL
+  try {
+    await assert.rejects(
+      () => setPriority({ ...PROJECT, jira: { site: 'https://x', cloud_id: 'cloud-1' } }, 'EX-1', { value: 'High', fetchImpl: async () => response({}) }),
+      /jira\.email is required/,
+    )
+  } finally {
+    process.env.JIRA_EMAIL = saved
+  }
+  await assert.rejects(
+    () => setPriority(PROJECT, 'EX-1', { value: ' ', fetchImpl: async () => response({}) }),
+    /priority value is missing/,
+  )
+})
+
+test('the latest comment is read on the gateway and its ADF flattened to text', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), auth: init.headers?.authorization, accept: init.headers?.accept })
+    return response({
+      comments: [{
+        id: '10101',
+        author: { displayName: 'Stéphane' },
+        created: '2026-11-11T09:00:00.000+0000',
+        body: {
+          type: 'doc',
+          version: 1,
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'Attente du contrat.' },
+                { type: 'hardBreak' },
+                { type: 'mention', attrs: { id: 'acc-1', text: '@Stéphane' } },
+              ],
+            },
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'Dépend de ' },
+                { type: 'inlineCard', attrs: { url: 'https://example.test/ticket' } },
+              ],
+            },
+          ],
+        },
+      }],
+    })
+  }
+
+  const comment = await latestComment(PROJECT, 'EX-1207', { fetchImpl })
+
+  assert.equal(calls.length, 1)
+  const url = new URL(calls[0].url)
+  assert.equal(url.pathname, '/ex/jira/cloud-1/rest/api/3/issue/EX-1207/comment')
+  assert.equal(url.searchParams.get('maxResults'), '1')
+  assert.equal(url.searchParams.get('orderBy'), '-created')
+  assert.match(calls[0].auth, /^Basic /)
+  assert.equal(calls[0].accept, 'application/json')
+  assert.deepEqual(comment, {
+    author: 'Stéphane',
+    body: 'Attente du contrat.\n@Stéphane\nDépend de https://example.test/ticket',
+    createdAt: '2026-11-11T09:00:00.000+0000',
+    url: 'https://example.atlassian.net/browse/EX-1207?focusedCommentId=10101',
+  })
+})
+
+test('an issue with no comment, or an empty ADF body, has no reason to show', async () => {
+  const none = await latestComment(PROJECT, 'EX-1', { fetchImpl: async () => response({ comments: [], total: 0 }) })
+  assert.equal(none, null)
+
+  const blank = await latestComment(PROJECT, 'EX-1', {
+    fetchImpl: async () => response({
+      comments: [{ id: '1', body: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [] }] } }],
+    }),
+  })
+  assert.equal(blank, null)
+})
+
+test('a comment read needs jira.email', async () => {
+  const saved = process.env.JIRA_EMAIL
+  delete process.env.JIRA_EMAIL
+  try {
+    await assert.rejects(
+      () => latestComment({ ...PROJECT, jira: { site: 'https://x', cloud_id: 'cloud-1' } }, 'EX-1', { fetchImpl: async () => response({}) }),
+      /jira\.email is required/,
+    )
+  } finally {
+    process.env.JIRA_EMAIL = saved
+  }
+})
+
+test('a comment read keeps the 401 message', async () => {
+  await assert.rejects(
+    () => latestComment(PROJECT, 'EX-1207', {
+      fetchImpl: async () => response({ message: 'Unauthorized' }, { status: 401 }),
+    }),
+    /Jira token missing or invalid/,
+  )
+})
