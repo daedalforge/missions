@@ -132,9 +132,11 @@ ligne, à gauche de son volet droit. L'épic n'est plus un niveau de l'arbre mai
 une colonne : chaque ligne montre la clé courte de son épic (`MIS-2`), ou une
 cellule vide quand la mission n'en a pas. Le titre de l'épic n'est plus
 cherchable — une requête par nom d'épic ne déplie plus rien — mais la clé
-reste lisible en tête de ligne. La punaise d'une mission la fait passer devant
-toutes les autres, dans l'ordre du tri choisi : épingler ne réordonne pas les
-épinglées entre elles, et une requête garde ses épinglées en tête. Au repos, la
+reste lisible en tête de ligne. L'ordre de la liste est fixe : priorité
+décroissante, puis story points croissants, puis clé de la mission. La punaise
+d'une mission la fait passer devant toutes les autres, sans changer cet ordre :
+épingler ne réordonne pas les épinglées entre elles, et une requête garde ses
+épinglées en tête. Au repos, la
 liste et le volet vide partagent la largeur : le volet annonce ce qu'une
 mission ouvrira, comme celui de Done. Ce volet est monté dans les cinq onglets
 du panneau — seul l'onglet qui le remplit change ; la liste, elle, garde sa
@@ -142,7 +144,7 @@ grille à une colonne.
 Le champ de recherche **est** la barre de la liste — `⌘K` l'ouvre, `↑` `↓`
 promènent le surlignage, `Entrée` ouvre la fiche, `Échap` referme le volet puis
 vide la requête, sans quitter la liste. Les filtres (Type, Epic, Project, Priorité,
-Sort, Clear, Missing) vivent dans cette colonne, sous le champ et au-dessus de
+Clear, Missing) vivent dans cette colonne, sous le champ et au-dessus de
 la bande d'états ; Type, Epic et Project s'ouvrent sur une liste de cases à
 cocher — cocher plusieurs valeurs les réunit en OU dans la dimension, les
 dimensions restant combinées en ET — et la barre du dessus ne garde que le
