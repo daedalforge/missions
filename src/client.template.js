@@ -437,15 +437,13 @@ window.__ModuleLoader__.load({
 @media (prefers-reduced-motion: reduce) { .missions-icon-shuriken { animation: none; } }
 .missions-icon-seal { animation: missions-seal-stamp 6s ease-in-out infinite; transform-box: view-box; transform-origin: center; overflow: visible; }
 @keyframes missions-seal-stamp {
-  0% { transform: scale(1) rotate(0deg); }
-  11%, 16% { transform: scale(1.32) rotate(-10deg); }
-  22% { transform: scale(1) rotate(0deg); }
-  23% { transform: scale(.95) rotate(0deg); }
-  24.5%, 50% { transform: scale(1) rotate(0deg); }
-  61%, 66% { transform: scale(1.32) rotate(10deg); }
-  72% { transform: scale(1) rotate(0deg); }
-  73% { transform: scale(.95) rotate(0deg); }
-  74.5%, 100% { transform: scale(1) rotate(0deg); }
+  0% { transform: scale(1.32) rotate(-10deg); }
+  6% { transform: scale(.95) rotate(0deg); }
+  12% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.32) rotate(10deg); }
+  56% { transform: scale(.95) rotate(0deg); }
+  62% { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1.32) rotate(-10deg); }
 }
 @media (prefers-reduced-motion: reduce) { .missions-icon-seal { animation: none; } }
 .missions-search { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-tertiary, #7a7168); }

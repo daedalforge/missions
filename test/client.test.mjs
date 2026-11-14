@@ -1344,6 +1344,16 @@ test('le sceau se tamponne des deux côtés, sauf en mouvement réduit', () => {
   const echelles = [...frames.matchAll(/scale\(([\d.]+)\)/g)].map((match) => Number(match[1]))
   assert.equal(Math.round((Math.max(...echelles) - 1) * 100), 32, 'l’amplitude est de 32 %')
   assert.doesNotMatch(frames, /rotate\(360deg\)/, 'le sceau ne tourne pas en continu')
+  // Aucun palier : les deux tampons s'enchaînent sans temps mort (retour du
+  // demandeur du 14/11/2026), et la boucle se referme sans saut.
+  const images = [...frames.matchAll(/([\d.]+)%(?:\s*,\s*([\d.]+)%)?\s*\{([^}]*)\}/g)]
+    .map((match) => ({ pourcentages: [match[1], match[2]].filter(Boolean), transform: match[3].trim() }))
+  assert.ok(images.length >= 7, 'la boucle est décrite par ses images clés')
+  assert.ok(images.every((image) => image.pourcentages.length === 1), 'aucun palier : une image clé par instant')
+  for (let i = 1; i < images.length; i += 1) {
+    assert.notEqual(images[i].transform, images[i - 1].transform, 'le sceau ne s’arrête pas entre deux images clés')
+  }
+  assert.equal(images.at(-1).transform, images[0].transform, 'la boucle se referme sans saut')
   assert.match(css, /overflow: visible/, 'le sceau levé n’est pas rogné')
   assert.match(css, /transform-box: view-box/)
   assert.match(css, /transform-origin: center/)
