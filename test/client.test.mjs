@@ -9088,7 +9088,7 @@ test('une mission épinglée porte sa punaise et passe devant, sous une requête
     { ...MISSION, key: 'MIS-302', title: 'Bravo', priority: 'normal', pinned: false },
     { ...MISSION, key: 'MIS-303', title: 'Alpha two', priority: 'urgent', pinned: false },
   ]
-  const { arbre } = monterArbre({ missions: liste, sort: 'priority' })
+  const { arbre } = monterArbre({ missions: liste })
   const cles = (rendu) => findAll(rendu, 'div')
     .filter((node) => node.props.className === 'missions-tree-row')
     .map((node) => textOf(findAll(node, 'span').find((span) => span.props.className === 'missions-tree-key')))
