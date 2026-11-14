@@ -64,35 +64,38 @@ sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pa
 modifié — la mission quitte Done et reste sur le disque.
 
 L'onglet **Missions** est un arbre à deux niveaux : l'épic, puis ses missions,
-dans la moitié gauche d'un workbench à deux moitiés égales (plancher 340 px).
+sur toute la largeur de l'onglet. Au repos, la liste est seule : aucun aperçu,
+aucune moitié droite permanente — le workbench n'a qu'une colonne.
 Le champ de recherche **est** la barre de l'arbre — `⌘K` l'ouvre, `↑` `↓`
-promènent le surlignage, `Entrée` ouvre la fiche, `Échap` vide la requête sans
-quitter l'arbre. Les filtres (Type, Epic, Project, Priorité, Sort, Clear,
+promènent le surlignage, `Entrée` ouvre la fiche, `Échap` referme le volet puis
+vide la requête, sans quitter l'arbre. Les filtres (Type, Epic, Project, Priorité, Sort, Clear,
 Missing) vivent dans cette colonne, sous le champ et au-dessus de la bande
 d'états ; la barre du dessus ne garde que le libellé Outline et Refresh. Un même matcher répond sur trois familles : la clé (`206`
 trouve `MIS-206`), le titre, la ligne de checklist — une mission trouvée par sa
 checklist montre au plus deux ancres puis `+N`, avec son compte
 `checklist 3 / 5`. Une requête peut aussi nommer un épic : la ligne d'épic
-affiche `4 open`, déplie ses missions et le volet lit le lot. Le compte du champ
+affiche `4 open` et déplie ses missions. Le compte du champ
 nomme **une** famille (`1 of 12`, puis `1 epic`) : il n'est jamais additionné à
 un compte de lot. La bande d'états remplace le select Statut et garde les
-comptes du portefeuille pendant toute requête. La moitié droite montre
-l'aperçu de l'entrée surlignée ; `Entrée` sur une ligne, ou le bouton
-« Open mission » de l'aperçu, y monte la fiche de la mission, qui remplace
-l'aperçu sans replier l'arbre ni déplacer la colonne. Un clic sur une ligne ne
-fait que la surligner — l'aperçu montre la mission, la fiche ne s'ouvre pas.
-Déplacer le surlignage ne change pas la fiche ouverte ; la fermer rend l'aperçu
-de l'entrée courante. La fiche **lit et
+comptes du portefeuille pendant toute requête. Un clic sur une ligne, ou
+`Entrée` sur la ligne surlignée, ouvre la fiche **dans le volet droit de
+l'onglet** : le volet de Done, la même largeur, la même fiche — la liste garde
+la place qu'elle occupe et le volet prend la sienne. `×` ou `Échap` referment
+le volet et rendent la largeur ; `Échap` ne vide la requête qu'une fois le
+volet fermé. Déplacer le surlignage ne change pas la fiche ouverte, et la
+sélection survit au changement d'onglet : revenir sur Missions rouvre la fiche,
+un volet fermé le reste. La fiche **lit et
 écrit** au même endroit — ses onglets, sa déclaration de branche, sa priorité
 et son blocage restent ses seuls gestes ; surligner une action de déclaration
 la laisse telle quelle. Une ligne de mission fait 38 px et un filet sépare deux
 missions voisines d'un même épic, jamais avant la première ni après la
-dernière ; la ligne d'épic garde ses 26 px. Sous 900 px, le workbench retombe
-sur une seule colonne : la fiche passe sous l'arbre. Les lignes de checklist viennent de
+dernière ; la ligne d'épic garde ses 26 px. Sous 900 px, le volet garde la
+largeur de celui de Done (`max-width: 46 %`) et la liste prend le reste : rien
+ne déborde horizontalement. Les lignes de checklist viennent de
 `GET missions/api/checklist-index`, mémorisé trente secondes (`?refresh=1` le
 paie à nouveau) : une lecture disque par ouverture de panneau, pas une par
 frappe. Les gestes comptent `search.q` (palier de longueur), `search.family`,
-`preview.kind` et `mission.open` avec son `from` (`row` ou `preview`). **Done**
+`preview.kind` et `mission.open` avec son `from` (`row`). **Done**
 garde le chemin cartes, inchangé.
 
 Le **Dashboard** ajoute deux sections à son périmètre. **Repositories**
