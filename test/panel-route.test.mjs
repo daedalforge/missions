@@ -11,6 +11,7 @@ import { MISSION_FILE } from '../lib/branches.js'
 import { apply } from '../lib/index.js'
 import { resetRepositorySummary } from '../lib/repositories.js'
 import { clearCache } from '../lib/trackers/index.js'
+import { forgetToken } from '../lib/trackers/github.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 
@@ -2902,4 +2903,245 @@ test('un déplacement qui collisionne répond 409 sans toucher la source', async
   assert.equal(refused.body.error, 'workflow conflict')
   assert.equal(refused.body.errors[0].code, 'cle-double')
   assert.equal(await readFile(join(dir, 'workflows', 'model', 'cadrage.yml'), 'utf8'), source, 'la source reste intacte')
+})
+
+/**
+ * La déclaration de projet de la création : deux projets GitHub au vocabulaire
+ * différent, pour prouver que le formulaire ne lit que ce que la carte accepte.
+ */
+const CREATE_PROJECTS = `canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: missions
+    name: Workspace missions
+    reference: MIS
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: missions
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+  - id: legacy
+    name: Legacy
+    reference: LEG
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: legacy
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+`
+
+async function mountCreate(t, fetchImpl) {
+  const mounted = await mount(t, { fetchImpl })
+  await mkdir(join(mounted.dir, 'missions'), { recursive: true })
+  await writeFile(join(mounted.dir, 'missions', 'projects.yml'), CREATE_PROJECTS)
+  return mounted
+}
+
+test('GET /create rend les projets et le vocabulaire que chacun accepte', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  const { handler } = await mountCreate(t, async () => trackerResponse({}))
+
+  const response = await call(handler, { path: '/missions/api/create' })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body, {
+    status: 'to-refine',
+    defaultPriority: 'normal',
+    projects: [
+      { id: 'missions', name: 'Workspace missions', reference: 'MIS', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+      { id: 'legacy', name: 'Legacy', reference: 'LEG', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+    ],
+  })
+
+  const refused = await call(handler, { method: 'PUT', path: '/missions/api/create' })
+  assert.equal(refused.status, 405)
+  assert.equal(refused.headers.allow, 'GET')
+})
+
+test('GET /create/epics exige un projet connu et rend ses milestones', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  const calls = []
+  const fetchImpl = async (url) => {
+    const target = String(url)
+    calls.push(target)
+    if (target.includes('/milestones')) {
+      return trackerResponse([{ number: 1, title: 'Fondations' }])
+    }
+    return trackerResponse({ message: 'unexpected' }, { status: 500 })
+  }
+  const { handler } = await mountCreate(t, fetchImpl)
+
+  const missing = await call(handler, { path: '/missions/api/create/epics' })
+  assert.equal(missing.status, 400)
+  assert.match(missing.body.error, /project is missing/)
+
+  const unknown = await call(handler, { path: '/missions/api/create/epics?project=inconnu' })
+  assert.equal(unknown.status, 404)
+  assert.match(unknown.body.error, /unknown project: inconnu/)
+  assert.deepEqual(calls, [])
+
+  const response = await call(handler, { path: '/missions/api/create/epics?project=missions' })
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body, {
+    project: 'missions',
+    epics: [{ id: '1', label: 'MIS-1 · Fondations' }],
+  })
+  assert.deepEqual(calls, ['https://api.github.com/repos/daedalforge/missions/milestones?state=all&per_page=100'])
+})
+
+test('GET /create/epics nomme un refus du tracker en 502', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  const { handler } = await mountCreate(t, async () => trackerResponse({ message: 'Bad credentials' }, { status: 401 }))
+
+  const response = await call(handler, { path: '/missions/api/create/epics?project=missions' })
+
+  assert.equal(response.status, 502)
+  assert.match(response.body.error, /GitHub token missing or invalid/)
+})
+
+test('POST /create refuse chaque champ invalide avant tout appel au tracker', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  let touched = 0
+  const { handler } = await mountCreate(t, async (url) => {
+    touched += 1
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'moi' })
+    return trackerResponse({ number: 1 }, { status: 201 })
+  })
+
+  const invalid = [
+    [{ title: 'T', type: 'story', priority: 'normal' }, 400, /project is missing/],
+    [{ project: 'missions', type: 'story', priority: 'normal' }, 400, /title is missing/],
+    [{ project: 'missions', title: '   ', type: 'story', priority: 'normal' }, 400, /title is missing/],
+    [{ project: 'missions', title: 'x'.repeat(256), type: 'story', priority: 'normal' }, 400, /title is longer than 255/],
+    [{ project: 'missions', title: 'T', description: 'x'.repeat(4001), type: 'story', priority: 'normal' }, 400, /description is longer than 4000/],
+    [{ project: 'missions', title: 'T', type: 'epic', priority: 'normal' }, 400, /unknown type: epic/],
+    [{ project: 'missions', title: 'T', type: 'story', priority: 'critical' }, 400, /unknown priority: critical/],
+    [{ project: 'missions', title: 'T', type: 'story', priority: 'normal', epic: 'MIS-7' }, 400, /epic must be a GitHub milestone number/],
+    [{ project: 'inconnu', title: 'T', type: 'story', priority: 'normal' }, 404, /unknown project: inconnu/],
+  ]
+  for (const [body, status, error] of invalid) {
+    const response = await call(handler, { method: 'POST', path: '/missions/api/create', body })
+    assert.equal(response.status, status, JSON.stringify(body))
+    assert.match(response.body.error, error)
+  }
+  assert.equal(touched, 0)
+})
+
+test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  clearCache()
+  let reads = 0
+  let createdFlag = false
+  const posted = []
+  const fetchImpl = async (url, init = {}) => {
+    const target = String(url)
+    if (target.endsWith('/user')) return trackerResponse({ login: 'slucienvauthier-so' })
+    if (init.method === 'POST') {
+      posted.push({ url: target, body: JSON.parse(init.body) })
+      createdFlag = true
+      return trackerResponse({ number: 42, html_url: 'https://github.com/daedalforge/missions/issues/42' }, { status: 201 })
+    }
+    if (target.includes('/repos/daedalforge/legacy/')) return trackerResponse([])
+    reads += 1
+    const created = [{
+      number: 42,
+      title: 'Créer une mission',
+      labels: [{ name: 'to-refine' }, { name: 'priority:high' }],
+      milestone: null,
+      type: { name: 'Feature' },
+      html_url: 'https://github.com/daedalforge/missions/issues/42',
+      updated_at: '2026-11-10T10:00:00Z',
+    }]
+    return trackerResponse(createdFlag ? created : [])
+  }
+  const { handler } = await mountCreate(t, fetchImpl)
+
+  const warm = await call(handler, { path: '/missions/api/list' })
+  assert.deepEqual(warm.body.missions, [])
+
+  const created = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/create',
+    body: {
+      project: 'missions',
+      title: 'Créer une mission',
+      description: 'Le formulaire du tiroir.',
+      type: 'story',
+      priority: 'high',
+      epic: '3',
+    },
+  })
+
+  assert.equal(created.status, 201)
+  assert.deepEqual(created.body, {
+    key: 'MIS-42',
+    tracker: 'github',
+    reference: 'MIS',
+    number: 42,
+    url: 'https://github.com/daedalforge/missions/issues/42',
+    project: 'missions',
+  })
+  assert.deepEqual(posted[0].body, {
+    title: 'Créer une mission',
+    body: 'Le formulaire du tiroir.',
+    labels: ['to-refine', 'priority:high'],
+    assignees: ['slucienvauthier-so'],
+    type: 'Feature',
+    milestone: 3,
+  })
+
+  const reloaded = await call(handler, { path: '/missions/api/list' })
+  assert.equal(reads, 2, 'la création jette la liste ouverte en cache')
+  assert.deepEqual(reloaded.body.missions.map((mission) => mission.key), ['MIS-42'])
+  assert.equal(reloaded.body.missions[0].state, 'to-refine', 'la mission relue est née to-refine')
+})
+
+test('POST /create nomme un refus du tracker en 502', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'moi' })
+    if (init.method === 'POST') return trackerResponse({ message: 'Validation Failed' }, { status: 422 })
+    return trackerResponse([])
+  }
+  const { handler } = await mountCreate(t, fetchImpl)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/create',
+    body: { project: 'missions', title: 'T', type: 'story', priority: 'normal' },
+  })
+
+  assert.equal(response.status, 502)
+  assert.match(response.body.error, /GitHub/)
 })
