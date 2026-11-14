@@ -142,7 +142,7 @@ de la mission. La punaise d'une mission la fait passer devant toutes les
 autres, sans changer cet ordre : épingler ne réordonne pas les épinglées entre
 elles, et une requête garde ses épinglées en tête. Pendant le défilement de la
 liste, les épinglées tiennent le haut : elles restent visibles au-dessus des
-lignes qui passent dessous. Au repos, la
+lignes qui passent dessous, détachées du reste par une règle et un peu d'air. Au repos, la
 liste et le volet vide partagent la largeur : le volet annonce ce qu'une
 mission ouvrira, comme celui de Done. Ce volet est monté dans les cinq onglets
 du panneau — seul l'onglet qui le remplit change ; la liste, elle, garde sa

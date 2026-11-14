@@ -9404,7 +9404,14 @@ test('les missions épinglées gardent le haut de la liste quand elle défile', 
   assert.match(collant, /position: sticky/)
   assert.match(collant, /top: 0/)
   assert.match(collant, /z-index: 2/)
-  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-wb-pins \{ background: var\(--skin-page\); \}/)
+  // La bande se détache du reste de la liste : elle porte son propre air sous
+  // les épinglées, une règle plus marquée que les séparateurs de rangs et une
+  // ombre douce, au lieu de se fondre dans la première ligne du dessous.
+  assert.match(collant, /padding-bottom: 8px/, 'la bande garde son air sous les épinglées')
+  assert.match(collant, /border-bottom: 1px solid var\(--dsw-alias-border-l2/, 'une règle plus marquée ferme la bande')
+  assert.match(collant, /box-shadow: 0 8px 10px -10px/, 'la bande se soulève de la liste')
+  assert.doesNotMatch(SOURCE, /\.missions-wb-pins \.missions-tree-row:last-child/, 'la bande ne se fond plus dans les séparateurs de rangs')
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-wb-pins \{ background: var\(--skin-page\); border-bottom: 1\.5px solid var\(--skin-ink\); box-shadow: none; \}/)
 
   // La zone qui défile n'a pas d'air en haut : cet air (2 px) est une marge
   // hors du défilement, sinon les rangs passent dans la bande au-dessus du
