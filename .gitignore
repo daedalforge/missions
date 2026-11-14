@@ -3,8 +3,10 @@ node_modules/
 dist/
 missions/*/
 # Déclarations locales des projets : le gabarit est versionné, la déclaration
-# du poste ne l'est pas.
+# du poste ne l'est pas. Les épingles de la liste sont du même genre : une
+# préférence de lecture de ce poste, jamais partagée.
 missions/projects.yml
+missions/pins.yml
 # Playbooks du workspace : ils portent des règles propres à un projet ou à une
 # entreprise, donc ils restent locaux. Le panneau les lit sur le poste.
 /playbook/
