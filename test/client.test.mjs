@@ -9023,6 +9023,58 @@ test('une valeur d’épic sans séparateur s’affiche une fois, sans clé inve
   assert.equal(textOf(ligne).split('SO-483').length - 1, 1)
 })
 
+test('une ligne dit ses points, et rien quand la mission n’en porte pas', () => {
+  // Given trois missions : cinq points, un point, aucun point.
+  const liste = [
+    { ...MISSION, key: 'MIS-401', title: 'Cinq points', points: 5 },
+    { ...MISSION, key: 'MIS-402', title: 'Un point', points: 1 },
+    { ...MISSION, key: 'MIS-403', title: 'Sans point', points: null },
+  ]
+  const { arbre } = monterArbre({ missions: liste })
+
+  // When la liste plate est rendue.
+  const rendu = arbre()
+  const ligne = (cle) => findAll(rendu, 'div').find((node) => node.props.className === 'missions-tree-row' && textOf(node).includes(cle))
+  const suffixe = (cle) => findAll(ligne(cle), 'span').find((span) => span.props.className === 'missions-tree-points')
+
+  // Then les points se lisent en texte, au pluriel de la ligne de Done.
+  assert.equal(textOf(suffixe('MIS-401')), '5 pts')
+  assert.equal(textOf(suffixe('MIS-402')), '1 pt')
+  assert.equal(textOf(ligne('MIS-401')).split(' pts').length - 1, 1, 'le suffixe n’est pas doublé')
+
+  // Then une mission sans points ne porte aucun suffixe : ni « null pts »,
+  // ni « 0 pts ».
+  assert.equal(suffixe('MIS-403'), undefined, 'aucun nœud de points sans points')
+  assert.doesNotMatch(textOf(ligne('MIS-403')), /\d+ pt/)
+})
+
+test('la priorité de la ligne parvient au lecteur d’écran', () => {
+  // Given deux missions de l'onglet, l'une de priorité haute, l'autre sans
+  // priorité connue.
+  const liste = [
+    { ...MISSION, key: 'MIS-411', title: 'Priorité haute', priority: 'high' },
+    { ...MISSION, key: 'MIS-412', title: 'Sans priorité', priority: null },
+  ]
+  const { arbre } = monterArbre({ missions: liste })
+
+  // When la liste plate est rendue.
+  const rendu = arbre()
+  const ligne = (cle) => findAll(rendu, 'div').find((node) => node.props.className === 'missions-tree-row' && textOf(node).includes(cle))
+  const conteneur = (cle) => findAll(ligne(cle), 'span').find((span) => span.props.className === 'missions-tree-prio')
+  const repere = (cle) => findAll(ligne(cle), 'span').find((span) => span.props.className === 'missions-prio')
+
+  // Then le conteneur du repère ne cache plus le niveau au lecteur d'écran.
+  assert.equal(conteneur('MIS-411').props['aria-hidden'], undefined, 'le niveau n’est plus masqué')
+  assert.equal(conteneur('MIS-412').props['aria-hidden'], undefined)
+
+  // Then le repère porte son nom et son infobulle, comme sur la carte.
+  assert.equal(repere('MIS-411').props.role, 'img')
+  assert.equal(repere('MIS-411').props['aria-label'], 'Priority: High')
+  assert.equal(repere('MIS-411').props.title, 'Priority: High')
+  assert.equal(repere('MIS-412').props['aria-label'], 'No priority')
+  assert.equal(repere('MIS-412').props.title, 'No priority')
+})
+
 test('une mission épinglée porte sa punaise et passe devant, sous une requête aussi', () => {
   // Given trois missions, dont une épinglée et priorités inverses.
   const liste = [
@@ -9254,6 +9306,35 @@ test('les lignes de mission sont aérées et séparées par un filet', () => {
   const groupe = findAll(arbre(), 'div').find((node) => /missions-wb-rows/.test(String(node.props.className ?? '')) && node.children.length > 1)
   assert.ok(groupe, 'un groupe porte au moins deux missions')
   assert.ok(groupe.children.every((node) => node?.props?.className === 'missions-wb-row'), 'chaque rang est une ligne voisine')
+})
+
+test('la ligne garde sa hauteur et ses titres une fois les points ajoutés', () => {
+  // Then la classe des points suit la facture de l'âge : discrète, tabulaire,
+  // insécable, et pas plus grosse que lui.
+  const points = regle('.missions-tree-points')
+  assert.match(points, /flex: none/)
+  assert.match(points, /font-variant-numeric: tabular-nums/)
+  assert.match(points, /white-space: nowrap/)
+  assert.match(points, /font-size: 9\.5px/)
+
+  // Then sous 900 px, le texte se resserre au lieu de pousser le titre.
+  const compact = SOURCE.slice(SOURCE.indexOf('@media (max-width: 900px)'))
+  assert.match(compact.slice(0, compact.indexOf('\n}')), /\.missions-tree-points \{ font-size: 9px; \}/)
+
+  // Then la peau papier nomme la même teinte que l'âge.
+  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-tree-points/)
+
+  // Then la ligne garde ses 38 px, et son titre son ellipse.
+  assert.match(regle('.missions-tree-row'), /min-height: 38px/)
+  assert.match(regle('.missions-tree-title'), /min-width: 0/)
+  assert.match(regle('.missions-tree-title'), /text-overflow: ellipsis/)
+
+  // Then dans la ligne, les points passent avant l'âge, une seule fois.
+  const { arbre } = monterArbre({ missions: [{ ...MISSION, key: 'MIS-421', title: 'Ligne dense', points: 3 }] })
+  const ligne = findAll(arbre(), 'div').find((node) => node.props.className === 'missions-tree-row')
+  const rangs = ligne.children.map((node) => node?.props?.className)
+  assert.equal(rangs.filter((classe) => classe === 'missions-tree-points').length, 1)
+  assert.ok(rangs.indexOf('missions-tree-points') < rangs.indexOf('missions-tree-age'), 'les points passent avant l’âge')
 })
 
 test('ouvrir une mission monte sa fiche dans le volet de l’onglet, sans second panneau', () => {

@@ -1032,6 +1032,7 @@ window.__ModuleLoader__.load({
 .missions-tree-title { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--dsw-alias-label-primary, #1f1f1f); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .missions-tree-blocked { flex: none; padding: 0 5px; border-radius: 999px; background: color-mix(in srgb, #cf222e 12%, transparent); color: #a40e26; font-size: 9px; font-weight: 600; }
 .missions-tree-age { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.missions-tree-points { flex: none; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .missions-tree-anchors { flex: 1 1 100%; display: flex; flex-direction: column; gap: 1px; padding: 1px 0 2px 60px; }
 .missions-tree-anchor { display: flex; align-items: baseline; gap: 5px; min-width: 0; color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 10px; }
 .missions-tree-anchor-mark { flex: none; width: 9px; color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -1043,6 +1044,9 @@ window.__ModuleLoader__.load({
 .missions-wb-foot-note { text-transform: uppercase; letter-spacing: .06em; }
 @media (max-width: 860px) {
   .missions-tree-anchors, .missions-tree-overflow { padding-left: 12px; }
+}
+@media (max-width: 900px) {
+  .missions-tree-points { font-size: 9px; }
 }
 @media (max-width: 720px) {
   .missions-wb-field { padding: 8px 10px 4px; }
@@ -1079,7 +1083,7 @@ window.__ModuleLoader__.load({
 .missions-panel[data-skin="paper"] .missions-tree-row[data-selected="true"] { background: var(--skin-page-3); }
 .missions-panel[data-skin="paper"] .missions-tree-epic-ref, .missions-panel[data-skin="paper"] .missions-tree-key { color: var(--skin-accent-strong); font-family: var(--skin-mono); }
 .missions-panel[data-skin="paper"] .missions-tree-title { color: var(--skin-ink); }
-.missions-panel[data-skin="paper"] .missions-tree-age, .missions-panel[data-skin="paper"] .missions-tree-anchor-count { color: var(--skin-ink-3); }
+.missions-panel[data-skin="paper"] .missions-tree-age, .missions-panel[data-skin="paper"] .missions-tree-points, .missions-panel[data-skin="paper"] .missions-tree-anchor-count { color: var(--skin-ink-3); }
 .missions-panel[data-skin="paper"] .missions-tree-anchor { color: var(--skin-ink-2); }
 .missions-panel[data-skin="paper"] .missions-tree-anchor-mark { color: var(--skin-ink-3); }
 .missions-panel[data-skin="paper"] .missions-tree-blocked { background: var(--skin-danger-strong); color: var(--skin-page); }
@@ -1658,10 +1662,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
      */
     function ClosedRow({ mission, now, onOpen }) {
       const age = missionAge(mission.updatedAt, now)
-      const value = Number(mission.points)
-      const counted = mission.points !== null && mission.points !== undefined && mission.points !== ''
-        && Number.isFinite(value)
-      const points = counted ? `${value} pt${value === 1 ? '' : 's'}` : ''
+      const points = pointsText(mission.points)
       return h('li', { className: 'missions-rowitem' },
         h('button', {
           type: 'button',
@@ -2738,6 +2739,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const mission = entry.row.mission ?? entry.row
       const pinned = entry.row.pinned === true || mission.pinned === true
       const counts = entry.row.counts ?? { total: 0, checked: 0 }
+      const points = pointsText(mission.points)
       return h('div', {
         className: 'missions-tree-row',
         id: rowId,
@@ -2756,7 +2758,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           onSelect()
         },
       },
-        h('span', { className: 'missions-tree-prio', 'aria-hidden': 'true' },
+        h('span', { className: 'missions-tree-prio' },
           h(PriorityMark, { priority: mission.priority })),
         // A pin is a local preference, not a field: the mark says it without
         // taking the click or the focus from the row.
@@ -2784,6 +2786,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         h('span', { className: 'missions-tree-epic-ref' }, epicParts(mission.epic).key),
         h('span', { className: 'missions-tree-title' }, clipTitle(mission.title)),
         mission.blocked ? h('span', { className: 'missions-tree-blocked' }, 'blocked') : null,
+        points ? h('span', { className: 'missions-tree-points' }, points) : null,
         h('span', { className: 'missions-tree-age' }, relativeAge(mission.updatedAt)),
         entry.anchors.length > 0
           ? h('div', { className: 'missions-tree-anchors' },
