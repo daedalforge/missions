@@ -847,8 +847,6 @@ window.__ModuleLoader__.load({
 .missions-priority-select:disabled { opacity: .6; }
 .missions-priority-note { margin: 0 0 10px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-priority-note--error { color: var(--dsw-alias-label-danger, #b42318); }
-.missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 13%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 46%, transparent); }
-.missions-card[data-interactive="true"][data-blocked="true"]:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 14%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 52%, transparent); }
 .missions-journal { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
 .missions-journal-head { display: flex; align-items: baseline; gap: 8px; }
 .missions-journal-meta { min-width: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1306,8 +1304,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 .missions-panel[data-skin="paper"] .missions-priority-note--error { color: var(--skin-danger-strong); }
 .missions-panel[data-skin="paper"] .missions-blocked-apply { border: 1.5px solid var(--skin-danger-strong); border-radius: 6px; background: var(--skin-danger); color: var(--skin-page); box-shadow: 2px 2px 0 var(--skin-shadow); }
 .missions-panel[data-skin="paper"] .missions-blocked-cancel { border: 1.5px solid var(--skin-ink); border-radius: 6px; color: var(--skin-ink-2); }
-.missions-panel[data-skin="paper"] .missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--skin-danger) 12%, var(--skin-page-2)); border-color: var(--skin-danger-strong); }
-.missions-panel[data-skin="paper"] .missions-card[data-interactive="true"][data-blocked="true"]:hover { background: color-mix(in srgb, var(--skin-danger) 18%, var(--skin-page-2)); border-color: var(--skin-danger-strong); }
 .missions-panel[data-skin="paper"] .missions-declare-label { color: var(--skin-ink-3); font-family: var(--skin-mono); font-size: 9.5px; letter-spacing: .08em; }
 .missions-panel[data-skin="paper"] .missions-declare-input { height: 30px; border: 1.5px solid var(--skin-ink); border-radius: 7px; background: var(--skin-page-2); color: var(--skin-ink); font-size: 11.5px; box-shadow: 1px 1px 0 var(--skin-shadow); }
 .missions-panel[data-skin="paper"] .missions-declare-input:focus { outline: 2px solid var(--skin-accent-strong); outline-offset: 1px; }

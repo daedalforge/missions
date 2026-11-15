@@ -1270,10 +1270,6 @@ test('le cadre de carte est commun, le pick garde sa géométrie et son affordan
   assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]:hover/)
   assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]:focus-visible/)
   assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]\[aria-pressed="true"\]/)
-  // Le survol d'une carte bloquée reste un survol de contrôle : la teinte de
-  // blocage, elle, se pose sur la carte quelle que soit son interaction.
-  assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]\[data-blocked="true"\]:hover/)
-  assert.doesNotMatch(SOURCE, /^\.missions-card\[data-blocked="true"\]:hover/m, 'pas d’affordance de survol sans interaction')
   assert.doesNotMatch(SOURCE, /\.wf-pick[ ,{]/, 'la carte pick a quitté sa coque locale')
 })
 
