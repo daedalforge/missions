@@ -13,7 +13,7 @@ courant, et le bouton qui l'ouvre la nomme aussi.
       │           │          │            │              │
       │           │          │            │              └─ livrée : merge, issue fermée
       │           │          │            └─ PR approuvée
-      │           │          └─ branche poussée, PR ouverte, tests verts
+      │           │          └─ branche poussée, PR ouverte, tests verts, revue interne validée
       │           └─ cadrage validé : périmètre, critères, plan
       └─ ticket créé, rien n'est encore décidé
 ```
@@ -59,7 +59,7 @@ rattachée à un epic, qui est un milestone (voir
 | Étape | Entrée | Sortie | Page |
 |---|---|---|---|
 | Cadrage | ticket à cadrer | ticket **prête** : périmètre, critères, plan | [cadrage.md](cadrage.md) |
-| Exécution | ticket prête | ticket **en revue** : branche, commits, PR | [execution.md](execution.md) |
+| Exécution | ticket prête | ticket **en revue** : branche, commits, PR, revue interne validée | [execution.md](execution.md) |
 | Revue | ticket en revue | décision : approuvé (ticket **prêt à partir**) ou à reprendre | [review.md](review.md) |
 | Clôture | ticket prêt à partir | ticket **terminée** par le demandeur : merge, ticket fermé, branche supprimée ; journal et checklist soldés par la session | [cloture.md](cloture.md) |
 
