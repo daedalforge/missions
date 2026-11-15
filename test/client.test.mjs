@@ -1113,6 +1113,9 @@ test('le thème Naruto finit le formulaire de branche et le menu des filtres', (
   // Le menu des filtres garde la teinte du thème ; les accents d'état, eux,
   // ont quitté le bundle avec `StatusFilter`.
   assert.match(manga('.missions-status-option:hover'), /background: color-mix\(in srgb, var\(--skin-ink\) 8%, transparent\)/)
+  // Le vide des cartes a quitté le bundle : ni bandeau pointillé, ni état vide
+  // héros, les deux seules classes `missions-empty*` du chemin cartes.
+  assert.doesNotMatch(SOURCE, /missions-empty/)
   // L'aide d'erreur repasse au corail clair en thème sombre : le corail profond
   // du thème clair tomberait à 2,6:1 sur le fond sombre.
   const darkError = SOURCE.slice(SOURCE.indexOf(':root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-declare-note--error,'))
