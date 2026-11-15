@@ -10,19 +10,16 @@ import {
   SUMMARY_TTL_MS,
   adoptWorktree,
   countRepositories,
-  flattenLayout,
   isValidBranchName,
   isValidRepositoryName,
   listRepositories,
   parseBranches,
   parseLog,
-  parseMacheteLayout,
   parseStatus,
   parseWorktreeList,
   readHistory,
   readRepository,
   readRepositoryNames,
-  readTree,
   resetRepositorySummary,
   summarizeRepositories,
 } from '../lib/repositories.js'
@@ -456,75 +453,6 @@ test('une branche se vérifie avant d’atteindre git', () => {
   }
 })
 
-test('un layout machete se lit par ses indentations, annotations comprises', () => {
-  const entries = parseMacheteLayout([
-    '# commentaire',
-    'main',
-    '    feat/a  PR #12',
-    '        feat/a/fix',
-    '    hotfix/24',
-  ].join('\n'))
-  assert.deepEqual(entries, [
-    { name: 'main', depth: 0, annotation: null },
-    { name: 'feat/a', depth: 1, annotation: 'PR #12' },
-    { name: 'feat/a/fix', depth: 2, annotation: null },
-    { name: 'hotfix/24', depth: 1, annotation: null },
-  ])
-
-  assert.deepEqual(flattenLayout(entries).map((row) => [row.name, row.parent]), [
-    ['main', null],
-    ['feat/a', 'main'],
-    ['feat/a/fix', 'feat/a'],
-    ['hotfix/24', 'main'],
-  ])
-  // Une profondeur qui saute est ramenée au niveau atteignable.
-  assert.deepEqual(flattenLayout([{ name: 'seul', depth: 4 }]).map((row) => [row.name, row.depth, row.parent]), [['seul', 0, null]])
-  assert.deepEqual(parseMacheteLayout(''), [])
-  assert.deepEqual(parseBranches('main\n  feat/a  \n\n'), ['main', 'feat/a'], 'une ligne par réf, sans blancs')
-})
-
-test('le layout réel de Alpha donne ses seize branches, profondeurs et parents', () => {
-  const text = [
-    'main',
-    '    epic/ex-483',
-    '        feat/ex-752',
-    '            feat/ex-539',
-    '                feat/ex-755',
-    '                    feat/ex-758',
-    '                        feat/ex-761',
-    '                            feat/ex-783',
-    '                                feat/ex-765',
-    '                                feat/ex-768',
-    '        feat/ex-1185',
-    '        feat/ex-1186',
-    '        feat/ex-1184',
-    '    epic/ex-1309 slide-out=no',
-    '        fix/ex-1503',
-    '            feat/ex-1439',
-  ].join('\n')
-  const rows = flattenLayout(parseMacheteLayout(text))
-  assert.equal(rows.length, 16)
-  assert.deepEqual(rows.map((row) => [row.name, row.depth, row.parent]), [
-    ['main', 0, null],
-    ['epic/ex-483', 1, 'main'],
-    ['feat/ex-752', 2, 'epic/ex-483'],
-    ['feat/ex-539', 3, 'feat/ex-752'],
-    ['feat/ex-755', 4, 'feat/ex-539'],
-    ['feat/ex-758', 5, 'feat/ex-755'],
-    ['feat/ex-761', 6, 'feat/ex-758'],
-    ['feat/ex-783', 7, 'feat/ex-761'],
-    ['feat/ex-765', 8, 'feat/ex-783'],
-    ['feat/ex-768', 8, 'feat/ex-783'],
-    ['feat/ex-1185', 2, 'epic/ex-483'],
-    ['feat/ex-1186', 2, 'epic/ex-483'],
-    ['feat/ex-1184', 2, 'epic/ex-483'],
-    ['epic/ex-1309', 1, 'main'],
-    ['fix/ex-1503', 2, 'epic/ex-1309'],
-    ['feat/ex-1439', 3, 'fix/ex-1503'],
-  ])
-  assert.equal(rows.find((row) => row.name === 'epic/ex-1309').annotation, 'slide-out=no')
-})
-
 test('worktree list se lit en lignes, avec le worktree d’ici', () => {
   const text = [
     'worktree /Users/moi/projects/alpha',
@@ -613,102 +541,6 @@ test('une branche refusée ou inconnue est une erreur de demande', async (t) => 
 
   assert.equal(calls.some((call) => /--all/.test(call.command)), false, 'le nom refusé n’atteint jamais git')
   assert.equal(calls.some((call) => /feature\/zzz/.test(call.command)), false)
-})
-
-test('l’arbre d’un dépôt : layout, commits par branche, worktrees', async (t) => {
-  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
-  await writeFile(join(dir, 'alpha', '.git', 'machete'), 'main\n    feat/a  PR #12\n    ghost\n')
-  // Le worktree existe sur le disque : c'est son chemin réel que la ligne
-  // compare à la racine pour décider si elle reçoit un nom.
-  await mkdir(join(dir, 'alpha-12'), { recursive: true })
-  const worktrees = [
-    `worktree ${join(dir, 'alpha')}`, 'HEAD abc1234', 'branch refs/heads/main', '',
-    `worktree ${join(dir, 'alpha-12')}`, 'HEAD def5678', 'branch refs/heads/feat/a', '',
-  ].join('\n')
-  const { run, calls } = fauxGit({
-    'alpha rev-parse --git-common-dir': '.git\n',
-    'alpha worktree list --porcelain': worktrees,
-    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\nfeat/a\n',
-    'alpha log --format=%h%x1f%ct%x1f%s -n 11 main..refs/heads/feat/a': log(
-      ...Array.from({ length: 11 }, (_, i) => commit(`c0ffee${i}`, 1794468058 - i, `commit ${i}`)),
-    ),
-  })
-
-  const tree = await readTree(dir, 'alpha', { run })
-  assert.equal(tree.layout, true)
-  assert.deepEqual(tree.branches.map((row) => [row.name, row.depth, row.parent, row.worktree, row.missing]), [
-    ['main', 0, null, 'alpha', false],
-    ['feat/a', 1, 'main', 'alpha-12', false],
-    ['ghost', 1, 'main', null, true],
-  ])
-  assert.equal(tree.branches[1].annotation, 'PR #12')
-  assert.equal(tree.branches[1].commits.length, 10, 'dix commits, pas onze')
-  assert.equal(tree.branches[1].truncated, true, 'la onzième ligne est le marqueur')
-  assert.deepEqual(tree.branches[2].commits, [], 'une branche absente ne lance pas de log')
-  assert.equal(tree.worktrees.find((row) => row.path === join(dir, 'alpha')).current, true)
-  // Chaque ligne dit si elle est la souche, et le nom de son dossier quand il
-  // est un enfant direct de la racine : c'est ce nom que le geste envoie.
-  assert.deepEqual(tree.worktrees.map((row) => [row.path, row.main, row.name]), [
-    [join(dir, 'alpha'), true, 'alpha'],
-    [join(dir, 'alpha-12'), false, 'alpha-12'],
-  ])
-  assert.equal(calls.filter((call) => /^log /.test(call.command)).length, 1, 'seule une branche locale et rattachée lance un log')
-  assert.deepEqual(
-    [...new Set(calls.map((call) => call.command.split(' ')[0]))].sort(),
-    ['for-each-ref', 'log', 'rev-parse', 'worktree'],
-    'l’onglet ne lance que les lectures autorisées',
-  )
-})
-
-test('un layout vide est un layout absent, pas une branche fantôme', async (t) => {
-  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
-  await writeFile(join(dir, 'alpha', '.git', 'machete'), '   \n\n')
-  const { run, calls } = fauxGit({
-    'alpha rev-parse --git-common-dir': '.git\n',
-    'alpha worktree list --porcelain': `worktree ${join(dir, 'alpha')}\nHEAD abc1234\nbranch refs/heads/main\n`,
-    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\n',
-  })
-
-  const tree = await readTree(dir, 'alpha', { run })
-  assert.equal(tree.layout, false)
-  assert.deepEqual(tree.branches, [])
-  assert.equal(calls.some((call) => /^log /.test(call.command)), false)
-})
-
-test('un worktree hors de la racine n’a pas de nom, donc pas de geste', async (t) => {
-  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
-  const ailleurs = join(tmpdir(), 'missions-away', 'wt')
-  const worktrees = [
-    `worktree ${join(dir, 'alpha')}`, 'HEAD abc1234', 'branch refs/heads/main', '',
-    `worktree ${ailleurs}`, 'HEAD def5678', 'branch refs/heads/hot', '',
-  ].join('\n')
-  const { run } = fauxGit({
-    'alpha rev-parse --git-common-dir': '.git\n',
-    'alpha worktree list --porcelain': worktrees,
-    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\nhot\n',
-    'alpha log --format=%h%x1f%ct%x1f%s -n 11 main..refs/heads/hot': '',
-  })
-
-  const tree = await readTree(dir, 'alpha', { run })
-  assert.deepEqual(tree.worktrees.map((row) => [row.path, row.main, row.name]), [
-    [join(dir, 'alpha'), true, 'alpha'],
-    [ailleurs, false, null],
-  ])
-})
-
-test('sans fichier machete, l’arbre est plat mais les worktrees restent', async (t) => {
-  const dir = await root(t, [{ name: 'alpha', git: 'dir' }])
-  const { run } = fauxGit({
-    'alpha rev-parse --git-common-dir': '.git\n',
-    'alpha worktree list --porcelain': `worktree ${join(dir, 'alpha')}\nHEAD abc1234\nbranch refs/heads/main\n`,
-    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\n',
-  })
-
-  const tree = await readTree(dir, 'alpha', { run })
-  assert.equal(tree.layout, false)
-  assert.deepEqual(tree.branches, [])
-  assert.deepEqual(tree.worktrees.map((row) => [row.path, row.branch, row.current]), [[join(dir, 'alpha'), 'main', true]])
-  assert.deepEqual(tree.worktrees.map((row) => [row.main, row.name]), [[true, 'alpha']])
 })
 
 /**

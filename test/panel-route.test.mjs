@@ -1824,43 +1824,14 @@ test('POST repositories/adopt rend le refus de l’état, avec son côté et ses
   assert.equal(calls.some((line) => line.includes(' switch ')), false, 'un refus n’écrit pas')
 })
 
-test('GET repositories/tree lit le layout, les commits et les worktrees', async (t) => {
+test('GET repositories/tree n’existe plus : la route répond 404', async (t) => {
   const root = await workspace(t, ['alpha'])
-  await writeFile(join(root, 'alpha', '.git', 'machete'), 'main\n    feat/a  PR #12\n    ghost\n')
-  const worktrees = [
-    `worktree ${join(root, 'alpha')}`, 'HEAD abc1234', 'branch refs/heads/main', '',
-    `worktree ${join(root, 'alpha-12')}`, 'HEAD def5678', 'branch refs/heads/feat/a', '',
-  ].join('\n')
-  const { run } = fauxGitRun({
-    'alpha rev-parse --git-common-dir': '.git\n',
-    'alpha worktree list --porcelain': worktrees,
-    'alpha for-each-ref --format=%(refname:short) refs/heads': 'main\nfeat/a\n',
-    'alpha log --format=%h%x1f%ct%x1f%s -n 11 main..refs/heads/feat/a': 'c0ffee1\x1f1794468058\x1ffeat: a\n',
-  })
+  const { run } = fauxGitRun({})
   const { handler } = await mount(t, { workspaceRoot: root, runGit: run })
 
   const response = await call(handler, { path: '/missions/api/repositories/tree?name=alpha' })
-  assert.equal(response.status, 200)
-  assert.equal(response.body.layout, true)
-  assert.deepEqual(response.body.branches.map((row) => [row.name, row.depth, row.parent, row.missing]), [
-    ['main', 0, null, false],
-    ['feat/a', 1, 'main', false],
-    ['ghost', 1, 'main', true],
-  ])
-  assert.equal(response.body.branches[1].annotation, 'PR #12')
-  assert.equal(response.body.branches[1].worktree, 'alpha-12')
-  assert.equal(response.body.branches[1].commits[0].sha, 'c0ffee1')
-  assert.deepEqual(response.body.branches[2].commits, [])
-  const ici = response.body.worktrees.find((row) => row.path === join(root, 'alpha'))
-  assert.equal(ici.current, true)
-  assert.equal(ici.branch, 'main')
-
-  const missing = await call(handler, { path: '/missions/api/repositories/tree' })
-  assert.equal(missing.status, 400)
-  assert.match(missing.body.error, /invalid repository name/)
-
-  const post = await call(handler, { method: 'POST', path: '/missions/api/repositories/tree?name=alpha', body: {} })
-  assert.equal(post.status, 405)
+  assert.equal(response.status, 404)
+  assert.deepEqual(response.body, { error: 'unknown route' })
 })
 
 test('une racine illisible est une erreur du serveur, pas un 404', async (t) => {
@@ -1881,7 +1852,6 @@ test('les routes des dépôts refusent une requête non locale', async (t) => {
     '/missions/api/repositories/count',
     '/missions/api/repositories/detail?name=alpha',
     '/missions/api/repositories/commits?name=alpha',
-    '/missions/api/repositories/tree?name=alpha',
   ]) {
     const response = await call(handler, { path, remoteAddress: '10.0.0.7' })
     assert.equal(response.status, 403, path)
