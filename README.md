@@ -127,6 +127,12 @@ Depuis cet onglet, une mission close peut être **archivée** : son dossier pass
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
 modifié — la mission quitte Done et reste sur le disque.
 
+Done affiche ces closes avec l'arbre des missions : le même champ de recherche
+(`aria-label` « Done outline »), les mêmes filtres Type, Épic, Projet,
+Priorité, Clear et Missing, les mêmes ancres de checklist, le même volet et le
+même clavier. Seul le statut est figé — aucune barre d'états, aucun select — et
+le pied de liste compte les lignes closes (`N done`).
+
 L'onglet **Missions** est une liste plate : les missions ouvertes, une par
 ligne, à gauche de son volet droit. L'épic n'est plus un niveau de l'arbre mais
 une colonne : chaque ligne montre la clé courte de son épic (`MIS-2`), ou une
@@ -192,8 +198,9 @@ ne déborde horizontalement. Les lignes de checklist viennent de
 paie à nouveau) : une lecture disque par ouverture de panneau, pas une par
 frappe. Les gestes comptent `search.q` (palier de longueur), `search.family`,
 `preview.kind` (`mission` seulement), `mission.open` avec son `from` (`row`) et
-`mission.pin` (`pin` ou `unpin`). **Done**
-garde le chemin cartes, inchangé.
+`mission.pin` (`pin` ou `unpin`). **Done** monte le même arbre, avec son
+propre champ et ses propres filtres : un seul chemin de liste pour les deux
+onglets.
 
 Le **Dashboard** ajoute deux sections à son périmètre. **Repositories**
 croise les missions ouvertes avec le scan des dépôts — la route
