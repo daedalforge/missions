@@ -260,6 +260,9 @@ window.__ModuleLoader__.load({
   const WORKFLOW_KIND_LABELS = { etape: 'étapes', statuts: 'statuts' }
   const WORKFLOW_FORM = { title: '', description: '', kind: 'etape', local: false }
     const REFRESH_MS = 60000
+    // The pointer rests this long before the bubble opens: fast enough to read
+    // as an answer, slow enough that crossing the row opens nothing.
+    const TIP_DELAY = 120
 
     const STATE_LABELS = {
       'to-refine': 'to refine',
@@ -416,12 +419,26 @@ window.__ModuleLoader__.load({
 }
 .missions-toolbar { display: flex; flex-direction: column; gap: 10px; padding: 16px 28px 0; flex: none; }
 .missions-toolbar-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-/* The view's own command: one icon, its name carried by aria-label and title. */
+/* The view's own command: one icon, its name carried by aria-label and data-tip. */
 .missions-icon-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-secondary, #4a4a4a); cursor: pointer; }
 .missions-icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-icon-btn:disabled { opacity: .55; cursor: default; }
 .missions-icon-btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 45%, transparent); outline-offset: 2px; }
 .missions-icon-btn svg { display: block; }
+/* The panel's one tooltip: a layer at the root, placed from the trigger's box
+   and kept inside the panel's, so neither the list's scroll nor the drawer's
+   clips it. It never takes the pointer: the trigger underneath keeps the
+   hover. An icon whose button can be disabled sits in a wrapper, because a
+   disabled control receives no pointer event at all. */
+.missions-tip { position: absolute; z-index: 40; max-width: 260px; padding: 5px 8px; border: 1px solid var(--dsw-alias-border-l2, GrayText); border-radius: 6px; background: var(--dsw-alias-bg-layer-1, Canvas); color: var(--dsw-alias-label-primary, CanvasText); font-size: 11.5px; line-height: 1.45; box-shadow: 0 6px 16px color-mix(in srgb, var(--dsw-alias-label-primary, CanvasText) 16%, transparent); pointer-events: none; opacity: 0; visibility: hidden; transform: translateY(2px); transition: opacity .1s ease, transform .1s ease; }
+.missions-tip[data-side="top"] { transform-origin: 50% 100%; }
+.missions-tip[data-side="bottom"] { transform-origin: 50% 0; transform: translateY(-2px); }
+.missions-tip[data-shown="true"] { opacity: 1; visibility: visible; transform: none; }
+@media (prefers-reduced-motion: reduce) { .missions-tip { transition: none; } }
+/* The wrapper of a gesture that can be disabled: it is what receives the
+   pointer and the focus, the button keeps its look and its place in the row. */
+.missions-tip-anchor { display: inline-flex; flex: none; }
+.missions-tree-worktree .missions-tip-anchor { margin-left: auto; }
 /* The batch archive: the list's gesture, wider than an icon because its label
    carries the number of rows it names. Armed, it keeps the danger family of
    the drawer's archive so the second click reads as the one that moves. */
@@ -767,7 +784,8 @@ window.__ModuleLoader__.load({
 .missions-props dd { margin: 0; color: var(--dsw-alias-label-primary, #1f1f1f); overflow-wrap: anywhere; }
 /* The foot stacks only the names that must stay readable — a destructive
    gesture confirms with its own text — then one row of icon gestures: each
-   icon carries its name in title and aria-label. */
+   icon carries its name in data-tip and aria-label, and the gestures a
+   blocker can disable sit in a wrapper that takes the events. */
 .missions-drawer-foot { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
 .missions-drawer-actions { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
 .missions-action { height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; text-decoration: none; cursor: pointer; }
@@ -1421,6 +1439,14 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 .missions-panel[data-skin="paper"] .missions-tree-worktree-label { color: var(--skin-ink); font-family: var(--skin-mono); }
 .missions-panel[data-skin="paper"] .missions-tree-worktree-branch { color: var(--skin-ink-2); }
 .missions-panel[data-skin="paper"] .missions-tree-worktree-current { color: var(--skin-ink-3); }
+
+/* The tooltip under the illustrated skin: a slip cut from the page's paper,
+   ink border and offset print shadow, like the drawer's own cards. */
+.missions-panel[data-skin="paper"] .missions-tip { border: 1.5px solid var(--skin-ink); border-radius: 7px; background: var(--skin-page-2); color: var(--skin-ink); box-shadow: 2px 2px 0 var(--skin-shadow); font-family: var(--skin-display); }
+/* Dark keeps the same tokens: the skin's own dark values carry it, and only
+   the shadow deepens so the bubble still lifts off the page. */
+:root[data-ds-dark-theme] .missions-tip,
+body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srgb, var(--dsw-alias-label-primary, CanvasText) 26%, transparent); }
 
 /* Empty result: a tilted Konoha print, the portrait and a speech bubble. */
 .missions-panel[data-skin="paper"] .missions-loader { color: var(--skin-ink-3); min-height: 340px; }
@@ -2867,7 +2893,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             type: 'button',
             className: 'missions-icon-btn',
             'aria-label': 'Refresh',
-            title: 'Refresh',
+            'data-tip': 'Refresh',
             onClick: onRefresh,
             disabled: loading,
             'aria-busy': loading ? 'true' : 'false',
@@ -2878,7 +2904,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             type: 'button',
             className: 'missions-icon-btn',
             'aria-label': 'Create a mission',
-            title: 'Create a mission',
+            'data-tip': 'Create a mission',
             onClick: onNew,
           }, h(PlusIcon, { theme }))
       const archiveButton = archiveAll === null
@@ -3790,7 +3816,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               h('div', { className: 'missions-drawer-key' }, mission.key),
               h('h2', { className: 'missions-drawer-title' }, mission.title),
             ),
-            h('button', { type: 'button', className: 'missions-drawer-close', onClick: onClose, 'aria-label': 'Close' },
+            h('button', { type: 'button', className: 'missions-drawer-close', onClick: onClose, 'aria-label': 'Close', 'data-tip': 'Close' },
               h('svg', { width: 13, height: 13, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 },
                 h('path', { d: 'M4 4l8 8M12 4l-8 8', 'stroke-linecap': 'round' }),
               ),
@@ -3816,11 +3842,16 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 
           h('div', { className: 'missions-drawer-foot' },
             // Every action of the foot shares one row: icon only, its name in
-            // `title` for the pointer and in `aria-label` for the screen reader.
+            // `data-tip` for the pointer and in `aria-label` for the screen
+            // reader. The gestures a blocker can disable sit in a wrapper, which
+            // is what receives the events.
             h('div', { className: 'missions-drawer-actions' },
               // A pin is this checkout's reading order, not the tracker's: the
               // button is offered in every state and says where it stands.
-              h('button', {
+              h('span', {
+                className: 'missions-tip-anchor',
+                'data-tip': writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
+              }, h('button', {
                 type: 'button',
                 className: pinnedNow
                   ? 'missions-action missions-action--icon missions-action--pin missions-action--pinned'
@@ -3829,41 +3860,44 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                 disabled: writingPin,
                 'aria-pressed': pinnedNow ? 'true' : 'false',
                 'data-pinned': pinnedNow ? 'true' : 'false',
-                title: writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
                 'aria-label': writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
-              }, h(ActionIcon, { name: 'pin' })),
+              }, h(ActionIcon, { name: 'pin' }))),
               // Only the step that follows the merge may delete the branch: the
               // panel shows the gesture there and nowhere else, and the host
               // re-reads the state before touching anything. It opens the row so
               // it never sits next to the primary; its first click arms it, its
               // second confirms, and the button itself says which state it is in.
               mission.state === 'ready-for-prod'
-                ? h('button', {
+                ? h('span', {
+                    className: 'missions-tip-anchor',
+                    'data-tip': blocker ?? (closing ? 'Closing…' : armedClose ? 'Confirm — close the local checkout' : 'Close the local checkout'),
+                  }, h('button', {
                     type: 'button',
                     className: closing || !armedClose
                       ? 'missions-action missions-action--icon missions-action--danger'
                       : 'missions-action missions-action--icon missions-action--danger missions-action--danger-armed',
                     onClick: closeLocalCheckout,
                     disabled: closing || blocker !== null,
-                    title: blocker ?? (closing ? 'Closing…' : armedClose ? 'Confirm — close the local checkout' : 'Close the local checkout'),
                     'aria-label': closing ? 'Closing…' : armedClose ? 'Confirm — close the local checkout' : 'Close the local checkout',
                     'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
-                  }, h(ActionIcon, { name: closing || !armedClose ? 'close' : 'confirm' }))
+                  }, h(ActionIcon, { name: closing || !armedClose ? 'close' : 'confirm' })))
                 : null,
               // A done mission can be archived: its folder moves to
               // missions/archives/. Two clicks, like the close: the first arms
               // it, the second posts, and the button itself shows its state.
               mission.state === 'done'
-                ? h('button', {
+                ? h('span', {
+                    className: 'missions-tip-anchor',
+                    'data-tip': archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive',
+                  }, h('button', {
                     type: 'button',
                     className: armedArchive && !archiving
                       ? 'missions-action missions-action--icon missions-action--armed'
                       : 'missions-action missions-action--icon',
                     onClick: archiveMission,
                     disabled: archiving,
-                    title: archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive',
                     'aria-label': archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive',
-                  }, h(ActionIcon, { name: armedArchive && !archiving ? 'confirm' : 'archive' }))
+                  }, h(ActionIcon, { name: armedArchive && !archiving ? 'confirm' : 'archive' })))
                 : null,
               mission.url
                 ? h('a', {
@@ -3871,80 +3905,89 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                     href: mission.url,
                     target: '_blank',
                     rel: 'noreferrer noopener',
-                    title: 'Open on the tracker',
+                    'data-tip': 'Open on the tracker',
                     'aria-label': 'Open on the tracker',
                     onClick: () => track('mission.open-tracker'),
                   }, h(ActionIcon, { name: 'tracker' }))
-                : h('button', { type: 'button', className: 'missions-action missions-action--icon', disabled: true, title: 'No tracker link', 'aria-label': 'No tracker link' }, h(ActionIcon, { name: 'tracker' })),
+                : h('span', { className: 'missions-tip-anchor', 'data-tip': 'No tracker link' },
+                    h('button', { type: 'button', className: 'missions-action missions-action--icon', disabled: true, 'aria-label': 'No tracker link' }, h(ActionIcon, { name: 'tracker' })),
+                  ),
               // The Tolgee import belongs to projects that declare their locales:
               // elsewhere the button is absent, not disabled — there is nothing
               // to check and no file to write.
               mission.translations
-                ? h('button', {
+                ? h('span', {
+                    className: 'missions-tip-anchor',
+                    'data-tip': importingTolgee ? 'Checking the translations…' : 'Tolgee import',
+                  }, h('button', {
                     type: 'button',
                     className: 'missions-action missions-action--icon',
                     onClick: importTolgee,
                     disabled: importingTolgee,
-                    title: importingTolgee ? 'Checking the translations…' : 'Tolgee import',
                     'aria-label': importingTolgee ? 'Checking the translations…' : 'Tolgee import',
-                  }, h(ActionIcon, { name: 'tolgee' }))
+                  }, h(ActionIcon, { name: 'tolgee' })))
                 : null,
               // The free session asks a question: it opens in every state but
               // done, and sits before the state's own gestures so those stay
               // neighbours and the primary stays last.
               mission.state === 'done'
                 ? null
-                : h('button', {
-                    type: 'button',
-                    className: 'missions-action missions-action--icon',
-                    onClick: startFreeSession,
-                    disabled: freeBlocker !== null,
-                    title: freeBlocker ?? freeLabel,
-                    'aria-label': freeLabel,
-                    'aria-describedby': freeBlocker ? 'missions-session-blocked' : undefined,
-                  }, h(ActionIcon, { name: 'free' })),
+                : h('span', { className: 'missions-tip-anchor', 'data-tip': freeBlocker ?? freeLabel },
+                    h('button', {
+                      type: 'button',
+                      className: 'missions-action missions-action--icon',
+                      onClick: startFreeSession,
+                      disabled: freeBlocker !== null,
+                      'aria-label': freeLabel,
+                      'aria-describedby': freeBlocker ? 'missions-session-blocked' : undefined,
+                    }, h(ActionIcon, { name: 'free' })),
+                  ),
               // Only a mission in review has remarks to check: the client does
               // not know whether a PR exists, so the state alone decides, and
               // the session stops with a word when `gh` finds none.
               mission.state === 'in-review'
-                ? h('button', {
-                    type: 'button',
-                    className: 'missions-action missions-action--icon',
-                    onClick: startFeedbackSession,
-                    disabled: blocker !== null,
-                    title: blocker ?? feedbackLabel,
-                    'aria-label': feedbackLabel,
-                    'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
-                  }, h(ActionIcon, { name: 'feedback' }))
+                ? h('span', { className: 'missions-tip-anchor', 'data-tip': blocker ?? feedbackLabel },
+                    h('button', {
+                      type: 'button',
+                      className: 'missions-action missions-action--icon',
+                      onClick: startFeedbackSession,
+                      disabled: blocker !== null,
+                      'aria-label': feedbackLabel,
+                      'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                    }, h(ActionIcon, { name: 'feedback' })),
+                  )
                 : null,
               // The colleagues' validation is the review's own gesture: it
               // replaces the step session, stays next to the remarks, and is
               // the row's primary and last.
               mission.state === 'in-review'
-                ? h('button', {
-                    type: 'button',
-                    className: 'missions-action missions-action--icon missions-action--primary',
-                    onClick: startSession,
-                    disabled: blocker !== null,
-                    title: blocker ?? validateLabel,
-                    'aria-label': validateLabel,
-                    'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
-                  }, h(ActionIcon, { name: 'validate' }))
+                ? h('span', { className: 'missions-tip-anchor', 'data-tip': blocker ?? validateLabel },
+                    h('button', {
+                      type: 'button',
+                      className: 'missions-action missions-action--icon missions-action--primary',
+                      onClick: startSession,
+                      disabled: blocker !== null,
+                      'aria-label': validateLabel,
+                      'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                    }, h(ActionIcon, { name: 'validate' })),
+                  )
                 : null,
               // Outside review, the step session stays the primary and the last.
               mission.state === 'in-review'
                 ? null
-                : h('button', {
-                    type: 'button',
-                    className: 'missions-action missions-action--icon missions-action--primary',
-                    onClick: startSession,
-                    disabled: blocker !== null,
-                    title: blocker ?? sessionLabel,
-                    'aria-label': sessionLabel,
-                    'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
-                  }, h(ActionIcon, { name: 'session' })),
+                : h('span', { className: 'missions-tip-anchor', 'data-tip': blocker ?? sessionLabel },
+                    h('button', {
+                      type: 'button',
+                      className: 'missions-action missions-action--icon missions-action--primary',
+                      onClick: startSession,
+                      disabled: blocker !== null,
+                      'aria-label': sessionLabel,
+                      'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                    }, h(ActionIcon, { name: 'session' })),
+                  ),
             ),
-          ),      )
+          ),
+        )
     }
 
     const CREATE_TYPE_LABELS = { bug: 'Bug', story: 'Story' }
@@ -4108,7 +4151,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             h('div', { className: 'missions-drawer-key' }, 'New mission'),
             h('h2', { className: 'missions-drawer-title' }, 'Create a mission'),
           ),
-          h('button', { type: 'button', className: 'missions-drawer-close', onClick: onClose, 'aria-label': 'Close', disabled: busy }, '×'),
+          h('button', { type: 'button', className: 'missions-drawer-close', onClick: onClose, 'aria-label': 'Close', 'data-tip': 'Close', disabled: busy }, '×'),
         ),
 
         optionsError
@@ -4735,7 +4778,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             h('h3', { className: 'wf-card-title' }, 'Nouveau workflow'),
             h('p', { className: 'wf-note' }, 'Le modèle et le document sont écrits sous workflows/, jamais à la place d’un fichier existant.'),
           ),
-          h('button', { type: 'button', className: 'missions-drawer-close', 'aria-label': 'Fermer la création', onClick: closeCreate }, '×'),
+          h('button', { type: 'button', className: 'missions-drawer-close', 'aria-label': 'Fermer la création', 'data-tip': 'Fermer la création', onClick: closeCreate }, '×'),
         ),
         createForm,
       )
@@ -5021,7 +5064,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               },
                 h('span', null, `${labelOf(edge.from)} → ${labelOf(edge.to)}`),
                 edge.when ? h('span', { className: 'wf-arc-when' }, edge.when) : null,
-                h('button', { type: 'button', className: 'wf-arc-del', title: 'Supprimer l’arc', onClick: (event) => { event.stopPropagation(); removeArc(edge.from, edge.to) } }, '×'),
+                h('button', { type: 'button', className: 'wf-arc-del', 'aria-label': 'Supprimer l’arc', 'data-tip': 'Supprimer l’arc', onClick: (event) => { event.stopPropagation(); removeArc(edge.from, edge.to) } }, '×'),
               ))),
           h('label', { className: 'wf-field' }, h('span', null, 'Du'), h('select', { value: arc.from, onChange: (event) => setArc({ ...arc, from: event.target.value }) }, h('option', { value: '' }, '—'), ends.map((end) => h('option', { key: `from-${end.id}`, value: end.id }, end.id)))),
           h('label', { className: 'wf-field' }, h('span', null, 'Au'), h('select', { value: arc.to, onChange: (event) => setArc({ ...arc, to: event.target.value }) }, h('option', { value: '' }, '—'), ends.map((end) => h('option', { key: `to-${end.id}`, value: end.id }, end.id)))),
@@ -5400,15 +5443,16 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           h('span', { className: 'missions-repo-age' }, age),
         ),
         repository.kind === 'worktree'
-          ? h('button', {
-              type: 'button',
-              className: 'missions-repo-main',
-              title: switchTitle,
-              'aria-label': mainName ? `Bring ${repository.name} into ${mainName}` : 'Bring the worktree into its main checkout',
-              'aria-busy': adopting ? 'true' : 'false',
-              disabled: !mainName || adopting || blocked,
-              onClick: mainName ? () => onAdopt(repository) : undefined,
-            }, h(MainWorktreeIcon))
+          ? h('span', { className: 'missions-tip-anchor', 'data-tip': switchTitle },
+              h('button', {
+                type: 'button',
+                className: 'missions-repo-main',
+                'aria-label': mainName ? `Bring ${repository.name} into ${mainName}` : 'Bring the worktree into its main checkout',
+                'aria-busy': adopting ? 'true' : 'false',
+                disabled: !mainName || adopting || blocked,
+                onClick: mainName ? () => onAdopt(repository) : undefined,
+              }, h(MainWorktreeIcon)),
+            )
           : h('span', { className: 'missions-repo-main-slot', 'aria-hidden': 'true' }),
       )
     }
@@ -5898,7 +5942,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             h('div', { className: 'missions-drawer-key' }, shown.kind === 'worktree' ? 'worktree' : 'clone'),
             h('h2', { className: 'missions-drawer-title' }, repository.name),
           ),
-          h('button', { type: 'button', className: 'missions-drawer-close', onClick: onClose, 'aria-label': 'Close' },
+          h('button', { type: 'button', className: 'missions-drawer-close', onClick: onClose, 'aria-label': 'Close', 'data-tip': 'Close' },
             h('svg', { width: '14', height: '14', viewBox: '0 0 14 14', fill: 'none', 'aria-hidden': 'true' },
               h('path', { d: 'M3 3l8 8M11 3l-8 8', stroke: 'currentColor', strokeWidth: '1.4', strokeLinecap: 'round' }),
             ),
@@ -5961,17 +6005,18 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               type: 'button',
               className: 'missions-action missions-action--icon',
               onClick: openConflictSession,
-              title: 'Resolve conflicts',
+              'data-tip': 'Resolve conflicts',
               'aria-label': 'Resolve conflicts',
             }, h(ActionIcon, { name: 'resolve' })),
-            h('button', {
-              type: 'button',
-              className: 'missions-action missions-action--icon missions-action--primary',
-              onClick: openSquashSession,
-              disabled: squashBlocker !== null,
-              title: squashBlocker ?? squashLabel,
-              'aria-label': squashBlocker ?? squashLabel,
-            }, h(ActionIcon, { name: 'squash' })),
+            h('span', { className: 'missions-tip-anchor', 'data-tip': squashBlocker ?? squashLabel },
+              h('button', {
+                type: 'button',
+                className: 'missions-action missions-action--icon missions-action--primary',
+                onClick: openSquashSession,
+                disabled: squashBlocker !== null,
+                'aria-label': squashBlocker ?? squashLabel,
+              }, h(ActionIcon, { name: 'squash' })),
+            ),
           ),
         ),
       )
@@ -6119,15 +6164,19 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         worktree.main
           ? h('span', { className: 'missions-tree-worktree-main', title: 'The main worktree cannot be removed.' }, 'main')
           : worktree.name
-            ? h('button', {
-                type: 'button',
-                className: 'missions-tree-remove',
-                title: `Remove ${worktree.name} (${worktree.branch ?? 'detached'}) — its branch is kept`,
-                'aria-label': `Remove the worktree ${worktree.name}`,
-                'aria-busy': removing ? 'true' : 'false',
-                disabled: removing || blocked,
-                onClick: () => onRemove(worktree),
-              }, h(ActionIcon, { name: 'remove' }))
+            ? h('span', {
+                className: 'missions-tip-anchor',
+                'data-tip': `Remove ${worktree.name} (${worktree.branch ?? 'detached'}) — its branch is kept`,
+              },
+                h('button', {
+                  type: 'button',
+                  className: 'missions-tree-remove',
+                  'aria-label': `Remove the worktree ${worktree.name}`,
+                  'aria-busy': removing ? 'true' : 'false',
+                  disabled: removing || blocked,
+                  onClick: () => onRemove(worktree),
+                }, h(ActionIcon, { name: 'remove' })),
+              )
             : null,
       )
     }
@@ -6458,6 +6507,119 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // The creation drawer, beside the fiche and never with it: the tab opens
       // one or the other, and a tab switch closes what it cannot own.
       const [creating, setCreating] = React.useState(false)
+
+      // The panel's one tooltip. `data-tip` names the gesture on the element
+      // that receives the pointer or the focus — the button itself, or its
+      // wrapper when the button can be disabled. The layer lives at the root,
+      // so no drawer's scroll and no list's scroll can clip it.
+      const [tip, setTip] = React.useState(null)
+      const tipAnchor = React.useRef(null)
+      const tipWait = React.useRef(null)
+      const panelBox = React.useRef(null)
+      const tipBox = React.useRef(null)
+
+      const dropTip = React.useCallback(() => {
+        if (tipWait.current !== null) {
+          clearTimeout(tipWait.current)
+          tipWait.current = null
+        }
+        tipAnchor.current = null
+        setTip(null)
+      }, [])
+
+      // The trigger of an event: the nearest element carrying a name. A
+      // wrapper carries it for a button that a blocker disables, because a
+      // disabled control receives no pointer event at all.
+      const tipTriggerOf = (target) => (target && typeof target.closest === 'function' ? target.closest('[data-tip]') : null)
+
+      const openTip = React.useCallback((trigger) => {
+        // A hover that waited out its delay, or a focus, can arrive after the
+        // gesture left the panel: a detached trigger has no box to place.
+        if (trigger === null || trigger.isConnected === false) return
+        const box = trigger.getBoundingClientRect()
+        tipAnchor.current = trigger
+        setTip({
+          text: trigger.getAttribute('data-tip') ?? '',
+          trigger: { top: box.top, left: box.left, width: box.width, height: box.height },
+          placed: false,
+        })
+      }, [])
+
+      const onTipOver = (event) => {
+        const trigger = tipTriggerOf(event.target)
+        if (trigger === null) {
+          dropTip()
+          return
+        }
+        if (trigger === tipAnchor.current) return
+        if (tipWait.current !== null) clearTimeout(tipWait.current)
+        tipWait.current = setTimeout(() => {
+          tipWait.current = null
+          openTip(trigger)
+        }, TIP_DELAY)
+      }
+
+      // The pointer and the focus leave the same way: the bubble closes at
+      // once, unless the focus or the pointer moved inside the trigger.
+      const onTipLeave = (event) => {
+        const trigger = tipTriggerOf(event.target)
+        if (trigger === null) return
+        const next = event.relatedTarget
+        if (next && typeof trigger.contains === 'function' && trigger.contains(next)) return
+        dropTip()
+      }
+
+      const onTipFocus = (event) => {
+        const trigger = tipTriggerOf(event.target)
+        if (trigger === null) return
+        // A click also gives the focus: only a keyboard focus deserves the
+        // bubble, the way the native title behaves. The focused node is the
+        // button, not the anchor span that carries `data-tip` on a disabled
+        // gesture — a span never matches `:focus-visible`.
+        const focused = event.target
+        if (focused && typeof focused.matches === 'function' && !focused.matches(':focus-visible')) return
+        if (tipWait.current !== null) {
+          clearTimeout(tipWait.current)
+          tipWait.current = null
+        }
+        openTip(trigger)
+      }
+
+      // The pointer leaves the trigger the moment a click fires: the gesture
+      // may take the panel elsewhere, or take the trigger away with it, so the
+      // bubble closes before the handler runs.
+      const onTipDown = () => {
+        dropTip()
+      }
+
+      // `Escape` closes the bubble without moving the focus: the layer never
+      // takes it, so the key arrives on the document.
+      React.useEffect(() => {
+        const onKey = (event) => {
+          if (event.key === 'Escape') dropTip()
+        }
+        document.addEventListener('keydown', onKey)
+        return () => {
+          document.removeEventListener('keydown', onKey)
+        }
+      }, [dropTip])
+
+      // A hover waiting out its delay must not open a bubble for a panel that
+      // is gone.
+      React.useEffect(() => () => {
+        if (tipWait.current !== null) clearTimeout(tipWait.current)
+      }, [])
+
+      // The layer measures itself once its text is in the DOM: its box depends
+      // on the sentence, which the panel cannot know before rendering it.
+      React.useEffect(() => {
+        if (tip === null || tip.placed) return
+        const panel = panelBox.current
+        const layer = tipBox.current
+        if (panel === null || layer === null) return
+        const placed = placeTooltip(tip.trigger, panel.getBoundingClientRect(), layer.getBoundingClientRect(), TIP_GAP)
+        setTip({ text: tip.text, trigger: tip.trigger, placed: true, ...placed })
+      }, [tip])
 
       // The view's declared perimeter: a tab carries its own source, Settings
       // reads whatever its open section reads — so the banner and the tick
@@ -7040,7 +7202,17 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         ? createDrawer ?? missionDrawer ?? emptyDrawer
         : missionDrawer ?? emptyDrawer
 
-      return h('div', { className: 'missions-panel', 'data-theme': theme, 'data-skin': theme === 'default' ? undefined : 'paper' },
+      return h('div', {
+        className: 'missions-panel',
+        'data-theme': theme,
+        'data-skin': theme === 'default' ? undefined : 'paper',
+        ref: panelBox,
+        onPointerOver: onTipOver,
+        onPointerOut: onTipLeave,
+        onPointerDown: onTipDown,
+        onFocusIn: onTipFocus,
+        onFocusOut: onTipLeave,
+      },
         hero,
         h('header', { className: theme === 'default' ? 'missions-head' : 'missions-head missions-head--hero' },
           theme === 'default'
@@ -7159,6 +7331,18 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           ),
           tabDrawer,
         ),
+        // The layer is always mounted, empty and hidden: one node for the
+        // panel, so a test can prove there is exactly one, and so the box it
+        // must measure already exists when a trigger names a gesture.
+        h('div', {
+          className: 'missions-tip',
+          role: 'tooltip',
+          ref: tipBox,
+          'data-side': tip === null ? 'top' : tip.side,
+          'data-shown': tip === null || !tip.placed ? 'false' : 'true',
+          'aria-hidden': tip === null || !tip.placed ? 'true' : undefined,
+          style: tip === null || !tip.placed ? undefined : { top: `${tip.top}px`, left: `${tip.left}px` },
+        }, tip === null ? '' : tip.text),
       )
     }
 
