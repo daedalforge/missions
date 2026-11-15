@@ -20,7 +20,10 @@ const SOURCE = await readFile(new URL('../lib/client.js', import.meta.url), 'utf
 
 /** Le corps d'une règle CSS du bundle : de quoi la juger sans la recopier. */
 function regle(selector) {
-  const at = SOURCE.indexOf(`${selector} {`)
+  // La règle de peau est cherchée en tête de ligne : une variante sombre la
+  // reprend en fin de liste, et c'est bien le corps de la peau qu'on juge.
+  const tete = SOURCE.indexOf(`\n${selector} {`)
+  const at = tete >= 0 ? tete + 1 : SOURCE.indexOf(`${selector} {`)
   assert.ok(at >= 0, `règle absente : ${selector}`)
   return SOURCE.slice(at + selector.length, SOURCE.indexOf('}', at))
 }
@@ -8424,16 +8427,30 @@ test('le cadre du bandeau reprend la boîte et la bordure de la photo', () => {
   assert.match(cadre, /overflow: hidden/)
   assert.match(cadre, /border: 1\.5px solid var\(--skin-ink\)/)
   assert.match(cadre, /border-radius: 6px/)
+  assert.match(cadre, /filter: saturate\(\.62\) contrast\(1\) brightness\(1\.08\)/)
 
-  // Then la photo remplit le cadre, sans bordure ni débordement propre
+  // Then la photo remplit le cadre, sans bordure, filtre ni débordement propre
   assert.match(photo, /position: absolute/)
   assert.match(photo, /inset: 0/)
   assert.match(photo, /width: 100%/)
   assert.match(photo, /height: 100%/)
   assert.match(photo, /object-fit: cover/)
   assert.match(photo, /object-position: 50% 54%/)
-  assert.match(photo, /filter: saturate\(\.62\) contrast\(1\) brightness\(1\.08\)/)
+  assert.doesNotMatch(photo, /filter/)
   assert.doesNotMatch(photo, /border/)
+})
+
+test('le thème sombre filtre le cadre, bordure comprise', () => {
+  // Given les deux variantes sombres que le host pose sur le panneau
+  // When la règle du filtre sombre du bandeau est relue
+  const sombre = SOURCE.match(/[^}]*\{ filter: saturate\(\.45\) brightness\(\.55\) contrast\(1\.02\); \}/)
+
+  // Then le filtre porte sur le cadre, qui tient la bordure, jamais sur la photo
+  assert.ok(sombre, 'la règle sombre du bandeau existe')
+  assert.match(sombre[0], /\.missions-hero-frame/)
+  assert.doesNotMatch(sombre[0], /\.missions-hero-photo/)
+  assert.match(sombre[0], /:root\[data-ds-dark-theme\]/)
+  assert.match(sombre[0], /body\[data-ds-dark-theme\]/)
 })
 
 test('le souffle de la photo dure trente-quatre secondes, sans quitter le cadre', () => {
