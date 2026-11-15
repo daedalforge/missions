@@ -3768,7 +3768,7 @@ test('la punaise du volet écrit pins.yml et ne patche que ce drapeau', async ()
   // La punaise est le premier geste de la rangée : elle ne prend pas la place
   // de la session, qui reste la primaire et la dernière.
   const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
-  assert.equal(actions.children.filter((child) => child && child.type === 'button')[0], bouton)
+  assert.equal(gestesDeLaRangee(actions)[0], bouton)
 
   await bouton.props.onClick()
 
@@ -10082,7 +10082,12 @@ test('une réponse de liste périmée ne retire pas la ligne créée', async () 
 
 /** Un déclencheur factice : le harnais n'a pas de DOM, la couche ne lit que
  * `closest`, `getAttribute`, `matches`, `isConnected` et le rectangle. */
-function declencheurFactice({ nom = 'Refresh', rect = { top: 120, left: 40, width: 34, height: 34 }, ...over } = {}) {
+function declencheurFactice({
+  nom = 'Refresh',
+  rect = { top: 120, left: 40, width: 34, height: 34 },
+  focusMatches = () => true,
+  ...over
+} = {}) {
   const declencheur = {
     getAttribute: (attribut) => (attribut === 'data-tip' ? nom : null),
     getBoundingClientRect: () => ({ ...rect }),
@@ -10091,7 +10096,13 @@ function declencheurFactice({ nom = 'Refresh', rect = { top: 120, left: 40, widt
     contains: (noeud) => noeud === declencheur,
     ...over,
   }
-  return { declencheur, cible: { closest: (selecteur) => (selecteur === '[data-tip]' ? declencheur : null) } }
+  return {
+    declencheur,
+    cible: {
+      closest: (selecteur) => (selecteur === '[data-tip]' ? declencheur : null),
+      matches: focusMatches,
+    },
+  }
 }
 
 /** Le panneau monté sur la liste, prêt à recevoir ses événements. */
@@ -10331,10 +10342,18 @@ test('la racine du panneau arme le focus et Échap', () => {
   assert.equal(setters.at(-1), null)
 
   // When un clic pose le focus sur un bouton, qui n'est alors pas `:focus-visible`
-  const souris = declencheurFactice({ matches: () => false })
+  const souris = declencheurFactice({ focusMatches: () => false })
   panneau.props.onFocusIn({ target: souris.cible })
   // Then rien ne s'ouvre : le clic n'appelle pas d'infobulle
   assert.equal(setters.at(-1), null, 'le focus d’un clic n’ouvre rien')
+
+  // When le focus clavier entre dans un bouton enveloppé : le conteneur qui
+  // porte `data-tip` est un `span` qui ne matche jamais `:focus-visible`, mais
+  // c'est le bouton focalisé qui décide
+  const enveloppe = declencheurFactice({ matches: () => false, focusMatches: () => true })
+  panneau.props.onFocusIn({ target: enveloppe.cible })
+  // Then l'infobulle s'ouvre quand même
+  assert.equal(setters.at(-1).text, 'Refresh', 'le bouton focalisé décide, pas le conteneur')
 
   // When Échap tombe sur le document, bulle ouverte au clavier
   assert.match(SOURCE, /const TIP_DELAY = 120/)

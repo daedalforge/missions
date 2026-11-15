@@ -3848,7 +3848,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
             h('div', { className: 'missions-drawer-actions' },
               // A pin is this checkout's reading order, not the tracker's: the
               // button is offered in every state and says where it stands.
-              h('button', {
+              h('span', {
+                className: 'missions-tip-anchor',
+                'data-tip': writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
+              }, h('button', {
                 type: 'button',
                 className: pinnedNow
                   ? 'missions-action missions-action--icon missions-action--pin missions-action--pinned'
@@ -3857,9 +3860,8 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 disabled: writingPin,
                 'aria-pressed': pinnedNow ? 'true' : 'false',
                 'data-pinned': pinnedNow ? 'true' : 'false',
-                'data-tip': writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
                 'aria-label': writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
-              }, h(ActionIcon, { name: 'pin' })),
+              }, h(ActionIcon, { name: 'pin' }))),
               // Only the step that follows the merge may delete the branch: the
               // panel shows the gesture there and nowhere else, and the host
               // re-reads the state before touching anything. It opens the row so
@@ -3884,16 +3886,18 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               // missions/archives/. Two clicks, like the close: the first arms
               // it, the second posts, and the button itself shows its state.
               mission.state === 'done'
-                ? h('button', {
+                ? h('span', {
+                    className: 'missions-tip-anchor',
+                    'data-tip': archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive',
+                  }, h('button', {
                     type: 'button',
                     className: armedArchive && !archiving
                       ? 'missions-action missions-action--icon missions-action--armed'
                       : 'missions-action missions-action--icon',
                     onClick: archiveMission,
                     disabled: archiving,
-                    'data-tip': archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive',
                     'aria-label': archiving ? 'Archiving…' : armedArchive ? 'Confirm — archive the mission' : 'Archive',
-                  }, h(ActionIcon, { name: armedArchive && !archiving ? 'confirm' : 'archive' }))
+                  }, h(ActionIcon, { name: armedArchive && !archiving ? 'confirm' : 'archive' })))
                 : null,
               mission.url
                 ? h('a', {
@@ -6569,8 +6573,11 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         const trigger = tipTriggerOf(event.target)
         if (trigger === null) return
         // A click also gives the focus: only a keyboard focus deserves the
-        // bubble, the way the native title behaves.
-        if (typeof trigger.matches === 'function' && !trigger.matches(':focus-visible')) return
+        // bubble, the way the native title behaves. The focused node is the
+        // button, not the anchor span that carries `data-tip` on a disabled
+        // gesture — a span never matches `:focus-visible`.
+        const focused = event.target
+        if (focused && typeof focused.matches === 'function' && !focused.matches(':focus-visible')) return
         if (tipWait.current !== null) {
           clearTimeout(tipWait.current)
           tipWait.current = null
