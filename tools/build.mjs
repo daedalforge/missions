@@ -20,17 +20,15 @@ const indented = view
   .map((line) => (line ? `    ${line}` : ''))
   .join('\n')
 
-// The theme's three photographs are inlined as data URIs: the bundle stays
+// The theme's two photographs are inlined as data URIs: the bundle stays
 // self-contained and the panel makes no network request for its decoration.
 const ART = {
   village: await readBinary('assets/konoha-village.webp'),
-  konoha: await readBinary('assets/konoha-naruto.webp'),
   avatar: await readBinary('assets/naruto-avatar.webp'),
 }
 const art = [
   'const ART = {',
   `  village: 'data:image/webp;base64,${ART.village}',`,
-  `  konoha: 'data:image/webp;base64,${ART.konoha}',`,
   `  avatar: 'data:image/webp;base64,${ART.avatar}',`,
   '}',
 ].join('\n')
