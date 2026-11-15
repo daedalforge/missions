@@ -262,30 +262,55 @@ function boutonRemontees(tree) {
   return boutonGeste(tree, 'Check the PR feedback')
 }
 
-test('le volet rend « Check the PR feedback » en revue, à côté de la session', () => {
+/** Le bouton de validation des collègues, ou null quand la mission n'en rend pas. */
+function boutonValidation(tree) {
+  return boutonGeste(tree, 'PR validated')
+}
+
+test('le volet rend « Check the PR feedback » et « PR validated » en revue, côte à côte', () => {
   const { tree } = monterVolet({ ...MISSION, state: 'in-review', updatedAt: MISSION.updated })
-  const bouton = boutonRemontees(tree)
-  assert.ok(bouton, 'le bouton doit être rendu en revue')
+  const remontees = boutonRemontees(tree)
+  assert.ok(remontees, 'le bouton des remontées doit être rendu en revue')
 
-  // Icône seule : le nom vit dans l'infobulle et le libellé accessible, et le
-  // verrou ne mord pas ici.
-  assert.equal(bouton.props.className, 'missions-action missions-action--icon')
-  assert.equal(bouton.props.disabled, false)
-  assert.equal(bouton.props.title, 'Check the PR feedback')
-  assert.equal(bouton.props['aria-label'], 'Check the PR feedback')
-  assert.equal(textOf(bouton), '', 'le bouton ne porte plus de texte')
-  assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte une icône')
-  assert.equal(bouton.props['aria-describedby'], undefined)
-  assert.equal(typeof bouton.props.onClick, 'function')
+  // Icône seule : le nom vit dans l'infobulle et le libellé accessible.
+  assert.equal(remontees.props.className, 'missions-action missions-action--icon')
+  assert.equal(remontees.props.disabled, false)
+  assert.equal(remontees.props.title, 'Check the PR feedback')
+  assert.equal(remontees.props['aria-label'], 'Check the PR feedback')
+  assert.equal(textOf(remontees), '', 'le bouton ne porte plus de texte')
+  assert.equal(findAll(remontees, 'svg').length, 1, 'le bouton porte une icône')
 
-  // Il précède le bouton de session, qui reste le primaire et le dernier.
+  // La validation des collègues est le geste de la revue : même rangée, à
+  // côté des remontées, et c'est elle le primaire.
+  const validation = boutonValidation(tree)
+  assert.ok(validation, 'le bouton « PR validated » doit être rendu en revue')
+  assert.equal(validation.props.className, 'missions-action missions-action--icon missions-action--primary')
+  assert.equal(validation.props.disabled, false)
+  assert.equal(validation.props.title, 'PR validated')
+  assert.equal(validation.props['aria-label'], 'PR validated')
+  assert.equal(textOf(validation), '', 'icône seule pour la validation aussi')
+  assert.equal(findAll(validation, 'svg').length, 1, 'le bouton porte son icône')
+  assert.equal(findAll(validation, 'circle').length, 1, 'la validation porte son sceau, pas le triangle de session')
+  assert.equal(validation.props['aria-describedby'], undefined)
+  assert.equal(typeof validation.props.onClick, 'function')
+
   const actions = findAll(tree, 'div').find((node) => node.props.className === 'missions-drawer-actions')
   assert.ok(actions, 'le volet doit rendre la barre d’actions')
   const boutons = actions.children.filter((child) => child.type === 'button')
   const iRemontees = boutons.findIndex((node) => nomDuGeste(node) === 'Check the PR feedback')
-  const iSession = boutons.findIndex((node) => /^Start a session/.test(nomDuGeste(node)))
-  assert.ok(iSession > iRemontees, 'la session reste après les remontées')
-  assert.match(boutons[iSession].props.className, /missions-action--primary/)
+  const iValidation = boutons.findIndex((node) => nomDuGeste(node) === 'PR validated')
+  assert.equal(iValidation, iRemontees + 1, 'la validation suit les remontées')
+  assert.equal(iValidation, boutons.length - 1, 'la validation est le dernier geste')
+  // La session du pas n'a plus de sens : la revue est faite par les collègues.
+  assert.equal(boutonSession(tree), null, 'aucune session d’étape en revue')
+})
+
+test('hors revue, le volet ne rend pas « PR validated » et garde la session d’étape', () => {
+  for (const state of ['to-refine', 'ready', 'in-progress', 'ready-for-prod', 'done']) {
+    const { tree } = monterVolet({ ...MISSION, state, updatedAt: MISSION.updated })
+    assert.equal(boutonValidation(tree), null, `aucune validation pour ${state}`)
+    assert.ok(boutonSession(tree), `la session d’étape reste rendue pour ${state}`)
+  }
 })
 
 test('hors revue, le volet ne rend pas le bouton des remontées', () => {
@@ -314,6 +339,13 @@ test('le bouton des remontées est désarmé par le même verrou que la session'
     assert.equal(bouton.props.title, message)
     assert.equal(bouton.props['aria-label'], 'Check the PR feedback')
     assert.equal(bouton.props['aria-describedby'], 'missions-session-blocked')
+    // La validation des collègues est désarmée par le même verrou.
+    const validation = boutonValidation(tree)
+    assert.ok(validation, `la validation reste rendue, désarmée : ${message}`)
+    assert.equal(validation.props.disabled, true)
+    assert.equal(validation.props.title, message)
+    assert.equal(validation.props['aria-label'], 'PR validated')
+    assert.equal(validation.props['aria-describedby'], 'missions-session-blocked')
     // Le message est bien rendu sous le bouton, et la note le cite.
     assert.match(textOf(tree), new RegExp(`Session blocked: ${message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
   }
@@ -364,7 +396,7 @@ test('le clic sur les remontées ouvre une session avec le prompt dédié', asyn
   assert.doesNotMatch(prompt, /Tu ne fais que la revue/)
 })
 
-test('le bouton de session envoie toujours le prompt d’hier', async () => {
+test('« PR validated » ouvre une session avec le prompt de revue, sans relire le diff', async () => {
   const captures = []
   const services = {
     getService: (name) =>
@@ -377,13 +409,43 @@ test('le bouton de session envoie toujours le prompt d’hier', async () => {
     { services, workspaceId: 'w' },
   )
 
-  const bouton = boutonSession(tree)
+  const bouton = boutonValidation(tree)
   await bouton.props.onClick()
 
   assert.equal(captures.length, 1)
   assert.match(captures[0], /Étape en cours : revue \(statut in-review\)\./)
   assert.match(captures[0], /Tu ne fais que la revue/)
+  assert.match(captures[0], /la revue du diff est celle de tes collègues/)
+  assert.match(captures[0], /constates leur validation sur la PR/)
+  assert.match(captures[0], /chaque critère d’acceptation porte sa preuve/)
+  assert.match(captures[0], /poses le label ready-for-prod/)
+  assert.match(captures[0], /sans validation des collègues/)
+  assert.match(captures[0], /Playbook à lire : playbook\/revue\.md/)
   assert.doesNotMatch(captures[0], /Dépôt du projet/)
+  // La relecture du diff n'est plus le geste : le brief d'hier ne revient pas.
+  assert.doesNotMatch(captures[0], /chaque critère avec sa preuve, le diff/)
+  assert.doesNotMatch(captures[0], /tu approuves/)
+})
+
+test('hors revue, le bouton de session garde le prompt d’hier', async () => {
+  const captures = []
+  const services = {
+    getService: (name) =>
+      name === 'uiWorkspace'
+        ? { startSession: (id, options) => captures.push(options?.prompt) }
+        : null,
+  }
+  const { tree } = monterVolet(
+    { ...MISSION, state: 'ready', updatedAt: MISSION.updated },
+    { services, workspaceId: 'w' },
+  )
+
+  const bouton = boutonSession(tree)
+  await bouton.props.onClick()
+
+  assert.equal(captures.length, 1)
+  assert.match(captures[0], /Étape en cours : exécution \(statut ready\)\./)
+  assert.match(captures[0], /Tu ne fais que l’exécution/)
 })
 
 test('un clic sur Start a session n’écrit aucune note et ne crée qu’une session', async () => {
@@ -399,7 +461,7 @@ test('un clic sur Start a session n’écrit aucune note et ne crée qu’une se
         : null,
   }
   const { tree, setters } = monterVolet(
-    { ...MISSION, state: 'in-review', updatedAt: MISSION.updated },
+    { ...MISSION, state: 'ready', updatedAt: MISSION.updated },
     { services, workspaceId: 'w' },
   )
 
@@ -429,7 +491,7 @@ test('une session que le shell refuse laisse une note courte et lisible', async 
         : null,
   }
   const { tree, setters } = monterVolet(
-    { ...MISSION, state: 'in-review', updatedAt: MISSION.updated },
+    { ...MISSION, state: 'ready', updatedAt: MISSION.updated },
     { services, workspaceId: 'w' },
   )
 
@@ -452,6 +514,8 @@ test('le prompt n’est plus construit en ligne dans le gabarit du volet', async
   assert.match(SOURCE, /function feedbackSessionPrompt\(mission = \{\}\)/)
   assert.match(SOURCE, /const FEEDBACK_BRIEF =/)
   assert.match(SOURCE, /Check the PR feedback/)
+  assert.match(SOURCE, /const validateLabel = 'PR validated'/)
+  assert.match(SOURCE, /h\(ActionIcon, \{ name: 'validate' \}\)/)
   assert.match(SOURCE, /mission\.state === 'in-review'/)
   // La session libre suit le même chemin : son prompt vit à côté, pas en ligne.
   assert.match(template, /const freePrompt = freeSessionPrompt\(mission\)/)
@@ -551,9 +615,9 @@ test('chaque geste de la rangée ne porte que son icône, nommée', () => {
   assert.deepEqual(gestes.map(nomDuGeste), [
     'Pin',
     'Open on the tracker',
-    'Check the PR feedback',
     'Start a free session',
-    'Start a session — revue',
+    'Check the PR feedback',
+    'PR validated',
   ])
 
   for (const geste of gestes) {
@@ -564,8 +628,9 @@ test('chaque geste de la rangée ne porte que son icône, nommée', () => {
     assert.equal(geste.props.title, nomDuGeste(geste), `${nomDuGeste(geste)} garde le même nom en infobulle`)
     assert.match(geste.props.className, /missions-action--icon/)
   }
-  // La step session reste l'action primaire, et la dernière.
+  // La validation des collègues est l'action primaire, et la dernière.
   assert.match(gestes.at(-1).props.className, /missions-action--primary/)
+  assert.equal(gestes.at(-1).props['aria-label'], 'PR validated')
 })
 
 test('la session bloquée dit pourquoi dans son infobulle, son nom ne change pas', () => {
@@ -6776,10 +6841,11 @@ test('l’import Tolgee se place entre le ticket et les remontées', () => {
     .map(nomDuGeste)
   const iTolgee = noms.indexOf('Tolgee import')
   const iFeedback = noms.indexOf('Check the PR feedback')
-  const iSession = noms.findIndex((name) => /^Start a session/.test(name))
+  const iValidation = noms.indexOf('PR validated')
   assert.ok(iTolgee > 0, 'l’import suit le ticket')
   assert.ok(iTolgee < iFeedback, 'l’import précède les remontées')
-  assert.equal(iSession, noms.length - 1, 'la session reste le dernier geste')
+  assert.ok(iTolgee < iValidation, 'l’import précède la validation')
+  assert.equal(iValidation, noms.length - 1, 'la validation reste le dernier geste')
 })
 
 test('à l’ouverture du volet, ni bilan ni rapport Tolgee ne sont rendus', () => {
@@ -7569,13 +7635,13 @@ test('blocage, déclaration, session et remontées comptent un seul POST', async
     await enregistrer.props.onClick()
     spy.geste('mission.declare')
 
-    // En revue, les deux sessions : le pas courant et les remontées de la PR.
+    // En revue, les deux gestes : la validation des collègues et les remontées.
     const revue = monterVoletAvec({ ...MISSION, state: 'in-review' })
-    const session = boutonSession(revue.inner)
+    const validation = boutonValidation(revue.inner)
     const remontees = boutonGeste(revue.inner, 'Check the PR feedback')
-    assert.ok(session, 'la session du pas est rendue')
+    assert.ok(validation, 'la validation est rendue en revue')
     assert.ok(remontees, 'la session des remontées est rendue')
-    await session.props.onClick().catch(() => {})
+    await validation.props.onClick().catch(() => {})
     spy.geste('mission.session')
     await remontees.props.onClick().catch(() => {})
     spy.geste('mission.feedback-session')

@@ -7,75 +7,86 @@ exit:
   - in-progress
   - to-refine
 nodes:
-  - id: relire-criteres
-    label: Relire les critères d'acceptation
-    section: Ce qu'on relit
-    writer: demandeur
-    artifact: un verdict par critère
-  - id: relire-diff
-    label: Relire le diff
-    section: Ce qu'on relit
-    writer: demandeur
-    condition: le diff fait ce qu'il annonce
+  - id: constater-validation
+    label: Constater la validation des collègues
+    section: Ce qu'on constate
+    writer: session
+    artifact: la validation citée, verdict et date
+    gate: le verdict des collègues est prouvé sur la PR
+  - id: constater-criteres
+    label: Constater que chaque critère porte sa preuve
+    section: Ce qu'on constate
+    writer: session
+    artifact: la liste des critères, chacun avec sa preuve
+    gate: chaque critère d'acceptation cite sa preuve
   - id: verifier-perimetre
     label: Vérifier le périmètre
-    section: Ce qu'on relit
-    writer: demandeur
-    gate: ce qui est dans la PR était dans le cadrage
+    section: Ce qu'on constate
+    writer: session
+    artifact: le périmètre vérifié, fichier par fichier
+    gate: la PR ne sort pas du périmètre du cadrage
   - id: verifier-tests
     label: Vérifier les tests
-    section: Ce qu'on relit
-    writer: demandeur
-    gate: les tests passent et couvrent le comportement ajouté
-  - id: relire-journal
-    label: Relire le journal
-    section: Ce qu'on relit
-    writer: demandeur
-    gate: le journal dit la même chose que la PR
-  - id: relire-checklist
-    label: Relire la checklist de la session
-    section: Ce qu'on relit
-    writer: demandeur
+    section: Ce qu'on constate
+    writer: session
+    artifact: la suite verte, et le compte des tests ajoutés
+    gate: les tests passent sur la tête de branche
+  - id: verifier-journal
+    label: Vérifier le journal
+    section: Ce qu'on constate
+    writer: session
+    artifact: le journal relu, étape par étape
+    gate: le journal porte chaque étape avec sa preuve
+  - id: verifier-checklist
+    label: Vérifier la checklist
+    section: Ce qu'on constate
+    writer: session
+    artifact: la checklist relue, case par case
+    gate: chaque case cochée annonce une preuve retrouvée
   - id: ecarter-motifs
     label: Écarter ce qui n'est pas un motif de refus
     section: Ce qui n'est pas un motif de refus
-    writer: demandeur
-    gate: style, amélioration hors périmètre et préférence non écrite ne fondent pas un refus
+    writer: session
+    artifact: la liste des remarques écartées, avec leur motif
+    gate: aucun refus ne porte sur le style ou le goût
   - id: decider
     label: Trancher
     section: Décisions possibles
-    writer: demandeur
-  - id: approuver
-    label: Approuver la PR
-    section: Sur le tracker
-    writer: demandeur
-    artifact: la revue approuvée
+    writer: session
   - id: reprendre
     label: Demander des changements
-    section: Sur le tracker
+    section: Décisions possibles
     writer: demandeur
-    artifact: une revue en request changes
+    artifact: le libellé in-progress
   - id: renvoyer-cadrage
     label: Renvoyer au cadrage
-    section: Sur le tracker
+    section: Décisions possibles
     writer: demandeur
     artifact: le libellé to-refine
+  - id: enregistrer-validation
+    label: Enregistrer la décision datée dans le ticket
+    section: Sur le tracker
+    writer: session
+    artifact: le commentaire daté, avec les preuves
+    gate: le commentaire est daté et cite la preuve de chaque critère
   - id: verifier-sortie
     label: Vérifier la condition de sortie
     section: Condition de sortie
-    writer: demandeur
-    gate: les cinq cases sont cochées
+    writer: session
+    artifact: la condition de sortie cochée, case par case
+    gate: les cinq cases de sortie sont cochées
   - id: passer-prete-a-partir
     label: Passer le ticket à prête à partir
     section: Sur le tracker
     writer: session
     artifact: le libellé ready-for-prod
+    gate: le ticket porte ready-for-prod et plus in-review
 edges:
   - from: in-review
-    to: relire-criteres
-  - from: relire-criteres
-    to: relire-diff
-  - from: relire-diff
+    to: constater-validation
+  - from: constater-validation
+    to: constater-criteres
+  - from: constater-criteres
     to: verifier-perimetre
   - from: verifier-perimetre
     to: renvoyer-cadrage
@@ -83,20 +94,20 @@ edges:
   - from: verifier-perimetre
     to: verifier-tests
   - from: verifier-tests
-    to: relire-journal
-  - from: relire-journal
-    to: relire-checklist
-  - from: relire-checklist
+    to: verifier-journal
+  - from: verifier-journal
+    to: verifier-checklist
+  - from: verifier-checklist
     to: ecarter-motifs
   - from: ecarter-motifs
     to: decider
   - from: decider
-    to: approuver
+    to: enregistrer-validation
     when: tout est conforme
   - from: decider
     to: reprendre
     when: un critère ou une preuve manque
-  - from: approuver
+  - from: enregistrer-validation
     to: verifier-sortie
   - from: verifier-sortie
     to: passer-prete-a-partir
