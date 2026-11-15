@@ -776,6 +776,18 @@ test('une section retenue par un bloqueur masqué ne bouge pas', () => {
   assert.deepEqual(groups.map((group) => group.state), ['in-progress', 'ready'])
 })
 
+test('un bloqueur masqué ne déplace pas sa section, même portée par une autre mission', () => {
+  // Given une mission in-progress retenue par une mission ready absente de la
+  // liste filtrée, et une mission ready visible qui porte sa section.
+  const groups = groupByState([
+    { key: 'a#1', state: 'in-progress', blockers: [{ key: 'a#9', state: 'ready' }] },
+    { key: 'a#2', state: 'ready' },
+  ])
+
+  // Then l'arête n'existe pas : la section retenue garde sa place de workflow.
+  assert.deepEqual(groups.map((group) => group.state), ['in-progress', 'ready'])
+})
+
 test('le filtre Missing ne garde que les tickets à qui il manque un champ', () => {
   assert.deepEqual(filterMissions(MISSIONS, { missing: 'any' }).map((m) => m.key), ['a#2'])
 
