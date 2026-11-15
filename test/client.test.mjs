@@ -5623,15 +5623,20 @@ test('un worktree porte la bascule vers son principal, un clone n’en a pas', (
   assert.ok(bouton, 'le worktree porte sa bascule')
   assert.equal(nomDuGeste(bouton), 'Bring missions-gh20 into missions')
   // L'infobulle dit ce que le clic fait : la branche reprise, le dossier perdu.
-  assert.match(bouton.props['data-tip'], /^Bring missions-gh20 into missions \(\/Users\/moi\/projects\/missions\)/)
-  assert.match(bouton.props['data-tip'], /worktree folder is removed$/)
+  const infobulle = infobulleDe(ouvert.inner, bouton)
+  assert.match(infobulle, /^Bring missions-gh20 into missions \(\/Users\/moi\/projects\/missions\)/)
+  assert.match(infobulle, /worktree folder is removed$/)
   assert.equal(bouton.props.disabled, false)
   assert.equal(textOf(bouton), '', 'la bascule ne porte que son dessin')
   const dessin = findAll(bouton, 'svg')
   assert.equal(dessin.length, 1)
   assert.equal(dessin[0].props['aria-hidden'], 'true')
-  // La bascule est un frère de la ligne, pas un bouton dans le bouton.
-  assert.equal(worktree.children.filter((child) => child && child.type === 'button').length, 2)
+  // La bascule est un frère de la ligne, pas un bouton dans le bouton : elle
+  // vit dans son conteneur, qui reçoit le pointeur quand la bascule est armée.
+  const rangee = findAll(worktree, 'button').find((child) => child.props['data-repository'] === 'missions-gh20')
+  assert.ok(rangee, 'la ligne porte sa rangée cliquable')
+  assert.equal(findAll(rangee, 'button').includes(bouton), false, 'la bascule n’est pas dans la rangée')
+  assert.ok(worktree.children.some((child) => child && child.props?.className === 'missions-tip-anchor'), 'la bascule vit dans son conteneur, frère de la rangée')
 
   // L'en-tête garde la même géométrie : la cellule terminale vide aligne la
   // colonne de la bascule sur celle des lignes.
@@ -5658,8 +5663,8 @@ test('une bascule sans cible reste là, désarmée, et dit pourquoi', () => {
     assert.equal(bouton.props.onClick, undefined)
   }
   const [dehors, inconnu] = bascules
-  assert.equal(dehors.props['data-tip'], 'outside the workspace root : /Users/moi/ailleurs/missions')
-  assert.equal(inconnu.props['data-tip'], 'main worktree unknown')
+  assert.equal(infobulleDe(inner, dehors), 'outside the workspace root : /Users/moi/ailleurs/missions')
+  assert.equal(infobulleDe(inner, inconnu), 'main worktree unknown')
   assert.equal(dehors.props.title, undefined, 'plus de title natif')
   assert.equal(inconnu.props.title, undefined, 'plus de title natif')
 })
@@ -6508,14 +6513,14 @@ test('le volet d’un dépôt porte « Resolve conflicts » et « Squash » dans
     const bouton = boutonConflits(inner)
     assert.ok(bouton, `le geste resolve est rendu pour ${repository.name}`)
     assert.match(bouton.props.className, /missions-action--icon/)
-    assert.equal(bouton.props['data-tip'], 'Resolve conflicts')
+    assert.equal(infobulleDe(inner, bouton), 'Resolve conflicts')
     assert.equal(bouton.props.type, 'button')
-    assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans title et aria-label')
+    assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans l’infobulle et l’aria-label')
     assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte son dessin')
 
     const squash = boutonSquash(inner)
-    assert.equal(squash.props['data-tip'], 'Squash the mission branch into one commit')
-    assert.equal(textOf(squash), '', 'icône seule : le nom vit dans title et aria-label')
+    assert.equal(infobulleDe(inner, squash), 'Squash the mission branch into one commit')
+    assert.equal(textOf(squash), '', 'icône seule : le nom vit dans l’infobulle et l’aria-label')
     assert.equal(findAll(squash, 'svg').length, 1, 'le bouton porte son dessin')
 
     // Le pied reprend la famille du volet mission.
@@ -6567,10 +6572,10 @@ test('le volet d’un dépôt porte « Squash the mission branch into one commit
     const bouton = boutonSquash(inner)
     assert.equal(bouton.props.className, 'missions-action missions-action--icon missions-action--primary')
     assert.equal(bouton.props.type, 'button')
-    assert.equal(bouton.props['data-tip'], label)
+    assert.equal(infobulleDe(inner, bouton), label)
     assert.equal(bouton.props['aria-label'], label)
     assert.equal(bouton.props.disabled, false)
-    assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans title et aria-label')
+    assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans l’infobulle et l’aria-label')
     assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte son dessin')
     // Le pied reprend la famille du volet mission.
     const pied = findAll(inner, 'div').find((node) => node.props.className === 'missions-drawer-foot')
@@ -6582,25 +6587,29 @@ test('le volet d’un dépôt porte « Squash the mission branch into one commit
 test('sans détail lisible ou sans branche, « Squash » reste visible, désactivé, et dit pourquoi', () => {
   const repository = REPO_SCAN.repositories[1]
 
-  const lecture = boutonSquash(voletSquash(repository, { detail: { loading: true, data: null, error: null } }).inner)
+  const lectureArbre = voletSquash(repository, { detail: { loading: true, data: null, error: null } }).inner
+  const lecture = boutonSquash(lectureArbre)
   assert.equal(lecture.props.disabled, true)
-  assert.equal(lecture.props['data-tip'], 'Reading the repository…')
+  assert.equal(infobulleDe(lectureArbre, lecture), 'Reading the repository…')
   assert.equal(lecture.props['aria-label'], 'Reading the repository…')
 
-  const echec = boutonSquash(voletSquash(repository, { detail: { loading: false, data: null, error: 'fatal: not a git repository' } }).inner)
+  const echecArbre = voletSquash(repository, { detail: { loading: false, data: null, error: 'fatal: not a git repository' } }).inner
+  const echec = boutonSquash(echecArbre)
   assert.equal(echec.props.disabled, true)
-  assert.equal(echec.props['data-tip'], 'The repository could not be read')
+  assert.equal(infobulleDe(echecArbre, echec), 'The repository could not be read')
   assert.equal(echec.props['aria-label'], 'The repository could not be read')
 
-  const detache = boutonSquash(voletSquash(repository, { detail: scanReady({ ...repository, detached: true, branch: null, remote: 'x' }) }).inner)
+  const detacheArbre = voletSquash(repository, { detail: scanReady({ ...repository, detached: true, branch: null, remote: 'x' }) }).inner
+  const detache = boutonSquash(detacheArbre)
   assert.equal(detache.props.disabled, true)
-  assert.equal(detache.props['data-tip'], 'Detached HEAD — no branch to squash')
+  assert.equal(infobulleDe(detacheArbre, detache), 'Detached HEAD — no branch to squash')
   assert.equal(detache.props['aria-label'], 'Detached HEAD — no branch to squash')
 
   // Le détail donne une branche : le geste se débloque et reprend son nom.
-  const actif = boutonSquash(voletSquash(repository).inner)
+  const actifArbre = voletSquash(repository).inner
+  const actif = boutonSquash(actifArbre)
   assert.equal(actif.props.disabled, false)
-  assert.equal(actif.props['data-tip'], 'Squash the mission branch into one commit')
+  assert.equal(infobulleDe(actifArbre, actif), 'Squash the mission branch into one commit')
 })
 
 test('un clic sur « Squash » ouvre la session dans le workspace du dépôt, sans l’envoyer', async () => {
@@ -6877,7 +6886,7 @@ test('le volet ne rend l’import Tolgee que pour un projet qui déclare ses loc
   assert.equal(infobulleDe(tree, bouton), 'Tolgee import')
   assert.equal(bouton.props['aria-label'], 'Tolgee import')
   assert.equal(bouton.props.disabled, false)
-  assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans title et aria-label')
+  assert.equal(textOf(bouton), '', 'icône seule : le nom vit dans l’infobulle et l’aria-label')
   assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte son dessin')
   assert.equal('aria-describedby' in bouton.props, false, 'le geste ne dépend pas du verrou de session')
   assert.equal(typeof bouton.props.onClick, 'function')
@@ -10071,11 +10080,37 @@ test('une réponse de liste périmée ne retire pas la ligne créée', async () 
 
 /* Infobulles : une couche au panneau, un `data-tip` par geste muet, pas de title. */
 
+/** Un déclencheur factice : le harnais n'a pas de DOM, la couche ne lit que
+ * `closest`, `getAttribute`, `matches`, `isConnected` et le rectangle. */
+function declencheurFactice({ nom = 'Refresh', rect = { top: 120, left: 40, width: 34, height: 34 }, ...over } = {}) {
+  const declencheur = {
+    getAttribute: (attribut) => (attribut === 'data-tip' ? nom : null),
+    getBoundingClientRect: () => ({ ...rect }),
+    matches: () => true,
+    isConnected: true,
+    contains: (noeud) => noeud === declencheur,
+    ...over,
+  }
+  return { declencheur, cible: { closest: (selecteur) => (selecteur === '[data-tip]' ? declencheur : null) } }
+}
+
+/** Le panneau monté sur la liste, prêt à recevoir ses événements. */
+function panneauPourInfobulle() {
+  const charge = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', { ...EMPTY_BAR.filters }])
+  charge.api.apply(charge.ctx)
+  return { ...charge, panneau: charge.registered.main({}) }
+}
+
 test('une seule infobulle, montée à la racine du panneau et éteinte au repos', () => {
+  // Given le panneau monté sur la liste, rien de survolé
   const tree = monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', { ...EMPTY_BAR.filters }])
+
+  // When on cherche la couche d'infobulle
   const couches = findAll(tree, 'div').filter((node) => node.props.role === 'tooltip')
-  assert.equal(couches.length, 1, 'une seule couche, toujours la même')
   const panneau = findAll(tree, 'div').find((node) => node.props.className === 'missions-panel')
+
+  // Then une seule, enfant de la racine, et invisible
+  assert.equal(couches.length, 1, 'une seule couche, toujours la même')
   assert.ok(panneau.children.includes(couches[0]), 'la couche est enfant de la racine du panneau')
   assert.equal(couches[0].props['data-shown'], 'false', 'aucune infobulle au repos')
   assert.equal(couches[0].props['aria-hidden'], 'true')
@@ -10087,6 +10122,7 @@ test('une seule infobulle, montée à la racine du panneau et éteinte au repos'
 })
 
 test('chaque bouton à icône seule, dans tous les volets, est nommé par un data-tip', () => {
+  // Given les huit arbres qui portent un bouton sans texte visible
   const arbres = [
     monter([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', { ...EMPTY_BAR.filters }]),
     monterVolet({ ...MISSION, state: 'in-review', translations: TRANSLATIONS, updatedAt: MISSION.updated }).tree,
@@ -10098,11 +10134,13 @@ test('chaque bouton à icône seule, dans tous les volets, est nommé par un dat
     voletDepot(REPO_SCAN.repositories[1]).inner,
   ]
 
+  // When on parcourt chaque bouton muet
   let muets = 0
   for (const arbre of arbres) {
     for (const bouton of findAll(arbre, 'button')) {
       if (textOf(bouton).trim() !== '') continue
       muets += 1
+      // Then il est nommé par l'infobulle, jamais par le title natif
       assert.equal(bouton.props.title, undefined, `${nomDuGeste(bouton)} ne porte plus de title natif`)
       const nom = infobulleDe(arbre, bouton)
       assert.equal(typeof nom, 'string', `${nomDuGeste(bouton)} porte une infobulle`)
@@ -10116,13 +10154,9 @@ test('l’inventaire couvre les vingt et un gestes muets, y compris ceux de l’
   // La fiche en comptait dix-neuf : la bascule « Bring … into … » du worktree,
   // icône seule elle aussi, manquait à l'appel, et la validation des collègues
   // est arrivée avec la revue.
+  // Given le bundle livré
+  // Then il porte un déclencheur par geste muet, et les quatre croix muettes
   assert.equal((SOURCE.match(/'data-tip':/g) ?? []).length, 21, 'vingt et un déclencheurs, un par geste muet')
-
-  // Les deux boutons de l'éditeur de workflow, hors des volets montés ci-dessus.
-  assert.match(SOURCE, /'aria-label': 'Fermer la création', 'data-tip': 'Fermer la création'/)
-  assert.match(SOURCE, /'aria-label': 'Supprimer l’arc', 'data-tip': 'Supprimer l’arc'/)
-
-  // Quatre volets muets recevaient leur nom d'un aria-label seul.
   assert.equal(
     (SOURCE.match(/className: 'missions-drawer-close'[^}]*'data-tip': 'Close'/g) ?? []).length,
     3,
@@ -10130,12 +10164,42 @@ test('l’inventaire couvre les vingt et un gestes muets, y compris ceux de l’
   )
 })
 
+test('l’éditeur de workflow nomme ses deux boutons à icône seule', () => {
+  // Given l'éditeur ouvert sur le graphe, un arc par ligne
+  const graphe = montrerWorkflows([workflowEntry()], { tab: 'graphe' }).rendered
+
+  // When on lit le geste qui retire un arc
+  const retirer = findAll(graphe, 'button').find((node) => node.props.className === 'wf-arc-del')
+
+  // Then il porte son nom accessible et son infobulle, sans title
+  assert.ok(retirer, 'le graphe rend le retrait d’arc')
+  assert.equal(nomDuGeste(retirer), 'Supprimer l’arc')
+  assert.equal(infobulleDe(graphe, retirer), 'Supprimer l’arc')
+  assert.equal(retirer.props.title, undefined, 'plus de title natif')
+
+  // Given la création ouverte sur son formulaire
+  const creation = montrerWorkflows([workflowEntry()], { tab: 'infos', creating: true }).rendered
+
+  // When on lit la croix du tiroir
+  const fermer = findAll(creation, 'button').find((node) => node.props.className === 'missions-drawer-close')
+
+  // Then elle dit ce qu'elle ferme, et rien d'autre
+  assert.ok(fermer, 'la création rend sa croix')
+  assert.equal(nomDuGeste(fermer), 'Fermer la création')
+  assert.equal(infobulleDe(creation, fermer), 'Fermer la création')
+  assert.equal(fermer.props.title, undefined, 'plus de title natif')
+})
+
 test('un geste désactivé dit pourquoi dans le conteneur qui porte son infobulle', () => {
-  // Sans branche, le bouton de session est désactivé : un bouton désactivé ne
-  // reçoit aucun événement pointeur, le conteneur prend donc l'infobulle.
+  // Given une mission sans branche : le bouton de session est désactivé
   const sansBranche = monterVolet({ ...MISSION, branch: null, base: null, updatedAt: MISSION.updated }).tree
+
+  // When on lit le geste de session
   const session = boutonSession(sansBranche)
   const conteneur = conteneurDe(sansBranche, session)
+
+  // Then le motif de la désactivation vit dans le conteneur, seul à recevoir
+  // le pointeur, et le bouton garde son nom accessible
   assert.ok(conteneur, 'le geste désactivable vit dans son conteneur')
   assert.equal(conteneur.props.className, 'missions-tip-anchor')
   assert.equal(conteneur.props['data-tip'], 'branch is not declared, set it below or in the mission folder')
@@ -10154,47 +10218,125 @@ test('un geste désactivé dit pourquoi dans le conteneur qui porte son infobull
   assert.equal(infobulleDe(sansTracker, sansLien), 'No tracker link')
 })
 
-test('la racine du panneau arme le survol, le focus et Échap', async () => {
-  const { api, ctx, registered, setters, effects } = charger(
-    undefined,
-    [EMPTY_BAR, dashboardView(DASH_MISSIONS), 'missions', '', { ...EMPTY_BAR.filters }],
-  )
-  api.apply(ctx)
-  const panneau = registered.main({})
-  // Les quatre écouteurs sont posés sur la racine, pas sur chaque bouton.
-  for (const nom of ['onPointerOver', 'onPointerOut', 'onFocusIn', 'onFocusOut']) {
+test('un geste que le blocage peut désarmer dit pourquoi dans son conteneur, au pied des dépôts', () => {
+  // Given un worktree dont le principal est hors du dépôt
+  const worktree = REPO_SCAN.repositories[2]
+  const scan = {
+    ...REPO_SCAN,
+    repositories: [{ ...worktree, name: 'dehors', main: { name: null, path: '/Users/moi/ailleurs/missions' } }],
+  }
+  const { inner: liste } = montrerRepositories(scanReady(scan), null, memorySession(WORKTREES_SHOWN))
+
+  // When on lit la bascule désarmée
+  const bascule = findAll(liste, 'button').find((button) => button.props.className === 'missions-repo-main')
+
+  // Then son conteneur dit pourquoi, là où le bouton désactivé ne reçoit rien
+  assert.ok(bascule, 'le worktree porte sa bascule')
+  assert.equal(bascule.props.disabled, true)
+  assert.equal(infobulleDe(liste, bascule), 'outside the workspace root : /Users/moi/ailleurs/missions')
+
+  // Given le volet des worktrees d'un dépôt
+  const arbre = {
+    layout: true,
+    branches: [],
+    worktrees: [{ path: '/Users/moi/projects/myapp-12', branch: 'feat/a', head: 'def5678', current: false, main: false, name: 'myapp-12' }],
+  }
+  const { inner: voletArbre } = volet([
+    ...repositoriesStates(scanReady(REPO_SCAN.repositories[1]), REPO_SCAN.repositories[1]),
+    'worktrees', { loading: false, more: false, data: null, error: null }, { loading: false, data: arbre, error: null },
+  ])
+
+  // When on lit le retrait du worktree
+  const retirer = findAll(voletArbre, 'button').find((button) => button.props.className === 'missions-tree-remove')
+
+  // Then sa promesse de garder la branche suit le même chemin
+  assert.ok(retirer, 'le worktree porte son retrait')
+  assert.equal(infobulleDe(voletArbre, retirer), 'Remove myapp-12 (feat/a) — its branch is kept')
+
+  // Given un dépôt dont le détail est en cours de lecture
+  const chargement = voletSquash(REPO_SCAN.repositories[1], { detail: { loading: true, data: null, error: null } }).inner
+
+  // When on lit « Squash »
+  const squash = boutonSquash(chargement)
+
+  // Then son motif de désactivation est lisible, même désactivé
+  assert.equal(squash.props.disabled, true)
+  assert.ok(conteneurDe(chargement, squash), '« Squash » vit dans son conteneur')
+  assert.equal(infobulleDe(chargement, squash), 'Reading the repository…')
+})
+
+test('la racine du panneau arme le survol', async () => {
+  // Given le panneau monté sur la liste
+  const { panneau, setters } = panneauPourInfobulle()
+
+  // Then les écouteurs du pointeur sont posés sur la racine, pas sur chaque bouton
+  for (const nom of ['onPointerOver', 'onPointerOut', 'onPointerDown']) {
     assert.equal(typeof panneau.props[nom], 'function', `la racine écoute ${nom}`)
   }
 
-  // Un déclencheur factice : le harnais n'a pas de DOM, la couche ne lit que
-  // `closest`, `getAttribute` et le rectangle.
-  const declencheur = {
-    getAttribute: (nom) => (nom === 'data-tip' ? 'Refresh' : null),
-    getBoundingClientRect: () => ({ top: 120, left: 40, width: 34, height: 34 }),
-    contains: (noeud) => noeud === declencheur,
-  }
-  const cible = { closest: (selecteur) => (selecteur === '[data-tip]' ? declencheur : null) }
+  const { declencheur, cible } = declencheurFactice()
 
-  // Au survol, l'infobulle attend son délai puis lit le nom du déclencheur.
+  // When le pointeur entre dans le déclencheur
   panneau.props.onPointerOver({ target: cible })
+
+  // Then l'infobulle attend son délai, puis lit le nom du déclencheur
   assert.equal(setters.length, 0, 'le survol n’ouvre pas tout de suite')
   await new Promise((done) => setTimeout(done, 160))
   assert.equal(setters.at(-1).text, 'Refresh', 'le survol ouvre l’infobulle')
   assert.deepEqual(setters.at(-1).trigger, { top: 120, left: 40, width: 34, height: 34 })
 
-  // Sortir ferme, sauf si le pointeur entre dans le déclencheur.
+  // When le pointeur bouge dans le déclencheur
   panneau.props.onPointerOut({ target: cible, relatedTarget: declencheur })
+  // Then la bulle reste
   assert.equal(setters.at(-1).text, 'Refresh', 'un mouvement dans le déclencheur ne referme pas')
+
+  // When le pointeur sort vers l'extérieur
   panneau.props.onPointerOut({ target: cible, relatedTarget: null })
+  // Then la bulle se referme
   assert.equal(setters.at(-1), null, 'sortir referme')
 
-  // Au focus, l'infobulle s'ouvre sans attendre.
+  // When un clic tombe sur la racine, bulle ouverte
+  panneau.props.onPointerOver({ target: cible })
+  await new Promise((done) => setTimeout(done, 160))
+  panneau.props.onPointerDown()
+  // Then le clic referme avant que le geste ne déplace le panneau
+  assert.equal(setters.at(-1), null, 'un clic referme')
+
+  // When le pointeur entre dans une zone sans geste, bulle ouverte
+  panneau.props.onPointerOver({ target: cible })
+  panneau.props.onPointerOver({ target: { closest: () => null } })
+  // Then la bulle ne survit pas hors de son déclencheur
+  assert.equal(setters.at(-1), null, 'hors de tout geste, la bulle se referme')
+})
+
+test('la racine du panneau arme le focus et Échap', () => {
+  // Given le panneau monté et un déclencheur atteint au clavier
+  const { panneau, setters, effects } = panneauPourInfobulle()
+
+  // Then les écouteurs du focus sont posés sur la racine
+  for (const nom of ['onFocusIn', 'onFocusOut']) {
+    assert.equal(typeof panneau.props[nom], 'function', `la racine écoute ${nom}`)
+  }
+
+  const { cible } = declencheurFactice()
+
+  // When le focus arrive au clavier
   panneau.props.onFocusIn({ target: cible })
+  // Then l'infobulle s'ouvre sans attendre
   assert.equal(setters.at(-1).text, 'Refresh', 'le focus ouvre sans délai')
+
+  // When le focus sort de la racine
   panneau.props.onFocusOut({ target: cible, relatedTarget: null })
+  // Then la bulle se referme
   assert.equal(setters.at(-1), null)
 
-  // Échap referme depuis le document, posé dans le même écouteur `keydown`.
+  // When un clic pose le focus sur un bouton, qui n'est alors pas `:focus-visible`
+  const souris = declencheurFactice({ matches: () => false })
+  panneau.props.onFocusIn({ target: souris.cible })
+  // Then rien ne s'ouvre : le clic n'appelle pas d'infobulle
+  assert.equal(setters.at(-1), null, 'le focus d’un clic n’ouvre rien')
+
+  // When Échap tombe sur le document, bulle ouverte au clavier
   assert.match(SOURCE, /const TIP_DELAY = 120/)
   const ecoutes = new Map()
   const vraiDocument = globalThis.document
@@ -10208,26 +10350,49 @@ test('la racine du panneau arme le survol, le focus et Échap', async () => {
     panneau.props.onFocusIn({ target: cible })
     const retirer = touche.fn()
     ecoutes.get('keydown')({ key: 'Escape' })
+    // Then la touche referme sans déplacer le focus
     assert.equal(setters.at(-1), null, 'Échap referme')
     retirer()
+    assert.equal(ecoutes.has('keydown'), false, 'la touche ne survit pas au panneau')
   } finally {
     globalThis.document = vraiDocument
   }
 })
 
+test('un déclencheur démonté n’ouvre pas d’infobulle', async () => {
+  // Given un déclencheur que le survol a quitté, puis que le panneau a démonté
+  const { panneau, setters } = panneauPourInfobulle()
+  const { cible } = declencheurFactice({ isConnected: false })
+
+  // When le pointeur entre puis attend le délai
+  panneau.props.onPointerOver({ target: cible })
+  await new Promise((done) => setTimeout(done, 160))
+
+  // Then rien ne s'ouvre : un nœud détaché n'a pas de boîte où se poser
+  assert.equal(setters.length, 0, 'un déclencheur détaché n’ouvre rien')
+})
+
 test('la couche se pose depuis le rectangle du déclencheur, jamais au jugé', () => {
+  // Given le bundle livré
+  // When on lit l'effet de placement
+  // Then il passe par la fonction pure, avec les boîtes mesurées du panneau et
+  // de la couche, et la couche reste inerte sous le pointeur
   assert.match(SOURCE, /const placed = placeTooltip\(tip\.trigger, panel\.getBoundingClientRect\(\), layer\.getBoundingClientRect\(\), TIP_GAP\)/)
-  assert.match(SOURCE, /'pointer-events':|pointer-events: none/)
-  // Le clic et le survol ne traversent pas la couche : elle est inerte.
   assert.match(regle('.missions-tip'), /pointer-events: none/)
 })
 
 test('la couche a sa règle dans les deux thèmes, sans couleur en dur', () => {
+  // Given les règles du bundle
+  // When on lit la règle de la couche
+  // Then elle se pose en absolu, au-dessus du contenu, et ne prend pas le pointeur
   const base = regle('.missions-tip')
   assert.match(base, /position: absolute/)
   assert.match(base, /z-index: 40/)
   assert.match(regle('.missions-tip[data-shown="true"]'), /opacity: 1/)
   assert.match(regle('.missions-tip-anchor'), /display: inline-flex/)
+  // La face rendue par `placeTooltip` est consommée par la feuille.
+  assert.match(regle('.missions-tip[data-side="top"]'), /transform-origin: 50% 100%/)
+  assert.match(regle('.missions-tip[data-side="bottom"]'), /transform-origin: 50% 0/)
   // Aucune couleur en dur : les deux thèmes passent par leurs variables.
   assert.doesNotMatch(base, /#[0-9a-fA-F]{3,6}\b/)
   assert.match(base, /var\(--dsw-alias-border-l2/)
