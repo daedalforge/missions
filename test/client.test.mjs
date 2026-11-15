@@ -8546,6 +8546,8 @@ test('neuf poussières montent et s\'effacent aux deux bouts du cycle', () => {
 
   // Then chacun monté dans sa propre boucle, invisible aux deux extrémités
   assert.match(grain, /width: 3px; height: 3px/)
+  // Then la poussière garde sa couleur claire en thème sombre, où --skin-page est noir
+  assert.match(grain, /background: rgb\(255 249 235 \/ \.82\)/)
   assert.match(grain, /animation: missions-hero-mote 9s linear infinite/)
   assert.match(montee, /0% \{ transform: translate3d\(0, 16px, 0\) scale\(\.7\); opacity: 0; \}/)
   assert.match(montee, /100% \{ transform: translate3d\(6px, -54px, 0\) scale\(1\.05\); opacity: 0; \}/)

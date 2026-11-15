@@ -1147,7 +1147,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-icon-btn {
 .missions-panel[data-skin="paper"] .missions-hero-frame::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: linear-gradient(100deg, rgba(255,255,255,0) 38%, rgba(255,246,224,.5) 50%, rgba(255,255,255,0) 62%); mix-blend-mode: screen; animation: missions-hero-sweep 12s linear infinite; }
 .missions-panel[data-skin="paper"] .missions-hero-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 54%; transform-origin: center; --hero-scale: 1.12; --hero-pan: 4%; transform: scale(var(--hero-scale)); animation: missions-hero-drift 14s ease-in-out infinite alternate; }
 .missions-panel[data-skin="paper"] .missions-hero-air { position: absolute; inset: 9px 9px 0; z-index: 2; overflow: hidden; border-radius: 6px; pointer-events: none; }
-.missions-panel[data-skin="paper"] .missions-hero-air i { position: absolute; width: 3px; height: 3px; background: var(--skin-page); opacity: 0; animation: missions-hero-mote 9s linear infinite; }
+.missions-panel[data-skin="paper"] .missions-hero-air i { position: absolute; width: 3px; height: 3px; background: rgb(255 249 235 / .82); opacity: 0; animation: missions-hero-mote 9s linear infinite; }
 .missions-panel[data-skin="paper"] .missions-hero::before { content: ""; position: absolute; inset: 9px 9px 0; z-index: 1; border-radius: 6px; background-image: radial-gradient(var(--skin-ink) 1px, transparent 1.15px); background-size: 5px 5px; opacity: .2; mix-blend-mode: multiply; pointer-events: none; }
 .missions-panel[data-skin="paper"] .missions-hero::after { content: ""; position: absolute; inset: 9px 9px 0; z-index: 2; border-radius: 6px; pointer-events: none; background: var(--skin-hero-fade), var(--skin-hero-wash); }
 .missions-panel[data-skin="paper"] .missions-hero-avatar { position: absolute; z-index: 3; right: 26px; bottom: 16px; width: 112px; height: 112px; border-radius: 50%; overflow: hidden; border: 3px solid var(--skin-page); background: var(--skin-page-2); box-shadow: 0 0 0 1.5px var(--skin-ink), 4px 4px 0 var(--skin-shadow); }
@@ -6618,7 +6618,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           ...Array.from({ length: 9 }, (_, index) => h('i', {
             key: index,
             style: {
-              left: `${6 + ((index * 37) % 74)}%`,
+              left: `${6 + ((index * 31) % 74)}%`,
               bottom: `${6 + ((index * 23) % 44)}px`,
               animationDelay: `${(-(((index + 1) * 1.7) % 9)).toFixed(2)}s`,
               animationDuration: `${(7.5 + (index % 4) * 1.4).toFixed(1)}s`,
