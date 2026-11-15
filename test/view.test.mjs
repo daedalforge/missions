@@ -56,7 +56,6 @@ import {
   FEEDBACK_BRIEF,
   FREE_BRIEF,
   ticketReadLine,
-  treeIndent,
   STEP_BRIEFS,
   STEP_BY_STATE,
   FILTERS_KEY,
@@ -2373,13 +2372,7 @@ test('historyLabel chiffre le total par milliers, et nomme sa branche', () => {
   assert.equal(historyLabel({ total: 12 }), '', 'sans branche, pas de phrase')
 })
 
-test('treeIndent un cran par profondeur, worktreeLabel la fin du chemin', () => {
-  assert.equal(treeIndent(0), 10)
-  assert.equal(treeIndent(null), 10)
-  assert.equal(treeIndent(-2), 10)
-  assert.equal(treeIndent(1), 24)
-  assert.equal(treeIndent(3), 52)
-
+test('worktreeLabel la fin du chemin', () => {
   assert.equal(worktreeLabel('/Users/moi/projects/myapp'), 'myapp')
   assert.equal(worktreeLabel('/Users/moi/projects/myapp/'), 'myapp')
   assert.equal(worktreeLabel('C:\\projects\\myapp'), 'myapp')
@@ -2428,7 +2421,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
     'mission.block', 'mission.pin', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
     'mission.session', 'mission.feedback-session',
-    'repository.open', 'repository.adopt', 'repository.remove', 'repository.tab.details', 'repository.tab.history', 'repository.tab.worktrees',
+    'repository.open', 'repository.adopt', 'repository.remove', 'repository.tab.details', 'repository.tab.history',
     'repository.branch', 'repository.more', 'repository.resolve', 'repository.squash',
     'workflow.step', 'workflow.save', 'workflow.reload', 'workflow.gesture.add', 'workflow.gesture.remove',
     'workflow.arc.add', 'workflow.arc.update', 'workflow.arc.remove',

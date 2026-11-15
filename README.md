@@ -276,6 +276,15 @@ scan. Quand aucune ligne ne répond, la liste le dit et un bouton efface la
 barre. Le choix ne vit que la session — `missions.repositories.filters` dans
 `sessionStorage` — et une barre vide n'y laisse aucune clé.
 
+Chaque ligne de worktree porte deux gestes dans la cellule d'actions : la
+flèche ramène sa branche dans le checkout principal (**adopt**), la corbeille
+supprime son dossier et garde sa branche (**remove**). Les deux demandent
+confirmation, puis un `POST` ; quand le dossier ne tient que des fichiers
+ignorés, l'hôte refuse une première fois et le second accord les emporte avec
+lui. Le bandeau au-dessus de la liste dit le résultat, la liste relit le scan,
+et le volet ouvert sur le checkout disparu se ferme. Un clone ne porte aucun
+des deux gestes : il n'a ni checkout principal ni dossier à rendre.
+
 **Settings** range les trois vues qui ne lisent ni le tracker ni la liste des
 missions ouvertes : **Usage**, puis **Workflows**, puis **Playbook**, dans une
 navigation verticale à gauche. La section ouverte est la seule montée ; Usage
