@@ -139,12 +139,17 @@ sans niveau), garde sa forme. Elle porte aussi ses story points en texte
 entre le repère de priorité et la clé de la mission. L'ordre de la liste
 est fixe : priorité décroissante, puis story points croissants, puis clé
 de la mission. Une mission bloquée ferme la liste : elle passe après toutes
-les missions actionnables, quels que soient sa priorité et ses points. Entre
-missions bloquées, celle dont la raison de blocage nomme la clé d'une autre
-attend que celle-ci passe d'abord ; un cycle garde l'ordre de base. La punaise
-d'une mission la fait passer devant toutes les autres, sans changer cet ordre :
-épingler ne réordonne pas les épinglées entre elles, et une requête garde ses
-épinglées en tête. Pendant le défilement de la liste, les épinglées tiennent
+les missions actionnables, quels que soient sa priorité et ses points. Elle
+l'est par le label `blocked` — dont la raison reste un commentaire du ticket —
+ou par une dépendance Jira : un lien `Blocks` entrant vers une mission qui
+n'a pas encore atteint la revue. Entre missions bloquées, celle dont la raison
+nomme la clé d'une autre, ou qui porte cette clé en dépendance, attend que
+celle-ci passe d'abord ; la contrainte se propage, et un cycle garde l'ordre
+de base. La punaise d'une mission la fait passer devant toutes les autres,
+sans changer cet ordre : épingler ne réordonne pas les épinglées entre elles,
+et une requête garde ses épinglées en tête. Une seule exception va contre
+l'épingle : une mission bloquée ne passe jamais devant son bloqueur visible,
+même épinglée. Pendant le défilement de la liste, les épinglées tiennent
 le haut : elles restent visibles au-dessus des lignes qui passent dessous,
 détachées du reste par une règle et un peu d'air. Au repos, la
 liste et le volet vide partagent la largeur : le volet annonce ce qu'une
