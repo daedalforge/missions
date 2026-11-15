@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { clearCache, forget, listAll, setPriority } from '../lib/trackers/index.js'
+import { clearCache, forget, listAll, pointsOf, setPoints, setPriority } from '../lib/trackers/index.js'
 import { forgetToken as forgetJiraToken } from '../lib/trackers/jira.js'
 
 const MAP = {
@@ -327,6 +327,68 @@ test('a tracker without a priority writer refuses instead of pretending', async 
     () => setPriority({ id: 'x', tracker: 'notion', map: MAP }, 'MIS-2', { value: 'high' }),
     /unknown tracker: notion/,
   )
+})
+
+test('une écriture de points vide la lecture en cache du projet', async () => {
+  const project = { ...PROJECT_OK, map: { ...MAP, points: 'sp:' } }
+  let label = 'sp:3'
+  let reads = 0
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    if (href.endsWith('/user')) return response({ login: 'slucienvauthier-so' })
+    if (href.includes('/labels')) return response({})
+    // L'écriture lit l'issue avant de retirer : ce n'est pas une lecture de liste.
+    if (href.endsWith('/issues/2')) return response({ labels: [{ name: 'ready' }, { name: label }] })
+    if (href.includes('/issues?')) reads += 1
+    return response([{ number: 2, title: 'Mission 2', labels: [{ name: 'ready' }, { name: label }], type: { name: 'Feature' } }])
+  }
+
+  const first = await listAll([project], { fetchImpl })
+  assert.equal(first.missions[0].points, 3)
+  assert.equal(reads, 1)
+
+  // L'écriture ne lit pas ; la liste suivante doit relire et voir la nouvelle taille.
+  await setPoints(project, 'MIS-2', { points: 8, fetchImpl })
+  assert.equal(reads, 1)
+  label = 'sp:8'
+
+  const second = await listAll([project], { fetchImpl })
+  assert.equal(reads, 2)
+  assert.equal(second.missions[0].points, 8)
+})
+
+test('une écriture de points vide aussi le périmètre des missions terminées', async () => {
+  const project = { ...PROJECT_OK, map: { ...MAP, points: 'sp:' } }
+  const declaredKeys = new Set(['MIS-2'])
+  let reads = 0
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    if (href.includes('/labels')) return response({})
+    if (href.endsWith('/issues/2')) return response({ labels: [{ name: 'done' }] })
+    if (href.includes('/issues?')) reads += 1
+    return response([{ number: 2, title: 'Mission 2', state: 'closed', labels: [{ name: 'done' }] }])
+  }
+
+  await listAll([project], { fetchImpl, declaredKeys, scope: 'done' })
+  await listAll([project], { fetchImpl, declaredKeys, scope: 'done' })
+  assert.equal(reads, 1)
+
+  await setPoints(project, 'MIS-2', { points: 8, fetchImpl })
+  await listAll([project], { fetchImpl, declaredKeys, scope: 'done' })
+  assert.equal(reads, 2)
+})
+
+test('un tracker sans écriture de points refuse au lieu de faire semblant', async () => {
+  await assert.rejects(
+    () => setPoints({ id: 'x', tracker: 'notion', map: MAP }, 'MIS-2', { points: 3 }),
+    /unknown tracker: notion/,
+  )
+})
+
+test('pointsOf dit la forme native du projet, ou rien', () => {
+  assert.equal(pointsOf({ ...PROJECT_OK, map: { ...MAP, points: 'sp:' } }), 'sp:')
+  assert.equal(pointsOf(PROJECT_OK), null)
+  assert.equal(pointsOf(PROJECT_JIRA), 'customfield_10016')
 })
 
 /** Le compte courant, puis les issues : les commentaires sont routés par l'appelant. */

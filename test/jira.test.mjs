@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
-import { create, epics, forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/jira.js'
+import { create, epics, forgetToken, latestComment, list, setBlocked, setPoints, setPriority } from '../lib/trackers/jira.js'
 
 const PROJECT = {
   id: 'alpha',
@@ -455,6 +455,60 @@ test('a priority write needs jira.email and a value', async () => {
   await assert.rejects(
     () => setPriority(PROJECT, 'EX-1', { value: ' ', fetchImpl: async () => response({}) }),
     /priority value is missing/,
+  )
+})
+
+test('poser les points écrit le champ du projet en un seul PUT', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null, auth: init.headers?.authorization })
+    return response(undefined, { status: 204 })
+  }
+
+  const result = await setPoints(PROJECT, 'EX-7', { points: 3, fetchImpl })
+
+  assert.deepEqual(result, { key: 'EX-7', field: 'customfield_10016' })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].method, 'PUT')
+  assert.match(calls[0].url, /\/rest\/api\/3\/issue\/EX-7$/)
+  assert.deepEqual(JSON.parse(calls[0].body), { fields: { customfield_10016: 3 } })
+  assert.match(calls[0].auth, /^Basic /)
+})
+
+test('poser les points respecte le champ déclaré par le projet', async () => {
+  const declared = { ...PROJECT, jira: { ...PROJECT.jira, story_points_field: 'customfield_10032' } }
+  const bodies = []
+  const fetchImpl = async (url, init = {}) => {
+    bodies.push(JSON.parse(init.body ?? '{}'))
+    return response(undefined, { status: 204 })
+  }
+
+  const result = await setPoints(declared, 'EX-7', { points: 13, fetchImpl })
+
+  assert.deepEqual(result, { key: 'EX-7', field: 'customfield_10032' })
+  assert.deepEqual(bodies, [{ fields: { customfield_10032: 13 } }])
+})
+
+test('une écriture de points garde le refus du tracker', async () => {
+  const fetchImpl = async () => response({ message: 'Forbidden' }, { status: 403 })
+
+  await assert.rejects(() => setPoints(PROJECT, 'EX-7', { points: 5, fetchImpl }), /Jira access denied/)
+})
+
+test('une écriture de points exige jira.email et une taille positive', async () => {
+  const saved = process.env.JIRA_EMAIL
+  delete process.env.JIRA_EMAIL
+  try {
+    await assert.rejects(
+      () => setPoints({ ...PROJECT, jira: { site: 'https://x', cloud_id: 'cloud-1' } }, 'EX-7', { points: 5, fetchImpl: async () => response({}) }),
+      /jira\.email is required/,
+    )
+  } finally {
+    process.env.JIRA_EMAIL = saved
+  }
+  await assert.rejects(
+    () => setPoints(PROJECT, 'EX-7', { points: 0, fetchImpl: async () => response({}) }),
+    /points value is missing/,
   )
 })
 

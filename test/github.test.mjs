@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 
 import { lastLink } from '../lib/http.js'
-import { create, epics, forgetToken, latestComment, list, setBlocked, setPriority } from '../lib/trackers/github.js'
+import { create, epics, forgetToken, latestComment, list, setBlocked, setPoints, setPriority } from '../lib/trackers/github.js'
 
 const PROJECT = {
   id: 'missions',
@@ -327,6 +327,101 @@ test('a priority write needs an issue key and a value', async () => {
   await assert.rejects(
     () => setPriority(PROJECT, 'MIS-110', { value: '  ', fetchImpl: async () => response({}) }),
     /priority value is missing/,
+  )
+})
+
+test('changer les points lit l’issue, retire les anciennes tailles puis pose la cible', async () => {
+  const calls = []
+  // Le ticket porte trois tailles — dont un `sp:4` tapé à la main, hors échelle.
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    if ((init.method ?? 'GET') === 'GET') return response({ labels: [{ name: 'ready' }, { name: 'sp:8' }, { name: 'sp:3' }, { name: 'sp:4' }] })
+    return response({})
+  }
+
+  const result = await setPoints(PROJECT, 'MIS-110', { points: 5, fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', value: 'sp:5' })
+  assert.deepEqual(calls.map((call) => `${call.method} ${decodeURIComponent(call.url)}`), [
+    'GET https://api.github.com/repos/daedalforge/missions/issues/110',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:8',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:3',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:4',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+  assert.deepEqual(JSON.parse(calls[4].body), { labels: ['sp:5'] })
+})
+
+test('une taille déjà portée n’est pas retirée pour être reposée', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${String(url)}`)
+    if ((init.method ?? 'GET') === 'GET') return response({ labels: [{ name: 'ready' }, { name: 'sp:5' }] })
+    return response({})
+  }
+
+  const result = await setPoints(PROJECT, 'MIS-110', { points: 5, fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', value: 'sp:5' })
+  assert.deepEqual(calls, [
+    'GET https://api.github.com/repos/daedalforge/missions/issues/110',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+})
+
+test('un libellé de la famille qui n’est pas une taille reste en place', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${String(url)}`)
+    if ((init.method ?? 'GET') === 'GET') return response({ labels: [{ name: 'sp:moyen' }, { name: 'sprint:1' }] })
+    return response({})
+  }
+
+  await setPoints(PROJECT, 'MIS-110', { points: 3, fetchImpl })
+
+  assert.deepEqual(calls, [
+    'GET https://api.github.com/repos/daedalforge/missions/issues/110',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+})
+
+test('retirer un libellé de points déjà absent est un succès, pas un échec', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${String(url)}`)
+    if ((init.method ?? 'GET') === 'GET') return response({ labels: [{ name: 'sp:8' }] })
+    return init.method === 'DELETE'
+      ? response({ message: 'Label does not exist' }, { status: 404 })
+      : response({})
+  }
+
+  const result = await setPoints(PROJECT, 'MIS-110', { points: 8, fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', value: 'sp:8' })
+  assert.equal(calls.at(-1), 'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels')
+})
+
+test('une écriture de points garde un vrai refus : seul un 404 dit « déjà retiré »', async () => {
+  const fetchImpl = async (url, init = {}) =>
+    (init.method ?? 'GET') === 'GET'
+      ? response({ labels: [{ name: 'sp:8' }] })
+      : response({ message: 'Forbidden' }, { status: 403 })
+
+  await assert.rejects(() => setPoints(PROJECT, 'MIS-110', { points: 3, fetchImpl }), /GitHub access denied/)
+})
+
+test('une écriture de points exige une clé, un préfixe et une taille positive', async () => {
+  await assert.rejects(
+    () => setPoints(PROJECT, 'MIS-points', { points: 3, fetchImpl: async () => response({}) }),
+    /not an issue key/,
+  )
+  await assert.rejects(
+    () => setPoints(PROJECT, 'MIS-110', { points: 0, fetchImpl: async () => response({}) }),
+    /points value is missing/,
+  )
+  await assert.rejects(
+    () => setPoints({ ...PROJECT, map: { ...PROJECT.map, points: null } }, 'MIS-110', { points: 3, fetchImpl: async () => response({}) }),
+    /no points label prefix/,
   )
 })
 

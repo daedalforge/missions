@@ -30,6 +30,13 @@ précise. Un critère qu'on ne peut pas vérifier n'est pas un critère.
 - [ ] …
 - [ ] …
 
+## Estimation
+
+La taille retenue, posée sur le ticket : `1`, `2`, `3`, `5`, `8` ou `13`. Elle se
+lit sur la fiche — un libellé `sp:N` sur GitHub, le champ de story points du
+projet sur Jira — et ne s'édite pas dans le panneau. Une ré-estimation reprend
+le cadrage : l'exécution ne touche pas à la taille.
+
 ## Contraintes et risques
 
 Ce qui borne la solution (compatibilité, données existantes, délais) et ce qui

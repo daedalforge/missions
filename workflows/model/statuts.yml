@@ -20,7 +20,7 @@ nodes:
     tracker: label in-progress
   - id: in-review
     label: En revue
-    description: La PR est ouverte ; une relecture tranche.
+    description: La PR est ouverte et relue à l'aveugle ; le demandeur tranche.
     tracker: label in-review
   - id: ready-for-prod
     label: Prête à partir
@@ -48,7 +48,7 @@ edges:
     when: PR ouverte et complète
     writer: session
     artifact: label in-review
-    gate: 'PR assignée, étiquetée, milestone posée, Closes #N'
+    gate: 'PR assignée, typée, milestone posée, Closes #N, revue interne à l''aveugle validée'
   - from: in-progress
     to: to-refine
     when: cadrage faux
