@@ -1085,7 +1085,7 @@ test('le compteur de l’onglet prend l’anneau des groupes, pas une pastille p
   }
 })
 
-test('le thème Naruto finit le formulaire de branche et le filtre', () => {
+test('le thème Naruto finit le formulaire de branche et le menu des filtres', () => {
   const manga = (name) => regle(`.missions-panel[data-skin="paper"] ${name}`)
 
   // Le formulaire du volet suivait le thème par défaut : champs blancs, bordure
@@ -1096,25 +1096,9 @@ test('le thème Naruto finit le formulaire de branche et le filtre', () => {
     assert.match(manga(field), /box-shadow: [12]px [12]px 0 var\(--skin-shadow\)/)
   }
   assert.match(manga('.missions-declare'), /border-top: 1\.5px solid var\(--skin-ink\)/)
-  // Les cases du filtre Statut prennent les teintes du thème ; la palette
-  // GitHub ne reste que sur le thème par défaut.
-  const accents = [
-    ['in-review', 'var(--skin-info-strong)'],
-    ['ready-for-prod', 'var(--skin-alt-strong)'],
-    ['in-progress', 'var(--skin-warn-ink)'],
-    ['ready', 'var(--skin-good-strong)'],
-    ['to-refine', 'var(--skin-quiet-strong)'],
-  ]
-  for (const [state, color] of accents) {
-    assert.ok(
-      manga(`.missions-status-option[data-state="${state}"] input`).includes(`accent-color: ${color};`),
-      `accent manga manquant pour ${state}`,
-    )
-  }
-  assert.match(regle('.missions-status-option[data-state="to-refine"] input'), /accent-color: #8250df/)
-  // Le vide des cartes a quitté le bundle : ni bandeau pointillé, ni état vide
-  // héros, les deux seules classes `missions-empty*` du chemin cartes.
-  assert.doesNotMatch(SOURCE, /missions-empty/)
+  // Le menu des filtres garde la teinte du thème ; les accents d'état, eux,
+  // ont quitté le bundle avec `StatusFilter`.
+  assert.match(manga('.missions-status-option:hover'), /background: color-mix\(in srgb, var\(--skin-ink\) 8%, transparent\)/)
   // L'aide d'erreur repasse au corail clair en thème sombre : le corail profond
   // du thème clair tomberait à 2,6:1 sur le fond sombre.
   const darkError = SOURCE.slice(SOURCE.indexOf(':root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-declare-note--error,'))
