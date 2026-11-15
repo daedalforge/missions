@@ -2026,8 +2026,6 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
     "Garde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande."
 
   assert.equal(missionSessionPrompt(TEMOIN), attendu)
-  // Le prompt de session ne porte pas le clone : c'est le prompt des remontées
-  // qui a besoin de savoir où lire la PR.
   assert.doesNotMatch(missionSessionPrompt(TEMOIN), /Dépôt du projet/)
 })
 
@@ -2039,6 +2037,7 @@ test('le worktree de la mission dérive du clone et de la clé', () => {
 
   // Then un champ manquant interdit la dérivation au lieu d'inventer un chemin
   assert.equal(missionWorktree({ ...TEMOIN, repo: null }), null)
+  assert.equal(missionWorktree({ ...TEMOIN, key: null }), null)
   assert.equal(missionWorktree({ ...TEMOIN, branch: null }), null)
   assert.equal(missionWorktree({ ...TEMOIN, base: null }), null)
 })
