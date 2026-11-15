@@ -884,6 +884,15 @@ test('l’onglet Done rend l’arbre de Missions, son vide et son pied', () => {
   assert.ok('selected' in view.props, 'le volet ouvert gouverne l’arbre de Done')
 
   const rendu = renderTree(view)
+  // Le champ de l'arbre de Done garde son libellé, son raccourci et son compte.
+  const champs = findAll(rendu, 'input').filter((node) => node.props.type === 'search')
+  assert.equal(champs.length, 1, 'un seul champ de recherche')
+  assert.equal(champs[0].props['aria-label'], 'Done outline')
+  assert.equal(
+    textOf(findAll(rendu, 'span').find((node) => node.props.className === 'missions-wb-kbd')),
+    '⌘K',
+    'le raccourci du champ suit l’arbre de Done',
+  )
   const lignes = findAll(rendu, 'div').filter((node) => node.props.className === 'missions-tree-row')
   assert.equal(lignes.length, 1, 'seule la mission close est dans l’arbre')
   assert.match(textOf(lignes[0]), /mission close/)
@@ -919,6 +928,11 @@ test('l’onglet Done rend l’arbre de Missions, son vide et son pied', () => {
   )
   // Le pied compte le périmètre de l'onglet, pas les lignes que la requête garde.
   assert.match(textOf(nommee), /1 done/)
+  // Le compte du champ, lui, dit les lignes rendues sur celles du périmètre.
+  assert.match(
+    textOf(findAll(nommee, 'span').find((node) => node.props.className === 'missions-wb-count')),
+    /0 of 1/,
+  )
 
   const empty = textOf(renderTree(monter(states([]))))
   assert.match(empty, /No done mission declared on this machine\./)
@@ -967,7 +981,7 @@ test('l’onglet Done garde les filtres de l’arbre, sans statut ni bande', () 
   // Then la barre de l'arbre est là, ses chips aussi, sans select ni bande
   const rendu = renderTree(vue)
   const text = textOf(rendu)
-  for (const chip of ['Type', 'Epic', 'Project', 'Priority']) {
+  for (const chip of ['Type', 'Epic', 'Project', 'Priority', 'Missing']) {
     assert.match(text, new RegExp(chip), `le chip ${chip} est rendu`)
   }
   assert.deepEqual(findAll(rendu, 'select'), [])
@@ -1061,9 +1075,9 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   assert.doesNotMatch(SOURCE, /\[data-skin="paper"\] \.missions-card\[data-interactive="true"\]:hover \{[^}]*translateY/)
 })
 
-test('le compteur de l’onglet prend l’anneau des groupes, pas une pastille pâle', () => {
+test('le compteur de l’onglet porte l’anneau de la peau papier, pas une pastille pâle', () => {
   const ring = regle('.missions-panel[data-skin="paper"] .missions-tab-count')
-  // Même dessin que `.missions-group-ring` : le trait, la taille, le chiffre.
+  // Le trait, la taille et le chiffre sont ceux de l'anneau cerclé de la peau.
   assert.match(ring, /display: grid/)
   assert.match(ring, /width: 24px/)
   assert.match(ring, /height: 24px/)
@@ -1071,13 +1085,13 @@ test('le compteur de l’onglet prend l’anneau des groupes, pas une pastille p
   assert.match(ring, /border-radius: 50%/)
   assert.match(ring, /font: 700 11px\/1 var\(--skin-mono\)/)
   // Un compteur d'onglet n'a pas d'état : l'accent du panneau remplace la
-  // teinte d'état que l'anneau des groupes reçoit de son groupe.
+  // teinte que les groupes portaient autrefois.
   assert.match(ring, /background: var\(--skin-accent\)/)
   // La pastille du thème par défaut ne bouge pas.
   assert.match(regle('.missions-tab-count'), /border-radius: 9px/)
-  // En thème sombre, le chiffre reste en encre sombre sur l'orange, comme
-  // l'anneau et la marque du titre : c'est le bloc, pas seulement l'entrée de
-  // la liste, qui doit porter la couleur.
+  // En thème sombre, le chiffre reste en encre sombre sur l'orange, comme la
+  // marque du titre : c'est le bloc, pas seulement l'entrée de la liste, qui
+  // doit porter la couleur.
   for (const prefix of [':root[data-ds-dark-theme]', 'body[data-ds-dark-theme]']) {
     const at = SOURCE.indexOf(`${prefix} .missions-panel[data-skin="paper"] .missions-tab-count,`)
     assert.ok(at >= 0, `sélecteur sombre manquant : ${prefix}`)
