@@ -1914,7 +1914,7 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
     'Travaille sur la mission MIS-42 — Reload onglet mission.\n\n' +
     "Lis d'abord le ticket avec le CLI, jamais sa page HTML (tronquée) :\n" +
     'gh issue view 42 -R daedalforge/missions --json number,title,state,body,labels,milestone,assignees,comments\n' +
-    'Étape en cours : exécution (statut in-progress). Tu ne fais que l’exécution : la branche depuis la base, les commits, la PR vers la base avec `Closes #N`, la revue interne à l\'aveugle du diff, le journal et la checklist à jour ; si elle valide, le ticket passe en in-review et tu t’arrêtes, sinon tu corriges les constats et tu fais relire jusqu’à validation.\n\n' +
+    "Étape en cours : exécution (statut in-progress). Tu ne fais que l’exécution : la branche depuis la base, les commits, la PR vers la base avec `Closes #N`, la revue interne à l'aveugle du diff, le journal et la checklist à jour ; si elle valide, le ticket passe en in-review et tu t’arrêtes, sinon tu corriges les constats et tu fais relire jusqu’à validation.\n\n" +
     "Chaque étape se joue dans une nouvelle session : à la fin de celle-ci, arrête-toi ; l'étape suivante sera une nouvelle session.\n\n" +
     'Branche : fix/mis-42 ; base : main.\n\n' +
     'Playbook à lire : playbook/execution.md.\n\n' +
