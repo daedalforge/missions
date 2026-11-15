@@ -45,7 +45,19 @@ nodes:
     label: Renseigner la PR
     section: Renseigner la PR
     writer: session
-    gate: assignée, typée, étiquetée in-review, liée au ticket, même milestone
+    gate: assignée, typée, liée au ticket, même milestone, sans label in-review
+  - id: revue-interne
+    label: Faire relire le diff à l'aveugle
+    section: Revue interne à l'aveugle
+    writer: session
+    condition: la PR est renseignée
+    artifact: le verdict et ses constats
+  - id: corriger-constats
+    label: Corriger les constats de la relecture
+    section: Revue interne à l'aveugle
+    writer: session
+    condition: la relecture refuse
+    artifact: les correctifs poussés sur la branche
   - id: retour-cadrage
     label: Renvoyer au cadrage
     section: Règles de conduite
@@ -55,12 +67,12 @@ nodes:
     label: Vérifier la condition de sortie
     section: Condition de sortie — la mission est « en revue »
     writer: session
-    gate: les huit cases sont cochées
+    gate: les neuf cases sont cochées
   - id: passer-en-revue
     label: Passer le ticket en revue
     section: Sur le tracker
     writer: session
-    artifact: le libellé in-review
+    artifact: les libellés in-review sur la PR et le ticket
 edges:
   - from: ready
     to: ouvrir-branche
@@ -77,19 +89,28 @@ edges:
     to: ouvrir-pr
     when: le travail est prêt
   - from: ouvrir-pr
+    to: renseigner-pr
+  - from: renseigner-pr
+    to: revue-interne
+  - from: revue-interne
+    to: corriger-constats
+    when: la relecture refuse
+  - from: corriger-constats
+    to: revue-interne
+    when: les correctifs sont poussés
+  - from: revue-interne
     to: tenir-journal
+    when: la relecture valide
   - from: tenir-journal
     to: cocher-checklist
   - from: cocher-checklist
-    to: renseigner-pr
-  - from: renseigner-pr
     to: verifier-sortie
   - from: verifier-sortie
     to: tenir-journal
     when: une case n'est pas cochée
   - from: verifier-sortie
     to: passer-en-revue
-    when: les huit cases sont cochées
+    when: les neuf cases sont cochées
   - from: passer-en-revue
     to: in-review
   - from: petits-commits
