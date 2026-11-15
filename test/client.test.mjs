@@ -3249,6 +3249,7 @@ test('le volet montre la raison du blocage : auteur, âge, texte et lien', () =>
     ...MISSION,
     updatedAt: MISSION.updated,
     blocked: true,
+    blockedByLabel: true,
     blockedReason: {
       state: 'found',
       author: 'slucienvauthier-so',
@@ -3285,6 +3286,7 @@ test('une raison sans auteur affiche « Commentaire du ticket »', () => {
     ...MISSION,
     updatedAt: MISSION.updated,
     blocked: true,
+    blockedByLabel: true,
     blockedReason: { state: 'found', author: null, body: 'Attente.', createdAt: null, url: null },
   })
 
@@ -3298,6 +3300,7 @@ test('une raison absente ou illisible est dite, sans texte inventé', () => {
     ...MISSION,
     updatedAt: MISSION.updated,
     blocked: true,
+    blockedByLabel: true,
     blockedReason: { state: 'empty', author: null, body: '', createdAt: null, url: null },
   }).tree
   const note = findAll(empty, 'p').find((node) => node.props.className === 'missions-blocked-reason-note')
@@ -3308,6 +3311,7 @@ test('une raison absente ou illisible est dite, sans texte inventé', () => {
     ...MISSION,
     updatedAt: MISSION.updated,
     blocked: true,
+    blockedByLabel: true,
     blockedReason: { state: 'unavailable', author: null, body: '', createdAt: null, url: null },
   }).tree
   const note2 = findAll(unavailable, 'p').find((node) => node.props.className === 'missions-blocked-reason-note')
@@ -3323,6 +3327,95 @@ test('une mission non bloquée garde le formulaire et l’indice, sans raison', 
   // du label seul plutôt qu'une carte vide.
   const legacy = monterVolet({ ...MISSION, updatedAt: MISSION.updated, blocked: true }).tree
   assert.match(textOf(legacy), /Le label `blocked` est posé sur le ticket ; sa raison est en commentaire\./)
+})
+
+test('une mission retenue par une dépendance nomme ses bloqueuses, sans lire de commentaire', () => {
+  // Given une mission que retient une seule dépendance, sans le label.
+  const { tree } = monterVolet({
+    ...MISSION,
+    updatedAt: MISSION.updated,
+    blocked: true,
+    blockedByLabel: false,
+    blockers: [{
+      key: 'MIS-44',
+      title: 'Contrat de données',
+      state: 'in-progress',
+      url: 'https://example.atlassian.net/browse/MIS-44',
+    }],
+  })
+
+  // Then le volet nomme la bloqueuse, son état lisible et son lien.
+  assert.match(textOf(tree), /Bloquée par cette mission/)
+  const lien = findAll(tree, 'a').find((node) => node.props.className === 'missions-blocked-by-link')
+  assert.ok(lien, 'la bloqueuse est un lien vers son ticket')
+  assert.equal(lien.props.href, 'https://example.atlassian.net/browse/MIS-44')
+  assert.equal(lien.props.target, '_blank')
+  assert.equal(lien.props.rel, 'noreferrer')
+  assert.equal(textOf(lien), 'MIS-44')
+  assert.match(textOf(tree), /in progress/)
+
+  // Then aucune raison n'est lue ni promise : la copie ne parle pas de
+  // commentaire pour un blocage par dépendance.
+  assert.equal(findAll(tree, 'div').filter((node) => node.props.className === 'missions-blocked-reason').length, 0)
+  assert.equal(textOf(tree).includes('commentaire'), false)
+
+  // Then le commutateur ne montre que le label : éteint.
+  const interrupteur = findAll(tree, 'button').find((node) => node.props.role === 'switch')
+  assert.equal(interrupteur.props['aria-checked'], 'false')
+})
+
+test('le label et la dépendance du volet se lisent ensemble', () => {
+  // Given une mission qui porte le label et qu'une dépendance retient aussi.
+  const { tree } = monterVolet({
+    ...MISSION,
+    updatedAt: MISSION.updated,
+    blocked: true,
+    blockedByLabel: true,
+    blockedReason: { state: 'found', author: null, body: 'Attente.', createdAt: null, url: null },
+    blockers: [{ key: 'MIS-44', title: 'Contrat', state: 'ready', url: null }],
+  })
+
+  // Then les deux causes s'affichent, et le commutateur suit le label.
+  assert.match(textOf(tree), /Bloquée par cette mission/)
+  assert.ok(findAll(tree, 'p').some((node) => node.props.className === 'missions-blocked-reason-text'))
+  const interrupteur = findAll(tree, 'button').find((node) => node.props.role === 'switch')
+  assert.equal(interrupteur.props['aria-checked'], 'true')
+})
+
+test('le cadenas d’une carte dit pourquoi, jamais un commentaire de dépendance', () => {
+  // Then le cadenas nomme les bloqueuses d'un blocage par dépendance et ne
+  // garde la phrase du commentaire que pour le label.
+  assert.match(SOURCE, /'Bloqué : la raison est en commentaire du ticket'/)
+  assert.match(SOURCE, /`Bloquée par \$\{\(mission\.blockers \?\? \[\]\)\.map/)
+})
+
+test('la liste place une mission bloquée après sa bloqueuse, même épinglée', () => {
+  // Given une mission épinglée et urgente que retient une mission libre, plus
+  // une mission de contexte.
+  const liste = [
+    {
+      ...MISSION,
+      key: 'MIS-471',
+      title: 'Épinglée',
+      pinned: true,
+      priority: 'urgent',
+      blocked: true,
+      blockedByLabel: false,
+      blockers: [{ key: 'MIS-472', title: 'Bloqueuse', state: 'ready' }],
+    },
+    { ...MISSION, key: 'MIS-472', title: 'Bloqueuse', priority: 'low' },
+  ]
+  const { arbre } = monterArbre({ missions: liste })
+
+  // When la liste plate est rendue.
+  const lignes = findAll(arbre(), 'div')
+    .filter((node) => node.props.className === 'missions-tree-row')
+    .map((node) => textOf(node))
+    .filter((text) => text.includes('MIS-47'))
+    .map((text) => (text.includes('MIS-471') ? 'MIS-471' : 'MIS-472'))
+
+  // Then l'épingle ne passe pas devant le bloqueur : la règle prime.
+  assert.deepEqual(lignes, ['MIS-472', 'MIS-471'])
 })
 
 test('une raison écrite est posée sans attendre la lecture suivante', () => {
