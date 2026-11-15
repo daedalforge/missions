@@ -242,6 +242,9 @@ sa propre copie de la mise en page : le thème illustré porte la peau
 `data-skin="paper"` et n'apporte que ses tokens `--skin-*` et ses rares
 variantes de décor. Naruto affiche la photo du village, le portrait de Konoha,
 le kicker « Konoha · mission log » et la marque 忍, en clair comme en sombre. Le
+bandeau s'anime sans JavaScript : la photo respire sur 34 s dans son cadre, le
+portrait monte de 6 px sur un cycle de 6,5 s et la bulle le suit d'un tiers de
+seconde ; `prefers-reduced-motion: reduce` coupe les trois animations. Le
 thème par défaut garde le panneau sobre du host ; une valeur stockée inconnue,
 comme l'ancien identifiant `noel`, retombe sur Default.
 
