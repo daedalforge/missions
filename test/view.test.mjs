@@ -2026,6 +2026,29 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
   assert.doesNotMatch(missionSessionPrompt(TEMOIN), /Dépôt du projet/)
 })
 
+test('le brief de revue constate la validation des collègues, mot pour mot', () => {
+  // La revue n'est plus la relecture du diff : ce brief est celui des
+  // collègues, et il est épinglé comme celui de l'exécution.
+  assert.equal(
+    STEP_BRIEFS.revue,
+    'Tu ne fais que la revue : la revue du diff est celle de tes collègues et a eu lieu en exécution ; tu constates leur validation sur la PR (`gh pr view --json reviewDecision,reviews`), tu vérifies que chaque critère d’acceptation porte sa preuve, que le périmètre et les tests tiennent, que le journal et la checklist sont à jour, tu écris la décision datée dans le ticket, tu poses le label ready-for-prod et tu t’arrêtes ; sans validation des collègues, tu nommes ce qui manque et tu ne déplaces pas les labels.',
+  )
+
+  const prompt = missionSessionPrompt({ ...TEMOIN, state: 'in-review' })
+  assert.match(prompt, /Étape en cours : revue \(statut in-review\)\. Tu ne fais que la revue : la revue du diff est celle de tes collègues/)
+  assert.match(prompt, /constates leur validation sur la PR/)
+  assert.match(prompt, /chaque critère d’acceptation porte sa preuve/)
+  assert.match(prompt, /tu poses le label ready-for-prod/)
+  assert.match(prompt, /sans validation des collègues, tu nommes ce qui manque et tu ne déplaces pas les labels/)
+  assert.match(prompt, /Playbook à lire : playbook\/revue\.md\./)
+  assert.match(prompt, /Journal de mission : missions\/MIS-42\/journal\.md/)
+  assert.match(prompt, /Checklist de mission : missions\/MIS-42\/checklist\.md/)
+  assert.match(prompt, /tu ne merges jamais la PR/)
+  // La relecture du diff n'est plus le geste : l'ancien brief ne survit pas.
+  assert.doesNotMatch(prompt, /chaque critère avec sa preuve, le diff/)
+  assert.doesNotMatch(prompt, /tu approuves/)
+})
+
 test('chaque état nomme la page de playbook de son étape', () => {
   // La correspondance est épinglée ici, indépendamment de lib/view.js : une
   // table retournée doit casser ce test, pas le traverser.

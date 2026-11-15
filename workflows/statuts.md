@@ -27,7 +27,7 @@ qu'un seul état à la fois.
 | `ready` | `in-progress` | branche poussée | session | `label in-progress` | la branche est poussée vers la base |
 | `in-progress` | `in-review` | PR ouverte et complète | session | `label in-review` | PR assignée, typée, milestone posée, `Closes #N`, revue interne à l'aveugle validée |
 | `in-progress` | `to-refine` | cadrage faux | demandeur | `label to-refine` | le cadrage ou le périmètre change |
-| `in-review` | `ready-for-prod` | revue approuvée | session | `label ready-for-prod` | cinq cases de sortie de revue cochées |
+| `in-review` | `ready-for-prod` | validation des collègues constatée | session | `label ready-for-prod` | cinq cases de sortie de revue cochées |
 | `in-review` | `in-progress` | changements demandés | demandeur | `label in-progress` | un critère ou une preuve manque |
 | `in-review` | `to-refine` | diff hors périmètre | demandeur | `label to-refine` | le diff sort du cadrage |
 | `ready-for-prod` | `done` | merge et ticket fermé | demandeur | issue fermée | PR mergée et ticket fermé |

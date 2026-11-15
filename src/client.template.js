@@ -3260,8 +3260,11 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const step = missionStep(mission)
       const sessionLabel = step ? `Start a session — ${step}` : 'Start a session'
       // The label says « remontées » without imitating the step session: the
-      // step button stays the primary, and the last of the row.
+      // review's own gesture stays the primary, and the last of the row.
       const feedbackLabel = 'Check the PR feedback'
+      // The review's own gesture: the colleagues validated the PR and the
+      // session records it. It replaces the step session in `in-review`.
+      const validateLabel = 'PR validated'
       // A free session answers a question without moving the ticket: its label
       // names the gesture, and the row's tooltip shows the same words.
       const freeLabel = 'Start a free session'
@@ -3886,6 +3889,20 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                     'aria-label': importingTolgee ? 'Checking the translations…' : 'Tolgee import',
                   }, h(ActionIcon, { name: 'tolgee' }))
                 : null,
+              // The free session asks a question: it opens in every state but
+              // done, and sits before the state's own gestures so those stay
+              // neighbours and the primary stays last.
+              mission.state === 'done'
+                ? null
+                : h('button', {
+                    type: 'button',
+                    className: 'missions-action missions-action--icon',
+                    onClick: startFreeSession,
+                    disabled: freeBlocker !== null,
+                    title: freeBlocker ?? freeLabel,
+                    'aria-label': freeLabel,
+                    'aria-describedby': freeBlocker ? 'missions-session-blocked' : undefined,
+                  }, h(ActionIcon, { name: 'free' })),
               // Only a mission in review has remarks to check: the client does
               // not know whether a PR exists, so the state alone decides, and
               // the session stops with a word when `gh` finds none.
@@ -3900,29 +3917,32 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                     'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
                   }, h(ActionIcon, { name: 'feedback' }))
                 : null,
-              // The free session sits above the step session, which stays the
-              // primary and the last: a question is never the default gesture.
-              // A closed mission plays no session at all, so `done` hides it.
-              mission.state === 'done'
+              // The colleagues' validation is the review's own gesture: it
+              // replaces the step session, stays next to the remarks, and is
+              // the row's primary and last.
+              mission.state === 'in-review'
+                ? h('button', {
+                    type: 'button',
+                    className: 'missions-action missions-action--icon missions-action--primary',
+                    onClick: startSession,
+                    disabled: blocker !== null,
+                    title: blocker ?? validateLabel,
+                    'aria-label': validateLabel,
+                    'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                  }, h(ActionIcon, { name: 'validate' }))
+                : null,
+              // Outside review, the step session stays the primary and the last.
+              mission.state === 'in-review'
                 ? null
                 : h('button', {
                     type: 'button',
-                    className: 'missions-action missions-action--icon',
-                    onClick: startFreeSession,
-                    disabled: freeBlocker !== null,
-                    title: freeBlocker ?? freeLabel,
-                    'aria-label': freeLabel,
-                    'aria-describedby': freeBlocker ? 'missions-session-blocked' : undefined,
-                  }, h(ActionIcon, { name: 'free' })),
-              h('button', {
-                type: 'button',
-                className: 'missions-action missions-action--icon missions-action--primary',
-                onClick: startSession,
-                disabled: blocker !== null,
-                title: blocker ?? sessionLabel,
-                'aria-label': sessionLabel,
-                'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
-              }, h(ActionIcon, { name: 'session' })),
+                    className: 'missions-action missions-action--icon missions-action--primary',
+                    onClick: startSession,
+                    disabled: blocker !== null,
+                    title: blocker ?? sessionLabel,
+                    'aria-label': sessionLabel,
+                    'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                  }, h(ActionIcon, { name: 'session' })),
             ),
           ),      )
     }
@@ -4294,6 +4314,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         // A speech bubble: the PR's remarks.
         return h('svg', common,
           h('path', { d: 'M13.4 9.4A1.6 1.6 0 0 1 11.8 11H5.2L2.6 13.3V3.6A1.6 1.6 0 0 1 4.2 2h7.6a1.6 1.6 0 0 1 1.6 1.6Z' }),
+        )
+      }
+      if (name === 'validate') {
+        // A seal: the colleagues' validation, recorded in the ticket.
+        return h('svg', common,
+          h('circle', { cx: 8, cy: 8, r: 6 }),
+          h('path', { d: 'M5.3 8.2 7.2 10.1 10.8 6.1' }),
         )
       }
       if (name === 'close') {
