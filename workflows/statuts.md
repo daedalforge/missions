@@ -25,7 +25,7 @@ qu'un seul état à la fois.
 | --- | --- | --- | --- | --- | --- |
 | `to-refine` | `ready` | cadrage validé | session | `label ready` | neuf cases du cadrage cochées et accord du demandeur |
 | `ready` | `in-progress` | branche poussée | session | `label in-progress` | la branche est poussée vers la base |
-| `in-progress` | `in-review` | PR ouverte et complète | session | `label in-review` | PR assignée, étiquetée, milestone posée, `Closes #N` |
+| `in-progress` | `in-review` | PR ouverte et complète | session | `label in-review` | PR assignée, typée, milestone posée, `Closes #N`, revue interne à l'aveugle validée |
 | `in-progress` | `to-refine` | cadrage faux | demandeur | `label to-refine` | le cadrage ou le périmètre change |
 | `in-review` | `ready-for-prod` | revue approuvée | session | `label ready-for-prod` | cinq cases de sortie de revue cochées |
 | `in-review` | `in-progress` | changements demandés | demandeur | `label in-progress` | un critère ou une preuve manque |
