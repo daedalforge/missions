@@ -8454,11 +8454,11 @@ test('le thème sombre filtre le cadre, bordure comprise', () => {
 })
 
 test('le souffle de la photo dure trente-quatre secondes, sans quitter le cadre', () => {
-  // Given la règle de la photo et le keyframes du souffle
+  // Given le bundle construit et son bloc de thème
+  // When la règle de la photo et le keyframes du souffle sont extraits
   const photo = regleDePeau(PHOTO_HERO)
   const souffle = ligneDe('@keyframes missions-hero-breathe')
 
-  // When le cadre ne bouge pas et que la photo grandit dessous
   // Then l'animation est déclarée dans la peau, lente et alternative
   assert.match(photo, /animation: missions-hero-breathe 34s ease-in-out infinite alternate/)
   assert.match(photo, /transform-origin: center/)
@@ -8467,7 +8467,8 @@ test('le souffle de la photo dure trente-quatre secondes, sans quitter le cadre'
 })
 
 test('le portrait monte de six pixels et son ombre s’allonge', () => {
-  // Given la règle du portrait et le keyframes de la flottaison
+  // Given le bandeau de Konoha monté sous la peau papier
+  // When les règles du portrait et de sa flottaison sont extraites
   const portrait = regle(PORTRAIT_HERO)
   const flottaison = ligneDe('@keyframes missions-hero-float')
 
@@ -8480,7 +8481,8 @@ test('le portrait monte de six pixels et son ombre s’allonge', () => {
 })
 
 test('la bulle suit le portrait avec un retard de 0,35 s', () => {
-  // Given la règle de la bulle et le keyframes de la poursuite
+  // Given le bandeau de Konoha monté sous la peau papier
+  // When les règles de la bulle et de sa poursuite sont extraites
   const bulle = regle(BULLE_HERO)
   const poursuite = ligneDe('@keyframes missions-hero-bubble-follow')
 
@@ -8525,10 +8527,10 @@ test('les animations du bandeau ne vivent que sous la peau papier', () => {
 })
 
 test('le thème Default ne monte ni bandeau ni animation', () => {
-  // Given le thème Default rendu
+  // Given le thème Default
+  // When le panneau est rendu
   const flat = JSON.stringify(renduTheme('default'))
 
-  // When le panneau est rendu
   // Then il ne porte ni le décor de Konoha, ni ses animations
   assert.doesNotMatch(flat, /missions-hero/)
   assert.doesNotMatch(flat, /missions-hero-breathe|missions-hero-float|missions-hero-bubble-follow/)
