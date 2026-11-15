@@ -42,7 +42,7 @@ function response(body, { status = 200 } = {}) {
   }
 }
 
-function issue(key, { status = 'In Progress', type = 'Story', hierarchyLevel = 0, parent = null, labels = [] } = {}) {
+function issue(key, { status = 'In Progress', type = 'Story', hierarchyLevel = 0, parent = null, labels = [], links = [] } = {}) {
   return {
     key,
     fields: {
@@ -53,8 +53,18 @@ function issue(key, { status = 'In Progress', type = 'Story', hierarchyLevel = 0
       customfield_10016: 5,
       parent: parent ? { key: parent, fields: { summary: `Épic ${parent}` } } : undefined,
       labels,
+      issuelinks: links,
       updated: '2026-11-10T10:00:00.000+0000',
     },
+  }
+}
+
+/** Un lien Jira, tel que la page liste le renvoie : le sens porte le type. */
+function link(type, { inward = null, outward = null, inwardStatus = 'To Refine' } = {}) {
+  return {
+    type: { name: type, inward: 'is blocked by', outward: 'blocks' },
+    inwardIssue: inward === null ? undefined : { key: inward, fields: { summary: `Mission ${inward}`, status: { name: inwardStatus } } },
+    outwardIssue: outward === null ? undefined : { key: outward, fields: { summary: `Mission ${outward}`, status: { name: 'Ready' } } },
   }
 }
 
@@ -126,6 +136,8 @@ test('Jira issues are normalized through the project map', async () => {
     title: 'Mission EX-1207',
     state: 'in-progress',
     stateConflict: [],
+    blockedByLabel: false,
+    blockers: [],
     blocked: false,
     type: 'story',
     priority: 'high',
@@ -136,6 +148,71 @@ test('Jira issues are normalized through the project map', async () => {
     url: 'https://example.atlassian.net/browse/EX-1207',
     updatedAt: '2026-11-10T10:00:00.000+0000',
   })
+})
+
+test('les liens Blocks entrants retiennent la mission, pas les sortants', async () => {
+  // Given une mission liée en entrant à une dépendance à raffiner, en sortant
+  // à une dépendance, et par un lien Relates.
+  const fetchImpl = reading(async () => response({
+    issues: [issue('EX-1', {
+      links: [
+        link('Blocks', { inward: 'EX-2' }),
+        link('Blocks', { outward: 'EX-3' }),
+        link('Relates', { inward: 'EX-4' }),
+      ],
+    })],
+  }))
+
+  // When la liste est lue.
+  const missions = await list(PROJECT, { fetchImpl })
+
+  // Then seule la dépendance entrante retient la mission, et son état vient de
+  // la map du projet.
+  assert.deepEqual(missions[0].blockers, [{
+    key: 'EX-2',
+    title: 'Mission EX-2',
+    state: 'to-refine',
+    url: 'https://example.atlassian.net/browse/EX-2',
+  }])
+  assert.equal(missions[0].blockedByLabel, false)
+  assert.equal(missions[0].blocked, true)
+})
+
+test('une dépendance en revue ou hors map ne retient pas la mission', async () => {
+  // Given deux liens entrants : l'un vers la revue, l'autre vers un statut
+  // que la map ne connaît pas.
+  const fetchImpl = reading(async () => response({
+    issues: [issue('EX-1', {
+      links: [
+        link('Blocks', { inward: 'EX-2', inwardStatus: 'Code review' }),
+        link('Blocks', { inward: 'EX-3', inwardStatus: 'Unknown status' }),
+      ],
+    })],
+  }))
+
+  // When la liste est lue.
+  const missions = await list(PROJECT, { fetchImpl })
+
+  // Then aucune dépendance ne retient, et la mission n'est pas bloquée.
+  assert.deepEqual(missions[0].blockers, [])
+  assert.equal(missions[0].blocked, false)
+})
+
+test('la page liste demande issuelinks, en une seule requête pour tout le lot', async () => {
+  // Given une mission liée à une dépendance à raffiner.
+  const calls = []
+  const fetchImpl = reading(async (url) => {
+    calls.push(String(url))
+    return response({ issues: [issue('EX-1', { links: [link('Blocks', { inward: 'EX-2' })] })] })
+  })
+
+  // When la liste est lue.
+  await list(PROJECT, { fetchImpl })
+
+  // Then le champ demandé porte les liens, et la page suffit : aucun appel par
+  // dépendance.
+  assert.equal(calls.length, 1)
+  assert.match(decodeURIComponent(calls[0]), /issuelinks/)
 })
 
 test('a Task issue is read as a story', async () => {

@@ -839,6 +839,12 @@ window.__ModuleLoader__.load({
 .missions-blocked-reason-link { width: fit-content; color: #0969da; font-size: 11.5px; text-decoration: underline; }
 .missions-blocked-reason-note { margin: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-blocked-note--error { color: var(--dsw-alias-label-danger, #b42318); }
+/* The dependencies that hold a mission: a key to open, the state it waits at. */
+.missions-blocked-by { display: grid; gap: 4px; min-width: 0; }
+.missions-blocked-by-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.missions-blocked-by-item { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 6px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 999px; background: var(--dsw-alias-bg-layer-1, #ffffff); font-size: 11.5px; }
+.missions-blocked-by-link { color: #0969da; text-decoration: underline; }
+.missions-blocked-by-state { color: var(--dsw-alias-label-tertiary, #7a7168); }
 /* La priorité s'édite dans la ligne : le select garde la taille du volet. */
 .missions-priority-select { max-width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 6px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12px; }
 .missions-priority-select:focus { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 40%, transparent); outline-offset: 1px; }
@@ -2052,7 +2058,9 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                 className: 'missions-lock',
                 role: 'img',
                 'aria-label': 'Bloqué',
-                title: 'Bloqué : la raison est en commentaire du ticket',
+                title: mission.blockedByLabel
+                  ? 'Bloqué : la raison est en commentaire du ticket'
+                  : `Bloquée par ${(mission.blockers ?? []).map((blocker) => blocker.key).join(', ')}`,
               },
                 h('svg', { viewBox: '0 0 12 12', 'aria-hidden': 'true' },
                   h('path', { className: 'lock-shackle', d: 'M3.6 5.2V4a2.4 2.4 0 0 1 4.8 0v1.2', fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }),
@@ -2303,6 +2311,36 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
           h('span', { className: 'missions-switch-thumb' }),
         ),
         h('span', { className: 'missions-switch-label' }, label),
+      )
+    }
+
+    /**
+     * What holds a mission without the label: its incoming `Blocks` links.
+     *
+     * The links are the panel's own read of the dependency's state, so the
+     * entry names the mission, the state it waits at, and opens its ticket: a
+     * blocker is another mission, and the reader may have to go and unblock it.
+     */
+    function BlockedBy({ blockers }) {
+      const one = blockers.length === 1
+      return h('div', { className: 'missions-blocked-by' },
+        h('span', { className: 'missions-blocked-label' },
+          one ? 'Bloquée par cette mission' : 'Bloquée par ces missions',
+        ),
+        h('ul', { className: 'missions-blocked-by-list' },
+          blockers.map((blocker) => h('li', { className: 'missions-blocked-by-item', key: blocker.key },
+            blocker.url
+              ? h('a', {
+                  className: 'missions-blocked-by-link',
+                  href: blocker.url,
+                  target: '_blank',
+                  rel: 'noreferrer',
+                  title: blocker.title,
+                }, blocker.key)
+              : h('span', { title: blocker.title }, blocker.key),
+            h('span', { className: 'missions-blocked-by-state' }, STATE_LABELS[blocker.state] ?? blocker.state),
+          )),
+        ),
       )
     }
 
@@ -2674,10 +2712,17 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
                         )
                       }
                       // A pin keeps its mission in sight while the tree scrolls:
-                      // the flat list already lifts the pinned rows, so their
-                      // leading run is the one sticky block.
-                      const pinned = flat ? group.rows.filter((row) => row.row?.pinned === true) : []
-                      const loose = flat ? group.rows.filter((row) => row.row?.pinned !== true) : group.rows
+                      // the flat list already lifts the pinned rows to its head,
+                      // so their leading run is the one sticky block — a pin a
+                      // blocker pushed down no longer sticks alone.
+                      const pinned = []
+                      if (flat) {
+                        for (const row of group.rows) {
+                          if (row.row?.pinned !== true) break
+                          pinned.push(row)
+                        }
+                      }
+                      const loose = flat ? group.rows.slice(pinned.length) : group.rows
                       const rows = h('div', {
                         className: flat ? 'missions-wb-rows missions-wb-rows--flat' : 'missions-wb-rows',
                         role: 'group',
@@ -2888,7 +2933,9 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         // matcher, and that matcher crosses the checklist, which is not a
         // mission field. The epic is a reference cell now, not a group.
         const scoped = sortMissions(filterMissions(missions, { ...filters, query: '', allowDone: false }))
-        const rows = pinnedFirst(scoped.map((mission) => {
+        // A blocked mission never opens before the dependency holding it: the
+        // rule outranks the pin, so it runs once the pins are lifted.
+        const lifted = pinnedFirst(scoped.map((mission) => {
           const index = checklists === null ? null : checklists[mission.key] ?? null
           return {
             id: mission.key,
@@ -2902,6 +2949,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             counts: index?.counts ?? { total: 0, checked: 0, partial: 0, open: 0 },
           }
         }))
+        const rows = respectBlockers(lifted, { blockersOf: (row) => row.mission.blockers })
         // One anonymous group: no label, so no epic ever answers as a result
         // and no mission is context. The pins are lifted again by `orderRows`,
         // under a query as well.
@@ -2943,7 +2991,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             // The epic no longer heads a group: the rows sit straight under
             // the tree, and a pin keeps them first under a query too.
             flat: true,
-            orderRows: (entries) => pinnedFirst(entries, (entry) => entry.row?.pinned === true),
+            orderRows: (entries) => respectBlockers(
+              pinnedFirst(entries, (entry) => entry.row?.pinned === true),
+              {
+                keyOf: (entry) => entry.row?.key,
+                blockersOf: (entry) => entry.row?.mission?.blockers,
+              },
+            ),
             query,
             onQuery,
             onQueryEnd: trackQuery,
@@ -3085,8 +3139,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       // Which tab of the drawer is showing: the drawer rests on the details.
       const [section, setSection] = React.useState('details')
       // Blocked is a label of the tracker, not a field of the panel: the switch
-      // shows what the tracker holds and the write goes through the host.
-      const [blockedNow, setBlockedNow] = React.useState(Boolean(mission.blocked))
+      // shows the label, and the write goes through the host. A mission may
+      // also be held by a dependency alone, so `blockedByLabel` is what the
+      // switch reads, and `blockers` is the other cause. An older host answer
+      // may carry the mark without the flag: `blocked` alone still means the
+      // label then.
+      const labelBlocked = (value) => value.blockedByLabel ?? Boolean(value.blocked)
+      const [blockedNow, setBlockedNow] = React.useState(labelBlocked(mission))
       const [armedBlock, setArmedBlock] = React.useState(false)
       const [reason, setReason] = React.useState('')
       const [writingBlock, setWritingBlock] = React.useState(false)
@@ -3142,9 +3201,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
         return () => { alive = false }
       }, [mission.key, mission.folder])
 
-      // A refreshed list carries the tracker's answer: the switch follows it.
+      // A refreshed list carries the tracker's answer: the switch follows the
+      // label, and the reason follows the read.
       React.useEffect(() => {
-        setBlockedNow(Boolean(mission.blocked))
+        setBlockedNow(labelBlocked(mission))
         setBlockedReason(mission.blockedReason ?? null)
         setArmedBlock(false)
         setReason('')
@@ -3473,6 +3533,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const dirty = branch.trim() !== savedBranch || base.trim() !== savedBase
       const checklistView = checklist?.exists ? parseChecklist(checklist.source) : null
 
+      // The dependencies that hold the mission: a `Blocks` link whose target
+      // has not reached the review. They are a cause of their own — no comment
+      // to read, no label on the ticket — so the switch never counts them.
+      const blockers = Array.isArray(mission.blockers) ? mission.blockers : []
+      const heldByDependency = blockers.length > 0
+      const markedBlocked = blockedNow || armedBlock || heldByDependency
+
       const detailsPanel = h(React.Fragment, null,
         h('dl', { className: 'missions-props' },
           h(DrawerRow, { label: 'State', value: STATE_LABELS[mission.state] ?? mission.state }),
@@ -3519,10 +3586,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
             }, priorityNote.text)
           : null,
 
-        h('div', { className: 'missions-blocked', 'data-blocked': blockedNow || armedBlock ? 'true' : 'false' },
+        h('div', { className: 'missions-blocked', 'data-blocked': markedBlocked ? 'true' : 'false' },
           h('div', { className: 'missions-blocked-head' },
             h('span', { className: 'missions-blocked-title' },
-              blockedNow ? 'Mission bloquée' : 'Signaler un blocage',
+              markedBlocked ? 'Mission bloquée' : 'Signaler un blocage',
             ),
             h(Switch, {
               label: 'Bloqué',
@@ -3561,9 +3628,13 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
               )
             : blockedNow
               ? h(BlockedReason, { reason: blockedReason })
-              : h('p', { className: 'missions-blocked-hint' },
-                  'Le label `blocked` et sa raison partent dans le tracker ; rien n’est gardé ici.',
-                ),
+              : null,
+          heldByDependency ? h(BlockedBy, { blockers }) : null,
+          !blockedNow && !armedBlock && !heldByDependency
+            ? h('p', { className: 'missions-blocked-hint' },
+                'Le label `blocked` et sa raison partent dans le tracker ; rien n’est gardé ici.',
+              )
+            : null,
           blockNote
             ? h('p', { className: blockNote.error ? 'missions-blocked-note missions-blocked-note--error' : 'missions-blocked-note', role: blockNote.error ? 'alert' : 'status' }, blockNote.text)
             : null,
@@ -6742,7 +6813,9 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
       const activeFilters = doneTab ? doneFilters : filters
       // Done keeps closed rows, so it is the only view that passes `allowDone`.
       const filtered = filterMissions(activeMissions, { query: activeQuery, ...activeFilters, allowDone: doneTab })
-      const groups = groupByState(sortMissions(filtered))
+      // A section whose mission waits on another section's mission moves behind
+      // it; inside a section, the same rule orders the rows.
+      const groups = groupByState(respectBlockers(sortMissions(filtered)))
 
       // The batch gesture is one request for the rendered keys: the child owns
       // the two-click state, this function pays the read and applies the result.

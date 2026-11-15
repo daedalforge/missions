@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { firstKnown, invertMap, normalizeIssue, onlyKnown } from '../lib/mission.js'
+import { firstKnown, invertMap, normalizeIssue, onlyKnown, stateBeforeReview } from '../lib/mission.js'
 
 const PROJECT = {
   id: 'missions',
@@ -173,4 +173,99 @@ test('a mission without the label is not blocked', () => {
   })
 
   assert.equal(mission.blocked, false)
+})
+
+/** Les noms de statut du tracker, tels que la map inverse les lit. */
+const WORKFLOW_NAMES = {
+  'to-refine': 'To Refine',
+  ready: 'Ready',
+  'in-progress': 'In Progress',
+  'in-review': 'Code Review',
+  'ready-for-prod': 'Ready for Prod',
+  done: 'Released',
+}
+
+const HOLDING_STATES = ['to-refine', 'ready', 'in-progress']
+const RELEASING_STATES = ['in-review', 'ready-for-prod', 'done']
+
+test('la revue sépare les états qui retiennent une mission de ceux qui la libèrent', () => {
+  // Given les six états du workflow et la frontière de la revue.
+
+  // When la frontière les lit un par un.
+
+  // Then les états d'avant la revue retiennent, les suivants libèrent, et un
+  // état absent ou inconnu ne retient rien.
+  assert.deepEqual(HOLDING_STATES.map(stateBeforeReview), [true, true, true])
+  assert.deepEqual(RELEASING_STATES.map(stateBeforeReview), [false, false, false])
+  assert.equal(stateBeforeReview(null), false)
+  assert.equal(stateBeforeReview('unknown'), false)
+})
+
+test('un lien entrant vers un état antérieur à la revue retient la mission', () => {
+  // Given une mission in-progress, liée à une dépendance à raffiner et à une
+  // dépendance déjà en revue.
+  const inverse = invertMap({ states: WORKFLOW_NAMES, types: {}, labels: {} })
+  const mission = normalizeIssue({
+    project: PROJECT,
+    key: 'MIS-200',
+    rawState: 'In Progress',
+    rawBlockers: [
+      { key: 'MIS-201', title: 'À raffiner', rawState: 'To Refine', url: 'https://jira.example/browse/MIS-201' },
+      { key: 'MIS-202', title: 'En revue', rawState: 'Code Review', url: 'https://jira.example/browse/MIS-202' },
+    ],
+    inverse,
+  })
+
+  // Then seule la dépendance d'avant la revue retient, et l'état de la
+  // mission ne bouge pas.
+  assert.deepEqual(mission.blockers, [{
+    key: 'MIS-201',
+    title: 'À raffiner',
+    state: 'to-refine',
+    url: 'https://jira.example/browse/MIS-201',
+  }])
+  assert.equal(mission.blockedByLabel, false)
+  assert.equal(mission.blocked, true)
+  assert.equal(mission.state, 'in-progress')
+})
+
+test('les dépendances sont dédoublonnées, ordonnées et lues par la map', () => {
+  // Given deux liens vers la même dépendance, une seconde et un statut hors
+  // de la map, dans le désordre.
+  const inverse = invertMap({ states: WORKFLOW_NAMES, types: {}, labels: {} })
+  const mission = normalizeIssue({
+    project: PROJECT,
+    key: 'MIS-210',
+    rawState: 'In Progress',
+    rawBlockers: [
+      { key: 'MIS-212', title: 'Trois', rawState: 'In Progress', url: 'https://jira.example/browse/MIS-212' },
+      { key: 'MIS-211', title: 'Un', rawState: 'To Refine', url: 'https://jira.example/browse/MIS-211' },
+      { key: 'MIS-211', title: 'Un', rawState: 'To Refine', url: 'https://jira.example/browse/MIS-211' },
+      { key: 'MIS-213', title: 'Hors map', rawState: 'Unknown Status', url: 'https://jira.example/browse/MIS-213' },
+    ],
+    inverse,
+  })
+
+  // Then chaque dépendance ne compte qu'une fois, dans l'ordre du workflow,
+  // et le statut hors map est écarté.
+  assert.deepEqual(mission.blockers.map((blocker) => blocker.key), ['MIS-211', 'MIS-212'])
+  assert.deepEqual(mission.blockers.map((blocker) => blocker.state), ['to-refine', 'in-progress'])
+})
+
+test('le label et la dépendance s’additionnent sans doubler le blocage', () => {
+  // Given une mission qui porte le label et qu'une dépendance retient.
+  const inverse = invertMap({ states: WORKFLOW_NAMES, types: {}, labels: {} })
+  const mission = normalizeIssue({
+    project: PROJECT,
+    key: 'MIS-220',
+    rawState: 'In Progress',
+    rawLabels: ['blocked'],
+    rawBlockers: [{ key: 'MIS-221', title: 'Bloqueuse', rawState: 'Ready', url: 'https://jira.example/browse/MIS-221' }],
+    inverse,
+  })
+
+  // Then les deux causes restent lisibles, et le blocage n'est dit qu'une fois.
+  assert.equal(mission.blockedByLabel, true)
+  assert.deepEqual(mission.blockers.map((blocker) => blocker.key), ['MIS-221'])
+  assert.equal(mission.blocked, true)
 })

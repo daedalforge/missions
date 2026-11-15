@@ -3416,6 +3416,8 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
       title: 'Créer une mission',
       state: 'to-refine',
       stateConflict: [],
+      blockedByLabel: false,
+      blockers: [],
       blocked: false,
       type: 'story',
       priority: 'high',

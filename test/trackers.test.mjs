@@ -477,6 +477,52 @@ test('la liste cachée garde la raison : un seul commentaire lu', async () => {
   assert.equal(comments, 1)
 })
 
+test('une mission retenue par une seule dépendance ne lit aucun commentaire', async () => {
+  // Given une mission bloquée par le label et une mission retenue par un lien
+  // Blocks entrant, sans label.
+  const commentReads = []
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    if (href.endsWith('/myself')) return response({ accountId: 'me' })
+    if (href.includes('/comment')) {
+      commentReads.push(href)
+      return response({ comments: [] })
+    }
+    return response({
+      issues: [
+        { key: 'EX-1', fields: { summary: 'Label', status: { name: 'In Progress' }, issuetype: { name: 'Story' }, labels: ['blocked'], updated: '2026-11-10T10:00:00.000+0000' } },
+        {
+          key: 'EX-2',
+          fields: {
+            summary: 'Dépendance',
+            status: { name: 'In Progress' },
+            issuetype: { name: 'Story' },
+            labels: [],
+            issuelinks: [{
+              type: { name: 'Blocks', inward: 'is blocked by', outward: 'blocks' },
+              inwardIssue: { key: 'EX-3', fields: { summary: 'Bloqueuse', status: { name: 'To Do' } } },
+            }],
+            updated: '2026-11-10T10:00:00.000+0000',
+          },
+        },
+      ],
+    })
+  }
+
+  // When la liste est lue.
+  const { missions } = await listAll([PROJECT_JIRA], { fetchImpl })
+
+  // Then seule la mission du label lit un commentaire, et la dépendance suffit
+  // à retenir l'autre.
+  assert.equal(commentReads.length, 1)
+  assert.match(commentReads[0], /EX-1/)
+  assert.equal(missions.find((mission) => mission.key === 'EX-1').blockedByLabel, true)
+  const dependency = missions.find((mission) => mission.key === 'EX-2')
+  assert.equal(dependency.blocked, true)
+  assert.equal(dependency.blockedByLabel, false)
+  assert.deepEqual(dependency.blockers.map((blocker) => blocker.key), ['EX-3'])
+})
+
 test('l’historique done ne demande pas de raison', async () => {
   const calls = []
   const fetchImpl = async (url) => {

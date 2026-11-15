@@ -99,6 +99,7 @@ import {
   scanLabel,
   searchBucket,
   pinnedFirst,
+  respectBlockers,
   sortMissions,
   sortRepositories,
   stateOptions,
@@ -688,6 +689,103 @@ test('pinnedFirst lit le drapeau ou un prédicat, et ne devine jamais', () => {
   // Then le prédicat du client lit la ligne, le défaut lit le drapeau absent.
   assert.deepEqual(pinnedFirst(entries, (entry) => entry.row.pinned === true).map((entry) => entry.row.key), ['b', 'c', 'a'])
   assert.deepEqual(pinnedFirst([{ key: 'x' }, { key: 'y' }]).map((item) => item.key), ['x', 'y'])
+})
+
+test('respectBlockers place chaque mission après ses bloqueuses visibles', () => {
+  // Given une mission urgente en tête du tri, retenue par deux dépendances.
+  const missions = [
+    { key: 'MIS-3', state: 'ready', priority: 'urgent', blockers: [{ key: 'MIS-2' }, { key: 'MIS-1' }] },
+    { key: 'MIS-2', state: 'ready', priority: 'low' },
+    { key: 'MIS-1', state: 'ready', priority: 'normal' },
+  ]
+
+  // When la contrainte est appliquée.
+  const ordered = respectBlockers(missions)
+
+  // Then les bloqueuses passent dans leur ordre de base, puis la mission
+  // retenue, et l'entrée n'est pas mutée.
+  assert.deepEqual(ordered.map((mission) => mission.key), ['MIS-2', 'MIS-1', 'MIS-3'])
+  assert.deepEqual(missions.map((mission) => mission.key), ['MIS-3', 'MIS-2', 'MIS-1'])
+})
+
+test('un bloqueur hors de la liste ne contraint rien', () => {
+  // Given une mission qui cite une clé filtrée et une mission libre.
+  const missions = [
+    { key: 'MIS-1', state: 'ready', blockers: [{ key: 'MIS-9', state: 'in-progress' }] },
+    { key: 'MIS-2', state: 'ready' },
+  ]
+
+  // When la contrainte est appliquée.
+  const ordered = respectBlockers(missions).map((mission) => mission.key)
+
+  // Then l'ordre de base reste tel quel.
+  assert.deepEqual(ordered, ['MIS-1', 'MIS-2'])
+})
+
+test('respectBlockers rend une permutation et garde l’ordre d’un cycle', () => {
+  // Given deux missions qui se retiennent l'une l'autre, et une libre.
+  const missions = [
+    { key: 'MIS-1', state: 'ready', blockers: [{ key: 'MIS-2' }] },
+    { key: 'MIS-2', state: 'ready', blockers: [{ key: 'MIS-1' }] },
+    { key: 'MIS-3', state: 'ready' },
+  ]
+
+  // When la contrainte est appliquée.
+  const ordered = respectBlockers(missions).map((mission) => mission.key)
+
+  // Then aucune mission n'est perdue ni doublée, et le cycle garde son ordre.
+  assert.deepEqual([...ordered].sort(), ['MIS-1', 'MIS-2', 'MIS-3'])
+  assert.ok(ordered.indexOf('MIS-1') < ordered.indexOf('MIS-2'))
+})
+
+test('épingler une mission bloquée ne la fait pas passer avant son bloqueur', () => {
+  // Given une mission épinglée que retient une mission libre.
+  const missions = [
+    { key: 'MIS-1', state: 'ready', pinned: true, blockers: [{ key: 'MIS-2' }] },
+    { key: 'MIS-2', state: 'ready' },
+  ]
+
+  // When la contrainte passe après les épingles.
+  const ordered = respectBlockers(pinnedFirst(missions)).map((mission) => mission.key)
+
+  // Then la règle prime sur l'épingle.
+  assert.deepEqual(ordered, ['MIS-2', 'MIS-1'])
+})
+
+test('une section dont une mission attend une autre section passe derrière elle', () => {
+  // Given une mission ready retenue par une mission to-refine.
+  const groups = groupByState([
+    { key: 'a#1', state: 'ready', blockers: [{ key: 'a#2', state: 'to-refine' }] },
+    { key: 'a#2', state: 'to-refine' },
+    { key: 'a#3', state: 'in-progress' },
+  ])
+
+  // Then la section qui porte le bloqueur remonte devant la section retenue.
+  assert.deepEqual(groups.map((group) => group.state), ['in-progress', 'to-refine', 'ready'])
+})
+
+test('une section retenue par un bloqueur masqué ne bouge pas', () => {
+  // Given une mission ready retenue par une mission to-refine absente de la
+  // liste filtrée.
+  const groups = groupByState([
+    { key: 'a#1', state: 'ready', blockers: [{ key: 'a#9', state: 'to-refine' }] },
+    { key: 'a#2', state: 'in-progress' },
+  ])
+
+  // Then l'ordre des sections reste celui du workflow.
+  assert.deepEqual(groups.map((group) => group.state), ['in-progress', 'ready'])
+})
+
+test('un bloqueur masqué ne déplace pas sa section, même portée par une autre mission', () => {
+  // Given une mission in-progress retenue par une mission ready absente de la
+  // liste filtrée, et une mission ready visible qui porte sa section.
+  const groups = groupByState([
+    { key: 'a#1', state: 'in-progress', blockers: [{ key: 'a#9', state: 'ready' }] },
+    { key: 'a#2', state: 'ready' },
+  ])
+
+  // Then l'arête n'existe pas : la section retenue garde sa place de workflow.
+  assert.deepEqual(groups.map((group) => group.state), ['in-progress', 'ready'])
 })
 
 test('le filtre Missing ne garde que les tickets à qui il manque un champ', () => {
