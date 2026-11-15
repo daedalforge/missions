@@ -90,6 +90,14 @@ base: main
 - **Le dossier se crée au cadrage**, quand la fiche est validée ; la branche
   elle-même ne s'ouvre qu'à l'exécution, depuis `base`.
 
+**Le worktree de la mission** : la branche ne s'ouvre jamais dans le clone.
+Chaque exécution travaille dans `~/projects/<clone>-<CLÉ>` — un enfant direct
+de `~/projects`, dérivé du clone et de la clé — et le clone reste sur sa base,
+réservé aux tests manuels avant validation. Le panneau nomme ce chemin dans le
+prompt d'exécution, dans celui des remontées de PR et dans celui de la session
+libre ; `missions/<dossier>/` et `playbook/` restent dans le clone, que le
+panneau lit.
+
 **Depuis le panneau** : le volet de détail se lit en trois onglets —
 **Details** (propriétés et champs ci-dessous), **Journal** et **Checklist** —
 et les actions restent en pied de volet, sous les onglets. Elles tiennent en une

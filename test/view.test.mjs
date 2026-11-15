@@ -47,6 +47,7 @@ import {
   executionBlocker,
   freeSessionBlocker,
   missionStep,
+  missionWorktree,
   missionSessionPrompt,
   feedbackSessionPrompt,
   freeSessionPrompt,
@@ -2017,16 +2018,72 @@ test('le prompt de session est la chaîne d’hier, au caractère près', () => 
     'gh issue view 42 -R daedalforge/missions --json number,title,state,body,labels,milestone,assignees,comments\n' +
     "Étape en cours : exécution (statut in-progress). Tu ne fais que l’exécution : la branche depuis la base, les commits, la PR vers la base avec `Closes #N`, la revue interne à l'aveugle du diff, le journal et la checklist à jour ; si elle valide, le ticket passe en in-review et tu t’arrêtes, sinon tu corriges les constats et tu fais relire jusqu’à validation.\n\n" +
     "Chaque étape se joue dans une nouvelle session : à la fin de celle-ci, arrête-toi ; l'étape suivante sera une nouvelle session.\n\n" +
-    'Branche : fix/mis-42 ; base : main.\n\n' +
+    'Branche : fix/mis-42 ; base : main.\n' +
+    'Worktree de mission : ~/projects/missions-MIS-42 — le clone ~/projects/missions garde sa base, réservé aux tests manuels.\n\n' +
     'Playbook à lire : playbook/execution.md.\n\n' +
     'Journal de mission : missions/MIS-42/journal.md — tiens-le à jour à chaque étape.\n\n' +
     'Checklist de mission : missions/MIS-42/checklist.md — coche chaque point avec sa preuve.\n\n' +
     "Garde-fou : tu ne merges jamais la PR et tu n'écris jamais sur main — le merge et la fermeture du ticket sont les gestes du demandeur, même s'il te le demande."
 
   assert.equal(missionSessionPrompt(TEMOIN), attendu)
-  // Le prompt de session ne porte pas le clone : c'est le prompt des remontées
-  // qui a besoin de savoir où lire la PR.
   assert.doesNotMatch(missionSessionPrompt(TEMOIN), /Dépôt du projet/)
+})
+
+test('le worktree de la mission dérive du clone et de la clé', () => {
+  // Given une mission qui déclare son clone, sa clé, sa branche et sa base
+  // When le chemin du worktree est dérivé
+  // Then il vaut le clone suffixé par la clé, un enfant direct de ~/projects
+  assert.equal(missionWorktree(TEMOIN), '~/projects/missions-MIS-42')
+
+  // Then un champ manquant interdit la dérivation au lieu d'inventer un chemin
+  assert.equal(missionWorktree({ ...TEMOIN, repo: null }), null)
+  assert.equal(missionWorktree({ ...TEMOIN, key: null }), null)
+  assert.equal(missionWorktree({ ...TEMOIN, branch: null }), null)
+  assert.equal(missionWorktree({ ...TEMOIN, base: null }), null)
+})
+
+test('le prompt d’exécution nomme le worktree de la mission, les autres étapes non', () => {
+  // Given une mission déclarée avec son clone, sa branche et sa base
+  // When le prompt de session est composé pour l'exécution
+  // Then les deux états de l'exécution nomment le worktree et le clone gardé sur sa base
+  for (const state of ['ready', 'in-progress']) {
+    const prompt = missionSessionPrompt({ ...TEMOIN, state })
+    assert.match(
+      prompt,
+      /Worktree de mission : ~\/projects\/missions-MIS-42 — le clone ~\/projects\/missions garde sa base, réservé aux tests manuels\./,
+    )
+  }
+
+  // Then cadrage, revue et clôture n'en portent aucun
+  for (const state of ['to-refine', 'in-review', 'ready-for-prod']) {
+    assert.doesNotMatch(missionSessionPrompt({ ...TEMOIN, state }), /Worktree de mission/)
+  }
+})
+
+test('les remontées de revue et la session libre nomment le même worktree', () => {
+  // Given une mission dont la branche vit dans un worktree, quel que soit l'état
+  // When les prompts des remontées et de la session libre sont composés
+  // Then les deux nomment le worktree et le clone qui garde sa base
+  for (const state of ['in-progress', 'in-review']) {
+    const prompt = feedbackSessionPrompt({ ...TEMOIN, state })
+    assert.match(prompt, /Dépôt du projet : ~\/projects\/missions\./)
+    assert.match(
+      prompt,
+      /Worktree de mission : ~\/projects\/missions-MIS-42 — le clone ~\/projects\/missions garde sa base, réservé aux tests manuels\./,
+    )
+  }
+
+  const libre = freeSessionPrompt(TEMOIN)
+  assert.match(libre, /Dépôt du projet : ~\/projects\/missions\./)
+  assert.match(libre, /Branche : fix\/mis-42 ; base : main\./)
+  assert.match(
+    libre,
+    /Worktree de mission : ~\/projects\/missions-MIS-42 — le clone ~\/projects\/missions garde sa base, réservé aux tests manuels\./,
+  )
+
+  // Then sans clone déclaré, aucun des deux prompts n'invente de worktree
+  assert.doesNotMatch(feedbackSessionPrompt({ ...TEMOIN, repo: null }), /Worktree de mission/)
+  assert.doesNotMatch(freeSessionPrompt({ ...TEMOIN, repo: null }), /Worktree de mission/)
 })
 
 test('le brief de revue constate la validation des collègues, mot pour mot', () => {
