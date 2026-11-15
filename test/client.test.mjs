@@ -8692,7 +8692,6 @@ function monterDone({ query = '', filters = {}, checklists = null, selected = nu
     { ...EMPTY_BAR.filters, ...filters, state: ['done'] },
     null,
     'usage',
-    0,
     { loading: true, data: null, error: null },
     checklists,
     null,
