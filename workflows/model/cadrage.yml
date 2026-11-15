@@ -38,6 +38,12 @@ nodes:
     section: Ce qu'on fait
     writer: session
     artifact: le plan d'exécution, dans l'ordre
+  - id: estimer-points
+    label: Estimer les points
+    section: Ce qu'on fait
+    writer: session
+    condition: le plan est posé
+    artifact: la taille native sur le ticket, une seule
   - id: declarer-branche
     label: Déclarer la branche et sa base
     section: Ce qu'on fait
@@ -57,7 +63,7 @@ nodes:
     label: Vérifier la condition de sortie
     section: Condition de sortie — la mission est « prête »
     writer: session
-    gate: les neuf cases sont cochées
+    gate: les dix cases sont cochées
   - id: valider-cadrage
     label: Faire valider le cadrage
     section: Sur le tracker
@@ -90,6 +96,8 @@ edges:
   - from: ecrire-fiche
     to: proposer-plan
   - from: proposer-plan
+    to: estimer-points
+  - from: estimer-points
     to: declarer-branche
   - from: declarer-branche
     to: ouvrir-journal
@@ -102,7 +110,7 @@ edges:
     when: une case n'est pas cochée
   - from: verifier-sortie
     to: valider-cadrage
-    when: les neuf cases sont cochées
+    when: les dix cases sont cochées
   - from: valider-cadrage
     to: passer-ready
     when: le demandeur a validé
