@@ -1085,7 +1085,7 @@ test('le compteur de l’onglet prend l’anneau des groupes, pas une pastille p
   }
 })
 
-test('le thème Naruto finit le formulaire de branche, le filtre et la liste vide', () => {
+test('le thème Naruto finit le formulaire de branche et le filtre', () => {
   const manga = (name) => regle(`.missions-panel[data-skin="paper"] ${name}`)
 
   // Le formulaire du volet suivait le thème par défaut : champs blancs, bordure
@@ -1112,8 +1112,9 @@ test('le thème Naruto finit le formulaire de branche, le filtre et la liste vid
     )
   }
   assert.match(regle('.missions-status-option[data-state="to-refine"] input'), /accent-color: #8250df/)
-  // Le vide des cartes a quitté le bundle : plus de bandeau pointillé.
-  assert.doesNotMatch(SOURCE, /missions-empty-state/)
+  // Le vide des cartes a quitté le bundle : ni bandeau pointillé, ni état vide
+  // héros, les deux seules classes `missions-empty*` du chemin cartes.
+  assert.doesNotMatch(SOURCE, /missions-empty/)
   // L'aide d'erreur repasse au corail clair en thème sombre : le corail profond
   // du thème clair tomberait à 2,6:1 sur le fond sombre.
   const darkError = SOURCE.slice(SOURCE.indexOf(':root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-declare-note--error,'))
@@ -1196,7 +1197,7 @@ test('une carte statique n’est pas un bouton, une carte active l’est', () =>
 })
 
 test('la carte d’un workflow est un bouton natif, actif et pressé', () => {
-  const { rendered } = montrerWorkflows([workflowEntry(), statutsEntry()])
+  const { rendered, setters } = montrerWorkflows([workflowEntry(), statutsEntry()])
   const cartes = findAll(rendered, 'button').filter((node) => /missions-card--pick/.test(node.props.className ?? ''))
   assert.equal(cartes.length, 2)
   assert.equal(cartes[0].type, 'button')
@@ -1205,8 +1206,9 @@ test('la carte d’un workflow est un bouton natif, actif et pressé', () => {
   assert.equal(cartes[0].props.tabIndex, undefined, 'le bouton natif est déjà dans l’ordre')
   assert.equal(cartes[0].props['aria-pressed'], true, 'la carte choisie est pressée')
   assert.equal(cartes[1].props['aria-pressed'], false)
-  // Le contrat de la carte active survit sur le pick : le clic choisit.
-  assert.equal(typeof cartes[0].props.onClick, 'function', 'la carte pick ouvre au clic')
+  // Le contrat de la carte active survit sur le pick : le clic choisit l'étape.
+  cartes[1].props.onClick()
+  assert.ok(setters.includes('statuts'), 'le clic du pick change l’étape choisie')
 })
 
 test('les deux listes qui gardent une carte passent par la même coque', () => {
