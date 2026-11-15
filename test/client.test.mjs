@@ -838,16 +838,22 @@ test('le bundle cantonne done à l’onglet Done, jamais à la liste ouverte', (
   // La liste ouverte ne relit plus done, même si un filtre le nomme : seul le
   // périmètre Done passe `allowDone`.
   assert.match(SOURCE, /if \(!allowDone && mission\.state === 'done'\) return false/)
-  assert.match(SOURCE, /allowDone: doneTab/)
-  assert.match(SOURCE, /filterMissions\(activeMissions, \{ query: activeQuery, \.\.\.activeFilters, allowDone: doneTab \}\)/)
+  assert.match(SOURCE, /query: '', allowDone \}\)/)
+  assert.match(SOURCE, /sortMissions\(filterMissions\(missions, \{ \.\.\.filters, query: '', allowDone \}\)\)/)
+  // L'index des checklists se lit pour les deux onglets, Done compris.
+  assert.match(SOURCE, /if \(tab !== 'missions' && tab !== 'done'\) return undefined/)
   // Done lit les closes par son propre appel et dit son vide propre.
   assert.match(SOURCE, /\?done=1/)
   assert.match(SOURCE, /No done mission declared on this machine\./)
 })
 
-test('l’onglet Done rend sa liste, son vide et son statut figé', () => {
+test('l’onglet Done rend l’arbre de Missions, son vide et son pied', () => {
   const doneMission = {
     key: 'MIS-6', title: 'mission close', state: 'done', type: 'bug', priority: 'high',
+    project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z',
+  }
+  const openMission = {
+    key: 'MIS-7', title: 'mission ouverte', state: 'in-review', type: 'story', priority: 'normal',
     project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z',
   }
   const states = (missions) => [
@@ -865,35 +871,161 @@ test('l’onglet Done rend sa liste, son vide et son statut figé', () => {
     { ...EMPTY_BAR.filters, state: ['done'] },
   ]
 
-  // Une liste mêlant ouverte et close : l’onglet Done ne garde que la close,
-  // même si le serveur lui servait un périmètre trop large.
-  const openMission = {
-    key: 'MIS-7', title: 'mission ouverte', state: 'in-review', type: 'story', priority: 'normal',
-    project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z',
-  }
+  // L'onglet Done reçoit le même arbre que Missions, paramétré pour son
+  // périmètre : les closes passent le budget, les libellés disent l'onglet.
   const panel = monter(states([openMission, doneMission]))
   const view = findAll(panel, 'MissionsView')[0]
   assert.ok(view, 'l’onglet Done porte la même vue, nourrie par sa lecture')
-  assert.deepEqual(view.props.statusOptions, ['done'])
-  assert.equal(view.props.statusFixed, true)
+  assert.equal(view.props.allowDone, true)
+  assert.equal(view.props.label, 'Done outline')
+  assert.equal(view.props.footLabel, 'done')
   assert.equal(view.props.emptyText, 'No done mission declared on this machine.')
-  // La barre de Done est la même, au select de tri près : l'ordre y est fixe
-  // aussi, et aucun select de tri n'y reste.
+  assert.ok('checklists' in view.props, 'l’index des checklists suit l’onglet Done')
+  assert.ok('selected' in view.props, 'le volet ouvert gouverne l’arbre de Done')
+
+  const rendu = renderTree(view)
+  const lignes = findAll(rendu, 'div').filter((node) => node.props.className === 'missions-tree-row')
+  assert.equal(lignes.length, 1, 'seule la mission close est dans l’arbre')
+  assert.match(textOf(lignes[0]), /mission close/)
+  assert.doesNotMatch(textOf(lignes[0]), /mission ouverte/)
+  assert.deepEqual(
+    findAll(rendu, 'div').filter((node) => String(node.props.className ?? '').split(' ').includes('missions-card')),
+    [],
+    'Done ne monte aucune carte',
+  )
+
+  // Le statut est figé en Done : aucun select de tri, aucune « All open states ».
   assert.equal(
-    findAll(view, 'select').filter((node) => /^Filter by /.test(node.props['aria-label'] ?? '')).length,
+    findAll(rendu, 'select').filter((node) => /^Filter by /.test(node.props['aria-label'] ?? '')).length,
     0,
     'aucun select de tri dans la barre de Done',
   )
-  assert.doesNotMatch(textOf(view), /Sort/)
-
-  const text = textOf(renderTree(panel))
-  assert.match(text, /mission close/)
-  assert.doesNotMatch(text, /mission ouverte/)
-  // Le statut est figé : pas de « All open states » dans une vue close.
+  const text = textOf(rendu)
+  assert.doesNotMatch(text, /Sort/)
   assert.doesNotMatch(text, /All open states/)
+  // Le pied dit le périmètre de l'onglet, jamais celui de la liste ouverte.
+  assert.match(text, /1 done/)
+  assert.doesNotMatch(text, /1 open/)
 
   const empty = textOf(renderTree(monter(states([]))))
   assert.match(empty, /No done mission declared on this machine\./)
+})
+
+test('l’onglet Done cherche dans la checklist comme Missions', () => {
+  // Given une seule mission close dont trois lignes de checklist parlent de
+  // « session » : la requête ne touche que la checklist, pas les champs.
+  const checklists = {
+    'MIS-1': {
+      counts: { total: 5, checked: 2, partial: 0, open: 3 },
+      lines: [
+        { text: 'The session key still restores the tab', state: 'open' },
+        { text: 'A session timeout is documented', state: 'checked' },
+        { text: 'Session writes one journal line', state: 'checked' },
+        { text: 'The suite is green', state: 'open' },
+        { text: 'The README names the tab', state: 'open' },
+      ],
+    },
+  }
+  const { vue } = monterDone({ checklists, missions: [BATCH_DONE[0]] })
+
+  // When la requête porte sur la checklist
+  const rendu = renderTree({ ...vue, props: { ...vue.props, query: 'session' } })
+
+  // Then la ligne de checklist porte la mission, avec deux ancres et le reste
+  const ligne = findAll(rendu, 'div').find((node) => node.props.className === 'missions-tree-row')
+  assert.ok(ligne, 'la mission de la ligne trouvée est dans l’arbre de Done')
+  assert.match(textOf(ligne), /MIS-1/)
+  const ancres = findAll(ligne, 'div').filter((node) => node.props.className === 'missions-tree-anchor')
+  assert.equal(ancres.length, 2, 'deux ancres au plus')
+  assert.match(textOf(ancres[0]), /The session key still restores the tab/)
+  assert.match(textOf(ligne), /checklist 2 \/ 5/)
+  assert.match(
+    textOf(findAll(ligne, 'div').find((node) => node.props.className === 'missions-tree-overflow')),
+    /\+1/,
+  )
+  // Le lot compte les lignes de l'arbre : une mission répond, une seule clé.
+  assert.equal(boutonLot(rendu).props['aria-label'], 'Archive 1 mission')
+})
+
+test('l’onglet Done garde les filtres de l’arbre, sans statut ni bande', () => {
+  // Given la barre close active par un filtre de priorité
+  const { vue, setters } = monterDone({ filters: { priority: ['high'] } })
+
+  // Then la barre de l'arbre est là, ses chips aussi, sans select ni bande
+  const rendu = renderTree(vue)
+  const text = textOf(rendu)
+  for (const chip of ['Type', 'Epic', 'Project', 'Priority']) {
+    assert.match(text, new RegExp(chip), `le chip ${chip} est rendu`)
+  }
+  assert.deepEqual(findAll(rendu, 'select'), [])
+  assert.doesNotMatch(text, /All open states/)
+  assert.deepEqual(
+    findAll(rendu, 'div').filter((node) => node.props.className === 'missions-band'),
+    [],
+    'aucune bande d’états dans une vue close',
+  )
+
+  // Then Clear remet la barre close à son état de Done, pas à zéro état
+  const clear = findAll(rendu, 'button').find((node) => node.props.className === 'missions-clear')
+  assert.ok(clear, 'la barre active porte Clear')
+  clear.props.onClick()
+  assert.ok(
+    setters.some((value) => value && typeof value === 'object' && Array.isArray(value.state) && value.state.join() === 'done'),
+    'Clear garde le statut figé de Done',
+  )
+})
+
+test('l’onglet Done garde le clavier et le volet de l’arbre', () => {
+  // Given un volet ouvert sur une mission close, et une requête en cours
+  const { vue, setters } = monterDone({ selected: { key: 'MIS-1' }, query: 'mis' })
+  const brut = findAll(vue.fn({ ...vue.props }), 'Workbench')[0]
+  assert.equal(brut.props.drawerOpen, true, 'le volet ouvert gouverne l’arbre de Done')
+
+  // When Échap tombe, le volet se ferme et la requête reste en place
+  const volet = renderTree(brut)
+  const avant = setters.length
+  volet.props.onKeyDown({ key: 'Escape', preventDefault() {} })
+  assert.equal(setters.length, avant, 'Échap ne vide pas la requête quand le volet est ouvert')
+
+  // Then sans volet, le même Échap vide la requête
+  const libre = renderTree(findAll(vue.fn({ ...vue.props, selected: null }), 'Workbench')[0])
+  libre.props.onKeyDown({ key: 'Escape', preventDefault() {} })
+  assert.ok(setters.slice(avant).includes(''), 'sans volet, Échap vide la requête')
+})
+
+test('l’onglet Done ouvre la mission close au clavier', () => {
+  // Given le curseur sur la première close, une flèche le déplace d'une ligne
+  const { vue } = monterDone({ query: 'mis' })
+  const poses = []
+  const noter = (entry) => poses.push(entry)
+  const ouverts = []
+  const brut = findAll(vue.fn({ ...vue.props, onSelect: (mission, from) => ouverts.push([mission.key, from]) }), 'Workbench')[0]
+  const suivant = renderTree({ ...brut, props: { ...brut.props, cursor: 'mission:MIS-1', onCursor: noter } })
+  suivant.props.onKeyDown({ key: 'ArrowDown', preventDefault() {} })
+  assert.deepEqual(poses.map((entry) => entry.id), ['mission:MIS-2'], 'la flèche descend d’une ligne')
+
+  // When Entrée tombe sur la ligne surlignée
+  const entree = renderTree({ ...brut, props: { ...brut.props, cursor: 'mission:MIS-1' } })
+  entree.props.onKeyDown({ key: 'Enter', preventDefault() {} })
+
+  // Then la mission close s'ouvre, comme en Missions
+  assert.deepEqual(ouverts, [['MIS-1', 'row']], 'Entrée ouvre la mission close')
+})
+
+test('la signature du lot trie les clés des lignes rendues', () => {
+  // Given trois closes dont une épinglée : l'ordre d'affichage change, la
+  // signature non — c'est elle qui arme le geste, pas l'ordre des lignes.
+  const missions = [{ ...BATCH_DONE[2], pinned: true }, BATCH_DONE[0], BATCH_DONE[1]]
+  const { vue } = monterDone({ missions })
+  const bouton = findAll(vue.fn({ ...vue.props }), 'ArchiveBatchButton')[0]
+  assert.ok(bouton, 'le lot est monté dans la barre')
+  assert.deepEqual(bouton.props.keys.slice().sort(), ['MIS-1', 'MIS-2', 'MIS-3'])
+  assert.equal(bouton.props.signature, 'MIS-1\nMIS-2\nMIS-3', 'la signature est triée')
+
+  // Then une requête resserre les clés, et la signature suit les lignes rendues.
+  const serre = findAll(vue.fn({ ...vue.props, query: 'alpha' }), 'ArchiveBatchButton')[0]
+  assert.deepEqual(serre.props.keys.slice().sort(), ['MIS-1', 'MIS-2'])
+  assert.equal(serre.props.signature, 'MIS-1\nMIS-2')
 })
 
 test('les erreurs du bandeau ont une clé unique par ligne', () => {
@@ -967,9 +1099,8 @@ test('le thème Naruto finit le formulaire de branche, le filtre et la liste vid
     )
   }
   assert.match(regle('.missions-status-option[data-state="to-refine"] input'), /accent-color: #8250df/)
-  // La liste vide n'est plus un texte gris nu : un bandeau pointillé.
-  assert.match(manga('.missions-empty'), /border: 1\.5px dashed var\(--skin-line-strong\)/)
-  assert.match(manga('.missions-empty'), /background: var\(--skin-page-2\)/)
+  // Le vide des cartes a quitté le bundle : plus de bandeau pointillé.
+  assert.doesNotMatch(SOURCE, /missions-empty-state/)
   // L'aide d'erreur repasse au corail clair en thème sombre : le corail profond
   // du thème clair tomberait à 2,6:1 sur le fond sombre.
   const darkError = SOURCE.slice(SOURCE.indexOf(':root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-declare-note--error,'))
@@ -1039,31 +1170,6 @@ test('chaque carte porte un repère de priorité qui se lit sans la couleur', ()
   assert.ok(SOURCE.includes('.missions-prio .prio-bar, .missions-prio .prio-mark { fill: currentColor; }'))
 })
 
-test('une carte de mission est un bouton qui se tape, sans état pressé', () => {
-  const view = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
-  api.apply(ctx)
-  const list = findAll(registered.main({}), 'MissionsView')[0]
-  // Le chemin cartes est celui de Done : l'onglet Missions, lui, passe par l'arbre.
-  const tree = renderTree({ ...list, props: { ...list.props, tree: false } })
-  const carte = findAll(tree, 'article').find((node) => /missions-card--mission/.test(node.props.className ?? ''))
-  assert.ok(carte, 'la carte de mission est rendue')
-  assert.equal(carte.props.role, 'button')
-  assert.equal(carte.props.tabIndex, 0)
-  assert.equal(carte.props['data-interactive'], 'true')
-  assert.equal(carte.props['data-priority'], 'high')
-  assert.equal('aria-pressed' in carte.props, false, 'une carte ouvre, elle ne s’allume pas')
-
-  // Entrée et espace activent, une autre touche non : et l'espace est bien
-  // empêché de faire défiler la page sous le curseur.
-  const prevented = []
-  carte.props.onClick()
-  carte.props.onKeyDown({ key: 'Enter', preventDefault: () => prevented.push('enter') })
-  carte.props.onKeyDown({ key: ' ', preventDefault: () => prevented.push('space') })
-  carte.props.onKeyDown({ key: 'a', preventDefault: () => prevented.push('a') })
-  assert.deepEqual(prevented, ['enter', 'space'])
-})
-
 test('une carte statique n’est pas un bouton, une carte active l’est', () => {
   const { tree } = renderDigest()
   const widgets = findAll(tree, 'article').filter((node) => /missions-card--widget/.test(node.props.className ?? ''))
@@ -1086,22 +1192,16 @@ test('la carte d’un workflow est un bouton natif, actif et pressé', () => {
   assert.equal(cartes[0].props.tabIndex, undefined, 'le bouton natif est déjà dans l’ordre')
   assert.equal(cartes[0].props['aria-pressed'], true, 'la carte choisie est pressée')
   assert.equal(cartes[1].props['aria-pressed'], false)
+  // Le contrat de la carte active survit sur le pick : le clic choisit.
+  assert.equal(typeof cartes[0].props.onClick, 'function', 'la carte pick ouvre au clic')
 })
 
-test('les trois listes passent par la même carte', () => {
+test('les deux listes qui gardent une carte passent par la même coque', () => {
   // Une seule coque est construite : la classe du cadre n'apparaît qu'au
-  // montage de `Card`, et trois sites l'appellent — pas quatre.
+  // montage de `Card`, et deux sites l'appellent — la liste des missions n'est
+  // plus un article, elle est un arbre.
   assert.equal((SOURCE.match(/className: \['missions-card', `missions-card--\$\{variant\}`/g) ?? []).length, 1)
-  assert.equal((SOURCE.match(/h\(Card, \{/g) ?? []).length, 3, 'les trois listes passent par Card')
-
-  // Missions : un article, avec son axe et ses repères.
-  const view = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
-  api.apply(ctx)
-  const list = findAll(registered.main({}), 'MissionsView')[0]
-  const mission = renderTree({ ...list, props: { ...list.props, tree: false } })
-  const missionCard = findAll(mission, 'article').find((node) => /missions-card--mission/.test(node.props.className ?? ''))
-  assert.ok(missionCard, 'la liste des missions passe par Card')
+  assert.equal((SOURCE.match(/h\(Card, \{/g) ?? []).length, 2, 'les deux listes passent par Card')
 
   // Dashboard : les huit widgets, sans interaction.
   const { tree: dashboard } = renderDigest()
@@ -1113,9 +1213,9 @@ test('les trois listes passent par la même carte', () => {
   const picks = findAll(rendered, 'button').filter((node) => /missions-card--pick/.test(node.props.className ?? ''))
   assert.equal(picks.length, 2, 'les cartes de workflow passent par Card')
 
-  // Les trois variantes partagent le cadre et ne peignent que leur géométrie.
-  for (const carte of [missionCard, ...widgets, ...picks]) {
-    assert.match(carte.props.className, /^missions-card missions-card--(mission|widget|pick)( |$)/)
+  // Les deux variantes partagent le cadre et ne peignent que leur géométrie.
+  for (const carte of [...widgets, ...picks]) {
+    assert.match(carte.props.className, /^missions-card missions-card--(widget|pick)( |$)/)
   }
 })
 
@@ -1148,12 +1248,10 @@ test('les panneaux statiques ne sont pas des cartes', () => {
   assert.deepEqual(porteurs(inner), [], 'Usage ne porte aucune carte')
 })
 
-test('le cadre de carte est commun, la géométrie et l’affordance sont par variante', () => {
+test('le cadre de carte est commun, le pick garde sa géométrie et son affordance', () => {
   // Une seule coque : la classe de widget ne peint plus son propre cadre.
   assert.match(SOURCE, /^\.missions-card \{ display: flex/m)
   assert.doesNotMatch(SOURCE, /^\.missions-dash-card \{/m, 'la coque du dashboard a rejoint le cadre commun')
-  assert.match(regle('.missions-card--mission'), /gap: 10px/)
-  assert.match(regle('.missions-card--mission'), /padding: 14px 16px 12px/)
   assert.match(regle('.missions-card--pick'), /width: 100%/)
   // Le survol, le focus et l'état pressé n'existent que sur une carte active.
   assert.match(SOURCE, /\.missions-card\[data-interactive="true"\]:hover/)
@@ -1166,15 +1264,11 @@ test('le cadre de carte est commun, la géométrie et l’affordance sont par va
   assert.doesNotMatch(SOURCE, /\.wf-pick[ ,{]/, 'la carte pick a quitté sa coque locale')
 })
 
-test('la peau papier encadre les trois variantes sans coin sur le texte', () => {
+test('la peau papier encadre les deux variantes restantes, sans coin replié', () => {
   assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-card \{/)
-  // La géométrie papier reste sur la variante mission.
-  assert.match(regle('.missions-panel[data-skin="paper"] .missions-card--mission'), /gap: 7px/)
-  assert.match(regle('.missions-panel[data-skin="paper"] .missions-card--mission'), /padding: 11px 14px 9px/)
-  // Le coin replié ne peut pas se poser sur le compteur d'un widget ni sur le
-  // genre d'une carte workflow : il reste sur la carte de mission.
+  // Plus de variante mission : le coin replié a quitté la peau papier.
+  assert.doesNotMatch(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-card--mission/)
   assert.doesNotMatch(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-card::after/)
-  assert.match(SOURCE, /\.missions-panel\[data-skin="paper"\] \.missions-card--mission::after/)
 })
 
 test('la sélection d’une carte pick se peint aussi en peau papier', () => {
@@ -2280,34 +2374,6 @@ test('les nouveaux widgets ouvrent la liste sur leur type et leur priorité', ()
   assert.ok(setters.includes(''), 'le clic efface la recherche')
 })
 
-test('le statut montre « 2 selected » quand le panneau en porte deux', () => {
-  const session = memorySession({ 'missions.tab': 'missions' })
-  const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
-  api.apply(ctx)
-  const view = findAll(registered.main({}), 'MissionsView')[0]
-  assert.ok(view, 'le panneau doit rendre la liste')
-
-  // Rejouer la vue avec une barre à deux états : la session ne peut pas porter
-  // une barre à plusieurs valeurs au montage, la vue se rend donc seule.
-  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, tree: false, filters }, children: [] })
-  const chip = (node) => findAll(node, 'button').find((button) => button.props.className === 'missions-select')
-
-  const both = chip(rerender({ ...view.props.filters, state: ['ready', 'in-review'] }))
-  assert.equal(both.props['data-active'], 'true')
-  assert.equal(both.props['aria-expanded'], 'false', 'le menu reste fermé tant qu’on ne l’ouvre pas')
-  assert.match(textOf(both), /Status2 selected/)
-
-  // Un seul état garde son libellé, une majuscule en tête : le chip se lit seul.
-  assert.match(textOf(chip(rerender({ ...view.props.filters, state: ['ready'] }))), /StatusReady/)
-  // Aucun état : le chip retombe sur « All » et n'est plus actif.
-  const none = chip(rerender({ ...view.props.filters, state: null }))
-  assert.equal(none.props['data-active'], 'false')
-  assert.match(textOf(none), /StatusAll/)
-  // Le clic bascule bien l'ouverture : le menu est câblé, pas décoratif.
-  both.props.onClick()
-  assert.ok(setters.length > 0)
-})
-
 test('la priorité prend plusieurs valeurs et la barre les montre', () => {
   const session = memorySession({ 'missions.tab': 'missions' })
   const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
@@ -2315,7 +2381,7 @@ test('la priorité prend plusieurs valeurs et la barre les montre', () => {
   const view = findAll(registered.main({}), 'MissionsView')[0]
   assert.ok(view, 'le panneau doit rendre la liste')
 
-  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, tree: false, filters }, children: [] })
+  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, filters }, children: [] })
   const chip = (node) => findAll(node, 'button').find((button) => button.props.className === 'missions-select' && textOf(button).startsWith('Priority'))
 
   // Le lien du widget transporte deux niveaux : la barre les compte et reste
@@ -2347,7 +2413,7 @@ test('les chips Type, Epic et Project prennent plusieurs valeurs et la barre les
 
   // La session ne porte pas les nouvelles dimensions au montage : la vue se
   // rend seule avec la barre que l'on veut montrer.
-  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, tree: false, filters }, children: [] })
+  const rerender = (filters) => renderTree({ type: 'MissionsView', fn: view.fn, props: { ...view.props, filters }, children: [] })
   const chip = (node, label) => findAll(node, 'button')
     .find((button) => button.props.className === 'missions-select' && textOf(button).startsWith(label))
   const montrer = (label, filters) => {
@@ -3329,21 +3395,6 @@ test('le blocage écrit par la route de l’hôte, jamais vers le tracker', () =
   assert.match(SOURCE, /if \(next && !message\) return/)
 })
 
-test('une carte bloquée se teinte entièrement et porte un cadenas, sans mot', () => {
-  // Plus visuel que textuel (retour du demandeur) : la carte entière prend la
-  // teinte, le cadenas porte le sens, le mot ne vit plus que dans l'infobulle.
-  assert.match(SOURCE, /'data-blocked': mission\.blocked \? 'true' : 'false'/)
-  assert.match(SOURCE, /className: 'missions-lock'/)
-  assert.match(SOURCE, /'aria-label': 'Bloqué'/)
-  assert.ok(!/missions-blocked-badge/.test(SOURCE), 'la pastille textuelle a disparu')
-  assert.match(regle('.missions-card[data-blocked="true"]'), /background: color-mix/)
-  assert.match(regle('.missions-lock'), /border-radius: 999px/)
-  assert.match(
-    regle('.missions-panel[data-skin="paper"] .missions-card[data-blocked="true"]'),
-    /border-color: var\(--skin-danger-strong\)/,
-  )
-})
-
 test('le volet bloque avec un champ de raison et un bouton désarmé sans raison', () => {
   assert.match(SOURCE, /className: 'missions-blocked-input'/)
   // Le bouton reste désarmé tant que la raison est vide : la route exige le
@@ -3493,13 +3544,6 @@ test('le label et la dépendance du volet se lisent ensemble', () => {
   assert.equal(interrupteur.props['aria-checked'], 'true')
 })
 
-test('le cadenas d’une carte dit pourquoi, jamais un commentaire de dépendance', () => {
-  // Then le cadenas nomme les bloqueuses d'un blocage par dépendance et ne
-  // garde la phrase du commentaire que pour le label.
-  assert.match(SOURCE, /'Bloqué : la raison est en commentaire du ticket'/)
-  assert.match(SOURCE, /`Bloquée par \$\{\(mission\.blockers \?\? \[\]\)\.map/)
-})
-
 test('la liste place une mission bloquée après sa bloqueuse, même épinglée', () => {
   // Given une mission épinglée et urgente que retient une mission libre, plus
   // une mission de contexte.
@@ -3527,33 +3571,6 @@ test('la liste place une mission bloquée après sa bloqueuse, même épinglée'
 
   // Then l'épingle ne passe pas devant le bloqueur : la règle prime.
   assert.deepEqual(lignes, ['MIS-472', 'MIS-471'])
-})
-
-test('les sections rendues placent la section d’une bloqueuse devant la mission retenue', () => {
-  // Given une mission ready que retient une mission to-refine.
-  const liste = [
-    {
-      ...MISSION,
-      key: 'MIS-481',
-      title: 'Retenue',
-      state: 'ready',
-      blockers: [{ key: 'MIS-482', title: 'Bloqueuse', state: 'to-refine' }],
-    },
-    { ...MISSION, key: 'MIS-482', title: 'Bloqueuse', state: 'to-refine', priority: 'low' },
-  ]
-  const view = { loading: false, missions: liste, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
-  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
-  api.apply(ctx)
-  const list = findAll(registered.main({}), 'MissionsView')[0]
-
-  // When le chemin cartes, seul à rendre des sections, est rendu.
-  const rendu = renderTree({ ...list, props: { ...list.props, tree: false } })
-
-  // Then la section de la bloqueuse précède celle de la mission retenue.
-  const sections = findAll(rendu, 'section')
-    .filter((node) => String(node.props.className ?? '').split(' ').includes('missions-group'))
-    .map((node) => node.props['data-state'])
-  assert.deepEqual(sections, ['to-refine', 'ready'])
 })
 
 test('une raison écrite est posée sans attendre la lecture suivante', () => {
@@ -7395,11 +7412,10 @@ function espionUsage() {
 
 /** Clique une case du menu d'un `ChecklistFilter`, menu ouvert comme React le ferait. */
 function cliquerCaseFiltre(brut, queue, label, index = 0) {
-  // `StatusFilter` et `PriorityFilter` ne sont pas encore résolus : on rend le
+  // Les filtres ne sont pas encore résolus : on rend le
   // composant une fois pour obtenir son `ChecklistFilter`, que l'on rend ensuite
   // menu ouvert, comme le clic du chip l'aurait posé.
   const nom = {
-    Status: 'StatusFilter',
     Priority: 'PriorityFilter',
     Type: 'TypeFilter',
     Epic: 'EpicFilter',
@@ -8338,7 +8354,7 @@ function reglesDeTheme() {
 
 const MANGA_CLAIR = '.missions-panel[data-skin="paper"][data-theme="manga"]'
 const MANGA_SOMBRE = ':root[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="manga"]'
-const CLASSES_PARTAGEES = ['missions-card', 'missions-row', 'missions-group', 'missions-toolbar', 'missions-tabs', 'missions-tab-count', 'missions-drawer-tabs', 'missions-empty-state']
+const CLASSES_PARTAGEES = ['missions-card', 'missions-row', 'missions-toolbar', 'missions-tabs', 'missions-tab-count', 'missions-drawer-tabs']
 const SEUILS_CONTRASTE = [7, 4.5, 4.5]
 
 function arbreTheme(theme, session = {}, vue = { loading: false, missions: [MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }, initial = [EMPTY_BAR, vue]) {
@@ -8592,6 +8608,39 @@ function monterDoneBatch(missions, { count = missions.length, selected = null, q
   return { setters, arbre, rendu }
 }
 
+/** Le panneau monté sur Done, avec l'index des checklists et le volet. */
+function monterDone({ query = '', filters = {}, checklists = null, selected = null, missions = BATCH_DONE } = {}) {
+  const ouverte = { loading: false, missions: [], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const close = { loading: false, missions, errors: [], workspaceId: 'w', workspaceRoot: '/w', count: missions.length }
+  const etats = [
+    EMPTY_BAR,
+    ouverte,
+    'done',
+    '',
+    { ...EMPTY_BAR.filters },
+    selected,
+    'default',
+    null,
+    EMPTY_BAR,
+    close,
+    query,
+    { ...EMPTY_BAR.filters, ...filters, state: ['done'] },
+    null,
+    'usage',
+    0,
+    { loading: true, data: null, error: null },
+    checklists,
+    null,
+    null,
+  ]
+  const harness = charger(undefined, etats, memorySession())
+  harness.api.apply(harness.ctx)
+  const tree = harness.registered.main({})
+  const vue = findAll(tree, 'MissionsView')[0]
+  assert.ok(vue, 'la vue Done est montée')
+  return { ...harness, tree, vue }
+}
+
 /** Le bouton du lot, quel que soit son état, dans la barre de la liste. */
 function boutonLot(tree) {
   return findAll(tree, 'button').find((node) => /missions-batch-btn/.test(node.props.className ?? '')) ?? null
@@ -8624,7 +8673,8 @@ test('le bouton de lot n’existe qu’en Done et compte les lignes affichées',
   const ouvert = renderTree(monter([EMPTY_BAR, dashboardView(DASH_MISSIONS.filter((mission) => mission.state !== 'done')), 'missions']))
   assert.equal(boutonLot(ouvert), null, 'la liste ouverte ne porte pas le geste de lot')
 
-  // Done le porte, compté sur `filtered` : trois done, la recherche en garde deux.
+  // Done le porte, compté sur les lignes de l'arbre : trois done, la
+  // recherche en garde deux.
   const { arbre } = monterDoneBatch(BATCH_DONE, { query: 'alpha' })
   const bouton = boutonLot(arbre())
   assert.ok(bouton, 'Done porte le bouton de lot')
@@ -8637,7 +8687,10 @@ test('le bouton de lot n’existe qu’en Done et compte les lignes affichées',
   assert.ok(vide, 'le bouton reste dans la barre')
   assert.equal(vide.props.disabled, true)
   assert.equal(vide.props['aria-label'], 'Archive 0 missions')
-  assert.match(textOf(renderTree({ ...arbre({ query: 'zzz' }) })), /No mission matches these filters\./)
+  // L'arbre réutilise son `emptyText` sous une requête sans ligne : Done
+  // hérite donc de son propre texte, et non du texte générique des filtres.
+  // Comportement de l'arbre, consigné dans la fiche, pas une régression.
+  assert.match(textOf(renderTree({ ...arbre({ query: 'zzz' }) })), /No done mission declared on this machine\./)
 })
 
 test('le lot confirmé n’envoie que les clés affichées', async () => {
@@ -9049,16 +9102,18 @@ function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS, 
   return { ...harness, tree, vue, noeud, arbre }
 }
 
-test('l’onglet Missions monte un seul arbre générique, jamais une carte', () => {
+test('les deux onglets montent le même arbre générique, jamais une carte', () => {
   // Un seul Workbench dans la source, monté une seule fois : le composant est
-  // générique, il n'a qu'un usage et pas de jumeau.
+  // générique, il sert Missions et Done, et la carte de mission n'existe plus.
   assert.equal((SOURCE.match(/function Workbench\(/g) ?? []).length, 1)
   assert.equal((SOURCE.match(/h\(Workbench, \{/g) ?? []).length, 1)
+  assert.doesNotMatch(SOURCE, /MissionCard/, 'la carte de mission a quitté le bundle')
+  assert.doesNotMatch(SOURCE, /missions-card--mission/, 'sa coque aussi')
 
   const { arbre } = monterArbre()
   const rendu = arbre()
 
-  // Aucune carte ne vient doubler l'arbre : le chemin cartes est celui de Done.
+  // Aucune carte ne vient doubler l'arbre : la carte de mission n'existe plus.
   assert.deepEqual(findAll(rendu, 'MissionCard'), [])
   assert.deepEqual(findAll(rendu, 'Card'), [])
   const cartes = findAll(rendu, 'div').filter((node) => String(node.props.className ?? '').split(' ').includes('missions-card'))
@@ -9074,6 +9129,17 @@ test('l’onglet Missions monte un seul arbre générique, jamais une carte', ()
     'plus aucun groupe : l’épic est une référence, pas une section',
   )
   assert.equal(findAll(rendu, 'button').filter((node) => node.props['data-view'] !== undefined).length, 0)
+
+  // Done monte le même arbre, plat, avec ses trois closes.
+  const done = renderTree(monterDone().vue)
+  const lignesDone = findAll(done, 'div').filter((node) => node.props.role === 'treeitem')
+  assert.equal(lignesDone.length, 3, 'les trois closes sont dans l’arbre de Done')
+  assert.ok(lignesDone.every((node) => node.props['aria-level'] === 1), 'Done ne groupe pas non plus')
+  assert.deepEqual(
+    findAll(done, 'div').filter((node) => String(node.props.className ?? '').split(' ').includes('missions-card')),
+    [],
+    'aucune carte dans Done',
+  )
 })
 
 test('la liste plate ne lit que les lignes qu’on lui donne', () => {

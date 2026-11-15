@@ -5,7 +5,7 @@
  * per project. No token, no direct call to a tracker.
  *
  * Two views: a Dashboard that has nothing to show yet, and the mission list as
- * cards grouped by state, with a filter bar on top.
+ * one outline shared by the Missions and Done tabs, with a filter bar on top.
  */
 window.__ModuleLoader__.load({
   id: '@daedalforge/dsh-missions',
@@ -635,17 +635,6 @@ window.__ModuleLoader__.load({
 .pb-status--error .pb-status-text { color: #a33a2a; }
 .pb-errors { margin: 6px 0 0; padding-left: 18px; font-size: 11.5px; color: #a33a2a; }
 @media (max-width: 720px) { .pb-layout { grid-template-columns: minmax(0, 1fr); } .pb-pages { flex-direction: row; flex-wrap: wrap; } .pb-page { width: auto; } }
-.missions-group { margin-top: 20px; }
-.missions-group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary, #7a7168); position: sticky; top: 0; background: var(--dsw-alias-bg-base, #fbfaf8); z-index: 1; }
-.missions-group-head .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.missions-group-head .n { font-variant-numeric: tabular-nums; opacity: .75; }
-.missions-group-head .rule { flex: 1; height: 1px; background: var(--dsw-alias-border-l2, rgba(0,0,0,.07)); }
-.missions-group[data-state="in-review"] .missions-group-head { color: #0969da; }
-.missions-group[data-state="ready-for-prod"] .missions-group-head { color: #0e7c86; }
-.missions-group[data-state="in-progress"] .missions-group-head { color: #bf8700; }
-.missions-group[data-state="ready"] .missions-group-head { color: #1a7f37; }
-.missions-group[data-state="to-refine"] .missions-group-head { color: #8250df; }
-.missions-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(292px, 1fr)); gap: 12px; }
 /* One card, one frame: border, radius and background are shared by every list.
    Geometry and interior belong to the variant; a static card draws no
    affordance, an interactive one owns its hover, focus ring and pressed state. */
@@ -654,17 +643,10 @@ window.__ModuleLoader__.load({
 .missions-card[data-interactive="true"]:hover { border-color: color-mix(in srgb, currentColor 22%, transparent); background: color-mix(in srgb, currentColor 3%, var(--dsw-alias-bg-layer-1, #ffffff)); }
 .missions-card[data-interactive="true"]:focus-visible { outline: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 45%, transparent); outline-offset: 2px; }
 .missions-card[data-interactive="true"][aria-pressed="true"] { border-color: var(--dsw-alias-label-primary, #1f1f1f); box-shadow: inset 0 0 0 1px var(--dsw-alias-label-primary, #1f1f1f); }
-.missions-card--mission { gap: 10px; padding: 14px 16px 12px; }
 .missions-card--pick { width: 100%; gap: 6px; padding: 12px; text-align: left; font: inherit; color: inherit; }
 .missions-card[data-priority="urgent"] { border-left: 3px solid #cf222e; padding-left: 14px; }
 @media (prefers-reduced-motion: reduce) { .missions-card { transition: none; } }
 .missions-card-top { display: flex; align-items: center; gap: 6px; }
-.missions-project { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 160px; color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 10.5px; }
-.missions-project .dot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--dsw-alias-label-tertiary, #7a7168); }
-.missions-project .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.missions-type { display: inline-flex; align-items: center; height: 21px; padding: 0 8px; border-radius: 999px; font-size: 11px; background: color-mix(in srgb, currentColor 9%, transparent); color: var(--dsw-alias-label-tertiary, #7a7168); }
-.missions-type[data-type="bug"] { color: #cf222e; background: color-mix(in srgb, #cf222e 10%, transparent); }
-.missions-type[data-type="story"] { color: #2da44e; background: color-mix(in srgb, #2da44e 11%, transparent); }
 .missions-prio { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-prio svg { display: block; width: 100%; height: 100%; }
 .missions-prio[data-priority="urgent"] { width: 14px; height: 14px; color: #cf222e; }
@@ -677,12 +659,8 @@ window.__ModuleLoader__.load({
 :root[data-ds-dark-theme] .missions-prio[data-priority="urgent"], body[data-ds-dark-theme] .missions-prio[data-priority="urgent"] { color: #ff7b72; }
 :root[data-ds-dark-theme] .missions-prio[data-priority="urgent"] .prio-chip, body[data-ds-dark-theme] .missions-prio[data-priority="urgent"] .prio-chip { opacity: .2; }
 :root[data-ds-dark-theme] .missions-prio[data-priority="high"], body[data-ds-dark-theme] .missions-prio[data-priority="high"] { color: #e3b341; }
-.missions-sp { margin-left: auto; font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; color: var(--dsw-alias-label-tertiary, #7a7168); padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, currentColor 7%, transparent); }
 .missions-card-title { font-size: 13.5px; font-weight: 550; line-height: 1.4; letter-spacing: -.005em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .missions-card-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11px; }
-.missions-key { font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; }
-.missions-age { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.missions-empty { color: var(--dsw-alias-label-tertiary, #7a7168); padding: 24px 0; }
 .missions-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 300px; padding: 40px 0; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-loader-label { font-size: 11.5px; letter-spacing: .02em; }
 .missions-spinner { width: 26px; height: 26px; border: 2.5px solid color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 14%, transparent); border-top-color: var(--dsw-alias-label-primary, #1f1f1f); border-radius: 50%; animation: missions-spin .8s linear infinite; }
@@ -871,9 +849,6 @@ window.__ModuleLoader__.load({
 .missions-priority-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 13%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 46%, transparent); }
 .missions-card[data-interactive="true"][data-blocked="true"]:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 14%, var(--dsw-alias-bg-layer-1, #ffffff)); border-color: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 52%, transparent); }
-.missions-lock { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: auto; border-radius: 999px; background: var(--dsw-alias-label-danger, #b42318); color: #ffffff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 15%, transparent); }
-.missions-lock svg { display: block; width: 11px; height: 11px; }
-.missions-lock + .missions-sp { margin-left: 0; }
 .missions-journal { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.08)); }
 .missions-journal-head { display: flex; align-items: baseline; gap: 8px; }
 .missions-journal-meta { min-width: 0; color: var(--dsw-alias-label-tertiary, #7a7168); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1169,18 +1144,12 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="manga"] 
 
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-hero-photo,
 body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-hero-photo { filter: saturate(.45) brightness(.55) contrast(1.02); }
-:root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-type,
-:root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-group-ring,
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-tab-count,
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-title-mark,
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-drawer::before,
-body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-type,
-body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-group-ring,
 body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-tab-count,
 body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-title-mark,
 body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-drawer::before { color: var(--skin-accent-ink); }
-:root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-group-name,
-body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-group-name { color: var(--skin-ink-2); }
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-declare-note--error,
 body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-declare-note--error,
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-tolgee-note--error,
@@ -1260,19 +1229,7 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-icon-btn {
 .missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-thumb { background: var(--skin-page); }
 .missions-panel[data-skin="paper"] .missions-clear { height: 29px; padding: 0 9px; border: 1.5px dashed var(--skin-line-strong); border-radius: 7px; color: var(--skin-ink-3); text-decoration: none; font-size: 10px; }
 .missions-panel[data-skin="paper"] .missions-clear:hover { border-color: var(--skin-ink); color: var(--skin-ink); }
-.missions-panel[data-skin="paper"] .missions-empty { margin: 10px 0 0; padding: 14px 16px; border: 1.5px dashed var(--skin-line-strong); border-radius: 9px; background: var(--skin-page-2); color: var(--skin-ink-3); font-size: 11.5px; }
 
-/* Groups: a tinted stamp, a name, a rule. */
-.missions-panel[data-skin="paper"] .missions-group { margin-top: 10px; }
-.missions-panel[data-skin="paper"] .missions-group-head { position: sticky; top: 0; z-index: 3; gap: 9px; padding: 0 1px 7px; background: var(--skin-page); color: var(--skin-ink-3); font-size: 10px; letter-spacing: .14em; }
-.missions-panel[data-skin="paper"] .missions-group-ring { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border: 1.5px solid var(--skin-ink); border-radius: 50%; background: var(--state-tint, var(--skin-quiet)); color: var(--skin-ink); font: 700 11px/1 var(--skin-mono); }
-.missions-panel[data-skin="paper"] .missions-group-name { flex: none; color: var(--group-ink, var(--skin-ink-2)); font-size: 10px; font-weight: 800; }
-.missions-panel[data-skin="paper"] .missions-group-rule { flex: 1; height: 1px; background: var(--skin-line); }
-.missions-panel[data-skin="paper"] .missions-group[data-state="in-review"] { --state-tint: var(--skin-info); --group-ink: var(--skin-info-strong); }
-.missions-panel[data-skin="paper"] .missions-group[data-state="ready-for-prod"] { --state-tint: var(--skin-alt); --group-ink: var(--skin-alt-strong); }
-.missions-panel[data-skin="paper"] .missions-group[data-state="in-progress"] { --state-tint: var(--skin-warn); --group-ink: var(--skin-warn-ink); }
-.missions-panel[data-skin="paper"] .missions-group[data-state="ready"] { --state-tint: var(--skin-good); --group-ink: var(--skin-good-strong); }
-.missions-panel[data-skin="paper"] .missions-group[data-state="to-refine"] { --state-tint: var(--skin-quiet); --group-ink: var(--skin-quiet-strong); }
 .missions-panel[data-skin="paper"] .missions-sect { background: color-mix(in srgb, var(--skin-ink) 6%, transparent); }
 .missions-panel[data-skin="paper"] .missions-card-sub { color: var(--skin-ink-3); font-family: var(--skin-display); letter-spacing: .01em; }
 .missions-panel[data-skin="paper"] .missions-card--widget .missions-card-foot, .missions-panel[data-skin="paper"] .missions-rowitem { border-color: var(--skin-line); }
@@ -1288,23 +1245,14 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-icon-btn {
 :root[data-ds-dark-theme] .missions-rowage[data-quiet="true"],
 body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: var(--skin-attention); }
 
-/* Cards: ink frame, folded corner, speech-bubble type, dashed points. */
-.missions-panel[data-skin="paper"] .missions-cards { gap: 10px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
-/* The paper skin frames the three variants; the geometry stays on --mission. */
+/* Cards: ink frame and offset print shadow. */
+/* The paper skin frames the two remaining variants; the pick keeps its geometry. */
 .missions-panel[data-skin="paper"] .missions-card { position: relative; border: 1.5px solid var(--skin-ink); border-radius: 12px 12px 13px 3px; background: var(--skin-page-2); box-shadow: 3px 3px 0 var(--skin-shadow); transition: background-color .12s ease, box-shadow .12s ease; }
-.missions-panel[data-skin="paper"] .missions-card--mission { gap: 7px; padding: 11px 14px 9px; }
 .missions-panel[data-skin="paper"] .missions-card[data-interactive="true"]:hover { border-color: var(--skin-ink); background: color-mix(in srgb, var(--skin-accent) 8%, var(--skin-page-2)); box-shadow: 5px 5px 0 var(--skin-shadow); }
 .missions-panel[data-skin="paper"] .missions-card[data-interactive="true"]:focus-visible { outline: 2px solid var(--skin-accent-strong); outline-offset: 2px; }
 .missions-panel[data-skin="paper"] .missions-card[data-interactive="true"][aria-pressed="true"] { border-color: var(--skin-accent-strong); background: color-mix(in srgb, var(--skin-accent) 22%, var(--skin-page-2)); box-shadow: 3px 3px 0 var(--skin-accent-strong); }
-/* The folded corner stays on the mission card: on a widget it would sit on the meta. */
-.missions-panel[data-skin="paper"] .missions-card--mission::after { content: ""; position: absolute; top: -1.5px; right: -1.5px; width: 13px; height: 13px; background: linear-gradient(225deg, var(--skin-page) 47%, var(--skin-ink) 48% 53%, transparent 54%); }
 .missions-panel[data-skin="paper"] .missions-card[data-priority="urgent"] { border-left: 4px solid var(--skin-danger-strong); padding-left: 12px; }
 .missions-panel[data-skin="paper"] .missions-card-top { gap: 6px; }
-.missions-panel[data-skin="paper"] .missions-project { max-width: 160px; color: var(--skin-ink-2); font-size: 10px; }
-.missions-panel[data-skin="paper"] .missions-project .dot { background: var(--skin-ink-3); }
-.missions-panel[data-skin="paper"] .missions-type { position: relative; height: 21px; padding: 0 8px; border: 1.5px solid var(--skin-ink); border-radius: 9px 9px 9px 3px; background: var(--skin-good); color: var(--skin-ink); font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.missions-panel[data-skin="paper"] .missions-type::after { content: ""; position: absolute; left: 5px; bottom: -5px; width: 7px; height: 7px; background: inherit; border-left: 1.5px solid var(--skin-ink); border-bottom: 1.5px solid var(--skin-ink); transform: skewY(-20deg); }
-.missions-panel[data-skin="paper"] .missions-type[data-type="bug"] { background: var(--skin-danger); }
 .missions-panel[data-skin="paper"] .missions-prio { color: var(--skin-ink-3); }
 .missions-panel[data-skin="paper"] .missions-prio[data-priority="normal"] { color: var(--skin-ink-2); }
 .missions-panel[data-skin="paper"] .missions-prio[data-priority="high"] { color: var(--skin-accent-strong); }
@@ -1315,12 +1263,10 @@ body[data-ds-dark-theme] .missions-rowage[data-quiet="true"] { color: var(--skin
    cet orange clair qui tient le contraste du high sur --skin-page-2. */
 body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-priority="high"] { color: var(--skin-accent); }
 body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-priority="urgent"] .prio-chip { fill: var(--skin-danger-strong); }
-.missions-panel[data-skin="paper"] .missions-sp { border: 1px dashed var(--skin-line-strong); background: var(--skin-page); color: var(--skin-ink-2); font-size: 9.5px; padding: 1px 6px; border-radius: 5px; }
 .missions-panel[data-skin="paper"] .missions-card-title { color: var(--skin-ink); font-size: 14.5px; font-weight: 600; line-height: 1.35; }
 .missions-panel[data-skin="paper"] .missions-card-head-title { color: var(--skin-ink); }
 .missions-panel[data-skin="paper"] .missions-card-meta { color: var(--skin-ink-3); }
 .missions-panel[data-skin="paper"] .missions-card-foot { color: var(--skin-ink-3); font-size: 10.5px; }
-.missions-panel[data-skin="paper"] .missions-key { font-size: 10px; }
 
 /* Drawer: an orange spine, a portrait, inked actions. */
 .missions-panel[data-skin="paper"] .missions-drawer { position: relative; width: 404px; max-width: 46%; padding: 16px 22px 24px 40px; border-left: 1.5px solid var(--skin-ink); background: var(--skin-page); color: var(--skin-ink); }
@@ -1362,7 +1308,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 .missions-panel[data-skin="paper"] .missions-blocked-cancel { border: 1.5px solid var(--skin-ink); border-radius: 6px; color: var(--skin-ink-2); }
 .missions-panel[data-skin="paper"] .missions-card[data-blocked="true"] { background: color-mix(in srgb, var(--skin-danger) 12%, var(--skin-page-2)); border-color: var(--skin-danger-strong); }
 .missions-panel[data-skin="paper"] .missions-card[data-interactive="true"][data-blocked="true"]:hover { background: color-mix(in srgb, var(--skin-danger) 18%, var(--skin-page-2)); border-color: var(--skin-danger-strong); }
-.missions-panel[data-skin="paper"] .missions-lock { background: var(--skin-danger-strong); color: var(--skin-page); box-shadow: 2px 2px 0 var(--skin-shadow); }
 .missions-panel[data-skin="paper"] .missions-declare-label { color: var(--skin-ink-3); font-family: var(--skin-mono); font-size: 9.5px; letter-spacing: .08em; }
 .missions-panel[data-skin="paper"] .missions-declare-input { height: 30px; border: 1.5px solid var(--skin-ink); border-radius: 7px; background: var(--skin-page-2); color: var(--skin-ink); font-size: 11.5px; box-shadow: 1px 1px 0 var(--skin-shadow); }
 .missions-panel[data-skin="paper"] .missions-declare-input:focus { outline: 2px solid var(--skin-accent-strong); outline-offset: 1px; }
@@ -1448,7 +1393,6 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 :root[data-ds-dark-theme] .missions-tip,
 body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srgb, var(--dsw-alias-label-primary, CanvasText) 26%, transparent); }
 
-/* Empty result: a tilted Konoha print, the portrait and a speech bubble. */
 .missions-panel[data-skin="paper"] .missions-loader { color: var(--skin-ink-3); min-height: 340px; }
 .missions-panel[data-skin="paper"] .missions-loader-label { font-family: var(--skin-display); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
 .missions-panel[data-skin="paper"] .missions-sharingan { width: 86px; height: 86px; filter: drop-shadow(0 0 16px color-mix(in srgb, var(--skin-danger) 50%, transparent)); animation: missions-sharingan-pulse 1.6s ease-in-out infinite alternate; }
@@ -1456,19 +1400,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
 .missions-panel[data-skin="paper"] .missions-sharingan-tomoe { transform-box: view-box; transform-origin: 60px 60px; animation: missions-sharingan-spin 1.6s linear infinite; }
 @keyframes missions-sharingan-spin { to { transform: rotate(360deg); } }
 @keyframes missions-sharingan-pulse { from { opacity: .8; } to { opacity: 1; } }
-.missions-panel[data-skin="paper"] .missions-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; padding: 10px 20px 30px; text-align: center; }
-.missions-panel[data-skin="paper"] .missions-empty-art { position: relative; width: 300px; height: 196px; margin-bottom: 12px; }
-.missions-panel[data-skin="paper"] .missions-empty-photo { position: absolute; left: 0; top: 8px; width: 300px; height: 156px; overflow: hidden; border: 1.5px solid var(--skin-ink); border-radius: 6px; background: var(--skin-page-3); box-shadow: 4px 4px 0 var(--skin-shadow); transform: rotate(-2deg); }
-.missions-panel[data-skin="paper"] .missions-empty-photo img { position: absolute; top: 0; left: -100%; width: 200%; height: 100%; object-fit: cover; object-position: 50% 46%; }
-.missions-panel[data-skin="paper"] .missions-empty-bubble { position: absolute; right: -6px; top: 0; z-index: 2; display: flex; flex-direction: column; gap: 1px; padding: 6px 9px; border: 1.5px solid var(--skin-ink); border-radius: 9px; background: var(--skin-page-2); box-shadow: 2px 2px 0 var(--skin-shadow); text-align: left; }
-.missions-panel[data-skin="paper"] .missions-empty-bubble b { font-size: 10px; }
-.missions-panel[data-skin="paper"] .missions-empty-bubble span { color: var(--skin-ink-3); font-size: 8.5px; }
-.missions-panel[data-skin="paper"] .missions-empty-avatar { position: absolute; right: 0; bottom: 0; z-index: 3; width: 98px; height: 98px; border-radius: 50%; overflow: hidden; border: 3px solid var(--skin-page); background: var(--skin-page-2); box-shadow: 0 0 0 1.5px var(--skin-ink), 3px 3px 0 var(--skin-shadow); }
-.missions-panel[data-skin="paper"] .missions-empty-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.missions-panel[data-skin="paper"] .missions-empty-title { margin: 0 0 4px; color: var(--skin-ink); font-family: var(--skin-display); font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
-.missions-panel[data-skin="paper"] .missions-empty-hint { margin: 0 0 12px; color: var(--skin-ink-3); font-size: 11.5px; }
-.missions-panel[data-skin="paper"] .missions-empty-clear { height: 29px; padding: 0 11px; border: 1.5px solid var(--skin-ink); border-radius: 8px; background: var(--skin-page-2); box-shadow: 2px 2px 0 var(--skin-shadow); color: var(--skin-ink); font: inherit; font-size: 11px; cursor: pointer; }
-.missions-panel[data-skin="paper"] .missions-empty-clear:hover { background: var(--skin-page-3); }
 
 /* Narrow panel: keep the header, lose the bubble and shrink the portrait. */
 @media (prefers-reduced-motion: reduce) {
@@ -2064,45 +1995,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       )
     }
 
-    function MissionCard({ mission, onSelect }) {
-      return h(Card, {
-        variant: 'mission',
-        interactive: true,
-        onActivate: () => onSelect(mission),
-        'data-priority': mission.priority ?? 'none',
-        'data-blocked': mission.blocked ? 'true' : 'false',
-        top: [
-          h('span', { className: 'missions-project', title: mission.projectName ?? mission.project },
-            h('i', { className: 'dot', 'aria-hidden': 'true' }),
-            h('span', { className: 'name' }, mission.projectName ?? mission.project),
-          ),
-          h('span', { className: 'missions-type', 'data-type': mission.type ?? 'none' }, TYPE_LABELS[mission.type] ?? '—'),
-          h(PriorityMark, { priority: mission.priority }),
-          mission.points !== null && mission.points !== undefined ? h('span', { className: 'missions-sp' }, `${mission.points} pts`) : null,
-          mission.blocked
-            ? h('span', {
-                className: 'missions-lock',
-                role: 'img',
-                'aria-label': 'Bloqué',
-                title: mission.blockedByLabel
-                  ? 'Bloqué : la raison est en commentaire du ticket'
-                  : `Bloquée par ${(mission.blockers ?? []).map((blocker) => blocker.key).join(', ')}`,
-              },
-                h('svg', { viewBox: '0 0 12 12', 'aria-hidden': 'true' },
-                  h('path', { className: 'lock-shackle', d: 'M3.6 5.2V4a2.4 2.4 0 0 1 4.8 0v1.2', fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }),
-                  h('rect', { className: 'lock-body', x: 2.5, y: 5.1, width: 7, height: 4.7, rx: 1.2, fill: 'currentColor' }),
-                ),
-              )
-            : null,
-        ],
-        title: mission.title,
-        foot: [
-          h('span', { className: 'missions-key' }, mission.key),
-          h('span', { className: 'missions-age' }, relativeAge(mission.updatedAt)),
-        ],
-      })
-    }
-
     /**
      * A filter with several values, as a list of check boxes.
      *
@@ -2193,8 +2085,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               ),
               // « All » is the absence of a filter, not the list of the values
               // known today: a value that appears tomorrow must not be filtered
-              // out by a bar saved yesterday. A fixed filter (Done's status)
-              // passes no label: there is nothing to clear.
+              // out by a bar saved yesterday.
               allLabel
                 ? h('div', { className: 'missions-status-actions' },
                     h('button', { type: 'button', onClick: () => onChange(null) }, allLabel),
@@ -2203,23 +2094,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
             )
           : null,
       )
-    }
-
-    function StatusFilter({ missions, value, options, allLabel = 'All open states', onChange }) {
-      const counts = {}
-      for (const mission of missions) {
-        const state = STATE_ORDER.includes(mission.state) ? mission.state : 'unknown'
-        counts[state] = (counts[state] ?? 0) + 1
-      }
-      return h(ChecklistFilter, {
-        label: 'Status',
-        value,
-        options: options ?? stateOptions(missions),
-        labels: STATE_LABELS,
-        counts,
-        allLabel,
-        onChange,
-      })
     }
 
     function PriorityFilter({ missions, value, onChange }) {
@@ -2302,24 +2176,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           value,
           onChange: (event) => onChange(event.target.value),
         }, THEMES.map((theme) => h('option', { key: theme.id, value: theme.id }, theme.label))),
-      )
-    }
-
-    /** The themed empty state: the illustrated skin's print. */
-    function ThemedEmpty({ theme, onClear }) {
-      return h('div', { className: 'missions-empty-state' },
-        h('div', { className: 'missions-empty-art' },
-          theme === 'manga'
-            ? h(React.Fragment, null,
-                h('div', { className: 'missions-empty-photo' }, h('img', { src: ART.konoha, alt: '' })),
-                h('div', { className: 'missions-empty-bubble' }, h('b', null, 'Naruto?'), h('span', null, 'Searching…')),
-                h('div', { className: 'missions-empty-avatar' }, h('img', { src: ART.avatar, alt: '' })),
-              )
-            : null,
-        ),
-        h('h2', { className: 'missions-empty-title' }, 'No mission matches these filters.'),
-        h('p', { className: 'missions-empty-hint' }, 'Try another project, or clear the filters.'),
-        h('button', { type: 'button', className: 'missions-empty-clear', onClick: onClear }, 'Clear filters'),
       )
     }
 
@@ -2857,8 +2713,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       filters,
       onFilter,
       onClear,
-      filtered,
-      groups,
       onSelect,
       theme,
       loading,
@@ -2867,17 +2721,17 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       // Only the Missions tab passes it: Done and the dashboard render no
       // creation button, and no view creates a mission by accident.
       onNew = null,
-      statusOptions,
-      statusFixed = false,
       emptyText = 'No open missions assigned to you.',
       archiveAll = null,
-      tree = false,
       checklists = null,
       // The drawer is the panel's, on the far side of this view: the tree only
       // needs to know one is open, so its own Escape leaves the query alone.
       selected = null,
       actions = [],
       onAction = () => {},
+      allowDone = false,
+      label = 'Missions outline',
+      footLabel = 'open',
     }) {
       // The tree's one selection: the cursor names the highlighted row by id,
       // and stays where it is while the drawer describes it. The cursor never
@@ -2907,25 +2761,49 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
             'data-tip': 'Create a mission',
             onClick: onNew,
           }, h(PlusIcon, { theme }))
+
+      // The list is flat: every filter but the query — the field has its own
+      // matcher, and that matcher crosses the checklist, which is not a
+      // mission field. The epic is a reference cell now, not a group.
+      const scoped = sortMissions(filterMissions(missions, { ...filters, query: '', allowDone }))
+      // A blocked mission never opens before the dependency holding it: the
+      // rule outranks the pin, so it runs once the pins are lifted.
+      const lifted = pinnedFirst(scoped.map((mission) => {
+        const index = checklists === null ? null : checklists[mission.key] ?? null
+        return {
+          id: mission.key,
+          key: mission.key,
+          title: mission.title,
+          group: '',
+          groupLabel: '',
+          pinned: mission.pinned === true,
+          mission,
+          lines: index?.lines ?? [],
+          counts: index?.counts ?? { total: 0, checked: 0, partial: 0, open: 0 },
+        }
+      }))
+      const rows = respectBlockers(lifted, { blockersOf: (row) => row.mission.blockers })
+      // One anonymous group: no label, so no epic ever answers as a result
+      // and no mission is context. The pins are lifted again by `orderRows`,
+      // under a query as well.
+      const treeGroups = [{ id: '', label: '', rows }]
+
+      const archiveKeys = archiveAll === null
+        ? []
+        : outlineEntries(matchOutline(treeGroups, query), matchActions(actions, query))
+          .filter((entry) => entry.kind === 'mission')
+          .map((entry) => entry.row.mission.key)
       const archiveButton = archiveAll === null
         ? null
         : h(ArchiveBatchButton, {
-            keys: archiveAll.keys,
-            signature: archiveAll.signature,
+            keys: archiveKeys,
+            signature: archiveKeys.slice().sort().join('\n'),
             onConfirm: archiveAll.onConfirm,
           })
+
       const filtersRow = h('div', { className: 'missions-filters' },
         // The band is the tree's status filter: a select would say the same
         // thing, wider, above a list that already shows every state.
-        tree
-          ? null
-          : h(StatusFilter, {
-              missions,
-              value: filters.state,
-              options: statusOptions,
-              allLabel: statusFixed ? null : 'All open states',
-              onChange: statusFixed ? () => {} : (value) => onFilter('state', value),
-            }),
         h(TypeFilter, {
           missions,
           value: filters.type,
@@ -2954,167 +2832,70 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         }),
       )
 
-      if (tree) {
-        // The list is flat: every filter but the query — the field has its own
-        // matcher, and that matcher crosses the checklist, which is not a
-        // mission field. The epic is a reference cell now, not a group.
-        const scoped = sortMissions(filterMissions(missions, { ...filters, query: '', allowDone: false }))
-        // A blocked mission never opens before the dependency holding it: the
-        // rule outranks the pin, so it runs once the pins are lifted.
-        const lifted = pinnedFirst(scoped.map((mission) => {
-          const index = checklists === null ? null : checklists[mission.key] ?? null
-          return {
-            id: mission.key,
-            key: mission.key,
-            title: mission.title,
-            group: '',
-            groupLabel: '',
-            pinned: mission.pinned === true,
-            mission,
-            lines: index?.lines ?? [],
-            counts: index?.counts ?? { total: 0, checked: 0, partial: 0, open: 0 },
-          }
-        }))
-        const rows = respectBlockers(lifted, { blockersOf: (row) => row.mission.blockers })
-        // One anonymous group: no label, so no epic ever answers as a result
-        // and no mission is context. The pins are lifted again by `orderRows`,
-        // under a query as well.
-        const treeGroups = [{ id: '', label: '', rows }]
-
-        const trackQuery = (value) => {
-          const text = String(value ?? '')
-          onSearchEnd(text)
-          if (text.trim() === '') return
-          const result = matchOutline(treeGroups, text)
-          track('search.q', searchBucket(text))
-          track('search.family', outlineFamily(result, matchActions(actions, text).length))
-          if (outlineEntries(result, []).length === 0) track('preview.kind', 'none')
-        }
-
-        const moveCursor = (entry) => {
-          setCursor(entry.id)
-          // An action is a gesture, not a place: it takes the cursor and
-          // leaves the rest of the list where it was.
-          if (entry.kind !== 'mission') return
-          track('preview.kind', 'mission')
-        }
-
-        const activate = (entry) => {
-          if (entry.kind === 'mission') onSelect(entry.row.mission, 'row')
-        }
-
-        return h('div', { className: 'missions-tree-view' },
-          h('div', { className: 'missions-toolbar', 'data-tree': 'true' },
-            h('div', { className: 'missions-toolbar-top' },
-              h('span', { className: 'missions-toolbar-label' }, 'Outline'),
-              refreshButton,
-              newButton,
-              archiveButton,
-            ),
-          ),
-          h(Workbench, {
-            groups: treeGroups,
-            // The epic no longer heads a group: the rows sit straight under
-            // the tree, and a pin keeps them first under a query too.
-            flat: true,
-            orderRows: (entries) => respectBlockers(
-              pinnedFirst(entries, (entry) => entry.row?.pinned === true),
-              {
-                keyOf: (entry) => entry.row?.key,
-                blockersOf: (entry) => entry.row?.mission?.blockers,
-              },
-            ),
-            query,
-            onQuery,
-            onQueryEnd: trackQuery,
-            cursor,
-            onCursor: moveCursor,
-            onActivate: activate,
-            onAction,
-            actions,
-            drawerOpen: selected !== null,
-            theme,
-            loading,
-            failed,
-            emptyText,
-            filters: h('div', { className: 'missions-wb-filters' }, filtersRow),
-            header: h(StateBand, { missions, value: filters.state, onChange: (value) => onFilter('state', value) }),
-            footer: h('div', { className: 'missions-wb-foot' },
-              h('span', null, `${scoped.length} open`),
-            ),
-            renderRow: (props) => h(MissionOutlineRow, props),
-          }),
-        )
+      const trackQuery = (value) => {
+        const text = String(value ?? '')
+        onSearchEnd(text)
+        if (text.trim() === '') return
+        const result = matchOutline(treeGroups, text)
+        track('search.q', searchBucket(text))
+        track('search.family', outlineFamily(result, matchActions(actions, text).length))
+        if (outlineEntries(result, []).length === 0) track('preview.kind', 'none')
       }
 
-      const toolbar = h('div', { className: 'missions-toolbar' },
-        h('div', { className: 'missions-toolbar-top' },
-          h('label', { className: 'missions-search' },
-            h('svg', { width: 13, height: 13, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, 'aria-hidden': 'true' },
-              h('circle', { cx: 7, cy: 7, r: 4.6 }),
-              h('path', { d: 'M10.4 10.4 14 14', strokeLinecap: 'round' }),
-            ),
-            h('input', {
-              type: 'search',
-              value: query,
-              placeholder: 'Filter by title, key, project…',
-              'aria-label': 'Filter missions',
-              onChange: (event) => onQuery(event.target.value),
-              // The gesture is the search, not the typing: the box is counted
-              // when it is left, or when Enter says the term is the one meant.
-              onBlur: (event) => onSearchEnd(event.target.value),
-              onKeyDown: (event) => {
-                if (event.key === 'Enter') onSearchEnd(event.target.value)
-              },
-            }),
+      const moveCursor = (entry) => {
+        setCursor(entry.id)
+        // An action is a gesture, not a place: it takes the cursor and
+        // leaves the rest of the list where it was.
+        if (entry.kind !== 'mission') return
+        track('preview.kind', 'mission')
+      }
+
+      const activate = (entry) => {
+        if (entry.kind === 'mission') onSelect(entry.row.mission, 'row')
+      }
+
+      return h('div', { className: 'missions-tree-view' },
+        h('div', { className: 'missions-toolbar', 'data-tree': 'true' },
+          h('div', { className: 'missions-toolbar-top' },
+            h('span', { className: 'missions-toolbar-label' }, 'Outline'),
+            refreshButton,
+            newButton,
+            archiveButton,
           ),
-          refreshButton,
-          newButton,
-          archiveButton,
         ),
-        filtersRow,
-      )
-
-      if (loading) {
-        return h('div', null, toolbar, h(PanelLoader, { theme }))
-      }
-      if (failed) {
-        return h('div', null, toolbar)
-      }
-      if (missions.length === 0) {
-        return h('div', null, toolbar, h('p', { className: 'missions-empty' }, emptyText))
-      }
-      if (filtered.length === 0) {
-        // The list rests on its own read: with no filter set, an empty list
-        // means there is nothing to show — not that a filter excluded
-        // everything.
-        const resting = !hasActiveFilters(filters) && String(query ?? '').trim() === ''
-        return h('div', null, toolbar, theme !== 'default' && !resting
-          ? h(ThemedEmpty, { theme, onClear })
-          : h('p', { className: 'missions-empty' }, resting ? emptyText : 'No mission matches these filters.'))
-      }
-
-      return h('div', null,
-        toolbar,
-        groups.map((group) => h('section', { className: 'missions-group', 'data-state': group.state, key: group.state },
-          h('div', { className: 'missions-group-head' },
-            theme === 'manga'
-              ? h(React.Fragment, null,
-                  h('span', { className: 'missions-group-ring' }, String(group.missions.length)),
-                  h('span', { className: 'missions-group-name' }, STATE_LABELS[group.state] ?? group.state),
-                  h('span', { className: 'missions-group-rule' }),
-                )
-              : h(React.Fragment, null,
-                  h('span', { className: 'dot' }),
-                  STATE_LABELS[group.state] ?? group.state,
-                  h('span', { className: 'n' }, String(group.missions.length)),
-                  h('span', { className: 'rule' }),
-                ),
+        h(Workbench, {
+          groups: treeGroups,
+          // The epic no longer heads a group: the rows sit straight under
+          // the tree, and a pin keeps them first under a query too.
+          flat: true,
+          orderRows: (entries) => respectBlockers(
+            pinnedFirst(entries, (entry) => entry.row?.pinned === true),
+            {
+              keyOf: (entry) => entry.row?.key,
+              blockersOf: (entry) => entry.row?.mission?.blockers,
+            },
           ),
-          h('div', { className: 'missions-cards' },
-            group.missions.map((mission) => h(MissionCard, { key: mission.key, mission, onSelect })),
+          label,
+          query,
+          onQuery,
+          onQueryEnd: trackQuery,
+          cursor,
+          onCursor: moveCursor,
+          onActivate: activate,
+          onAction,
+          actions,
+          drawerOpen: selected !== null,
+          theme,
+          loading,
+          failed,
+          emptyText,
+          filters: h('div', { className: 'missions-wb-filters' }, filtersRow),
+          header: h(StateBand, { missions, value: filters.state, onChange: (value) => onFilter('state', value) }),
+          footer: h('div', { className: 'missions-wb-foot' },
+            h('span', null, `${scoped.length} ${footLabel}`),
           ),
-        )),
+          renderRow: (props) => h(MissionOutlineRow, props),
+        }),
       )
     }
 
@@ -6844,7 +6625,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       // every keystroke: the host keeps a 30 s cache, and the field matches
       // in memory. Leaving the tab drops the read; coming back asks again.
       React.useEffect(() => {
-        if (tab !== 'missions') return undefined
+        if (tab !== 'missions' && tab !== 'done') return undefined
         let live = true
         fetch(CHECKLIST_INDEX_URL, { headers: { accept: 'application/json' } })
           .then((response) => response.json())
@@ -6998,14 +6779,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           h('img', { src: ART.avatar, alt: '' }),
         ),
       )
-      const activeQuery = doneTab ? doneQuery : query
-      const activeFilters = doneTab ? doneFilters : filters
-      // Done keeps closed rows, so it is the only view that passes `allowDone`.
-      const filtered = filterMissions(activeMissions, { query: activeQuery, ...activeFilters, allowDone: doneTab })
-      // A section whose mission waits on another section's mission moves behind
-      // it; inside a section, the same rule orders the rows.
-      const groups = groupByState(respectBlockers(sortMissions(filtered)))
-
       // The batch gesture is one request for the rendered keys: the child owns
       // the two-click state, this function pays the read and applies the result.
       // `applyArchive` is the one reducer of the removal, single entry or batch.
@@ -7025,16 +6798,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         }
         return { archived, refused }
       }
-      // What the list's gesture needs: exactly the rendered keys, the signature
-      // that names that list, and the request. Null outside Done, so the open
-      // list and the dashboard render no batch button and count nothing.
-      const archiveAll = doneTab
-        ? {
-            keys: filtered.map((mission) => mission.key),
-            signature: [...filtered.map((mission) => mission.key)].sort().join('\n'),
-            onConfirm: archiveBatch,
-          }
-        : null
+      // The view names the keys the tree shows; this function only owns the
+      // request. Null outside Done, so the open list and the dashboard count
+      // nothing and render no batch button.
+      const archiveAll = doneTab ? { onConfirm: archiveBatch } : null
       // One gesture per change of the bar, whatever the dimension: the tally
       // reads which filters people actually reach for, not how many clicks the
       // menu needed.
@@ -7282,10 +7049,11 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               : tab === 'done'
               ? h(MissionsView, {
                   missions: doneMissions, query: doneQuery, onQuery, onSearchEnd, filters: doneFilters, onFilter, onClear,
-                  filtered, groups, onSelect: openMission, theme, loading: doneView.loading, failed,
+                  onSelect: openMission, theme, loading: doneView.loading, failed,
                   onRefresh: () => { track('list.refresh', 'done'); return loadDone({ refresh: true }) },
-                  statusOptions: ['done'], statusFixed: true,
                   emptyText: 'No done mission declared on this machine.',
+                  allowDone: true, label: 'Done outline', footLabel: 'done',
+                  checklists: checklistIndex, selected,
                   // The batch gesture belongs to Done only: the open list and
                   // the dashboard pass no prop, so they render no button.
                   archiveAll,
@@ -7317,12 +7085,11 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 })
               : h(MissionsView, {
                   missions, query, onQuery, onSearchEnd, filters, onFilter, onClear,
-                  filtered, groups, onSelect: openMission, theme, loading, failed,
+                  onSelect: openMission, theme, loading, failed,
                   onRefresh: () => { track('list.refresh', 'open'); return load({ refresh: true }) },
                   // Only this tab creates: the button opens the form in the
                   // drawer's place, and the form closes onto the new row.
                   onNew: () => { setSelected(null); setCreating(true) },
-                  tree: true,
                   checklists: checklistIndex,
                   actions: outlineActions,
                   onAction: runOutlineAction,
