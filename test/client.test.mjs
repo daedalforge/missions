@@ -20,9 +20,19 @@ const SOURCE = await readFile(new URL('../lib/client.js', import.meta.url), 'utf
 
 /** Le corps d'une règle CSS du bundle : de quoi la juger sans la recopier. */
 function regle(selector) {
-  const at = SOURCE.indexOf(`${selector} {`)
+  // La règle de peau est cherchée en tête de ligne : une variante sombre la
+  // reprend en fin de liste, et c'est bien le corps de la peau qu'on juge.
+  const tete = SOURCE.indexOf(`\n${selector} {`)
+  const at = tete >= 0 ? tete + 1 : SOURCE.indexOf(`${selector} {`)
   assert.ok(at >= 0, `règle absente : ${selector}`)
   return SOURCE.slice(at + selector.length, SOURCE.indexOf('}', at))
+}
+
+/** La ligne de source qui porte un motif : de quoi juger un keyframes d'un bloc. */
+function ligneDe(motif) {
+  const at = SOURCE.indexOf(motif)
+  assert.ok(at >= 0, `motif absent : ${motif}`)
+  return SOURCE.slice(SOURCE.lastIndexOf('\n', at) + 1, SOURCE.indexOf('\n', at))
 }
 
 // Minimal DOM surface: the bundle mounts one <style> and nothing else.
@@ -1066,6 +1076,7 @@ test('le thème Naruto rend le bandeau et les images embarquées', () => {
   const flat = JSON.stringify(tree)
   assert.match(flat, /"data-theme":"manga"/)
   assert.match(flat, /missions-hero/)
+  assert.match(flat, /missions-hero-frame/)
   assert.match(flat, /data:image\/webp;base64,/)
   assert.match(SOURCE, /Naruto theme/)
   assert.match(flat, /DashboardView/)
@@ -8375,6 +8386,154 @@ test('le thème Naruto garde sa photo, son kicker et son glyphe', () => {
   assert.match(flat, /data:image\/webp/)
   assert.match(flat, /Konoha · mission log/)
   assert.match(flat, /忍/)
+})
+
+const CADRE_HERO = '.missions-panel[data-skin="paper"] .missions-hero-frame'
+const PHOTO_HERO = '.missions-panel[data-skin="paper"] .missions-hero-photo'
+const PORTRAIT_HERO = '.missions-panel[data-skin="paper"] .missions-hero-avatar'
+const BULLE_HERO = '.missions-panel[data-skin="paper"] .missions-hero-bubble'
+
+/** Le corps de la règle de peau, en tête de ligne : le bloc sombre la précède. */
+function regleDePeau(selector) {
+  const at = SOURCE.indexOf(`\n${selector} {`)
+  assert.ok(at >= 0, `règle de peau absente : ${selector}`)
+  return SOURCE.slice(at + selector.length + 1, SOURCE.indexOf('}', at))
+}
+
+test('le cadre du bandeau reprend la boîte et la bordure de la photo', () => {
+  // Given le bandeau de Naruto rendu
+  const arbre = arbreTheme('manga', { 'missions.tab': 'missions' })
+  const hero = findAll(arbre, 'div').find((node) => node.props.className === 'missions-hero')
+  assert.ok(hero, 'le bandeau est monté')
+
+  // When ses enfants et les règles du cadre sont lus
+  const enfants = hero.children.map((node) => node.props.className)
+  const cadre = regle(CADRE_HERO)
+  const photo = regleDePeau(PHOTO_HERO)
+
+  // Then la photo vit dans un cadre unique, premier enfant du bandeau
+  assert.deepEqual(enfants, ['missions-hero-frame', 'missions-hero-bubble', 'missions-hero-avatar'])
+  const image = hero.children[0].children
+  assert.equal(image.length, 1, 'le cadre ne porte que la photo')
+  assert.equal(image[0].type, 'img')
+  assert.equal(image[0].props.className, 'missions-hero-photo')
+  assert.match(image[0].props.src, /^data:image\/webp;base64,/)
+
+  // Then le cadre garde la géométrie que la photo portait sur la base
+  assert.match(cadre, /position: absolute/)
+  assert.match(cadre, /inset: 9px 9px 0/)
+  assert.match(cadre, /width: calc\(100% - 18px\)/)
+  assert.match(cadre, /height: calc\(100% - 9px\)/)
+  assert.match(cadre, /overflow: hidden/)
+  assert.match(cadre, /border: 1\.5px solid var\(--skin-ink\)/)
+  assert.match(cadre, /border-radius: 6px/)
+  assert.match(cadre, /filter: saturate\(\.62\) contrast\(1\) brightness\(1\.08\)/)
+
+  // Then la photo remplit le cadre, sans bordure, filtre ni débordement propre
+  assert.match(photo, /position: absolute/)
+  assert.match(photo, /inset: 0/)
+  assert.match(photo, /width: 100%/)
+  assert.match(photo, /height: 100%/)
+  assert.match(photo, /object-fit: cover/)
+  assert.match(photo, /object-position: 50% 54%/)
+  assert.doesNotMatch(photo, /filter/)
+  assert.doesNotMatch(photo, /border/)
+})
+
+test('le thème sombre filtre le cadre, bordure comprise', () => {
+  // Given les deux variantes sombres que le host pose sur le panneau
+  // When la règle du filtre sombre du bandeau est relue
+  const sombre = SOURCE.match(/[^}]*\{ filter: saturate\(\.45\) brightness\(\.55\) contrast\(1\.02\); \}/)
+
+  // Then le filtre porte sur le cadre, qui tient la bordure, jamais sur la photo
+  assert.ok(sombre, 'la règle sombre du bandeau existe')
+  assert.match(sombre[0], /\.missions-hero-frame/)
+  assert.doesNotMatch(sombre[0], /\.missions-hero-photo/)
+  assert.match(sombre[0], /:root\[data-ds-dark-theme\]/)
+  assert.match(sombre[0], /body\[data-ds-dark-theme\]/)
+})
+
+test('le souffle de la photo dure trente-quatre secondes, sans quitter le cadre', () => {
+  // Given le bundle construit et son bloc de thème
+  // When la règle de la photo et le keyframes du souffle sont extraits
+  const photo = regleDePeau(PHOTO_HERO)
+  const souffle = ligneDe('@keyframes missions-hero-breathe')
+
+  // Then l'animation est déclarée dans la peau, lente et alternative
+  assert.match(photo, /animation: missions-hero-breathe 34s ease-in-out infinite alternate/)
+  assert.match(photo, /transform-origin: center/)
+  assert.match(souffle, /from \{ transform: scale\(1\); \}/)
+  assert.match(souffle, /to \{ transform: scale\(1\.05\); \}/)
+})
+
+test('le portrait monte de six pixels et son ombre s’allonge', () => {
+  // Given le bandeau de Konoha monté sous la peau papier
+  // When les règles du portrait et de sa flottaison sont extraites
+  const portrait = regle(PORTRAIT_HERO)
+  const flottaison = ligneDe('@keyframes missions-hero-float')
+
+  // Then le portrait monte de six pixels, sur le cycle du guetteur
+  assert.match(portrait, /animation: missions-hero-float 6\.5s ease-in-out infinite alternate/)
+  assert.match(flottaison, /from \{ transform: translateY\(0\); box-shadow: 0 0 0 1\.5px var\(--skin-ink\), 4px 4px 0 var\(--skin-shadow\); \}/)
+
+  // Then son ombre s'allonge sous lui, alors que l'anneau d'encre reste fixe
+  assert.match(flottaison, /to \{ transform: translateY\(-6px\); box-shadow: 0 0 0 1\.5px var\(--skin-ink\), 6px 7px 0 var\(--skin-shadow\); \}/)
+})
+
+test('la bulle suit le portrait avec un retard de 0,35 s', () => {
+  // Given le bandeau de Konoha monté sous la peau papier
+  // When les règles de la bulle et de sa poursuite sont extraites
+  const bulle = regle(BULLE_HERO)
+  const poursuite = ligneDe('@keyframes missions-hero-bubble-follow')
+
+  // Then la bulle suit le même cycle, décalée d'un tiers de seconde
+  assert.match(bulle, /animation: missions-hero-bubble-follow 6\.5s ease-in-out \.35s infinite alternate/)
+  assert.match(poursuite, /from \{ transform: translateY\(0\); \}/)
+  assert.match(poursuite, /to \{ transform: translateY\(-3px\); \}/)
+
+  // Then la queue ne bouge pas et le texte de la bulle reste immobile
+  assert.match(regle(`${BULLE_HERO}::after`), /right: -7px; bottom: 12px/)
+  assert.doesNotMatch(regle(`${BULLE_HERO} b`), /animation/)
+  assert.doesNotMatch(regle(`${BULLE_HERO} span`), /animation/)
+})
+
+test('le mouvement réduit coupe les trois animations du bandeau', () => {
+  // Given le bloc de mouvement réduit dédié au bandeau
+  const at = SOURCE.indexOf(`@media (prefers-reduced-motion: reduce) {\n  ${PHOTO_HERO}`)
+  assert.ok(at >= 0, 'le bandeau a son propre bloc de mouvement réduit')
+
+  // When les sélecteurs coupés sont lus
+  const bloc = SOURCE.slice(at, SOURCE.indexOf('\n}', at))
+
+  // Then les trois animations du bandeau s'arrêtent, et elles seules
+  for (const selecteur of [PHOTO_HERO, PORTRAIT_HERO, BULLE_HERO]) {
+    assert.ok(bloc.includes(selecteur), `animation non coupée : ${selecteur}`)
+  }
+  assert.match(bloc, /\{ animation: none; \}/)
+})
+
+test('les animations du bandeau ne vivent que sous la peau papier', () => {
+  // Given toutes les règles du bloc de thème
+  const regles = reglesDeTheme()
+
+  // When celles qui déclarent une animation du bandeau sont retenues
+  const animees = regles.filter(({ body }) => /animation: missions-hero-/.test(body))
+
+  // Then chaque déclaration est portée par la peau papier, jamais la peau nue
+  assert.ok(animees.length >= 3, 'les trois animations sont déclarées')
+  for (const { selector } of animees) {
+    assert.ok(selector.startsWith('.missions-panel[data-skin="paper"] '), `animation hors peau : ${selector}`)
+  }
+})
+
+test('le thème Default ne monte ni bandeau ni animation', () => {
+  // Given le thème Default
+  // When le panneau est rendu
+  const flat = JSON.stringify(renduTheme('default'))
+
+  // Then il ne porte ni le décor de Konoha, ni ses animations
+  assert.doesNotMatch(flat, /missions-hero/)
+  assert.doesNotMatch(flat, /missions-hero-breathe|missions-hero-float|missions-hero-bubble-follow/)
 })
 
 test('la source ne garde aucune trace du thème Noël', () => {

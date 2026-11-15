@@ -1111,8 +1111,8 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"][data-theme="manga"] 
   --skin-attention: #e3b341; --skin-accent-ink: #2c2621;
 }
 
-:root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-hero-photo,
-body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-hero-photo { filter: saturate(.45) brightness(.55) contrast(1.02); }
+:root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-hero-frame,
+body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-hero-frame { filter: saturate(.45) brightness(.55) contrast(1.02); }
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-tab-count,
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-title-mark,
 :root[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-drawer::before,
@@ -1142,15 +1142,24 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-icon-btn {
 
 /* Hero: the photograph, the paper wash, the portrait and the speech bubble. */
 .missions-panel[data-skin="paper"] .missions-hero { position: relative; flex: none; height: 172px; overflow: hidden; border-bottom: 1.5px solid var(--skin-ink); background: var(--skin-page); }
-.missions-panel[data-skin="paper"] .missions-hero-photo { position: absolute; inset: 9px 9px 0; width: calc(100% - 18px); height: calc(100% - 9px); object-fit: cover; object-position: 50% 54%; border: 1.5px solid var(--skin-ink); border-radius: 6px; filter: saturate(.62) contrast(1) brightness(1.08); z-index: 0; }
+.missions-panel[data-skin="paper"] .missions-hero-frame { position: absolute; inset: 9px 9px 0; z-index: 0; width: calc(100% - 18px); height: calc(100% - 9px); overflow: hidden; border: 1.5px solid var(--skin-ink); border-radius: 6px; filter: saturate(.62) contrast(1) brightness(1.08); }
+.missions-panel[data-skin="paper"] .missions-hero-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 54%; transform-origin: center; animation: missions-hero-breathe 34s ease-in-out infinite alternate; }
 .missions-panel[data-skin="paper"] .missions-hero::before { content: ""; position: absolute; inset: 9px 9px 0; z-index: 1; border-radius: 6px; background-image: radial-gradient(var(--skin-ink) 1px, transparent 1.15px); background-size: 5px 5px; opacity: .2; mix-blend-mode: multiply; pointer-events: none; }
 .missions-panel[data-skin="paper"] .missions-hero::after { content: ""; position: absolute; inset: 9px 9px 0; z-index: 2; border-radius: 6px; pointer-events: none; background: var(--skin-hero-fade), var(--skin-hero-wash); }
-.missions-panel[data-skin="paper"] .missions-hero-avatar { position: absolute; z-index: 3; right: 26px; bottom: 16px; width: 112px; height: 112px; border-radius: 50%; overflow: hidden; border: 3px solid var(--skin-page); background: var(--skin-page-2); box-shadow: 0 0 0 1.5px var(--skin-ink), 4px 4px 0 var(--skin-shadow); }
+.missions-panel[data-skin="paper"] .missions-hero-avatar { position: absolute; z-index: 3; right: 26px; bottom: 16px; width: 112px; height: 112px; border-radius: 50%; overflow: hidden; border: 3px solid var(--skin-page); background: var(--skin-page-2); box-shadow: 0 0 0 1.5px var(--skin-ink), 4px 4px 0 var(--skin-shadow); animation: missions-hero-float 6.5s ease-in-out infinite alternate; }
 .missions-panel[data-skin="paper"] .missions-hero-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.missions-panel[data-skin="paper"] .missions-hero-bubble { position: absolute; z-index: 3; right: 152px; bottom: 54px; display: flex; flex-direction: column; gap: 1px; min-width: 118px; padding: 8px 11px; border: 1.5px solid var(--skin-ink); border-radius: 9px; background: var(--skin-page-2); color: var(--skin-ink); box-shadow: 2px 2px 0 var(--skin-shadow); }
+.missions-panel[data-skin="paper"] .missions-hero-bubble { position: absolute; z-index: 3; right: 152px; bottom: 54px; display: flex; flex-direction: column; gap: 1px; min-width: 118px; padding: 8px 11px; border: 1.5px solid var(--skin-ink); border-radius: 9px; background: var(--skin-page-2); color: var(--skin-ink); box-shadow: 2px 2px 0 var(--skin-shadow); animation: missions-hero-bubble-follow 6.5s ease-in-out .35s infinite alternate; }
 .missions-panel[data-skin="paper"] .missions-hero-bubble::after { content: ""; position: absolute; right: -7px; bottom: 12px; width: 11px; height: 11px; background: var(--skin-page-2); border-right: 1.5px solid var(--skin-ink); border-bottom: 1.5px solid var(--skin-ink); transform: rotate(-45deg); }
 .missions-panel[data-skin="paper"] .missions-hero-bubble b { font-size: 11px; line-height: 1.2; }
 .missions-panel[data-skin="paper"] .missions-hero-bubble span { font-size: 8.5px; color: var(--skin-ink-3); }
+@keyframes missions-hero-breathe { from { transform: scale(1); } to { transform: scale(1.05); } }
+@keyframes missions-hero-float { from { transform: translateY(0); box-shadow: 0 0 0 1.5px var(--skin-ink), 4px 4px 0 var(--skin-shadow); } to { transform: translateY(-6px); box-shadow: 0 0 0 1.5px var(--skin-ink), 6px 7px 0 var(--skin-shadow); } }
+@keyframes missions-hero-bubble-follow { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .missions-panel[data-skin="paper"] .missions-hero-photo,
+  .missions-panel[data-skin="paper"] .missions-hero-avatar,
+  .missions-panel[data-skin="paper"] .missions-hero-bubble { animation: none; }
+}
 
 /* Header over the hero: kicker, title, scope, actions. */
 .missions-panel[data-skin="paper"] .missions-head--hero { position: absolute; z-index: 4; inset: 0; height: 172px; display: block; padding: 0 30px; pointer-events: none; }
@@ -6595,7 +6604,9 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         loadDone({ silent: true, refresh: true })
       }
       const hero = theme === 'default' ? null : h('div', { className: 'missions-hero', 'aria-hidden': 'true' },
-        h('img', { className: 'missions-hero-photo', src: ART.village, alt: '' }),
+        h('div', { className: 'missions-hero-frame' },
+          h('img', { className: 'missions-hero-photo', src: ART.village, alt: '' }),
+        ),
         h('div', { className: 'missions-hero-bubble' },
           h('b', null, `${openMissions.length} mission${openMissions.length === 1 ? '' : 's'}!`),
           h('span', null, `${projectCount} project${projectCount === 1 ? '' : 's'}`),
