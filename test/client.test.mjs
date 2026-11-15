@@ -907,6 +907,19 @@ test('l’onglet Done rend l’arbre de Missions, son vide et son pied', () => {
   assert.match(text, /1 done/)
   assert.doesNotMatch(text, /1 open/)
 
+  // L'ouverte reste absente même sous une requête qui la nomme : la vue
+  // filtre son périmètre avant le matcher, pas après.
+  const nommee = renderTree({ ...view, props: { ...view.props, query: 'mission ouverte' } })
+  assert.doesNotMatch(textOf(nommee), /mission ouverte/)
+  assert.doesNotMatch(textOf(nommee), /MIS-7/)
+  assert.deepEqual(
+    findAll(nommee, 'div').filter((node) => node.props.className === 'missions-tree-row'),
+    [],
+    'aucune ligne ne répond à la requête',
+  )
+  // Le pied compte le périmètre de l'onglet, pas les lignes que la requête garde.
+  assert.match(textOf(nommee), /1 done/)
+
   const empty = textOf(renderTree(monter(states([]))))
   assert.match(empty, /No done mission declared on this machine\./)
 })
