@@ -1048,6 +1048,7 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+      points: "sp:"
 `
 
 async function mountBlocked(t, fetchImpl) {
@@ -1293,6 +1294,194 @@ test('un refus du tracker sur la priorité devient une erreur d’amont', async 
     method: 'POST',
     path: '/missions/api/priority',
     body: { key: 'MIS-110', priority: 'low' },
+  })
+
+  assert.equal(response.status, 502)
+  assert.match(response.body.error, /GitHub token missing or invalid/)
+})
+
+/** Le même projet, sans préfixe de points : la taille n'a alors aucune forme native. */
+const NULL_POINTS_PROJECTS = BLOCKED_PROJECTS.replace('      points: "sp:"\n', '')
+
+/** Un projet Jira qui déclare son champ de story points, à côté de la table canonique. */
+const JIRA_POINTS_PROJECTS = `canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+projects:
+  - id: alpha
+    name: Alpha
+    reference: EX
+    tracker: jira
+    jira:
+      site: https://example.atlassian.net
+      cloud_id: cloud-1
+      email: me@example.test
+      story_points_field: customfield_10032
+    map:
+      states:
+        to-refine: To Do
+        ready: Ready
+        in-progress: In Progress
+        in-review: In Review
+      types:
+        bug: Bug
+        story: Story
+      priorities:
+        urgent: Highest
+        high: High
+        normal: Medium
+        low: Low
+`
+
+test('POST points pose le label de la taille et rend la forme native', async (t) => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(`${init.method ?? 'GET'} ${decodeURIComponent(String(url))}`)
+    // L'issue portait déjà une taille : la route la remplace.
+    if ((init.method ?? 'GET') === 'GET') return trackerResponse({ labels: [{ name: 'ready' }, { name: 'sp:8' }] })
+    return trackerResponse({})
+  }
+  const { handler } = await mountBlocked(t, fetchImpl)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/points',
+    body: { key: 'MIS-110', points: 5 },
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body, { key: 'MIS-110', value: 'sp:5', points: 5, project: 'missions' })
+  assert.deepEqual(calls, [
+    'GET https://api.github.com/repos/daedalforge/missions/issues/110',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:8',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+})
+
+test('POST points sur Jira écrit le champ du projet, une seule fois', async (t) => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    return trackerResponse(undefined, { status: 204 })
+  }
+  const { dir, handler } = await mountBlocked(t, fetchImpl)
+  await writeFile(join(dir, 'missions', 'projects.yml'), JIRA_POINTS_PROJECTS)
+  const before = { token: process.env.JIRA_API_TOKEN, email: process.env.JIRA_EMAIL }
+  process.env.JIRA_API_TOKEN = 'test-jira-token'
+  process.env.JIRA_EMAIL = 'me@example.test'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/points',
+      body: { key: 'EX-7', points: 3 },
+    })
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(response.body, { key: 'EX-7', field: 'customfield_10032', points: 3, project: 'alpha' })
+    assert.deepEqual(calls.map((entry) => `${entry.method} ${entry.url}`), [
+      'PUT https://api.atlassian.com/ex/jira/cloud-1/rest/api/3/issue/EX-7',
+    ])
+    assert.deepEqual(JSON.parse(calls[0].body), { fields: { customfield_10032: 3 } })
+  } finally {
+    if (before.token === undefined) delete process.env.JIRA_API_TOKEN
+    else process.env.JIRA_API_TOKEN = before.token
+    if (before.email === undefined) delete process.env.JIRA_EMAIL
+    else process.env.JIRA_EMAIL = before.email
+  }
+})
+
+test('POST points refuse une clé absente avant tout appel au tracker', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const response = await call(handler, { method: 'POST', path: '/missions/api/points', body: { points: 5 } })
+
+  assert.equal(response.status, 400)
+  assert.match(response.body.error, /key is missing/)
+  assert.equal(touched, 0)
+})
+
+test('POST points refuse une taille absente ou hors échelle avant tout appel', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const missing = await call(handler, { method: 'POST', path: '/missions/api/points', body: { key: 'MIS-110' } })
+  assert.equal(missing.status, 400)
+  assert.match(missing.body.error, /points is missing/)
+
+  for (const points of [0, 4, 13.5, -2, 'cinq', '']) {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/points',
+      body: { key: 'MIS-110', points },
+    })
+    assert.equal(response.status, 400, `la taille ${JSON.stringify(points)} est refusée`)
+    assert.match(response.body.error, /points/)
+  }
+  assert.equal(touched, 0)
+})
+
+test('POST points refuse une clé que personne ne déclare', async (t) => {
+  let touched = 0
+  const { handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/points',
+    body: { key: 'ZZZ-1', points: 3 },
+  })
+
+  assert.equal(response.status, 404)
+  assert.match(response.body.error, /no project declares ZZZ-1/)
+  assert.equal(touched, 0)
+})
+
+test('POST points refuse un projet dont la taille n’a pas de forme native', async (t) => {
+  let touched = 0
+  const { dir, handler } = await mountBlocked(t, async () => {
+    touched += 1
+    return trackerResponse({})
+  })
+  await writeFile(join(dir, 'missions', 'projects.yml'), NULL_POINTS_PROJECTS)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/points',
+    body: { key: 'MIS-110', points: 3 },
+  })
+
+  assert.equal(response.status, 400)
+  assert.match(response.body.error, /points have no tracker value for missions/)
+  assert.equal(touched, 0)
+})
+
+test('GET est refusé sur la route points', async (t) => {
+  const { handler } = await mountBlocked(t, async () => trackerResponse({}))
+
+  const response = await call(handler, { method: 'GET', path: '/missions/api/points' })
+
+  assert.equal(response.status, 405)
+  assert.equal(response.headers.allow, 'POST')
+  assert.match(response.body.error, /method not allowed/)
+})
+
+test('un refus du tracker sur les points devient une erreur d’amont', async (t) => {
+  const { handler } = await mountBlocked(t, async () => trackerResponse({ message: 'Bad credentials' }, { status: 401 }))
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/points',
+    body: { key: 'MIS-110', points: 3 },
   })
 
   assert.equal(response.status, 502)

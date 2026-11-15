@@ -124,6 +124,16 @@ tracker d'accord : un refus laisse l'ancienne priorité en place et affiche
 l'erreur sous la ligne. Une mission sans priorité montre une option vide non
 sélectionnable, jamais un faux niveau.
 
+La ligne **Points** ne s'édite pas : une estimation se pose au cadrage, une fois
+le plan sous les yeux, et pas au fil de l'eau. La session appelle la route de
+l'hôte (`POST missions/api/points`) avec la clé et la taille ; l'hôte traduit la
+taille avec la table du projet et le panneau n'a ni jeton ni valeur de tracker.
+L'échelle est `1, 2, 3, 5, 8, 13` : une autre taille, une clé inconnue ou un
+projet dont la `map` ne déclare pas de forme native sont refusés avant le
+tracker, avec leur message ; un refus du tracker devient un 502 et laisse la
+fiche telle quelle. Poser les points remplace : les autres tailles de la famille
+sont retirées de l'issue dans le même geste.
+
 **Jamais versionné** : `missions/*/` est ignoré par git. Une déclaration reste
 locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
 part donc sans déclaration : on les repose depuis le panneau au premier cadrage.
@@ -255,7 +265,9 @@ Un projet sans entrée dans `projects.yml` ne peut pas recevoir de mission.
 La fiche d'une mission se crée dans le tracker à partir de
 [`gabarit-mission.md`](gabarit-mission.md). Les sections sont les mêmes pour
 Jira et GitHub ; seuls les champs natifs de l'outil (statut, assigné, sprint)
-diffèrent et ne sont pas dupliqués dans la description.
+diffèrent et ne sont pas dupliqués dans la description. La section
+`## Estimation` ne recopie pas le calcul : elle dit la taille retenue, celle que
+le tracker porte déjà.
 
 ## Epics
 
@@ -344,6 +356,12 @@ valeur du projet. Le panneau écrit les deux par la route de l'hôte, parce
 qu'il n'a pas de jeton. Une clé canonique sans valeur
 dans le tracker se compense par un libellé ; une valeur `null` dit que l'état
 n'a pas de représentation propre (la fermeture de l'issue, par exemple).
+
+`points` suit la même règle que `priority`, à une différence près : la taille
+est un nombre, pas un mot du workflow. C'est l'hôte qui la traduit — libellé
+`sp:N` sur GitHub, champ `story_points_field` du projet sur Jira — et il refuse
+d'écrire quand la `map` du projet ne déclare pas de forme native. Le panneau ne
+l'édite jamais : elle se pose au cadrage.
 
 | Canonique | GitHub (`missions`) | Jira (exemple à trois statuts) |
 |---|---|---|

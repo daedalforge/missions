@@ -17,18 +17,27 @@ moins cher et qui évite le plus de travail perdu.
    son objectif propre. Un ticket trop gros revient en cadrage.
 5. **Proposer un plan** : les étapes d'exécution, dans l'ordre, avec ce qui est
    vérifiable à chacune.
-6. **Déclarer la branche et sa base** — directement dans le volet de détail du
+6. **Estimer les points** une fois le plan posé, avant de déclarer la branche :
+   la route de l'hôte (`POST missions/api/points`) pose la taille sur le ticket
+   avec la valeur native du projet, et retire les autres tailles de la famille.
+   L'échelle est `1, 2, 3, 5, 8, 13` ; une autre valeur, une clé inconnue ou un
+   projet sans forme native sont refusés avant le tracker, avec leur message.
+   Relire le ticket : une seule taille, celle que le volet montrera. L'échelle et
+   la forme native sont dans
+   [`../missions/README.md`](../missions/README.md#correspondance-avec-le-tracker),
+   la commande et la lecture d'un refus dans le playbook du cadrage.
+7. **Déclarer la branche et sa base** — directement dans le volet de détail du
    panneau (champs « Branch » et « Base », bouton « Save »), ou à la main dans
    `missions/<dossier>/mission.yml` (format dans
    [`../missions/README.md`](../missions/README.md#branche-et-base)) : c'est ce
    qui autorise la session d'exécution. Le panneau crée le dossier de la
    mission s'il manque ; le fichier reste local (ignoré par git), il n'est
    jamais commité.
-7. **Ouvrir le journal de mission** dans `missions/<dossier>/journal.md` : la
+8. **Ouvrir le journal de mission** dans `missions/<dossier>/journal.md` : la
    demande verbatim, les lectures, l'état relevé, les hypothèses et les points
    ouverts (forme dans
    [`../missions/README.md`](../missions/README.md#journal-de-mission)).
-8. **Ouvrir la checklist de mission** dans `missions/<dossier>/checklist.md` :
+9. **Ouvrir la checklist de mission** dans `missions/<dossier>/checklist.md` :
    un geste vérifiable par point du plan, avec la preuve attendue (forme dans
    [`../missions/README.md`](../missions/README.md#checklist-de-mission)).
 
@@ -43,6 +52,8 @@ moins cher et qui évite le plus de travail perdu.
 - [ ] La branche et sa base sont déclarées dans `missions/<dossier>/mission.yml`.
 - [ ] Le journal est ouvert dans le dossier (demande, lectures, hypothèses, plan).
 - [ ] La checklist est ouverte : un geste vérifiable par point, avec sa preuve attendue.
+- [ ] L'estimation est posée sur le ticket : une seule taille de `1, 2, 3, 5, 8, 13`,
+      relue sur la fiche.
 - [ ] Le demandeur a validé — explicitement, dans le ticket.
 
 ## Signaux d'arrêt
@@ -60,5 +71,6 @@ moins cher et qui évite le plus de travail perdu.
 | Geste | Jira | GitHub |
 |---|---|---|
 | Créer la fiche | nouvelle issue, description = gabarit | nouvelle issue, corps = gabarit |
+| Poser les points | champ `story_points_field` du projet | label `sp:N` |
 | Passer à prête | statut To Do + label `prête` | label `ready` |
 | Valider | commentaire de validation du demandeur | commentaire de validation, ou pouce levé explicite |
