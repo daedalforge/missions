@@ -3418,6 +3418,33 @@ test('la liste place une mission bloquée après sa bloqueuse, même épinglée'
   assert.deepEqual(lignes, ['MIS-472', 'MIS-471'])
 })
 
+test('les sections rendues placent la section d’une bloqueuse devant la mission retenue', () => {
+  // Given une mission ready que retient une mission to-refine.
+  const liste = [
+    {
+      ...MISSION,
+      key: 'MIS-481',
+      title: 'Retenue',
+      state: 'ready',
+      blockers: [{ key: 'MIS-482', title: 'Bloqueuse', state: 'to-refine' }],
+    },
+    { ...MISSION, key: 'MIS-482', title: 'Bloqueuse', state: 'to-refine', priority: 'low' },
+  ]
+  const view = { loading: false, missions: liste, errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, view, 'missions'])
+  api.apply(ctx)
+  const list = findAll(registered.main({}), 'MissionsView')[0]
+
+  // When le chemin cartes, seul à rendre des sections, est rendu.
+  const rendu = renderTree({ ...list, props: { ...list.props, tree: false } })
+
+  // Then la section de la bloqueuse précède celle de la mission retenue.
+  const sections = findAll(rendu, 'section')
+    .filter((node) => String(node.props.className ?? '').split(' ').includes('missions-group'))
+    .map((node) => node.props['data-state'])
+  assert.deepEqual(sections, ['to-refine', 'ready'])
+})
+
 test('une raison écrite est posée sans attendre la lecture suivante', () => {
   assert.match(SOURCE, /setBlockedReason\(blockedReasonAfterWrite\(/)
   assert.match(SOURCE, /setBlockedReason\(mission\.blockedReason \?\? null\)/)
