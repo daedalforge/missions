@@ -92,6 +92,9 @@ import {
   repositoryFilterSnapshot,
   repositoryState,
   parseRepositoryFilters,
+  placeTooltip,
+  TIP_GAP,
+  TIP_MARGIN,
   hasActiveRepositoryFilters,
   filterRepositories,
   writeRepositoryFilters,
@@ -3021,4 +3024,43 @@ test('un titre long se coupe sur un espace, pas au milieu d’un mot', () => {
   assert.ok(title[kept.length] === ' ')
   // Un titre qui tient ne bouge pas.
   assert.equal(clipTitle('Court', 30), 'Court')
+})
+
+test('l’infobulle s’ouvre au-dessus du déclencheur quand le panneau laisse la place', () => {
+  const placed = placeTooltip(
+    { top: 200, left: 100, width: 34, height: 34 },
+    { top: 0, left: 0, width: 800, height: 600 },
+    { width: 120, height: 30 },
+  )
+
+  assert.equal(placed.side, 'top')
+  assert.equal(placed.top, 200 - 30 - TIP_GAP)
+  assert.equal(placed.left, 100 + (34 - 120) / 2)
+})
+
+test('l’infobulle passe sous le déclencheur quand le haut du panneau manque', () => {
+  const placed = placeTooltip(
+    { top: 10, left: 300, width: 34, height: 34 },
+    { top: 0, left: 0, width: 800, height: 600 },
+    { width: 120, height: 30 },
+  )
+
+  assert.equal(placed.side, 'bottom')
+  assert.equal(placed.top, 10 + 34 + TIP_GAP)
+})
+
+test('l’infobulle est ramenée dans la boîte du panneau, à droite comme à gauche', () => {
+  const panel = { top: 0, left: 0, width: 800, height: 600 }
+  const tip = { width: 120, height: 30 }
+
+  const aDroite = placeTooltip({ top: 200, left: 760, width: 34, height: 34 }, panel, tip)
+  assert.equal(aDroite.left, 800 - 120 - TIP_MARGIN)
+
+  const aGauche = placeTooltip({ top: 200, left: 0, width: 34, height: 34 }, panel, tip)
+  assert.equal(aGauche.left, TIP_MARGIN)
+
+  // Un décalage hors du panneau rendu par un panneau qui défile ne sort pas :
+  // la boîte mesurée est déjà relative au panneau, la marge la garde dedans.
+  const decale = placeTooltip({ top: 200, left: 900, width: 34, height: 34 }, panel, tip)
+  assert.equal(decale.left, 800 - 120 - TIP_MARGIN)
 })
