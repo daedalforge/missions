@@ -366,8 +366,8 @@ jamais un geste.
 
 - Un document de workflow décrit **un geste**, pas un outil : les commandes
   Jira et GitHub sont données côte à côte quand elles diffèrent.
-- Un critère d'acceptation sans scénario n'est pas un critère : la fiche nomme
-  2 à 4 scénarios principaux en Given/When/Then, et chaque étape dit ce qui doit
-  être vérifiable à sa sortie.
+- Un critère d'acceptation sans preuve n'est pas un critère ; sans scénario, il
+  n'en est pas un non plus : la fiche nomme 2 à 4 scénarios principaux en
+  Given/When/Then, et chaque étape dit ce qui doit être vérifiable à sa sortie.
 - Ce dépôt ne contient ni code produit, ni fiche de mission, ni journal de
   session.
