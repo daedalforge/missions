@@ -2055,13 +2055,13 @@ test('le prêt pour la prod ne déplace ni l’en-cours ni la file, et le périm
 
 test('la carte Bugs écarte un bug bloqué, fût-il le plus ancien de sa famille', () => {
   // Given un bug en revue bloqué par la seule étiquette, le plus ancien, deux
-  // bugs à raffiner non bloqués et un bug en cours qu'une mission en revue
-  // retient.
+  // bugs à raffiner non bloqués et un bug en cours qu'une mission encore hors
+  // revue retient — une dépendance arrivée en revue ne bloque plus l'hôte.
   const missions = [
     { key: 'MIS-50', title: 'bloqué par étiquette', state: 'in-review', type: 'bug', priority: 'urgent', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
     { key: 'MIS-51', title: 'revoir la recherche', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-11-01T00:00:00Z' },
     { key: 'MIS-52', title: 'corriger le filtre', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T00:00:00Z' },
-    { key: 'MIS-53', title: 'bloqué par dépendance', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-54', title: 'Contrat', state: 'in-review' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
+    { key: 'MIS-53', title: 'bloqué par dépendance', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-54', title: 'Contrat', state: 'in-progress' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
   ]
 
   // When l'onglet Dashboard est rendu.
@@ -2103,10 +2103,12 @@ test('les deux causes du blocage tiennent la même porte sur le digest', () => {
 
 test('une carte vide le dit sans mentir, et le total du panneau ne perd rien', () => {
   // Given deux missions en cours bloquées — l'une par l'étiquette, l'autre par
-  // sa dépendance — sans aucune mission en cours non bloquée.
+  // sa dépendance — sans aucune mission en cours non bloquée, et une mission
+  // à raffiner bloquée, qu'une file laisserait passer.
   const missions = [
     { key: 'MIS-70', title: 'en cours bloquée', state: 'in-progress', type: 'story', priority: 'high', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
-    { key: 'MIS-71', title: 'en cours retenue', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-72', title: 'Contrat', state: 'in-review' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T00:00:00Z' },
+    { key: 'MIS-71', title: 'en cours retenue', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-72', title: 'Contrat', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T00:00:00Z' },
+    { key: 'MIS-73', title: 'à raffiner bloquée', state: 'to-refine', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-03T00:00:00Z' },
   ]
 
   // When l'onglet Dashboard est rendu.
@@ -2118,10 +2120,10 @@ test('une carte vide le dit sans mentir, et le total du panneau ne perd rien', (
   assert.equal(empty(flight), 'Nothing in progress is unblocked.')
   assert.equal(textOf(findAll(flight, 'span').find((span) => span.props.className === 'missions-card-meta')), '0')
 
-  // Then la ligne de tête garde les deux missions dans les ouvertes, mais ne
-  // les met pas dans ce qui attend un geste du demandeur.
+  // Then la ligne de tête garde les trois missions bloquées dans les ouvertes,
+  // mais n'en met aucune dans ce qui attend un geste du demandeur.
   const scope = textOf(findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope'))
-  assert.equal(scope, '0 need you · 2 open · 1 project')
+  assert.equal(scope, '0 need you · 3 open · 1 project')
 })
 
 test('une carte vide nomme la borne, même quand des missions bloquées ou prêtes à partir existent', () => {
