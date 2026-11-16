@@ -2359,7 +2359,8 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       if (options.length === 0) return null
       const counts = new Map(options.map((state) => [state, 0]))
       for (const mission of missions) {
-        if (counts.has(mission.state)) counts.set(mission.state, counts.get(mission.state) + 1)
+        const state = stateFilterValue(mission.state)
+        if (counts.has(state)) counts.set(state, counts.get(state) + 1)
       }
       const selected = Array.isArray(value) ? value : value ? [value] : []
       const toggle = (state) => {

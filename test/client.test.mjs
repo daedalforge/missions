@@ -9871,6 +9871,23 @@ test('sélectionner des états laisse les comptes de la bande intacts', () => {
   assert.deepEqual(bandOf(arbre({}, { filters: EMPTY_BAR.filters })), bandOf(arbre()))
 })
 
+test('une mission dont l’état n’est pas du workflow compte dans « unknown state »', () => {
+  // Given la fixture plus une mission que le tracker n'a pas su classer.
+  const inconnue = { ...ARBRE_EPIC, key: 'MIS-999', title: 'État inconnu', state: null }
+  const { arbre } = monterArbre({ missions: [...ARBRE_MISSIONS, inconnue] })
+
+  // When la vue rend la bande.
+  const bande = bandOf(arbre())
+
+  // Then son segment la compte, comme la liste la montre.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '9'],
+    ['in review', '2'],
+    ['unknown state', '1'],
+  ])
+})
+
 test('l’arbre tient dans la largeur et ses titres sont ellipsés', () => {
   const colonne = regle('.missions-wb-column')
   assert.match(colonne, /min-width: 0/)
