@@ -223,15 +223,13 @@ frappe. Les gestes comptent `search.q` (palier de longueur), `search.family`,
 propre champ et ses propres filtres : un seul chemin de liste pour les deux
 onglets.
 
-Le **Dashboard** ajoute deux sections à son périmètre. **Repositories**
+Le **Dashboard** ajoute une section à son périmètre. **Repositories**
 croise les missions ouvertes avec le scan des dépôts — la route
 `missions/api/repositories/summary`, mémorisée cinq minutes
 (`SUMMARY_TTL_MS`) et partagée entre appels simultanés — en deux cartes :
 *Branches to push* (une branche de mission que le scan porte, jamais poussée
 ou en avance sur son amont) et *Checkouts to fix* (un dépôt illisible, en
-retard ou sale, une raison par ligne, la plus grave). **Done** relit ce que
-l'onglet Done a déjà ramené : les trois closes les plus récemment mises à
-jour, et celles dont la branche déclarée vit encore dans un worktree du scan.
+retard ou sale, une raison par ligne, la plus grave).
 Le résumé des dépôts ne se relit qu'à l'ouverture du Dashboard et à son tick,
 quand c'est l'onglet ouvert et la page visible, jamais avec `?refresh=1` : le
 bouton **Retry** est le seul à forcer. Un scan en échec garde les lignes et
@@ -260,7 +258,10 @@ compter toutes les missions ouvertes, prêtes à partir et bloquées incluses.
 Un projet peut déclarer ses **traductions** dans sa copie locale de
 `missions/projects.yml` — `translations.locales`,
 `translations.languageFile`, `translations.reference`. Le volet d'une mission de
-ce projet gagne alors un bouton **Tolgee import** : il lit le contenu de la
+ce projet gagne alors un bouton **Tolgee import**, tant que la mission est en
+`in-progress` ou `in-review` — le geste s'arrête là : prête pour la production ou
+livrée, la mission ne l'offre plus, et un projet sans locales ne l'offre jamais.
+Le bouton lit le contenu de la
 branche (`git show <branche>:<fichier>`) pour les fichiers que son diff change,
 relève les clés `t()` qu'ils utilisent et écrit
 `missions/<dossier>/import-tolgee.xliff` avec celles qui manquent ou sont vides
