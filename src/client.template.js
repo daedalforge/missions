@@ -1617,11 +1617,12 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
     /**
      * The foot of a widget: what the card does not show, and the way to the
      * list. The link only appears when the card holds more rows than it shows;
-     * its label carries the card's total — every unblocked row, shown or not —
-     * and the note carries the hidden ones. The list it opens is wider than
-     * the card: it keeps the blocked missions of these states, so it can hold
-     * more rows than the number the link was opened with. It returns nothing
-     * at all when the card fits: no empty rule under the last row.
+     * its label carries the card's total — every unblocked row, shown or not.
+     * The list it opens is wider than the card: it keeps the blocked missions
+     * of these states, so it can hold more rows than the number the link was
+     * opened with. The note is the card's own — points, hidden rows — and when
+     * the card fits with nothing to note, the foot returns nothing at all: no
+     * empty rule under the last row.
      */
     function widgetFoot({ note, total, onViewAll, cap = WIDGET_ROWS }) {
       const more = total > cap
