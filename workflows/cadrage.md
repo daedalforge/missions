@@ -49,7 +49,8 @@ moins cher et qui évite le plus de travail perdu.
 - [ ] L'objectif tient en une phrase à l'infinitif.
 - [ ] Le périmètre dit explicitement ce qui est **dehors**.
 - [ ] Chaque critère d'acceptation est vérifiable par une commande, un test ou une
-      observation précise, et désigne le scénario qui le prouve.
+      observation précise, et désigne le scénario qui le prouve ; la fiche nomme
+      2 à 4 scénarios principaux.
 - [ ] Aucun critère ne dépend d'une décision non tranchée.
 - [ ] Le plan d'exécution est écrit et tient en quelques étapes.
 - [ ] La branche et sa base sont déclarées dans `missions/<dossier>/mission.yml`.
