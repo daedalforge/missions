@@ -72,6 +72,7 @@ import {
   missionAge,
   needsYou,
   parseFilterSnapshot,
+  POINTS_SCALE,
   pointsText,
   pointsTotal,
   priorityOptions,
@@ -127,6 +128,10 @@ import {
   writeTab,
   writeWorktreesShown,
 } from '../lib/view.js'
+// L'échelle est définie dans `view.js` et ré-exportée par `mission.js` : la
+// route lit ce second nom, le volet lit le premier, et les deux sont la même
+// liste. Le test le prouve au lieu de le supposer.
+import { POINTS_SCALE as missionScale } from '../lib/mission.js'
 import { loadWorkflows, MODELS_DIR, readWorkflow } from '../lib/workflows.js'
 
 /** Un stockage de session en mémoire, comme celui de la fenêtre. */
@@ -1349,15 +1354,28 @@ test('le périmètre résume la file, l’ouvert et les projets ; les points sau
   assert.deepEqual(pointsTotal([]), { total: 0, counted: 0 })
 })
 
-test('un point s’écrit « 1 pt » et une absence ne s’écrit pas', () => {
+test('un point s’écrit « 1 pt », une demi-pointe « 0.5 pt », et une absence ne s’écrit pas', () => {
   // Given les formes que prend le compte de points d'une mission.
-  const comptes = [5, 1, 0, null, undefined, '', 'n/a']
+  const comptes = [5, 1, 0.5, 2.5, 0, null, undefined, '', 'n/a']
 
   // When chaque compte est mis en mots.
   const mots = comptes.map(pointsText)
 
-  // Then le pluriel suit la valeur, et une absence ne rend rien.
-  assert.deepEqual(mots, ['5 pts', '1 pt', '0 pts', '', '', '', ''])
+  // Then le pluriel ne commence qu'au-delà de 1, et une absence ne rend rien.
+  assert.deepEqual(mots, ['5 pts', '1 pt', '0.5 pt', '2.5 pts', '0 pt', '', '', '', ''])
+})
+
+test('l’échelle des points est celle du panneau, la demi-pointe comprise', () => {
+  // Given la liste que la route refuse hors échelle, et celle que le volet offre.
+  const scale = POINTS_SCALE
+
+  // When la route et le volet lisent la même constante.
+  const fromMission = missionScale
+
+  // Then les sept tailles sont là, une seule fois, et `0.5` ouvre l'échelle.
+  assert.deepEqual(scale, [0.5, 1, 2, 3, 5, 8, 13])
+  assert.deepEqual(fromMission, scale)
+  assert.equal(new Set(scale).size, scale.length)
 })
 
 test('une mission sans état connu reste dans la file, en dernier', () => {
@@ -2409,8 +2427,9 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
 
   // Les ids sont ceux des Notes techniques du ticket MIS-147, dans leur ordre ;
   // le geste d'archive, livré après par MIS-150, s'ajoute à sa place dans le
-  // volet, et l'épingle de MIS-14 suit le blocage qu'elle côtoie. Le registre ne
-  // prend pas d'autre liberté avec le contrat.
+  // volet, l'épingle de MIS-14 suit le blocage qu'elle côtoie, et l'estimation
+  // de MIS-53 suit la priorité qu'elle prolonge. Le registre ne prend pas
+  // d'autre liberté avec le contrat.
   assert.deepEqual(ids, [
     'tab.dashboard', 'tab.missions', 'tab.done', 'tab.repositories', 'tab.workflows', 'tab.usage',
     'tab.playbook',
@@ -2419,7 +2438,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'search.q', 'search.family', 'preview.kind', 'mission.open',
     'dashboard.view-all', 'mission.archive.batch',
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
-    'mission.block', 'mission.pin', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
+    'mission.points', 'mission.block', 'mission.pin', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
     'mission.session', 'mission.feedback-session',
     'repository.open', 'repository.adopt', 'repository.remove', 'repository.tab.details', 'repository.tab.history',
     'repository.branch', 'repository.more', 'repository.resolve', 'repository.squash',
@@ -2718,7 +2737,13 @@ test('les périmètres des deux sections comptent ce que les cartes montrent', (
   ]
   assert.deepEqual(doneScope(closed), { count: 2, points: 5, label: '2 closed · 5 pts' })
   assert.equal(doneScope([{ key: 'M-1', state: 'done', points: 1 }]).label, '1 closed · 1 pt')
-  assert.equal(doneScope().label, '0 closed · 0 pts')
+  // La demi-pointe se somme et reste au singulier tant qu'elle est seule.
+  assert.equal(doneScope([{ key: 'M-1', state: 'done', points: 0.5 }]).label, '1 closed · 0.5 pt')
+  assert.equal(
+    doneScope([{ key: 'M-1', state: 'done', points: 0.5 }, { key: 'M-2', state: 'done', points: 2 }]).label,
+    '2 closed · 2.5 pts',
+  )
+  assert.equal(doneScope().label, '0 closed · 0 pt')
 })
 
 test('un clone froid se compte en jours, pas en heures', () => {
