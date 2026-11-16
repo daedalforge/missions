@@ -8530,9 +8530,9 @@ test('le bandeau étroit garde l’anneau à neuf pixels du bord', () => {
   // Then le bandeau et la coiffe raccourcissent ensemble
   assert.match(bloc, /\.missions-hero \{ height: 150px; \}/)
 
-  // Then le portrait rétrécit sans perdre l'ancrage de peau
+  // Then le portrait rétrécit sans reprendre l'ancrage de peau
   assert.match(bloc, /\.missions-hero-avatar \{ width: 84px; height: 84px; \}/)
-  assert.doesNotMatch(bloc, /missions-hero-avatar \{[^}]*bottom:/)
+  assert.doesNotMatch(bloc, /missions-hero-avatar \{[^}]*(?:right|bottom):/)
 
   // Then la bulle disparaît et la pastille garde son bord, sans reprise locale
   assert.match(bloc, /\.missions-hero-bubble \{ display: none; \}/)
