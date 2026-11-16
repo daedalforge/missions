@@ -128,7 +128,7 @@ test('un interdit retiré de workspace.md échoue en le nommant', async (t) => {
   const source = await readFile(path, 'utf8')
   const stripped = source
     .split('\n')
-    .filter((line) => !line.startsWith('13. '))
+    .filter((line) => !line.startsWith('14. '))
     .join('\n')
   await writeFile(path, stripped)
 
@@ -138,5 +138,5 @@ test('un interdit retiré de workspace.md échoue en le nommant', async (t) => {
   // Then
   assert.notEqual(result.code, 0)
   assert.match(result.stderr, /playbook\/workspace\.md/)
-  assert.match(result.stderr, /13 interdits/)
+  assert.match(result.stderr, /14 interdits/)
 })
