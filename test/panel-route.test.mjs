@@ -2400,6 +2400,50 @@ test('POST /archive déplace une mission done et la retire de la lecture done', 
   }
 })
 
+/*
+ * Le cas d'une clé réutilisée : l'archive d'un premier archivage est encore
+ * là, réduite à sa déclaration. Le geste doit aboutir et ranger le dossier
+ * dedans — c'est le refus en 409 « already exists » qui bloquait le panneau.
+ */
+test('POST /archive se pose sur l’archive existante d’une clé re-déclarée', async (t) => {
+  const { dir, handler } = await mountArchive(t, { issue: CLOSED_42 })
+  const declaration = 'key: MIS-42\nbranch: feat/mis-42\nbase: main\n'
+  await mkdir(join(dir, 'missions', 'archives', 'MIS-42'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'archives', 'MIS-42', MISSION_FILE), declaration)
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/archive',
+      body: { key: 'MIS-42' },
+    })
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(response.body, {
+      archived: 'missions/archives/MIS-42',
+      folder: 'MIS-42',
+      project: 'missions',
+    })
+    assert.deepEqual((await readdir(join(dir, 'missions'))).sort(), ['archives', 'projects.yml'])
+    assert.deepEqual((await readdir(join(dir, 'missions', 'archives', 'MIS-42'))).sort(), [
+      'journal.md',
+      MISSION_FILE,
+    ])
+    assert.equal(
+      await readFile(join(dir, 'missions', 'archives', 'MIS-42', MISSION_FILE), 'utf8'),
+      declaration,
+    )
+
+    const done = await call(handler, { path: '/missions/api/list?done=1' })
+    assert.equal(done.status, 200)
+    assert.deepEqual(done.body.missions, [])
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
 test('un refus d’archive ne déplace rien : méthode, corps, projet, dossier', async (t) => {
   const { dir, handler } = await mountArchive(t, { issue: CLOSED_42 })
 
@@ -2604,7 +2648,9 @@ test('POST /archive-batch dit le refus d’une ligne sans défaire les autres', 
 
     assert.equal(response.status, 200)
     assert.deepEqual(response.body.archived.map((entry) => entry.key), ['MIS-42'])
-    assert.deepEqual(response.body.refused, [{ key: 'MIS-43', error: 'missions/archives/MIS-43 already exists' }])
+    assert.deepEqual(response.body.refused, [
+      { key: 'MIS-43', error: 'missions/archives/MIS-43 already exists: journal.md differs' },
+    ])
     assert.equal(await readFile(join(dir, 'missions', 'archives', 'MIS-43', 'journal.md'), 'utf8'), 'ancien\n')
     assert.equal(await readFile(join(dir, 'missions', 'archives', 'MIS-42', 'journal.md'), 'utf8'), '# Journal — MIS-42\n')
   } finally {
