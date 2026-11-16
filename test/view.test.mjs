@@ -1293,9 +1293,9 @@ test('un bug ou une story prêt pour la production ne prend plus la tête des wi
 })
 
 test('les quatre lentilles du digest écartent une mission bloquée, par label comme par dépendance', () => {
-  // Given quatre missions qu'une lentille prendrait sans la règle — deux
-  // bloquées, l'une par la seule étiquette, l'autre par la seule dépendance —
-  // plus une dont la dépendance a atteint la revue, et deux saines.
+  // Given deux missions qu'une lentille prendrait sans la règle — l'une
+  // bloquée par la seule étiquette, l'autre par la seule dépendance — plus une
+  // dont la dépendance a atteint la revue, et trois saines.
   const missions = [
     { key: 'bug-label', type: 'bug', priority: 'urgent', state: 'in-review', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-01T00:00:00Z' },
     { key: 'bug-vieux', type: 'bug', priority: 'normal', state: 'to-refine', blocked: false, blockers: [], updatedAt: '2026-10-10T00:00:00Z' },
