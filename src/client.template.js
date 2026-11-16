@@ -463,6 +463,23 @@ window.__ModuleLoader__.load({
   100% { transform: scale(1.32) rotate(-10deg); }
 }
 @media (prefers-reduced-motion: reduce) { .missions-icon-seal { animation: none; } }
+/* The stamp: one short scale on the wrapper, replayed by the drawing's key
+   after a successful write — the click lands before the list moves. */
+.missions-pin-icon { display: inline-flex; }
+.missions-pin-icon--stamped { animation: missions-pin-stamp 240ms ease-out; }
+@keyframes missions-pin-stamp {
+  0% { transform: scale(.88); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .missions-pin-icon--stamped { animation: none; } }
+/* Planted, the pin sways: the drawing moves, the row does not. */
+.missions-action--pinned .missions-icon-pin { animation: missions-pin-sway 6s ease-in-out infinite; transform-box: view-box; transform-origin: center; overflow: visible; }
+@keyframes missions-pin-sway {
+  0%, 100% { transform: rotate(-2deg) translateY(0); }
+  50% { transform: rotate(2deg) translateY(-.6px); }
+}
+@media (prefers-reduced-motion: reduce) { .missions-action--pinned .missions-icon-pin { animation: none; } }
 .missions-search { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-tertiary, #7a7168); }
 .missions-search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); font: inherit; font-size: 12.5px; }
 .missions-search input::placeholder { color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -779,7 +796,11 @@ window.__ModuleLoader__.load({
 .missions-action--danger-armed { border-color: transparent; background: var(--dsw-alias-label-danger, #b42318); color: #fff; }
 .missions-action--danger-armed:hover { background: color-mix(in srgb, var(--dsw-alias-label-danger, #b42318) 86%, #000); }
 .missions-action--armed { border-color: transparent; background: var(--dsw-alias-label-primary, #1f1f1f); color: #fff; }
-.missions-action--pinned { border-color: transparent; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.06)); color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-action--pinned { border-color: transparent; background: var(--dsw-alias-label-primary, #1f1f1f); color: var(--dsw-alias-label-primary-foreground, #ffffff); }
+.missions-action--pinned:hover { background: var(--dsw-alias-label-primary, #1f1f1f); color: var(--dsw-alias-label-primary-foreground, #ffffff); }
+/* Waiting, the pin keeps no frame: the filled tablet is the planted state's
+   mark. The border stays (transparent) so the row keeps its metrics. */
+.missions-action--pin:not(.missions-action--pinned) { border-color: transparent; }
 .missions-drawer-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-drawer-note--blocked { color: var(--dsw-alias-label-secondary, #5c534b); }
@@ -1286,6 +1307,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 .missions-panel[data-skin="paper"] .missions-action:focus-visible { outline-color: var(--skin-ink); }
 .missions-panel[data-skin="paper"] .missions-action--danger-armed { background: var(--skin-accent-strong); color: var(--skin-page); }
 .missions-panel[data-skin="paper"] .missions-action--armed { background: var(--skin-ink); color: var(--skin-page); }
+/* Pinned, the frame fills with the skin's ink: the pin is planted, and the
+   state reads before the tooltip. The hover keeps the fill. */
+.missions-panel[data-skin="paper"] .missions-action--pinned { border: 1.5px solid var(--skin-ink); background: var(--skin-ink); color: var(--skin-page); box-shadow: 2px 2px 0 var(--skin-shadow); }
+.missions-panel[data-skin="paper"] .missions-action--pinned:hover { background: var(--skin-ink); color: var(--skin-page); }
 .missions-panel[data-skin="paper"] .missions-drawer-note { padding: 6px 9px; border-left: 3px solid var(--skin-accent); background: color-mix(in srgb, var(--skin-accent) 12%, var(--skin-page)); color: var(--skin-ink-2); font-size: 10.5px; }
 .missions-panel[data-skin="paper"] .missions-declare { gap: 7px; border-top: 1.5px solid var(--skin-ink); }
 .missions-panel[data-skin="paper"] .missions-blocked { border: 1.5px solid var(--skin-ink); border-radius: 8px; background: var(--skin-page-2); box-shadow: 2px 2px 0 var(--skin-shadow); }
@@ -2983,6 +3008,11 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const [pinnedNow, setPinnedNow] = React.useState(mission.pinned === true)
       const [writingPin, setWritingPin] = React.useState(false)
       const [pinNote, setPinNote] = React.useState(null)
+      // The stamp counts successful writes, not the note: the note is cleared
+      // as soon as the refreshed list lands, and an animation keyed on it would
+      // be cut after one frame. The count only grows on a success, so opening
+      // the drawer and a refusal stamp nothing.
+      const [pinStamp, setPinStamp] = React.useState(0)
       // Closing the local checkout deletes the branch: the first click only
       // arms it, the second one sends the key. The host re-checks everything.
       const [armedClose, setArmedClose] = React.useState(false)
@@ -3258,6 +3288,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           if (!response.ok) throw new Error(data?.error ?? `pin failed (${response.status})`)
           setPinnedNow(next)
           setPinNote({ error: false, text: next ? 'Mission pinned at the top of the list.' : 'Mission unpinned.' })
+          setPinStamp(pinStamp + 1)
           onPinSaved?.({ key: mission.key, pinned: next })
         } catch (error) {
           setPinNote({ error: true, text: `Pin failed: ${error?.message ?? error}` })
@@ -3721,7 +3752,15 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 'aria-pressed': pinnedNow ? 'true' : 'false',
                 'data-pinned': pinnedNow ? 'true' : 'false',
                 'aria-label': writingPin ? 'Saving the pin…' : pinnedNow ? 'Unpin' : 'Pin',
-              }, h(ActionIcon, { name: 'pin' }))),
+              }, h('span', {
+                // The drawing is re-keyed on every successful write: React
+                // remounts it, which replays the stamp — never on opening,
+                // where no row has been stamped yet.
+                key: `${pinnedNow ? 'pin-up' : 'pin-down'}-${pinStamp}`,
+                className: pinStamp > 0
+                  ? 'missions-pin-icon missions-pin-icon--stamped'
+                  : 'missions-pin-icon',
+              }, h(ActionIcon, { name: 'pin', pinned: pinnedNow })))),
               // Only the step that follows the merge may delete the branch: the
               // panel shows the gesture there and nowhere else, and the host
               // re-reads the state before touching anything. It opens the row so
@@ -4201,7 +4240,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
      * drawn in place at 15 px, in the action's own colour, and the button's
      * `title` and `aria-label` carry the name — the drawing stays decorative.
      */
-    function ActionIcon({ name }) {
+    function ActionIcon({ name, pinned = false }) {
       const common = {
         viewBox: '0 0 16 16', width: 15, height: 15, fill: 'none', stroke: 'currentColor',
         strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true',
@@ -4264,13 +4303,21 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         )
       }
       if (name === 'pin') {
-        // A pushpin: the row stays at the top of this list, nothing moves in
-        // the tracker.
-        return h('svg', common,
-          h('path', { d: 'M6 2h4' }),
-          h('path', { d: 'M8 2v4' }),
-          h('path', { d: 'M5.3 6h5.4l-1.1 3.4H6.4L5.3 6Z' }),
-          h('path', { d: 'M8 9.4V14' }),
+        // A pushpin, in two drawings: waiting, it leans and stays outlined;
+        // pinned, it stands upright, the head filled in the button's ink, the
+        // point planted above a ground line. The tilt is drawn, not animated —
+        // the state must read still even with motion reduced.
+        const drawing = [
+          h('path', { d: 'M5.6 2.2h4.8' }),
+          h('path', { d: 'M8 2.2v3.4' }),
+          h('path', pinned
+            ? { d: 'M4.9 5.6h6.2l-1 3.2H5.9L4.9 5.6Z', fill: 'currentColor' }
+            : { d: 'M4.9 5.6h6.2l-1 3.2H5.9L4.9 5.6Z' }),
+          h('path', { d: 'M8 8.8v4.6' }),
+        ]
+        if (pinned) drawing.push(h('path', { d: 'M5.2 13.6h5.6' }))
+        return h('svg', { ...common, className: 'missions-icon missions-icon-pin' },
+          pinned ? drawing : h('g', { transform: 'rotate(-32 8 8)' }, drawing),
         )
       }
       if (name === 'resolve') {

@@ -35,6 +35,19 @@ function ligneDe(motif) {
   return SOURCE.slice(SOURCE.lastIndexOf('\n', at) + 1, SOURCE.indexOf('\n', at))
 }
 
+/** Un bloc `@keyframes` entier : le corps peut contenir d'autres accolades. */
+function keyframes(nom) {
+  const at = SOURCE.indexOf(`@keyframes ${nom} {`)
+  assert.ok(at >= 0, `keyframes absent : ${nom}`)
+  let depth = 0
+  for (let index = SOURCE.indexOf('{', at); index < SOURCE.length; index += 1) {
+    if (SOURCE[index] === '{') depth += 1
+    if (SOURCE[index] === '}') depth -= 1
+    if (depth === 0) return SOURCE.slice(at, index + 1)
+  }
+  assert.fail(`keyframes non fermé : ${nom}`)
+}
+
 // Minimal DOM surface: the bundle mounts one <style> and nothing else.
 globalThis.document = {
   createElement: () => ({ dataset: {}, remove() {} }),
@@ -3661,7 +3674,7 @@ test('un blocage Jira ouvre la carte sur le ticket, jamais sur l’API', async (
 function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overrides = {}) {
   const view = { loading: false, missions: [mission], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
   const panneau = [EMPTY_BAR, view, 'missions', '', EMPTY_BAR.filters, mission]
-  const { api, ctx, registered, setters, queue, resetHooks } = charger(undefined, [...panneau])
+  const { api, ctx, registered, setters, effects, queue, resetHooks } = charger(undefined, [...panneau])
   api.apply(ctx)
 
   const enfants = (node) => (node.children.length === 1 ? node.children[0] : node.children)
@@ -3686,14 +3699,16 @@ function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overr
   const workbench = renderTree(premier.wbOut)
 
   // Le même volet, un tour plus tard : les setters du clic alimentent les états.
-  const rerendre = () => {
+  // Un tour plus tard, et éventuellement une autre réponse du panneau : la
+  // liste rafraîchie peut renvoyer la mission avec `pinned` inversé.
+  const rerendre = (missionSuivante = mission) => {
     resetHooks()
     queue.length = 0
-    queue.push(...panneau)
+    queue.push(EMPTY_BAR, { ...view, missions: [missionSuivante] }, 'missions', '', EMPTY_BAR.filters, missionSuivante)
     const suivant = monter()
     return renderTree({ ...suivant.drawer, props: { ...suivant.drawer.props, ...overrides } })
   }
-  return { tree, drawer: premier.drawer, workbench, setters, rerendre }
+  return { tree, drawer: premier.drawer, workbench, setters, effects, rerendre }
 }
 
 test('le volet rend la priorité comme un select natif, plus comme une ligne morte', () => {
@@ -3953,7 +3968,8 @@ test('la punaise du volet écrit pins.yml et ne patche que ce drapeau', async ()
   assert.ok(bouton, 'le volet offre la punaise dans toutes les missions')
   assert.equal(bouton.props['aria-pressed'], 'false')
   assert.equal(bouton.props['data-pinned'], 'false')
-  assert.match(bouton.props.className, /missions-action--pin/)
+  assert.match(bouton.props.className, /\bmissions-action--pin\b/)
+  assert.doesNotMatch(bouton.props.className, /missions-action--pinned/, 'au repos, le bouton ne porte pas la classe de l’état')
 
   // La punaise est le premier geste de la rangée : elle ne prend pas la place
   // de la session, qui reste la primaire et la dernière.
@@ -4004,6 +4020,7 @@ test('un refus de pin laisse la punaise en place et le dit', async () => {
   const bouton = findAll(tree, 'button').find((node) => node.props['aria-label'] === 'Unpin')
   assert.ok(bouton, 'une mission épinglée montre le geste inverse')
   assert.equal(bouton.props['aria-pressed'], 'true')
+  assert.match(bouton.props.className, /\bmissions-action--pinned\b/, 'le cadre épinglé est porté par le bouton')
 
   await bouton.props.onClick()
 
@@ -4031,6 +4048,7 @@ test('un second clic sur la punaise retire la clé et rend la ligne à son rang'
   assert.ok(bouton, 'une mission épinglée montre le geste inverse')
   assert.equal(bouton.props['aria-pressed'], 'true')
   assert.equal(bouton.props['data-pinned'], 'true')
+  assert.match(bouton.props.className, /\bmissions-action--pinned\b/, 'le cadre épinglé est porté par le bouton')
 
   // When on clique sur la punaise déjà posée.
   await bouton.props.onClick()
@@ -4062,6 +4080,197 @@ test('un second clic sur la punaise retire la clé et rend la ligne à son rang'
     ['/w/missions/MIS-42', 'fix/mis-42', 'main', false],
   )
   assert.deepEqual(setSelected(previous), { ...previous, pinned: false })
+})
+
+test('la punaise penche au repos et se plante une fois épinglée', () => {
+  const dessin = (mission) => {
+    const { tree } = monterVolet(mission)
+    const bouton = findAll(tree, 'button').find((node) => /^(Pin|Unpin)$/.test(node.props['aria-label']))
+    assert.ok(bouton, 'le bouton du pin est monté')
+    const svg = findAll(bouton, 'svg').find((node) => node.props.className === 'missions-icon missions-icon-pin')
+    assert.ok(svg, 'le bouton porte le dessin nommé de la punaise')
+    return svg
+  }
+
+  // Given une mission au repos, puis la même épinglée.
+  const repos = dessin({ ...MISSION, updatedAt: MISSION.updated })
+  const epingle = dessin({ ...MISSION, pinned: true, updatedAt: MISSION.updated })
+
+  // Then au repos, la punaise attend couchée sur son trait, sans tête pleine.
+  const incline = findAll(repos, 'g').find((node) => node.props.transform === 'rotate(-32 8 8)')
+  assert.ok(incline, 'le dessin au repos est tourné de -32° autour de (8, 8)')
+  const traits = findAll(incline, 'path')
+  assert.equal(traits.length, 4, 'quatre traits : barre, tige, tête, pointe')
+  assert.ok(traits.every((path) => path.props.fill === undefined), 'aucune tête pleine au repos')
+  assert.ok(!traits.some((path) => path.props.d === 'M5.2 13.6h5.6'), 'aucun trait de sol au repos')
+
+  // Then épinglé, la punaise se dresse, tête pleine, pointe plantée.
+  assert.deepEqual(findAll(epingle, 'g'), [], 'le dessin épinglé n’est pas tourné')
+  const tete = findAll(epingle, 'path').find((path) => path.props.d === 'M4.9 5.6h6.2l-1 3.2H5.9L4.9 5.6Z')
+  assert.equal(tete.props.fill, 'currentColor', 'la tête prend l’encre du bouton')
+  assert.ok(findAll(epingle, 'path').some((path) => path.props.d === 'M5.2 13.6h5.6'), 'le trait de sol dit la pointe plantée')
+  assert.equal(epingle.props.width, 15)
+  assert.equal(epingle.props.height, 15)
+  assert.equal(epingle.props.strokeWidth, 1.6)
+})
+
+test('le cadre du pin se remplit dans le thème Default', () => {
+  // Given les règles du bouton épinglé, de son survol et du bouton au repos.
+  const cadre = regle('.missions-action--pinned')
+  const survol = regle('.missions-action--pinned:hover')
+  const repos = regle('.missions-action')
+
+  // Then le cadre se remplit de l'encre du thème, l'icône prend la couleur du fond.
+  assert.match(cadre, /border-color: transparent/)
+  assert.match(cadre, /background: var\(--dsw-alias-label-primary, #1f1f1f\)/)
+  assert.match(cadre, /color: var\(--dsw-alias-label-primary-foreground, #ffffff\)/)
+
+  // Then le survol garde le fond plein, il ne le délave pas.
+  assert.match(survol, /background: var\(--dsw-alias-label-primary, #1f1f1f\)/)
+  assert.doesNotMatch(survol, /interactive-bg-hover/)
+
+  // Then au repos, le bouton reste transparent : rien n'annonce un état, et
+  // le pin n'a pas de cadre — la bordure reste en place, transparente, pour
+  // que la rangée garde ses métriques.
+  assert.match(repos, /background: transparent/)
+  assert.match(repos, /border: 1px solid var\(--dsw-alias-border-l2/)
+  assert.match(regle('.missions-action--pin:not(.missions-action--pinned)'), /border-color: transparent/)
+})
+
+test('la peau Naruto remplit le pin d’encre par-dessus le bouton', () => {
+  // Given la règle du bouton dans la peau, puis celle du pin.
+  const bouton = SOURCE.indexOf('\n.missions-panel[data-skin="paper"] .missions-action {')
+  const pin = SOURCE.indexOf('\n.missions-panel[data-skin="paper"] .missions-action--pinned {')
+  assert.ok(bouton >= 0 && pin > bouton, 'la règle du pin se pose après celle du bouton')
+
+  const specificite = (selector) => (selector.match(/\.[\w-]+|\[[^\]]+\]|:[\w-]+/g) ?? []).length
+  const corps = '.missions-panel[data-skin="paper"] .missions-action--pinned'
+
+  // Then le cadre du pin prend l'encre, le fond de la peau et son ombre.
+  const reglePeau = regleDePeau(corps)
+  assert.match(reglePeau, /border: 1\.5px solid var\(--skin-ink\)/)
+  assert.match(reglePeau, /background: var\(--skin-ink\)/)
+  assert.match(reglePeau, /color: var\(--skin-page\)/)
+  assert.match(reglePeau, /box-shadow: 2px 2px 0 var\(--skin-shadow\)/)
+
+  // Then son survol garde le fond d'encre, et sa spécificité passe devant le bouton.
+  assert.match(regleDePeau(`${corps}:hover`), /background: var\(--skin-ink\)/)
+  assert.ok(specificite(corps) >= 3, 'le pin pèse au moins (0, 3, 0)')
+  assert.ok(specificite(`${corps}:hover`) >= 4, 'le survol pèse au moins (0, 4, 0)')
+})
+
+test('le pin épinglé garde son contraste dans les deux peaux', () => {
+  // Given la paire d'encre du bouton épinglé dans le thème Default. Le thème
+  // Default sombre est fourni par l'hôte : la règle ne pose que la paire
+  // sémantique inversée, donc les deux modes suivent ses jetons.
+  const cadre = regle('.missions-action--pinned')
+  const fond = /background: var\([^,]+, (#[0-9a-f]{6})\)/.exec(cadre)[1]
+  const encre = /color: var\([^,]+, (#[0-9a-f]{6})\)/.exec(cadre)[1]
+
+  // Then la règle s'appuie sur la paire inversée de l'hôte, pas sur une couleur fixe.
+  assert.match(cadre, /background: var\(--dsw-alias-label-primary,/)
+  assert.match(cadre, /color: var\(--dsw-alias-label-primary-foreground,/)
+
+  // Then les replis du thème Default restent lisibles ensemble.
+  const defaut = contraste(encre, fond)
+  assert.ok(defaut >= 4.5, `Default : ${defaut.toFixed(2)}:1`)
+
+  // Then la peau s'inverse proprement : encre sur page, clair comme sombre.
+  const claire = paletteDe(MANGA_CLAIR)
+  const sombre = new Map([...claire, ...paletteDe(MANGA_SOMBRE)])
+  for (const [nom, tokens] of [['Naruto clair', claire], ['Naruto sombre', sombre]]) {
+    const ratio = contraste(tokens.get('ink'), tokens.get('page'))
+    assert.ok(ratio >= 4.5, `${nom} : ${ratio.toFixed(2)}:1`)
+  }
+})
+
+test('le tampon du pin joue une fois et le va-et-vient reste au dessin', () => {
+  // Given les deux animations et leurs règles.
+  const tampon = regle('.missions-pin-icon--stamped')
+  const va = regle('.missions-action--pinned .missions-icon-pin')
+
+  // Then le tampon dure 240 ms et ne boucle pas.
+  assert.match(tampon, /animation: missions-pin-stamp 240ms/)
+  assert.doesNotMatch(tampon, /infinite/)
+
+  // Then le dessin épinglé respire toutes les 6 s, sans fin.
+  assert.match(va, /animation: missions-pin-sway 6s ease-in-out infinite/)
+
+  // Then les deux transforms vivent sur deux nœuds : l'enveloppe et le svg.
+  assert.doesNotMatch(va, /missions-pin-stamp/)
+
+  // Then le tampon enfle puis revient à l'échelle.
+  const stamp = keyframes('missions-pin-stamp')
+  assert.match(stamp, /0% \{ transform: scale\(\.88\); \}/)
+  assert.match(stamp, /60% \{ transform: scale\(1\.06\); \}/)
+  assert.match(stamp, /100% \{ transform: scale\(1\); \}/)
+
+  // Then le va-et-vient va de -2° à +2°, avec la course de -0,6 px.
+  const sway = keyframes('missions-pin-sway')
+  assert.match(sway, /0%, 100% \{ transform: rotate\(-2deg\) translateY\(0\); \}/)
+  assert.match(sway, /50% \{ transform: rotate\(2deg\) translateY\(-\.6px\); \}/)
+
+  // Then le mouvement réduit coupe les deux, sans retirer le dessin.
+  assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{ \.missions-pin-icon--stamped \{ animation: none; \} \}/)
+  assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{ \.missions-action--pinned \.missions-icon-pin \{ animation: none; \} \}/)
+})
+
+test('le dessin du pin rejoue son tampon à chaque bascule, jamais à l’ouverture', async () => {
+  const enveloppe = (tree) => findAll(tree, 'span').find((node) => String(node.props.className ?? '').includes('missions-pin-icon'))
+  const bouton = (tree, nom) => findAll(tree, 'button').find((node) => node.props['aria-label'] === nom)
+  const fetchAvant = globalThis.fetch
+  const repondre = (pinned) => {
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ key: 'MIS-42', pinned }) })
+  }
+  const missionEpinglee = { ...MISSION, pinned: true, updatedAt: MISSION.updated }
+
+  // Given le volet d'une mission au repos, ouvert pour la première fois. Le
+  // panneau ne rejoue pas la mise à jour ici : c'est le dessin qu'on juge.
+  const premier = monterVolet(undefined, { onPinSaved: () => {} })
+  const avant = enveloppe(premier.tree)
+  assert.ok(avant, 'le dessin est enveloppé : c’est l’enveloppe qui porte le tampon')
+  assert.equal(avant.props.className, 'missions-pin-icon')
+  assert.equal(avant.props.key, 'pin-down-0', 'le dessin au repos a sa clé')
+
+  // Then une mission déjà épinglée s'ouvre sans tampon.
+  const deja = enveloppe(monterVolet({ ...MISSION, pinned: true, updatedAt: MISSION.updated }).tree)
+  assert.equal(deja.props.className, 'missions-pin-icon', 'ouvrir le volet ne joue pas le geste')
+  assert.equal(deja.props.key, 'pin-up-0')
+
+  // When la première écriture réussit.
+  repondre(true)
+  await bouton(premier.tree, 'Pin').props.onClick()
+  const epingle = enveloppe(premier.rerendre())
+
+  // Then le dessin est remonté sous une autre clé et tamponné.
+  assert.equal(epingle.props.key, 'pin-up-1')
+  assert.equal(epingle.props.className, 'missions-pin-icon missions-pin-icon--stamped')
+
+  // When la liste rafraîchie renvoie la mission épinglée, l'effet du volet
+  // efface la note de succès : le dessin ne doit pas être remonté pour autant,
+  // sinon l'animation serait coupée après une frame.
+  const liste = premier.rerendre(missionEpinglee)
+  const recalage = premier.effects.filter((entry) => /setPinNote\(null\)/.test(String(entry.fn))).at(-1)
+  assert.ok(recalage, 'l’effet qui recale l’épinglage sur la liste existe')
+  recalage.fn()
+  const recale = premier.rerendre(missionEpinglee)
+  assert.equal(enveloppe(recale).props.key, enveloppe(liste).props.key, 'la note effacée ne remonte pas le dessin')
+  assert.equal(enveloppe(recale).props.className, 'missions-pin-icon missions-pin-icon--stamped')
+
+  // When la seconde écriture réussit, le tampon rejoue dans l'autre sens.
+  repondre(false)
+  await bouton(recale, 'Unpin').props.onClick()
+  const repose = enveloppe(premier.rerendre())
+  assert.equal(repose.props.key, 'pin-down-2')
+  assert.equal(repose.props.className, 'missions-pin-icon missions-pin-icon--stamped')
+
+  // Then un refus ne remonte pas le dessin : la punaise n'a pas bougé.
+  globalThis.fetch = async () => ({ ok: false, status: 502, json: async () => ({ error: 'pins.yml is broken' }) })
+  const refus = premier.rerendre()
+  const avantRefus = enveloppe(refus)
+  await bouton(refus, 'Pin').props.onClick()
+  assert.equal(enveloppe(premier.rerendre()).props.key, avantRefus.props.key)
+  globalThis.fetch = fetchAvant
 })
 
 /* Repositories: l'onglet, ses lignes, son volet. */
