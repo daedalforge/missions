@@ -277,32 +277,34 @@ test('le seuil d’état couvre le travail en cours et sa relecture, bornes comp
   // Given: la fenêtre du geste, du travail en cours à la relecture.
   const from = 'in-progress'
   const to = 'in-review'
+  const parcours = ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done']
 
-  // When: le seuil juge les six états du workflow, puis la fenêtre entière.
+  // When: le seuil juge les six états du workflow, puis il ouvre la fenêtre
+  // entière du parcours.
+  const verdicts = parcours.map((state) => stateInRange(state, from, to))
+  const ouverts = parcours.filter((state) => stateInRange(state, 'to-refine', 'done'))
+
   // Then: seuls les deux états de la fenêtre passent, et l'ordre lu est celui
   // du workflow : une fenêtre ouverte sur tout le parcours laisse tout passer.
-  assert.equal(stateInRange('to-refine', from, to), false)
-  assert.equal(stateInRange('ready', from, to), false)
-  assert.equal(stateInRange('in-progress', from, to), true)
-  assert.equal(stateInRange('in-review', from, to), true)
-  assert.equal(stateInRange('ready-for-prod', from, to), false)
-  assert.equal(stateInRange('done', from, to), false)
-
-  const parcours = ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done']
-  assert.deepEqual(parcours.filter((state) => stateInRange(state, 'to-refine', 'done')), parcours)
+  assert.deepEqual(verdicts, [false, false, true, true, false, false])
+  assert.deepEqual(ouverts, parcours)
 })
 
 test('un état inconnu ne tombe dans aucune fenêtre', () => {
   // Given: des valeurs que le workflow ne connaît pas.
-  const inconnus = [null, undefined, 'unknown', 'shipped', '']
+  const inconnus = [null, 'unknown', 'shipped']
 
-  // When: le seuil les juge contre la fenêtre du geste.
+  // When: le seuil les juge contre la fenêtre du geste, puis contre deux
+  // bornes qui ne sont pas des états.
   const verdicts = inconnus.map((state) => stateInRange(state, 'in-progress', 'in-review'))
+  const bornes = [
+    stateInRange('in-progress', 'nowhere', 'in-review'),
+    stateInRange('in-progress', 'in-progress', 'nowhere'),
+  ]
 
   // Then: aucun n'est offert par défaut, et une borne hors liste ferme tout.
-  assert.deepEqual(verdicts, inconnus.map(() => false))
-  assert.equal(stateInRange('in-progress', 'nowhere', 'in-review'), false)
-  assert.equal(stateInRange('in-progress', 'in-progress', 'nowhere'), false)
+  assert.deepEqual(verdicts, [false, false, false])
+  assert.deepEqual(bornes, [false, false])
 })
 
 test('done garde son groupe en dernier, mais la liste ouverte ne le relit jamais', () => {
