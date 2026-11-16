@@ -4123,8 +4123,10 @@ test('le cadre du pin se double d’encre dans le thème Default', () => {
   const filet = regle('.missions-action--pinned::before')
 
   // Then le cadre extérieur prend l'encre du texte, sur le fond du panneau :
-  // aucun aplat, c'est le dessin qui porte l'état.
-  assert.match(cadre, /border-color: var\(--dsw-alias-label-primary, #1f1f1f\)/)
+  // aucun aplat, c'est le dessin qui porte l'état. La V1 dessine un cadre de
+  // 1,5 px (le repos reste à 1 px), posé explicitement et non par recoloration.
+  assert.match(cadre, /border: 1\.5px solid var\(--dsw-alias-label-primary, #1f1f1f\)/)
+  assert.doesNotMatch(cadre, /border-color:/)
   assert.match(cadre, /background: transparent/)
   assert.match(cadre, /color: var\(--dsw-alias-label-primary, #1f1f1f\)/)
   assert.match(cadre, /box-shadow: none/)
@@ -4189,6 +4191,11 @@ test('le pin épinglé garde son contraste dans les deux peaux', () => {
   const defaut = contraste(encre, '#ffffff')
   assert.ok(defaut >= 4.5, `Default : ${defaut.toFixed(2)}:1`)
 
+  // Then le mode sombre de l'hôte tient le même seuil : la règle suit le jeton
+  // `--dsw-alias-label-primary`, qui vaut #f9fafb sur le fond sombre #151517.
+  const defaultSombre = contraste('#f9fafb', '#151517')
+  assert.ok(defaultSombre >= 4.5, `Default sombre : ${defaultSombre.toFixed(2)}:1`)
+
   // Then la peau tient l'encre sur son papier, clair comme sombre.
   const claire = paletteDe(MANGA_CLAIR)
   const sombre = new Map([...claire, ...paletteDe(MANGA_SOMBRE)])
@@ -4236,16 +4243,28 @@ test('le tampon du pin joue une fois et le va-et-vient reste au dessin', () => {
   assert.match(sway, /0%, 100% \{ transform: rotate\(-4deg\); \}/)
   assert.match(sway, /50% \{ transform: rotate\(4deg\); \}/)
 
-  // Then une pulsation discrète passe en fin de cycle, à 32 % d'opacité.
+  // Then une pulsation discrète passe en fin de cycle, à 32 % d'opacité ; sa
+  // opacité de base est nulle, sinon la couper laisse un anneau statique.
   assert.match(pulsation, /animation: missions-pin-ping 3\.6s ease-out infinite/)
+  assert.match(pulsation, /border-radius: 9px; opacity: 0; pointer-events: none;/)
   const ping = keyframes('missions-pin-ping')
   assert.match(ping, /0%, 66% \{ opacity: 0; transform: scale\(\.96\); \}/)
   assert.match(ping, /70% \{ opacity: \.32; \}/)
   assert.match(ping, /100% \{ opacity: 0; transform: scale\(1\.34\); \}/)
 
-  // Then le mouvement réduit coupe les cinq animations, sans retirer le dessin.
+  // Then la chute et le va-et-vient se composent sur le svg épinglé+stampé :
+  // la chute passe d'abord, le va-et-vient prend le relais à 340 ms. Sans
+  // cette règle, le va-et-vient (déclaré plus loin) annulerait la chute.
+  const composition = regle('.missions-action--pinned .missions-pin-icon--stamped .missions-icon-pin')
+  assert.match(composition, /missions-pin-drop 340ms/)
+  assert.match(composition, /missions-pin-sway 3\.6s ease-in-out 340ms infinite/)
+  const specificite = (selector) => (selector.match(/\.[\w-]+|\[[^\]]+\]|:[\w-]+/g) ?? []).length
+  assert.ok(specificite('.missions-action--pinned .missions-pin-icon--stamped .missions-icon-pin') > specificite('.missions-action--pinned .missions-icon-pin'))
+
+  // Then le mouvement réduit coupe les cinq animations, sans retirer le dessin
+  // ni laisser un anneau statique (l'opacité de base de la pulsation est nulle).
   assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{\n  \.missions-pin-icon--stamped \{ animation: none; \}\n  \.missions-pin-icon--stamped \.missions-icon-pin \{ animation: none; \}\n  \.missions-pin-icon--stamped::before \{ animation: none; \}\n\}/)
-  assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{\n  \.missions-action--pinned \.missions-icon-pin \{ animation: none; \}\n  \.missions-action--pinned \.missions-pin-icon::after \{ animation: none; \}\n\}/)
+  assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{\n  \.missions-action--pinned \.missions-icon-pin \{ animation: none; \}\n  \.missions-action--pinned \.missions-pin-icon--stamped \.missions-icon-pin \{ animation: none; \}\n  \.missions-action--pinned \.missions-pin-icon::after \{ animation: none; \}\n\}/)
 })
 
 test('le dessin du pin rejoue son tampon à chaque bascule, jamais à l’ouverture', async () => {

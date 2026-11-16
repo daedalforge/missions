@@ -500,14 +500,19 @@ window.__ModuleLoader__.load({
   0%, 100% { transform: rotate(-4deg); }
   50% { transform: rotate(4deg); }
 }
-.missions-action--pinned .missions-pin-icon::after { content: ""; position: absolute; inset: -9.5px; border: 1.5px solid currentColor; border-radius: 9px; pointer-events: none; animation: missions-pin-ping 3.6s ease-out infinite; }
+.missions-action--pinned .missions-pin-icon::after { content: ""; position: absolute; inset: -9.5px; border: 1.5px solid currentColor; border-radius: 9px; opacity: 0; pointer-events: none; animation: missions-pin-ping 3.6s ease-out infinite; }
 @keyframes missions-pin-ping {
   0%, 66% { opacity: 0; transform: scale(.96); }
   70% { opacity: .32; }
   100% { opacity: 0; transform: scale(1.34); }
 }
+/* Stamped and pinned at once: the fall finishes, then the sway takes over.
+   Without this rule the sway (declared later, same specificity) would cancel
+   the fall on the pinning gesture — the two would never compose. */
+.missions-action--pinned .missions-pin-icon--stamped .missions-icon-pin { animation: missions-pin-drop 340ms cubic-bezier(.2,.72,.3,1) both, missions-pin-sway 3.6s ease-in-out 340ms infinite; }
 @media (prefers-reduced-motion: reduce) {
   .missions-action--pinned .missions-icon-pin { animation: none; }
+  .missions-action--pinned .missions-pin-icon--stamped .missions-icon-pin { animation: none; }
   .missions-action--pinned .missions-pin-icon::after { animation: none; }
 }
 .missions-search { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #ffffff); color: var(--dsw-alias-label-tertiary, #7a7168); }
@@ -829,7 +834,7 @@ window.__ModuleLoader__.load({
 /* Planted, the pin is drawn in the button's own ink: an outer frame and an
    inner filet on the panel's ground, no fill. The drawing names the state;
    the ink names the action, so a host theme without our skin keeps it legible. */
-.missions-action--pinned { position: relative; border-color: var(--dsw-alias-label-primary, #1f1f1f); background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); box-shadow: none; }
+.missions-action--pinned { position: relative; border: 1.5px solid var(--dsw-alias-label-primary, #1f1f1f); background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); box-shadow: none; }
 .missions-action--pinned:hover { background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-action--pinned::before { content: ""; position: absolute; inset: 4px; border: 1.5px solid currentColor; border-radius: 4px; opacity: .9; pointer-events: none; }
 /* Waiting, the pin keeps no frame: the double filet is the planted state's
