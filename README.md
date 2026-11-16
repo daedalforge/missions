@@ -250,9 +250,9 @@ autre mission, pas vous, qu'elle le soit par le label `blocked` ou par un lien
 `Blocks` entrant vers une mission qui n'a pas atteint la revue. Leur état vide
 le dit (« No unblocked bug before its release. », « Nothing unblocked is
 waiting on you. »). Le lien *View all N* de chaque carte transporte les états
-qu'elle montre — jamais `ready-for-prod` — donc N est exactement le nombre de
-lignes que ce lien ouvre, parmi les non bloquées ; la liste ouverte, elle,
-garde les missions bloquées à leur étage. La ligne de section continue de
+qu'elle montre — jamais `ready-for-prod` — et N compte ses seules lignes non
+bloquées ; la liste ouverte, elle, garde les missions bloquées de ces états, à
+leur étage. La ligne de section continue de
 compter toutes les missions ouvertes, prêtes à partir et bloquées incluses.
 
 Un projet peut déclarer ses **traductions** dans sa copie locale de
