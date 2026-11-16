@@ -1472,7 +1472,7 @@ test('POST points refuse une taille absente ou hors échelle avant tout appel', 
   assert.equal(missing.status, 400)
   assert.match(missing.body.error, /points is missing/)
 
-  for (const points of [0, 4, 13.5, -2, 'cinq', '']) {
+  for (const points of [0, 1.5, 0.25, 4, 13.5, -2, 'cinq', '']) {
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/points',
