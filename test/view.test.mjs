@@ -5,10 +5,7 @@ import {
   actionVerb,
   endPoints,
   layoutWorkflow,
-  leftBehind,
   modelOf,
-  recentlyClosed,
-  RECENT_CLOSED_ROWS,
   repositoryScope,
   PLAYBOOK_PAGE_KEY,
   readPlaybookPage,
@@ -30,7 +27,6 @@ import {
   branchFieldValue,
   checkoutsToFix,
   COLD_CHECKOUT_DAYS,
-  doneScope,
   EMPTY_FILTERS,
   epicOptions,
   epicParts,
@@ -2688,50 +2684,7 @@ test('les dépôts à réparer portent une raison, la plus grave, et jamais deux
   assert.deepEqual(checkoutsToFix([]), [])
 })
 
-test('les closes récentes se trient sur la dernière mise à jour, et gardent leurs points', () => {
-  const missions = [
-    { key: 'M-1', state: 'done', updatedAt: '2026-11-01T00:00:00Z', points: 2 },
-    { key: 'M-2', state: 'done', updatedAt: '2026-11-04T00:00:00Z', points: 5 },
-    { key: 'M-3', state: 'done', updatedAt: '2026-11-02T00:00:00Z', points: null },
-    { key: 'M-4', state: 'done', updatedAt: '2026-11-03T00:00:00Z', points: 1 },
-    // Une ouverte reste une ouverte, même très récemment mise à jour.
-    { key: 'M-5', state: 'in-review', updatedAt: '2026-11-05T00:00:00Z', points: 8 },
-  ]
-
-  // Trois lignes, les plus récentes ; le modèle n'a pas de date de clôture,
-  // c'est la dernière mise à jour du tracker qui ordonne.
-  const rows = recentlyClosed(missions)
-  assert.deepEqual(rows.map((mission) => mission.key), ['M-2', 'M-4', 'M-3'])
-  assert.equal(rows[0].points, 5)
-  assert.equal(RECENT_CLOSED_ROWS, 3)
-
-  // La limite est un paramètre : le pied de carte la compare au total.
-  assert.deepEqual(recentlyClosed(missions, { limit: 2 }).map((mission) => mission.key), ['M-2', 'M-4'])
-  assert.deepEqual(recentlyClosed([]), [])
-})
-
-test('les closes laissées derrière sont celles dont la branche vit dans un worktree', () => {
-  const missions = [
-    { key: 'M-1', state: 'done', branch: 'feat/mis-100', updatedAt: '2026-11-02T00:00:00Z' },
-    { key: 'M-2', state: 'done', branch: 'feat/mis-101', updatedAt: '2026-11-03T00:00:00Z' },
-    { key: 'M-3', state: 'done', branch: null, updatedAt: '2026-11-04T00:00:00Z' },
-    { key: 'M-4', state: 'in-review', branch: 'feat/mis-102', updatedAt: '2026-11-05T00:00:00Z' },
-  ]
-  const repositories = [
-    { name: 'missions-mis-100', kind: 'worktree', branch: 'feat/mis-100', error: null, behind: 0, dirty: 0 },
-    // Un clone n'est pas un reste : sa branche est son affaire.
-    { name: 'missions', kind: 'clone', branch: 'feat/mis-101', error: null, behind: 0, dirty: 0 },
-    { name: 'missions-mis-102', kind: 'worktree', branch: 'feat/mis-102', error: null, behind: 0, dirty: 0 },
-  ]
-
-  const rows = leftBehind(missions, repositories)
-  assert.deepEqual(rows.map((row) => row.mission.key), ['M-1'])
-  assert.equal(rows[0].repository.name, 'missions-mis-100')
-  assert.equal(rows[0].label, 'closed')
-  assert.deepEqual(leftBehind(missions, []), [])
-})
-
-test('les périmètres des deux sections comptent ce que les cartes montrent', () => {
+test('les périmètres de la section Repositories comptent ce que les cartes montrent', () => {
   const summary = {
     count: 3,
     repositories: [
@@ -2745,21 +2698,6 @@ test('les périmètres des deux sections comptent ce que les cartes montrent', (
   assert.equal(repositoryScope({ repositories: [summary.repositories[0]] }).label, '1 repository · 0 to fix')
   // Un scan absent ne prétend rien : zéro ligne, zéro à réparer.
   assert.equal(repositoryScope().label, '0 repositories · 0 to fix')
-
-  const closed = [
-    { key: 'M-1', state: 'done', points: 3 },
-    { key: 'M-2', state: 'done', points: 2 },
-    { key: 'M-3', state: 'in-review', points: 8 },
-  ]
-  assert.deepEqual(doneScope(closed), { count: 2, points: 5, label: '2 closed · 5 pts' })
-  assert.equal(doneScope([{ key: 'M-1', state: 'done', points: 1 }]).label, '1 closed · 1 pt')
-  // La demi-pointe se somme et reste au singulier tant qu'elle est seule.
-  assert.equal(doneScope([{ key: 'M-1', state: 'done', points: 0.5 }]).label, '1 closed · 0.5 pt')
-  assert.equal(
-    doneScope([{ key: 'M-1', state: 'done', points: 0.5 }, { key: 'M-2', state: 'done', points: 2 }]).label,
-    '2 closed · 2.5 pts',
-  )
-  assert.equal(doneScope().label, '0 closed · 0 pt')
 })
 
 test('un clone froid se compte en jours, pas en heures', () => {
