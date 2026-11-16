@@ -83,7 +83,7 @@ identité :
 - `$DSH_HOME/playbook/` — les pages de méthode propres à une équipe ou à une
   entreprise. Le panneau les lit sur le poste ; elles ne partent pas avec le
   clone.
-- `config/` — les dotfiles Emacs et Ghostty, `config/links-home.yml` et
+- `config/` — les dotfiles Emacs, Ghostty et git, `config/links-home.yml` et
   l'empreinte GPG utilisée pour chiffrer les fichiers `.gpg`. Rien de tout cela
   n'est nécessaire au plugin.
 
@@ -98,6 +98,20 @@ poste d'origine (ou depuis un dépôt privé de dotfiles), puis :
    `config/tools/emacs/init-crypto.el`, remplacer l'empreinte par la sienne :
    `epa-file-encrypt-to` ne contient qu'une clé **publique**, jamais la clé
    privée, qui reste dans `~/.gnupg`.
+
+La configuration git du poste suit le même chemin : `config/tools/git/config`
+reprend la configuration globale actuelle et y ajoute `pull.rebase = true`, pour
+que `git pull` rejoue les commits locaux sans qu'il faille passer `--rebase`.
+Un lien le pose à la place de `~/.config/git/config` ; il porte donc aussi
+`gpg.format = ssh`, `commit.gpgsign = true` et `machete.traverse.push = false`,
+puisque le fichier du dépôt remplace le global. L'identité du poste reste hors
+du dépôt, dans `~/.config/git/local`, que le fichier inclut ;
+`~/.config/git/attributes` et `~/.config/git/ignore` restent eux aussi hors du
+lien. Si le clone disparaît ou change de branche, le lien casse et la
+configuration globale perd gpg, la signature et gitmachete — l'identité survit,
+elle est dans `local` ; il faut alors reposer le lien depuis
+`config/tools/git/config`. Le réglage ne vaut que pour ce poste : `--no-rebase`
+reste possible au cas par cas, et un dépôt sans divergence n'est pas rebasé.
 
 `node tools/link-config.mjs` lit `config/links-home.yml` par défaut ; l'option
 `--manifest <fichier>` permet d'en éprouver un autre.
