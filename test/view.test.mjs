@@ -1270,10 +1270,12 @@ test('un bug ou une story prêt pour la production ne prend plus la tête des wi
     { key: 'bug-unknown', type: 'bug', state: null, updatedAt: '2026-11-02T00:00:00Z' },
     { key: 'bug-done', type: 'bug', state: 'done', updatedAt: '2026-09-01T00:00:00Z' },
     { key: 'story-prod', type: 'story', priority: 'urgent', state: 'ready-for-prod', updatedAt: '2026-06-01T00:00:00Z' },
+    { key: 'story-prod-high', type: 'story', priority: 'high', state: 'ready-for-prod', updatedAt: '2026-06-05T00:00:00Z' },
     { key: 'story-high', type: 'story', priority: 'high', state: 'ready', updatedAt: '2026-11-03T00:00:00Z' },
     { key: 'story-urgent', type: 'story', priority: 'urgent', state: 'in-progress', updatedAt: '2026-11-05T00:00:00Z' },
     { key: 'task-high', type: 'story', priority: 'high', state: null, updatedAt: '2026-11-04T00:00:00Z' },
     { key: 'story-review', type: 'story', priority: 'urgent', state: 'in-review', updatedAt: '2026-11-06T00:00:00Z' },
+    { key: 'story-refine', type: 'story', priority: 'high', state: 'to-refine', updatedAt: '2026-11-07T00:00:00Z' },
     { key: 'story-normal', type: 'story', priority: 'normal', state: 'ready', updatedAt: '2026-10-01T00:00:00Z' },
     { key: 'story-done', type: 'story', priority: 'urgent', state: 'done', updatedAt: '2026-08-01T00:00:00Z' },
   ]
@@ -1285,7 +1287,7 @@ test('un bug ou une story prêt pour la production ne prend plus la tête des wi
   // Then le prêt à partir et le clos restent dehors, tous les autres états
   // ouverts restent rendus, les plus anciens d'abord.
   assert.deepEqual(bugs, ['bug-old', 'bug-progress', 'bug-review', 'bug-new', 'bug-unknown'])
-  assert.deepEqual(stories, ['story-high', 'task-high', 'story-urgent', 'story-review'])
+  assert.deepEqual(stories, ['story-high', 'task-high', 'story-urgent', 'story-review', 'story-refine'])
   assert.deepEqual(assignedBugs([]), [])
   assert.deepEqual(highPriorityStories([]), [])
 })
