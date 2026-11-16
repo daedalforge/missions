@@ -11217,3 +11217,108 @@ test('la couche a sa règle dans les deux thèmes, sans couleur en dur', () => {
   // Les transitions se coupent pour qui les refuse.
   assert.match(SOURCE, /@media \(prefers-reduced-motion: reduce\) \{\s*\.missions-tip \{ transition: none; \}/)
 })
+
+test('la peau papier dessine la pastille du switch en shuriken à quatre lames', () => {
+  // Given les règles papier de la pastille et de son trou
+  const pastille = regleDePeau('.missions-panel[data-skin="paper"] .missions-switch-thumb')
+  const trou = regleDePeau('.missions-panel[data-skin="paper"] .missions-switch-thumb::after')
+
+  // When la forme et le trou se lisent
+  // Then la pastille est l'étoile à quatre lames de la maquette, à l'encre
+  assert.match(pastille, /clip-path: polygon\(50% 0%, 72\.6% 27\.4%, 100% 50%, 72\.6% 72\.6%, 50% 100%, 27\.4% 72\.6%, 0% 50%, 27\.4% 27\.4%\)/)
+  assert.match(pastille, /background: var\(--skin-ink\)/)
+  // Le rond de 12 px et son ombre ont quitté la pastille : la forme porte le sens
+  assert.match(pastille, /border-radius: 0/)
+  assert.match(pastille, /box-shadow: none/)
+  // Le trou central est un rond de 4 px, peint par un pseudo-élément centré
+  assert.match(trou, /width: 4px/)
+  assert.match(trou, /height: 4px/)
+  assert.match(trou, /border-radius: 50%/)
+  assert.match(trou, /inset: 0/)
+  assert.match(trou, /margin: auto/)
+})
+
+test('le switch papier ne peint qu’avec les tokens du thème', () => {
+  // Given chaque règle papier qui touche le switch
+  const selecteurs = [
+    '.missions-panel[data-skin="paper"] .missions-switch',
+    '.missions-panel[data-skin="paper"] .missions-switch-track',
+    '.missions-panel[data-skin="paper"] .missions-switch-thumb',
+    '.missions-panel[data-skin="paper"] .missions-switch-thumb::after',
+    '.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-track',
+    '.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-thumb',
+    '.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-thumb::after',
+    '.missions-panel[data-skin="paper"] .missions-blocked .missions-switch[aria-checked="true"] .missions-switch-track',
+    '.missions-panel[data-skin="paper"] .missions-blocked .missions-switch[aria-checked="true"] .missions-switch-thumb::after',
+  ]
+
+  // When les corps de ces règles sont lus
+  const corps = selecteurs.map((selecteur) => regleDePeau(selecteur))
+
+  // Then aucune ne porte de couleur en dur : ni hexadécimal, ni fonction
+  for (const [index, texte] of corps.entries()) {
+    assert.doesNotMatch(texte, /#[0-9a-fA-F]{3,8}\b/, `couleur en dur dans ${selecteurs[index]}`)
+    assert.doesNotMatch(texte, /\b(?:rgb|rgba|hsl|hsla)\(/, `couleur en dur dans ${selecteurs[index]}`)
+  }
+  // et chaque teinte posée vient d'un token --skin- du thème
+  for (const [index, texte] of corps.entries()) {
+    for (const [, valeur] of texte.matchAll(/(?:background|border|border-color|color):\s*([^;]+);/g)) {
+      assert.match(valeur, /var\(--skin-/, `teinte hors tokens dans ${selecteurs[index]}`)
+    }
+  }
+})
+
+test('seul le volet Bloqué garde le rouge du danger sur le switch', () => {
+  // Given la règle de l'état actif ordinaire et celle du volet bloqué
+  const actif = regleDePeau('.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-track')
+  const bloque = regleDePeau('.missions-panel[data-skin="paper"] .missions-blocked .missions-switch[aria-checked="true"] .missions-switch-track')
+  const trou = regleDePeau('.missions-panel[data-skin="paper"] .missions-blocked .missions-switch[aria-checked="true"] .missions-switch-thumb::after')
+  const pastille = regleDePeau('.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-thumb')
+
+  // When leurs déclarations se lisent
+  // Then l'activation ordinaire prend l'accent orange et le bord encre
+  assert.match(actif, /background: var\(--skin-accent\)/)
+  assert.match(actif, /border-color: var\(--skin-ink\)/)
+  // et le volet bloqué garde le rouge, trou de la pastille compris
+  assert.match(bloque, /background: var\(--skin-danger\)/)
+  assert.match(bloque, /border-color: var\(--skin-danger-strong\)/)
+  assert.match(trou, /background: var\(--skin-danger\)/)
+  // La pastille active reste à l'encre d'accent : elle contraste sur les deux
+  // pistes actives, orange comme rouge, dans les deux thèmes.
+  assert.match(pastille, /background: var\(--skin-accent-ink\)/)
+})
+
+test('le switch garde son markup : un bouton nommé, une piste et une pastille', () => {
+  // Given le composant Switch de la base
+  const debut = SOURCE.indexOf('function Switch({ label, checked, onChange, disabled = false })')
+  assert.ok(debut >= 0, 'le composant Switch est celui de la base')
+  const corps = SOURCE.slice(debut, SOURCE.indexOf('function ', debut + 1))
+
+  // When son corps se lit
+  // Then il reste un button[role=switch] avec son état, sa piste et sa pastille
+  assert.match(corps, /role: 'switch'/)
+  assert.match(corps, /'aria-checked': checked \? 'true' : 'false'/)
+  assert.match(corps, /className: 'missions-switch'/)
+  assert.match(corps, /className: 'missions-switch-track'/)
+  assert.match(corps, /className: 'missions-switch-thumb'/)
+  assert.match(corps, /className: 'missions-switch-label'/)
+  // et le dessin n'a ajouté aucun attribut au markup : pas de forme portée en dur
+  assert.doesNotMatch(corps, /clip-path|shuriken|data-form/)
+})
+
+test('le mouvement réduit coupe la transition du switch papier', () => {
+  // Given la media query du panneau
+  const at = SOURCE.indexOf('@media (prefers-reduced-motion: reduce) { .missions-switch-track, .missions-switch-thumb { transition: none; } }')
+
+  // When la règle se cherche dans la source
+  // Then elle coupe la piste et la pastille, celles que la peau papier anime
+  assert.ok(at >= 0, 'la media query couvre la piste et la pastille')
+
+  // et le bloc papier ne rallume aucune transition que cette media query ne
+  // couperait pas.
+  const papier = SOURCE.slice(
+    SOURCE.indexOf('.missions-panel[data-skin="paper"] .missions-switch {'),
+    SOURCE.indexOf('.missions-panel[data-skin="paper"] .missions-clear {'),
+  )
+  assert.doesNotMatch(papier, /transition/)
+})
