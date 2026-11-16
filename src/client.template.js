@@ -1279,9 +1279,27 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-icon-btn {
 .missions-panel[data-skin="paper"] .missions-select[data-active="true"] { border-color: var(--skin-accent-strong); background: color-mix(in srgb, var(--skin-warn) 52%, var(--skin-page-2)); }
 .missions-panel[data-skin="paper"] .missions-switch { color: var(--skin-ink-2); font-size: 10.5px; }
 .missions-panel[data-skin="paper"] .missions-switch-track { border: 1.5px solid var(--skin-ink); background: var(--skin-page-2); box-shadow: 1px 1px 0 var(--skin-shadow); }
-.missions-panel[data-skin="paper"] .missions-switch-thumb { background: var(--skin-ink); }
-.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-track { background: var(--skin-danger); border-color: var(--skin-danger-strong); }
-.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-thumb { background: var(--skin-page); }
+.missions-panel[data-skin="paper"] .missions-switch-thumb {
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--skin-ink);
+  clip-path: polygon(50% 0%, 72.6% 27.4%, 100% 50%, 72.6% 72.6%, 50% 100%, 27.4% 72.6%, 0% 50%, 27.4% 27.4%);
+}
+.missions-panel[data-skin="paper"] .missions-switch-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 4px;
+  height: 4px;
+  margin: auto;
+  border-radius: 50%;
+  background: var(--skin-page-2);
+}
+.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-track { background: var(--skin-accent); border-color: var(--skin-ink); }
+.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-thumb { background: var(--skin-accent-ink); }
+.missions-panel[data-skin="paper"] .missions-switch[aria-checked="true"] .missions-switch-thumb::after { background: var(--skin-accent); }
+.missions-panel[data-skin="paper"] .missions-blocked .missions-switch[aria-checked="true"] .missions-switch-track { background: var(--skin-danger); border-color: var(--skin-danger-strong); }
+.missions-panel[data-skin="paper"] .missions-blocked .missions-switch[aria-checked="true"] .missions-switch-thumb::after { background: var(--skin-danger); }
 .missions-panel[data-skin="paper"] .missions-clear { height: 29px; padding: 0 9px; border: 1.5px dashed var(--skin-line-strong); border-radius: 7px; color: var(--skin-ink-3); text-decoration: none; font-size: 10px; }
 .missions-panel[data-skin="paper"] .missions-clear:hover { border-color: var(--skin-ink); color: var(--skin-ink); }
 
