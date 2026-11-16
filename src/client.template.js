@@ -1764,34 +1764,34 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         : h('div', { className: 'missions-sectgrid' },
               h(DashboardCard, {
                 title: 'Bugs',
-                sub: 'Unresolved, assigned to you. Oldest first.',
+                sub: 'Unresolved, not ready to ship. Oldest first.',
                 meta: bugs.length,
                 className: 'missions-dash-card--bugs',
                 footer: widgetFoot({
                   note: bugsHidden > 0 ? `${bugsHidden} more ${bugsHidden === 1 ? 'bug' : 'bugs'}` : null,
                   total: bugs.length,
-                  onViewAll: () => onViewAll({ type: 'bug' }),
+                  onViewAll: () => onViewAll({ type: 'bug', state: stateOptions(bugs) }),
                 }),
               },
                 bugs.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'No unresolved bug assigned to you.')
+                  ? h('p', { className: 'missions-card-empty' }, 'No unresolved bug before its release.')
                   : h('ul', { className: 'missions-rows' },
                       bugsShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
               ),
               h(DashboardCard, {
                 title: 'High-priority stories',
-                sub: 'Urgent or high, oldest first.',
+                sub: 'Urgent or high, not ready to ship. Oldest first.',
                 meta: stories.length,
                 className: 'missions-dash-card--stories',
                 footer: widgetFoot({
                   note: storiesHidden > 0 ? `${storiesHidden} more ${storiesHidden === 1 ? 'story' : 'stories'}` : null,
                   total: stories.length,
-                  onViewAll: () => onViewAll({ type: 'story', priority: ['urgent', 'high'] }),
+                  onViewAll: () => onViewAll({ type: 'story', priority: ['urgent', 'high'], state: stateOptions(stories) }),
                 }),
               },
                 stories.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'No high-priority story.')
+                  ? h('p', { className: 'missions-card-empty' }, 'No high-priority story before its release.')
                   : h('ul', { className: 'missions-rows' },
                       storiesShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
