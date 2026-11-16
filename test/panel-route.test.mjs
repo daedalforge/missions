@@ -1391,6 +1391,62 @@ test('POST points sur Jira écrit le champ du projet, une seule fois', async (t)
   }
 })
 
+test('POST points accepte la demi-pointe sur GitHub comme sur Jira', async (t) => {
+  const githubCalls = []
+  const jiraCalls = []
+  const fetchImpl = async (url, init = {}) => {
+    const target = String(url)
+    if (target.includes('atlassian')) {
+      jiraCalls.push({ url: target, method: init.method ?? 'GET', body: init.body ?? null })
+      return trackerResponse(undefined, { status: 204 })
+    }
+    githubCalls.push(`${init.method ?? 'GET'} ${decodeURIComponent(target)}`)
+    // L'issue portait déjà `sp:3` : la demi-pointe la remplace.
+    if ((init.method ?? 'GET') === 'GET') return trackerResponse({ labels: [{ name: 'ready' }, { name: 'sp:3' }] })
+    return trackerResponse({})
+  }
+  const { dir, handler } = await mountBlocked(t, fetchImpl)
+
+  const github = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/points',
+    body: { key: 'MIS-110', points: 0.5 },
+  })
+
+  assert.equal(github.status, 200)
+  assert.deepEqual(github.body, { key: 'MIS-110', value: 'sp:0.5', points: 0.5, project: 'missions' })
+  assert.deepEqual(githubCalls, [
+    'GET https://api.github.com/repos/daedalforge/missions/issues/110',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:3',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+
+  // Jira : la même demi-pointe, sur le champ que le projet déclare.
+  await writeFile(join(dir, 'missions', 'projects.yml'), JIRA_POINTS_PROJECTS)
+  const before = { token: process.env.JIRA_API_TOKEN, email: process.env.JIRA_EMAIL }
+  process.env.JIRA_API_TOKEN = 'test-jira-token'
+  process.env.JIRA_EMAIL = 'me@example.test'
+  try {
+    const jira = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/points',
+      body: { key: 'EX-7', points: 0.5 },
+    })
+
+    assert.equal(jira.status, 200)
+    assert.deepEqual(jira.body, { key: 'EX-7', field: 'customfield_10032', points: 0.5, project: 'alpha' })
+    assert.deepEqual(jiraCalls.map((entry) => `${entry.method} ${entry.url}`), [
+      'PUT https://api.atlassian.com/ex/jira/cloud-1/rest/api/3/issue/EX-7',
+    ])
+    assert.deepEqual(JSON.parse(jiraCalls[0].body), { fields: { customfield_10032: 0.5 } })
+  } finally {
+    if (before.token === undefined) delete process.env.JIRA_API_TOKEN
+    else process.env.JIRA_API_TOKEN = before.token
+    if (before.email === undefined) delete process.env.JIRA_EMAIL
+    else process.env.JIRA_EMAIL = before.email
+  }
+})
+
 test('POST points refuse une clé absente avant tout appel au tracker', async (t) => {
   let touched = 0
   const { handler } = await mountBlocked(t, async () => {
@@ -1416,7 +1472,7 @@ test('POST points refuse une taille absente ou hors échelle avant tout appel', 
   assert.equal(missing.status, 400)
   assert.match(missing.body.error, /points is missing/)
 
-  for (const points of [0, 4, 13.5, -2, 'cinq', '']) {
+  for (const points of [0, 1.5, 0.25, 4, 13.5, -2, 'cinq', '']) {
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/points',

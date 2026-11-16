@@ -489,6 +489,23 @@ test('poser les points respecte le champ déclaré par le projet', async () => {
   assert.deepEqual(bodies, [{ fields: { customfield_10032: 13 } }])
 })
 
+test('poser une demi-pointe part en un seul PUT sur le champ du projet', async () => {
+  const declared = { ...PROJECT, jira: { ...PROJECT.jira, story_points_field: 'customfield_10032' } }
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    return response(undefined, { status: 204 })
+  }
+
+  const result = await setPoints(declared, 'EX-7', { points: 0.5, fetchImpl })
+
+  assert.deepEqual(result, { key: 'EX-7', field: 'customfield_10032' })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].method, 'PUT')
+  assert.match(calls[0].url, /\/rest\/api\/3\/issue\/EX-7$/)
+  assert.deepEqual(JSON.parse(calls[0].body), { fields: { customfield_10032: 0.5 } })
+})
+
 test('une écriture de points garde le refus du tracker', async () => {
   const fetchImpl = async () => response({ message: 'Forbidden' }, { status: 403 })
 

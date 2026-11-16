@@ -132,15 +132,19 @@ tracker d'accord : un refus laisse l'ancienne priorité en place et affiche
 l'erreur sous la ligne. Une mission sans priorité montre une option vide non
 sélectionnable, jamais un faux niveau.
 
-La ligne **Points** ne s'édite pas : une estimation se pose au cadrage, une fois
-le plan sous les yeux, et pas au fil de l'eau. La session appelle la route de
-l'hôte (`POST missions/api/points`) avec la clé et la taille ; l'hôte traduit la
-taille avec la table du projet et le panneau n'a ni jeton ni valeur de tracker.
-L'échelle est `1, 2, 3, 5, 8, 13` : une autre taille, une clé inconnue ou un
-projet dont la `map` ne déclare pas de forme native sont refusés avant le
-tracker, avec leur message ; un refus du tracker devient un 502 et laisse la
-fiche telle quelle. Poser les points remplace : les autres tailles de la famille
-sont retirées de l'issue dans le même geste.
+La ligne **Points** se choisit dans l'échelle du panneau — `0.5, 1, 2, 3, 5,
+8, 13` — comme la priorité : le volet envoie `POST missions/api/points` avec la
+clé et la taille, l'hôte traduit la taille avec la table du projet, et le
+panneau n'a ni jeton ni valeur de tracker. La ligne ne bouge qu'une fois le
+tracker d'accord ; un refus laisse l'ancienne taille et affiche l'erreur sous la
+ligne. Une mission sans estimation montre une option vide « No points », non
+sélectionnable ; une taille hors échelle (`4`, héritée du tracker) reste
+offerte en fin de liste, sélectionnée. Choisir la taille déjà affichée n'écrit
+rien. Une clé inconnue, une taille hors échelle ou un projet dont la `map` ne
+déclare pas de forme native sont refusés avant le tracker, avec leur message.
+Poser les points remplace : les autres tailles de la famille sont retirées de
+l'issue dans le même geste, et un libellé voisin (`sp:moyen`) reste étranger à
+la famille.
 
 **Jamais versionné** : `missions/*/` est ignoré par git. Une déclaration reste
 locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
@@ -308,7 +312,7 @@ peut être en revue, un bug peut être prêt.
 | `in-review` | PR ouverte, en attente de revue |
 | `ready-for-prod` | revue faite, en attente de livraison |
 | `priority:urgent` · `priority:high` · `priority:normal` · `priority:low` | priorité, une seule par issue |
-| `sp:1` · `sp:2` · `sp:3` · `sp:5` · `sp:8` · `sp:13` | story points, un seul par issue |
+| `sp:0.5` · `sp:1` · `sp:2` · `sp:3` · `sp:5` · `sp:8` · `sp:13` | story points, un seul par issue |
 | `blocked` | mission bloquée : la raison est en commentaire de l'issue |
 
 Une issue porte **un seul** type natif et **un seul** état. Deux libellés d'état ne
@@ -382,7 +386,7 @@ l'édite jamais : elle se pose au cadrage.
 | `bug` | type `Bug` | type `Bug` |
 | `story` | type `Feature` | type `Story`, `Task` |
 | `urgent` / `high` / `normal` / `low` | label `priority:*` | `Highest` / `High` / `Medium` / `Low` |
-| story points | label `sp:N` | champ `story_points_field` (défaut `customfield_10016`) |
+| story points | label `sp:0.5` ou `sp:N` (`N` entier) | champ `story_points_field` (défaut `customfield_10016`) |
 
 Jira nomme `Story` et `Task` deux types distincts : le workspace n'en fait
 qu'un, la mission `story`. `Epic` et `Sub-task` restent sans traduction — un
