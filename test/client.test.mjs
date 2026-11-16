@@ -2640,6 +2640,54 @@ test('le compte annoncé par un widget vaut les lignes que son lien ouvre', () =
   assert.ok(setters.includes(''), 'le clic efface la recherche')
 })
 
+test('le lien d’une carte ouvre la bloquée de ses états, à son étage', () => {
+  // Given douze bugs en revue non bloqués et un bug en revue bloqué par la
+  // seule étiquette, plus ancien qu'eux : la carte Bugs lie ses douze lignes
+  // non bloquées, et la liste de cet état garde la bloquée.
+  const missions = [
+    { ...MISSION, key: 'MIS-95', title: 'Bloquée', state: 'in-review', type: 'bug', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-01T00:00:00Z' },
+  ]
+  for (let index = 0; index < 12; index += 1) {
+    missions.push({
+      ...MISSION,
+      key: `MIS-96${index}`,
+      title: `revue ${index}`,
+      state: 'in-review',
+      type: 'bug',
+      blocked: false,
+      blockers: [],
+      updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString(),
+    })
+  }
+  const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+
+  // When le lien de la carte Bugs est cliqué, puis la liste s'ouvre sur le
+  // filtre capturé.
+  const bugsCard = findAll(tree, 'article').find((article) => textOf(findAll(article, 'h3')[0]) === 'Bugs')
+  const link = findAll(bugsCard, 'button').find((button) => textOf(button).includes('View all 12'))
+  assert.ok(link, 'la carte doit lier ses douze lignes non bloquées')
+  link.props.onClick()
+  const filters = setters.find((next) => next && typeof next === 'object' && next.type === 'bug')
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const panel = charger(undefined, [EMPTY_BAR, dashboardView(missions)], session)
+  panel.api.apply(panel.ctx)
+  const list = findAll(panel.registered.main({}), 'MissionsView')[0]
+  const opened = renderTree({ type: 'MissionsView', fn: list.fn, props: { ...list.props, filters, query: '' }, children: [] })
+  const lignes = findAll(opened, 'div').filter((node) => node.props.className === 'missions-tree-row')
+
+  // Then la liste ouverte montre treize lignes — la bloquée de ces états en
+  // plus — et la bloquée s'y range au dernier étage, avec son badge.
+  assert.deepEqual(filters.state, ['in-review'])
+  assert.equal(lignes.length, 13)
+  const derniere = lignes[lignes.length - 1]
+  assert.ok(textOf(derniere).includes('MIS-95'), 'la bloquée doit rester dans la liste, à son étage')
+  assert.deepEqual(
+    findAll(derniere, 'span').filter((span) => span.props.className === 'missions-tree-blocked').map(textOf),
+    ['blocked'],
+    'la ligne bloquée garde son badge',
+  )
+})
+
 test('la priorité prend plusieurs valeurs et la barre les montre', () => {
   const session = memorySession({ 'missions.tab': 'missions' })
   const { api, ctx, registered, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
