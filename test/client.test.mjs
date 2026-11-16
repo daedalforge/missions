@@ -2081,7 +2081,7 @@ test('les deux causes du blocage tiennent la même porte sur le digest', () => {
   // story en revue bloquée par la seule étiquette, une story en revue dont la
   // dépendance est arrivée en revue, et une mission saine à raffiner.
   const missions = [
-    { key: 'MIS-60', title: 'en cours retenue', state: 'in-progress', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-61', title: 'Contrat', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
+    { key: 'MIS-60', title: 'en cours retenue', state: 'in-progress', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-64', title: 'Contrat', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
     { key: 'MIS-61', title: 'en revue retenue', state: 'in-review', type: 'story', priority: 'high', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T00:00:00Z' },
     { key: 'MIS-62', title: 'dépendance revue', state: 'in-review', type: 'story', priority: 'high', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
     { key: 'MIS-63', title: 'saine à raffiner', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-02T00:00:00Z' },
@@ -2134,7 +2134,7 @@ test('une carte vide nomme la borne, même quand des missions bloquées ou prêt
     { key: 'MIS-40', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
     { key: 'MIS-41', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T12:00:00Z' },
     { key: 'MIS-42', title: 'bug bloqué', state: 'to-refine', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T12:00:00Z' },
-    { key: 'MIS-43', title: 'story bloquée', state: 'in-review', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-44', title: 'Contrat', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-03T12:00:00Z' },
+    { key: 'MIS-43', title: 'story bloquée', state: 'in-review', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-74', title: 'Contrat', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-03T12:00:00Z' },
     { key: 'MIS-44', title: 'en cours bloquée', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-04T12:00:00Z' },
   ]
 
