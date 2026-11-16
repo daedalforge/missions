@@ -8535,13 +8535,13 @@ test('neuf poussières montent et s\'effacent aux deux bouts du cycle', () => {
   const grain = regle(`${AIR_HERO} i`)
   const montee = ligneDe('@keyframes missions-hero-mote')
 
-  // Then neuf grains, chacun avec sa position, son retard et sa durée
+  // Then neuf grains, chacun avec sa position et son retard, sur la cadence unique de la couche
   assert.equal(air.children.length, 9)
   for (const node of air.children) {
     assert.equal(node.type, 'i')
     assert.match(node.props.style.left, /^\d+%$/)
     assert.match(node.props.style.animationDelay, /^-\d+\.\d\ds$/)
-    assert.match(node.props.style.animationDuration, /^\d+\.\ds$/)
+    assert.equal(node.props.style.animationDuration, undefined)
   }
 
   // Then chacun monté dans sa propre boucle, invisible aux deux extrémités

@@ -6621,7 +6621,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               left: `${6 + ((index * 31) % 74)}%`,
               bottom: `${6 + ((index * 23) % 44)}px`,
               animationDelay: `${(-(((index + 1) * 1.7) % 9)).toFixed(2)}s`,
-              animationDuration: `${(7.5 + (index % 4) * 1.4).toFixed(1)}s`,
             },
           })),
         ),
