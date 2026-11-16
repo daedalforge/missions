@@ -1212,7 +1212,7 @@ test('chaque carte porte un repère de priorité qui se lit sans la couleur', ()
 test('une carte statique n’est pas un bouton, une carte active l’est', () => {
   const { tree } = renderDigest()
   const widgets = findAll(tree, 'article').filter((node) => /missions-card--widget/.test(node.props.className ?? ''))
-  assert.equal(widgets.length, 8, 'les huit widgets sont des cartes')
+  assert.equal(widgets.length, 6, 'les six widgets sont des cartes')
   for (const carte of widgets) {
     assert.equal(carte.props.role, undefined, 'pas de rôle de bouton')
     assert.equal(carte.props.tabIndex, undefined, 'pas dans l’ordre de tabulation')
@@ -1243,10 +1243,10 @@ test('les deux listes qui gardent une carte passent par la même coque', () => {
   assert.equal((SOURCE.match(/className: \['missions-card', `missions-card--\$\{variant\}`/g) ?? []).length, 1)
   assert.equal((SOURCE.match(/h\(Card, \{/g) ?? []).length, 2, 'les deux listes passent par Card')
 
-  // Dashboard : les huit widgets, sans interaction.
+  // Dashboard : les six widgets, sans interaction.
   const { tree: dashboard } = renderDigest()
   const widgets = findAll(dashboard, 'article').filter((node) => /missions-card--widget/.test(node.props.className ?? ''))
-  assert.equal(widgets.length, 8, 'les huit widgets passent par Card')
+  assert.equal(widgets.length, 6, 'les six widgets passent par Card')
 
   // Workflows : les deux cartes de choix, boutons natifs.
   const { rendered } = montrerWorkflows([workflowEntry(), statutsEntry()])
@@ -1342,7 +1342,7 @@ test('le montage lit l’ouvert et les deux comptes ; Done et le résumé paient
   // onglet, et le compte des dépôts se relit au tick quel que soit l'onglet.
   assert.match(SOURCE, /React\.useEffect\(\(\) => \{\n\s+load\(\)\n\s+loadDoneCount\(\)\n\s+loadRepositoryCount\(\)\n\s+\}, \[load, loadDoneCount, loadRepositoryCount\]\)/)
   assert.match(SOURCE, /if \(tab !== 'done'\) return undefined\n\s+loadDone\(\)/)
-  assert.match(SOURCE, /if \(tab !== 'dashboard'\) return undefined\n\s+loadSummary\(\)\n\s+loadDone\(\)\n\s+return undefined\n\s+\}, \[tab, loadSummary, loadDone\]\)/)
+  assert.match(SOURCE, /if \(tab !== 'dashboard'\) return undefined\n\s+loadSummary\(\)\n\s+return undefined\n\s+\}, \[tab, loadSummary\]\)/)
   // Le tick suit le périmètre de la vue ouverte : le Dashboard relit son
   // résumé, Done relit le clos, les vues tracker lisent l'ouvert, et Settings
   // n'en relit aucune.
@@ -2182,16 +2182,7 @@ const DASH_SUMMARY = {
   ],
 }
 
-/** Cinq closes, dont une dont la branche traîne encore dans un worktree. */
-const DASH_CLOSED = [
-  { key: 'MIS-10', title: 'livrée un', state: 'done', points: 5, updatedAt: '2026-11-10T12:00:00Z', branch: 'feat/mis-100' },
-  { key: 'MIS-11', title: 'livrée deux', state: 'done', points: 2, updatedAt: '2026-11-09T12:00:00Z', branch: null },
-  { key: 'MIS-12', title: 'livrée trois', state: 'done', points: 1, updatedAt: '2026-11-08T12:00:00Z', branch: null },
-  { key: 'MIS-13', title: 'livrée quatre', state: 'done', points: 1, updatedAt: '2026-11-07T12:00:00Z', branch: null },
-  { key: 'MIS-14', title: 'livrée cinq', state: 'done', points: 0, updatedAt: '2026-11-06T12:00:00Z', branch: null },
-]
-
-/** Le dashboard monté avec le digeste du scan et les closes. */
+/** Le dashboard monté avec le digeste du scan. */
 function renderDigest(props = {}) {
   const missions = DASH_MISSIONS.map((mission) => (
     mission.key === 'MIS-1' ? { ...mission, branch: 'feat/mis-192' } : mission
@@ -2199,7 +2190,6 @@ function renderDigest(props = {}) {
   const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], {
     now: DASH_NOW,
     summary: DASH_SUMMARY,
-    closed: DASH_CLOSED,
     ...props,
   })
   const section = (title) => findAll(tree, 'section').find((node) => {
@@ -2209,12 +2199,12 @@ function renderDigest(props = {}) {
   return { tree, setters, section, missions }
 }
 
-test('le dashboard ajoute Repositories et Done, et les quatre cartes ne bougent pas', () => {
+test('le dashboard ajoute Repositories, et les quatre cartes ne bougent pas', () => {
   const { tree, section } = renderDigest()
 
   const sections = findAll(tree, 'section')
-  assert.deepEqual(sections.map((node) => textOf(findAll(node, 'h2')[0])), ['Missions', 'Repositories', 'Done'])
-  assert.equal(findAll(tree, 'article').length, 8, 'quatre cartes par section')
+  assert.deepEqual(sections.map((node) => textOf(findAll(node, 'h2')[0])), ['Missions', 'Repositories'])
+  assert.equal(findAll(tree, 'article').length, 6, 'quatre cartes pour Missions, deux pour Repositories')
 
   // La section Missions garde ses quatre cartes, dans l'ordre et avec leurs
   // lignes : le digeste s'ajoute, il ne réordonne rien.
@@ -2228,12 +2218,11 @@ test('le dashboard ajoute Repositories et Done, et les quatre cartes ne bougent 
   assert.deepEqual(keys(flight), ['MIS-3', 'MIS-4'])
   assert.match(textOf(findAll(flight, 'div').find((node) => node.props.className === 'missions-card-foot')), /8 pts in flight · oldest 11 d/)
 
-  // Les deux nouvelles sections portent leur périmètre et leur sortie.
+  // La nouvelle section porte son périmètre et sa sortie.
   const scope = (title) => textOf(findAll(findAll(section(title), 'header')[0], 'span').find((span) => span.props.className === 'missions-sect-scope'))
   assert.equal(scope('Repositories'), '5 repositories · 3 to fix')
-  assert.equal(scope('Done'), '5 closed · 9 pts')
   const links = findAll(tree, 'button').filter((button) => button.props.className === 'missions-sect-link').map(textOf)
-  assert.deepEqual(links, ['Open Missions→', 'Open Repositories→', 'Open Done→'])
+  assert.deepEqual(links, ['Open Missions→', 'Open Repositories→'])
 })
 
 test('les branches à pousser portent leur avance, et leur clic ouvre le dépôt', () => {
@@ -2258,7 +2247,7 @@ test('les branches à pousser portent leur avance, et leur clic ouvre le dépôt
   // la liste : le digeste route par le panneau.
   const sortie = findAll(tree, 'button').find((button) => textOf(button) === 'Open Repositories→')
   sortie.props.onClick()
-  assert.ok(findAll(tree, 'section').length === 3)
+  assert.ok(findAll(tree, 'section').length === 2)
 })
 
 test('les dépôts à réparer disent leur raison la plus grave et l’âge du dernier commit', () => {
@@ -2276,46 +2265,6 @@ test('les dépôts à réparer disent leur raison la plus grave et l’âge du d
   assert.deepEqual(ages.map(textOf), ['', '6 h', '41 d'])
   assert.equal(ages[2].props['data-quiet'], 'true')
   assert.match(textOf(findAll(card, 'div').find((node) => node.props.className === 'missions-card-foot')), /1 cold clone · scanned 3 h ago/)
-})
-
-test('les closes récentes portent leurs points, et la carte dit trois sur N', () => {
-  const { section, tree } = renderDigest()
-  const card = findAll(section('Done'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Recently closed')
-
-  const keys = findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
-  assert.deepEqual(keys, ['MIS-10', 'MIS-11', 'MIS-12'], 'les trois dernières, par mise à jour')
-  const points = findAll(card, 'span').filter((span) => span.props.className === 'missions-rowpoints').map(textOf)
-  assert.deepEqual(points, ['5 pts', '2 pts', '1 pt'])
-  // Le total dépasse le plafond : la carte dit ce qu'elle montre et le pied le
-  // reste, avec un lien vers l'onglet Done.
-  const meta = textOf(findAll(card, 'span').find((span) => span.props.className === 'missions-card-meta'))
-  assert.equal(meta, '3 of 5')
-  const foot = findAll(card, 'div').find((node) => node.props.className === 'missions-card-foot')
-  assert.match(textOf(foot), /2 more closed/)
-  assert.match(textOf(foot), /View all 5/)
-
-  // La carte des restes nomme le geste, qui vit dans la liste des dépôts.
-  const left = findAll(section('Done'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Left behind')
-  assert.match(textOf(findAll(left, 'div').find((node) => node.props.className === 'missions-card-foot')), /Removing a worktree happens in the repositories tab/)
-  assert.deepEqual(findAll(left, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf), ['MIS-10'], 'seule la close dont la branche vit dans un worktree')
-
-  const sortie = findAll(tree, 'button').find((button) => textOf(button) === 'Open Done→')
-  assert.ok(sortie, 'la section Done a sa sortie')
-})
-
-test('une close laissée derrière ouvre le volet de son worktree', () => {
-  const ouverts = []
-  const { section } = renderDigest({ onOpenRepository: (repository) => ouverts.push(repository) })
-  const card = findAll(section('Done'), 'article').find((node) => textOf(findAll(node, 'h3')[0]) === 'Left behind')
-  const row = findAll(card, 'button').find((button) => button.props['data-reason'] === 'left-behind')
-  assert.ok(row, 'la close dont la branche vit dans un worktree a sa ligne')
-  assert.match(row.props['aria-label'], /^MIS-10 feat\/mis-100, closed/)
-
-  row.props.onClick()
-  assert.equal(ouverts.length, 1)
-  // Le volet s'ouvre sur le worktree, pas sur le clone principal : c'est lui
-  // qu'il faudra supprimer.
-  assert.equal(ouverts[0].name, 'missions-mis-100')
 })
 
 test('un scan en échec garde la section, nomme l’échec et propose Retry', () => {
@@ -2336,8 +2285,7 @@ test('un scan en échec garde la section, nomme l’échec et propose Retry', ()
   assert.deepEqual(metas, ['—', '—'], 'un scan absent ne se lit pas comme zéro')
   // Les autres sections restent visibles : l'échec est local.
   assert.ok(section('Missions'))
-  assert.ok(section('Done'))
-  assert.ok(findAll(tree, 'article').length >= 8)
+  assert.ok(findAll(tree, 'article').length >= 6)
 })
 
 test('un échec chaud garde les lignes du scan précédent', () => {
@@ -2383,7 +2331,7 @@ test('le résumé se lit à l’ouverture du Dashboard et à son tick, jamais ai
     await new Promise((done) => setTimeout(done, 0))
     assert.deepEqual(appels, [], 'aucun autre onglet ne paie le résumé')
 
-    // Onglet Dashboard : le résumé et les closes, sans forcer.
+    // Onglet Dashboard : le résumé, sans forcer.
     appels.length = 0
     const ouvert = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'dashboard' }))
     ouvert.api.apply(ouvert.ctx)
@@ -2391,7 +2339,7 @@ test('le résumé se lit à l’ouverture du Dashboard et à son tick, jamais ai
     const effet = ouvert.effects.find((effect) => String(effect.fn).includes("if (tab !== 'dashboard')"))
     assert.equal(effet.deps[0], 'dashboard')
     await effet.fn()
-    assert.deepEqual(appels, ['missions/api/repositories/summary', 'missions/api/list?done=1'], 'le résumé et les closes, chacun une fois')
+    assert.deepEqual(appels, ['missions/api/repositories/summary'], 'le résumé, une fois')
     assert.equal(appels.some((url) => url.includes('refresh=1')), false, 'l’ouverture ne force pas')
 
     // Le tick : page cachée, rien ne part ; page visible, le résumé se relit

@@ -223,15 +223,13 @@ frappe. Les gestes comptent `search.q` (palier de longueur), `search.family`,
 propre champ et ses propres filtres : un seul chemin de liste pour les deux
 onglets.
 
-Le **Dashboard** ajoute deux sections à son périmètre. **Repositories**
+Le **Dashboard** ajoute une section à son périmètre. **Repositories**
 croise les missions ouvertes avec le scan des dépôts — la route
 `missions/api/repositories/summary`, mémorisée cinq minutes
 (`SUMMARY_TTL_MS`) et partagée entre appels simultanés — en deux cartes :
 *Branches to push* (une branche de mission que le scan porte, jamais poussée
 ou en avance sur son amont) et *Checkouts to fix* (un dépôt illisible, en
-retard ou sale, une raison par ligne, la plus grave). **Done** relit ce que
-l'onglet Done a déjà ramené : les trois closes les plus récemment mises à
-jour, et celles dont la branche déclarée vit encore dans un worktree du scan.
+retard ou sale, une raison par ligne, la plus grave).
 Le résumé des dépôts ne se relit qu'à l'ouverture du Dashboard et à son tick,
 quand c'est l'onglet ouvert et la page visible, jamais avec `?refresh=1` : le
 bouton **Retry** est le seul à forcer. Un scan en échec garde les lignes et
