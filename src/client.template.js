@@ -3870,10 +3870,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 : h('span', { className: 'missions-tip-anchor', 'data-tip': 'No tracker link' },
                     h('button', { type: 'button', className: 'missions-action missions-action--icon', disabled: true, 'aria-label': 'No tracker link' }, h(ActionIcon, { name: 'tracker' })),
                   ),
-              // The Tolgee import belongs to projects that declare their locales:
-              // elsewhere the button is absent, not disabled — there is nothing
-              // to check and no file to write.
-              mission.translations
+              mission.translations && stateInRange(mission.state, 'in-progress', 'in-review')
                 ? h('span', {
                     className: 'missions-tip-anchor',
                     'data-tip': importingTolgee ? 'Checking the translations…' : 'Tolgee import',

@@ -106,6 +106,7 @@ import {
   respectBlockers,
   sortMissions,
   sortRepositories,
+  stateInRange,
   stateOptions,
   suggestBranch,
   TAB_KEY,
@@ -270,6 +271,40 @@ test('les statuts proposés suivent l’ordre du workflow, unknown en dernier', 
     ['to-refine', 'ready', 'in-review', 'ready-for-prod', 'unknown'],
   )
   assert.deepEqual(stateOptions([]), [])
+})
+
+test('le seuil d’état couvre le travail en cours et sa relecture, bornes comprises', () => {
+  // Given: la fenêtre du geste, du travail en cours à la relecture.
+  const from = 'in-progress'
+  const to = 'in-review'
+  const parcours = ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done']
+
+  // When: le seuil juge les six états du workflow, puis il ouvre la fenêtre
+  // entière du parcours.
+  const verdicts = parcours.map((state) => stateInRange(state, from, to))
+  const ouverts = parcours.filter((state) => stateInRange(state, 'to-refine', 'done'))
+
+  // Then: seuls les deux états de la fenêtre passent, et l'ordre lu est celui
+  // du workflow : une fenêtre ouverte sur tout le parcours laisse tout passer.
+  assert.deepEqual(verdicts, [false, false, true, true, false, false])
+  assert.deepEqual(ouverts, parcours)
+})
+
+test('un état inconnu ne tombe dans aucune fenêtre', () => {
+  // Given: des valeurs que le workflow ne connaît pas.
+  const inconnus = [null, 'unknown', 'shipped']
+
+  // When: le seuil les juge contre la fenêtre du geste, puis contre deux
+  // bornes qui ne sont pas des états.
+  const verdicts = inconnus.map((state) => stateInRange(state, 'in-progress', 'in-review'))
+  const bornes = [
+    stateInRange('in-progress', 'nowhere', 'in-review'),
+    stateInRange('in-progress', 'in-progress', 'nowhere'),
+  ]
+
+  // Then: aucun n'est offert par défaut, et une borne hors liste ferme tout.
+  assert.deepEqual(verdicts, [false, false, false])
+  assert.deepEqual(bornes, [false, false])
 })
 
 test('done garde son groupe en dernier, mais la liste ouverte ne le relit jamais', () => {
