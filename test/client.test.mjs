@@ -1727,6 +1727,10 @@ const DASH_MISSIONS = [
   // pas l'envoyer, mais la section ne dépend pas de cette promesse. Elle reste
   // un bug de priorité haute, pour que les widgets aient à l'exclure.
   { key: 'MIS-6', title: 'mission close', state: 'done', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
+  // Un bug et une story prêts pour la prod, les plus anciens de leur famille :
+  // les quatre cartes les laissent dehors, le périmètre les compte encore.
+  { key: 'MIS-7', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
+  { key: 'MIS-8', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'socle', projectName: 'Socle', updatedAt: '2026-09-01T12:00:00Z' },
 ]
 
 function dashboardView(missions, loading = false) {
@@ -1960,13 +1964,101 @@ test('le pied du Dashboard écrit la demi-pointe et ne met le pluriel qu’au-de
 test('la bande résume le périmètre et compte les missions qu’elle montre', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
-  // 5 missions ouvertes, 3 dans la file, 2 projets. Les widgets se recoupent :
-  // dix lignes rendues, mais cinq missions distinctes — le périmètre compte les
-  // missions, pas les occurrences.
+  // 7 missions ouvertes, 3 dans la file, 2 projets. Les widgets se recoupent :
+  // dix lignes rendues, mais sept missions distinctes — le périmètre compte les
+  // missions, pas les occurrences, et garde les deux prêts pour la prod.
   const rendered = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
   const scope = findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope')
-  assert.equal(textOf(scope), '3 need you · 5 open · 2 projects')
+  assert.equal(textOf(scope), '3 need you · 7 open · 2 projects')
   assert.equal(rendered.length, 10)
+})
+
+test('un bug prêt pour la production ne prend plus la tête du digest', () => {
+  // Given un bug prêt à partir, le plus ancien, et deux bugs à raffiner plus
+  // récents.
+  const missions = [
+    { key: 'MIS-7', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
+    { key: 'MIS-8', title: 'revoir la recherche', state: 'to-refine', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-01T12:00:00Z' },
+    { key: 'MIS-9', title: 'corriger le filtre', state: 'to-refine', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T12:00:00Z' },
+  ]
+
+  // When l'onglet Dashboard est rendu.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const bugs = findAll(tree, 'article')[0]
+
+  // Then la carte ne liste pas le prêt à partir, compte deux bugs et nomme la
+  // borne au lieu de promettre tous les bugs non résolus.
+  const keys = findAll(bugs, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  const meta = textOf(findAll(bugs, 'span').find((span) => span.props.className === 'missions-card-meta'))
+  assert.deepEqual(keys, ['MIS-8', 'MIS-9'])
+  assert.equal(meta, '2')
+  assert.match(textOf(bugs), /Unresolved, not ready to ship\. Oldest first\./)
+  assert.doesNotMatch(textOf(bugs), /Unresolved, assigned to you/)
+})
+
+test('une story urgente prête pour la production ne prend plus la tête du digest', () => {
+  // Given une story urgente prête à partir, la plus ancienne, une story haute
+  // prête et une story haute en revue, plus récentes.
+  const missions = [
+    { key: 'MIS-20', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T12:00:00Z' },
+    { key: 'MIS-21', title: 'thème manga', state: 'ready', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-01T12:00:00Z' },
+    { key: 'MIS-22', title: 'export CSV', state: 'in-review', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T12:00:00Z' },
+  ]
+
+  // When l'onglet Dashboard est rendu.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const stories = findAll(tree, 'article')[1]
+
+  // Then la carte ne liste pas la story prête à partir, compte deux stories et
+  // nomme la borne.
+  const keys = findAll(stories, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  const meta = textOf(findAll(stories, 'span').find((span) => span.props.className === 'missions-card-meta'))
+  assert.deepEqual(keys, ['MIS-21', 'MIS-22'])
+  assert.equal(meta, '2')
+  assert.match(textOf(stories), /Urgent or high, not ready to ship\. Oldest first\./)
+})
+
+test('le prêt pour la prod ne déplace ni l’en-cours ni la file, et le périmètre le compte', () => {
+  // Given une mission par état du parcours.
+  const missions = [
+    { key: 'MIS-30', title: 'à raffiner', state: 'to-refine', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-01T00:00:00Z' },
+    { key: 'MIS-31', title: 'prête à démarrer', state: 'ready', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T00:00:00Z' },
+    { key: 'MIS-32', title: 'en cours', state: 'in-progress', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
+    { key: 'MIS-33', title: 'en revue', state: 'in-review', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-03T00:00:00Z' },
+    { key: 'MIS-34', title: 'prête à partir', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
+    { key: 'MIS-35', title: 'sans état connu', state: null, type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-04T00:00:00Z' },
+  ]
+
+  // When le Dashboard est rendu.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const [, , flight, queue] = findAll(tree, 'article')
+
+  // Then l'en-cours ne garde que l'in-progress, la file les quatre états qui
+  // attendent un geste — sans le prêt pour la prod — et le périmètre compte
+  // les six missions ouvertes.
+  const keys = (card) => findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  assert.deepEqual(keys(flight), ['MIS-32'])
+  assert.deepEqual(keys(queue), ['MIS-33', 'MIS-31', 'MIS-30', 'MIS-35'])
+  const scope = textOf(findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope'))
+  assert.equal(scope, '4 need you · 6 open · 1 project')
+})
+
+test('une carte vide nomme la borne, même quand une mission prête à partir existe', () => {
+  // Given un bug et une story prêts à partir, seuls de leur famille.
+  const missions = [
+    { key: 'MIS-40', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
+    { key: 'MIS-41', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T12:00:00Z' },
+  ]
+
+  // When l'onglet Dashboard est rendu.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const [bugs, stories] = findAll(tree, 'article')
+
+  // Then les deux cartes sont vides et disent la borne, sans promettre un
+  // inventaire que le prêt à partir contredirait.
+  const empty = (card) => textOf(findAll(card, 'p').find((node) => node.props.className === 'missions-card-empty'))
+  assert.equal(empty(bugs), 'No unresolved bug before its release.')
+  assert.equal(empty(stories), 'No high-priority story before its release.')
 })
 
 test('cliquer une ligne ouvre la mission dans l’onglet Missions', () => {
@@ -2400,14 +2492,19 @@ test('le lien du widget ouvre la liste sur les états de la carte', () => {
   assert.ok(setters.includes(''), 'le clic efface la recherche')
 })
 
-test('les nouveaux widgets ouvrent la liste sur leur type et leur priorité', () => {
+test('le compte annoncé par un widget vaut les lignes que son lien ouvre', () => {
+  // Given douze bugs à raffiner et douze stories prêtes, chacune précédée d'une
+  // mission prête à partir plus ancienne qu'elle.
   const missions = []
   for (let index = 0; index < 12; index += 1) {
     missions.push({ key: `B-${index}`, title: `bug ${index}`, state: 'to-refine', type: 'bug', priority: 'normal', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString() })
   }
+  missions.push({ key: 'B-prod', title: 'bug prêt à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-07-01T00:00:00Z' })
   for (let index = 0; index < 12; index += 1) {
     missions.push({ key: `S-${index}`, title: `story ${index}`, state: 'ready', type: 'story', priority: index % 2 === 0 ? 'high' : 'urgent', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString() })
   }
+  missions.push({ key: 'S-prod', title: 'story prête à partir', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-06-01T00:00:00Z' })
+
   const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
   const card = (title) => findAll(tree, 'article').find((article) => textOf(findAll(article, 'h3')[0]) === title)
   const clickAll = (article) => {
@@ -2417,15 +2514,33 @@ test('les nouveaux widgets ouvrent la liste sur leur type et leur priorité', ()
   }
   const empty = { type: null, state: null, epic: null, priority: null, project: null, missing: null }
 
+  // When le lien de chaque carte est cliqué, puis la liste s'ouvre sur le
+  // filtre capturé.
   clickAll(card('Bugs'))
-  assert.deepEqual(setters.find((next) => next && typeof next === 'object' && next.type === 'bug'), { ...empty, type: 'bug' })
-
   clickAll(card('High-priority stories'))
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const panel = charger(undefined, [EMPTY_BAR, dashboardView(missions)], session)
+  panel.api.apply(panel.ctx)
+  const list = findAll(panel.registered.main({}), 'MissionsView')[0]
+  const opened = (filters) => renderTree({ type: 'MissionsView', fn: list.fn, props: { ...list.props, filters, query: '' }, children: [] })
+  const lines = (node) => findAll(node, 'div').filter((child) => child.props.className === 'missions-tree-row')
+
+  // Then chaque barre porte les états de sa carte — jamais le prêt à partir —
+  // et la liste montre exactement le compte annoncé.
+  const bugs = setters.find((next) => next && typeof next === 'object' && next.type === 'bug')
+  assert.deepEqual(bugs, { ...empty, type: 'bug', state: ['to-refine'] })
+  assert.equal(lines(opened(bugs)).length, 12)
+  assert.equal(lines(opened(bugs)).some((row) => row.props['data-state'] === 'ready-for-prod'), false)
+
+  const stories = setters.find((next) => next && typeof next === 'object' && next.type === 'story')
   assert.deepEqual(
-    setters.find((next) => next && typeof next === 'object' && next.type === 'story'),
-    { ...empty, type: 'story', priority: ['urgent', 'high'] },
+    stories,
+    { ...empty, type: 'story', priority: ['urgent', 'high'], state: ['ready'] },
     'la liste garde les deux niveaux dans la barre',
   )
+  assert.equal(lines(opened(stories)).length, 12)
+  assert.equal(lines(opened(stories)).some((row) => row.props['data-state'] === 'ready-for-prod'), false)
+
   assert.ok(setters.includes('missions'), 'le clic bascule sur l’onglet Missions')
   assert.ok(setters.includes(''), 'le clic efface la recherche')
 })
@@ -2638,8 +2753,8 @@ test('chaque carte dit à quoi elle sert, sous son titre', () => {
   const subs = findAll(tree, 'p').filter((node) => node.props.className === 'missions-card-sub')
 
   assert.deepEqual(subs.map(textOf), [
-    'Unresolved, assigned to you. Oldest first.',
-    'Urgent or high, oldest first.',
+    'Unresolved, not ready to ship. Oldest first.',
+    'Urgent or high, not ready to ship. Oldest first.',
     'Started, not shipped.',
     'Waiting on your next move, most urgent first.',
   ])
@@ -2669,8 +2784,8 @@ test('les widgets sans ligne disent ce qui manque, sans lien', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
   const [bugs, stories] = findAll(tree, 'article')
 
-  assert.match(textOf(bugs), /No unresolved bug assigned to you\./)
-  assert.match(textOf(stories), /No high-priority story\./)
+  assert.match(textOf(bugs), /No unresolved bug before its release\./)
+  assert.match(textOf(stories), /No high-priority story before its release\./)
   assert.equal(findAll(tree, 'button').filter((button) => textOf(button).includes('View all')).length, 0)
 })
 
@@ -8233,7 +8348,7 @@ test('le dashboard compte l’ouverture d’une ligne et le « View all » de se
     const toutVoir = findAll(dash, 'button').find((node) => node.props.className === 'missions-dash-link')
     assert.ok(toutVoir, 'le lien « View all » est rendu au-delà de dix lignes')
     toutVoir.props.onClick()
-    spy.geste('dashboard.view-all', 'type')
+    spy.geste('dashboard.view-all', 'type,state')
 
     const ligne = findAll(dash, 'button').find((node) => node.props.className === 'missions-row')
     assert.ok(ligne, 'une ligne de mission est rendue')

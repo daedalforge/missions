@@ -244,6 +244,13 @@ quand une mission est choisie ailleurs. Done et Repositories gardent leur volet,
 comme avant : la fiche de la mission close ou celle du dépôt choisi, et
 l'invitation quand rien n'est choisi.
 
+Les cartes **Bugs** et **High-priority stories** s'arrêtent à la revue : une
+mission prête pour la production n'y apparaît plus, même la plus ancienne, et
+leur sous-titre nomme la borne. Le lien *View all N* de chaque carte transporte
+les états qu'elle montre — jamais `ready-for-prod` — donc N est exactement le
+nombre de lignes que ce lien ouvre. La ligne de section, elle, continue de
+compter toutes les missions ouvertes, prêtes à partir incluses.
+
 Un projet peut déclarer ses **traductions** dans sa copie locale de
 `missions/projects.yml` — `translations.locales`,
 `translations.languageFile`, `translations.reference`. Le volet d'une mission de
