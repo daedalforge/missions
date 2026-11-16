@@ -1,6 +1,6 @@
 {
   "name": "@daedalforge/dsh-missions",
-  "version": "0.1.38",
+  "version": "0.1.39",
   "private": true,
   "description": "Missions panel for the DSH sidebar: reads the projects declared in a local missions/projects.yml",
   "type": "module",

@@ -174,8 +174,9 @@ trouve `MIS-206`), le titre et la ligne de checklist — une mission trouvée pa
 checklist montre au plus deux ancres puis `+N`, avec son compte
 `checklist 3 / 5`. Le compte du champ
 nomme **une** famille (`1 of 12`, `2 actions`) : il n'est jamais additionné à
-un compte de lot. La bande d'états remplace le select Statut et garde les
-comptes du portefeuille pendant toute requête. Un clic sur une ligne, ou
+un compte de lot. La bande d'états remplace le select Statut et suit les
+filtres et la requête : elle compte les missions que la liste montre, et chaque
+état garde son segment, à zéro s'il est exclu. Un clic sur une ligne, ou
 `Entrée` sur la ligne surlignée, ouvre la fiche **dans le volet droit de
 l'onglet** : le volet de Done, la même largeur, la même fiche — la liste garde
 la place qu'elle occupe et le volet prend la sienne. `×` ou `Échap` referment
