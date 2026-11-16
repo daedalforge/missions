@@ -8392,6 +8392,7 @@ const CADRE_HERO = '.missions-panel[data-skin="paper"] .missions-hero-frame'
 const PHOTO_HERO = '.missions-panel[data-skin="paper"] .missions-hero-photo'
 const PORTRAIT_HERO = '.missions-panel[data-skin="paper"] .missions-hero-avatar'
 const BULLE_HERO = '.missions-panel[data-skin="paper"] .missions-hero-bubble'
+const AIR_HERO = '.missions-panel[data-skin="paper"] .missions-hero-air'
 
 /** Le corps de la règle de peau, en tête de ligne : le bloc sombre la précède. */
 function regleDePeau(selector) {
@@ -8412,7 +8413,7 @@ test('le cadre du bandeau reprend la boîte et la bordure de la photo', () => {
   const photo = regleDePeau(PHOTO_HERO)
 
   // Then la photo vit dans un cadre unique, premier enfant du bandeau
-  assert.deepEqual(enfants, ['missions-hero-frame', 'missions-hero-bubble', 'missions-hero-avatar'])
+  assert.deepEqual(enfants, ['missions-hero-frame', 'missions-hero-air', 'missions-hero-bubble', 'missions-hero-avatar'])
   const image = hero.children[0].children
   assert.equal(image.length, 1, 'le cadre ne porte que la photo')
   assert.equal(image[0].type, 'img')
@@ -8453,51 +8454,155 @@ test('le thème sombre filtre le cadre, bordure comprise', () => {
   assert.match(sombre[0], /body\[data-ds-dark-theme\]/)
 })
 
-test('le souffle de la photo dure trente-quatre secondes, sans quitter le cadre', () => {
+test('la dérive de la caméra dure quatorze secondes, avec sa réserve de cadrage', () => {
   // Given le bundle construit et son bloc de thème
-  // When la règle de la photo et le keyframes du souffle sont extraits
+  // When la règle de la photo et le keyframes de la dérive sont extraits
   const photo = regleDePeau(PHOTO_HERO)
-  const souffle = ligneDe('@keyframes missions-hero-breathe')
+  const derive = ligneDe('@keyframes missions-hero-drift')
 
-  // Then l'animation est déclarée dans la peau, lente et alternative
-  assert.match(photo, /animation: missions-hero-breathe 34s ease-in-out infinite alternate/)
-  assert.match(photo, /transform-origin: center/)
-  assert.match(souffle, /from \{ transform: scale\(1\); \}/)
-  assert.match(souffle, /to \{ transform: scale\(1\.05\); \}/)
+  // Then la photo est cadrée en réserve, puis dérive d'un bord à l'autre
+  assert.match(photo, /--hero-scale: 1\.12/)
+  assert.match(photo, /--hero-pan: 4%/)
+  // Then la réserve du zoom couvre le pan : aucun bord ne peut apparaître
+  const echelle = Number(photo.match(/--hero-scale: ([\d.]+)/)[1])
+  const pan = Number(photo.match(/--hero-pan: ([\d.]+)%/)[1])
+  assert.ok(pan <= (echelle - 1) * 50, 'la réserve couvre le pan')
+  assert.match(photo, /transform: scale\(var\(--hero-scale\)\)/)
+  assert.match(photo, /animation: missions-hero-drift 14s ease-in-out infinite alternate/)
+
+  // Then l'aller-retour revient exactement au départ : le raccord est invisible
+  assert.match(derive, /from \{ transform: scale\(var\(--hero-scale, 1\.12\)\) translateX\(calc\(-1 \* var\(--hero-pan, 4%\)\)\); \}/)
+  assert.match(derive, /to \{ transform: scale\(var\(--hero-scale, 1\.12\)\) translateX\(var\(--hero-pan, 4%\)\); \}/)
 })
 
-test('le portrait monte de six pixels et son ombre s’allonge', () => {
+test('les docks étroits gardent une amplitude minimale', () => {
+  // Given les deux paliers de largeur du bandeau
+  // Then le pan ne descend pas sous 28 px et le zoom grandit pour le couvrir
+  assert.match(SOURCE, /--hero-scale: 1\.28; --hero-pan: max\(6%, 28px\)/)
+  assert.match(SOURCE, /--hero-scale: 1\.36; --hero-pan: max\(6%, 28px\)/)
+})
+
+test('le portrait et la bulle ne bougent plus', () => {
   // Given le bandeau de Konoha monté sous la peau papier
-  // When les règles du portrait et de sa flottaison sont extraites
+  const arbre = arbreTheme('manga', { 'missions.tab': 'missions' })
+  const hero = findAll(arbre, 'div').find((node) => node.props.className === 'missions-hero')
+
+  // When les règles du portrait et de la bulle sont extraites
   const portrait = regle(PORTRAIT_HERO)
-  const flottaison = ligneDe('@keyframes missions-hero-float')
-
-  // Then le portrait monte de six pixels, sur le cycle du guetteur
-  assert.match(portrait, /animation: missions-hero-float 6\.5s ease-in-out infinite alternate/)
-  assert.match(flottaison, /from \{ transform: translateY\(0\); box-shadow: 0 0 0 1\.5px var\(--skin-ink\), 4px 4px 0 var\(--skin-shadow\); \}/)
-
-  // Then son ombre s'allonge sous lui, alors que l'anneau d'encre reste fixe
-  assert.match(flottaison, /to \{ transform: translateY\(-6px\); box-shadow: 0 0 0 1\.5px var\(--skin-ink\), 6px 7px 0 var\(--skin-shadow\); \}/)
-})
-
-test('la bulle suit le portrait avec un retard de 0,35 s', () => {
-  // Given le bandeau de Konoha monté sous la peau papier
-  // When les règles de la bulle et de sa poursuite sont extraites
   const bulle = regle(BULLE_HERO)
-  const poursuite = ligneDe('@keyframes missions-hero-bubble-follow')
 
-  // Then la bulle suit le même cycle, décalée d'un tiers de seconde
-  assert.match(bulle, /animation: missions-hero-bubble-follow 6\.5s ease-in-out \.35s infinite alternate/)
-  assert.match(poursuite, /from \{ transform: translateY\(0\); \}/)
-  assert.match(poursuite, /to \{ transform: translateY\(-3px\); \}/)
+  // Then aucune des deux ne porte d'animation : le décor bouge, pas eux
+  assert.doesNotMatch(portrait, /animation/)
+  assert.doesNotMatch(bulle, /animation/)
 
-  // Then la queue ne bouge pas et le texte de la bulle reste immobile
+  // Then leur géométrie et leur ombre restent celles d'avant
+  assert.match(portrait, /right: 26px; bottom: 16px; width: 112px; height: 112px/)
+  assert.match(portrait, /box-shadow: 0 0 0 1\.5px var\(--skin-ink\), 4px 4px 0 var\(--skin-shadow\)/)
+  assert.match(bulle, /right: 152px; bottom: 54px/)
+  assert.match(bulle, /box-shadow: 2px 2px 0 var\(--skin-shadow\)/)
   assert.match(regle(`${BULLE_HERO}::after`), /right: -7px; bottom: 12px/)
+
+  // Then la bulle garde son texte : un titre et un sous-titre, intacts
+  const bulleNode = hero.children.find((node) => node.props.className === 'missions-hero-bubble')
+  assert.deepEqual(bulleNode.children.map((node) => node.type), ['b', 'span'])
+  assert.match(textOf(bulleNode.children[0]), /^\d+ missions?!$/)
+  assert.match(textOf(bulleNode.children[1]), /^\d+ projects?$/)
+  assert.match(regle(`${BULLE_HERO} b`), /font-size: 11px/)
+  assert.match(regle(`${BULLE_HERO} span`), /font-size: 8\.5px/)
   assert.doesNotMatch(regle(`${BULLE_HERO} b`), /animation/)
   assert.doesNotMatch(regle(`${BULLE_HERO} span`), /animation/)
 })
 
-test('le mouvement réduit coupe les trois animations du bandeau', () => {
+test('la brume glisse d’une tuile entière par cycle', () => {
+  // Given la couche de brume du cadre et son keyframes
+  // When la règle du pseudo-élément et la translation sont lues
+  const brume = regle(`${CADRE_HERO}::before`)
+  const glisse = ligneDe('@keyframes missions-hero-mist')
+
+  // Then deux nappes tuilées horizontalement, d’une période par cycle
+  assert.match(brume, /width: 200%/)
+  assert.match(brume, /background-size: 50% 100%, 25% 100%/)
+  assert.match(brume, /background-repeat: repeat-x/)
+  assert.match(brume, /mix-blend-mode: screen/)
+  assert.match(brume, /mask-image: linear-gradient\(#000 0 62%/)
+  assert.match(brume, /animation: missions-hero-mist 60s linear infinite/)
+
+  // Then la translation vaut une tuile de chaque nappe : le cycle se referme
+  assert.match(glisse, /from \{ transform: translate3d\(0, 0, 0\); \}/)
+  assert.match(glisse, /to \{ transform: translate3d\(-50%, 0, 0\); \}/)
+})
+
+test('la lumière balaie le cadre puis s’éteint hors champ', () => {
+  // Given la couche de lumière du cadre et son keyframes
+  // When la règle du pseudo-élément et la traversée sont lues
+  const lumiere = regle(`${CADRE_HERO}::after`)
+  const balayage = ligneDe('@keyframes missions-hero-sweep')
+
+  // Then la bande est décorative et traversée en moins de la moitié du cycle
+  assert.match(lumiere, /pointer-events: none/)
+  assert.match(lumiere, /mix-blend-mode: screen/)
+  assert.match(lumiere, /animation: missions-hero-sweep 12s linear infinite/)
+  assert.match(balayage, /0% \{ transform: translateX\(-130%\); \}/)
+  assert.match(balayage, /45% \{ transform: translateX\(130%\); \}/)
+
+  // Then elle finit hors champ à droite et repart hors champ à gauche
+  assert.match(balayage, /100% \{ transform: translateX\(130%\); \}/)
+})
+
+test('neuf poussières montent et s\'effacent aux deux bouts du cycle', () => {
+  // Given le bandeau de Naruto rendu
+  const arbre = arbreTheme('manga', { 'missions.tab': 'missions' })
+  const hero = findAll(arbre, 'div').find((node) => node.props.className === 'missions-hero')
+
+  // When la couche d'air et son keyframes sont lus
+  const air = hero.children.find((node) => node.props.className === 'missions-hero-air')
+  const grain = regle(`${AIR_HERO} i`)
+  const montee = ligneDe('@keyframes missions-hero-mote')
+
+  // Then neuf grains, chacun avec sa position et son retard, sur la cadence unique de la couche
+  assert.equal(air.children.length, 9)
+  for (const node of air.children) {
+    assert.equal(node.type, 'i')
+    assert.match(node.props.style.left, /^\d+%$/)
+    assert.match(node.props.style.animationDelay, /^-\d+\.\d\ds$/)
+    assert.equal(node.props.style.animationDuration, undefined)
+  }
+
+  // Then chacun monté dans sa propre boucle, invisible aux deux extrémités
+  const retards = air.children.map((node) => node.props.style.animationDelay)
+  assert.equal(new Set(retards).size, 9, 'chaque grain a son propre retard')
+  assert.match(grain, /width: 3px; height: 3px/)
+  // Then la poussière garde sa couleur claire en thème sombre, où --skin-page est noir
+  assert.match(grain, /background: rgb\(255 249 235 \/ \.82\)/)
+  assert.match(grain, /animation: missions-hero-mote 9s linear infinite/)
+  assert.match(montee, /0% \{ transform: translate3d\(0, 16px, 0\) scale\(\.7\); opacity: 0; \}/)
+  assert.match(montee, /100% \{ transform: translate3d\(6px, -54px, 0\) scale\(1\.05\); opacity: 0; \}/)
+})
+
+test('les animations du bandeau ne touchent que transform et opacity', () => {
+  // Given les quatre keyframes du décor
+  const keyframes = ['missions-hero-drift', 'missions-hero-mist', 'missions-hero-sweep', 'missions-hero-mote']
+
+  // When chaque keyframe est lue
+  // Then aucune ne déplace une propriété de mise en page, de peinture ou d'ombre
+  for (const nom of keyframes) {
+    const bloc = ligneDe(`@keyframes ${nom}`)
+    assert.ok(bloc.includes(`@keyframes ${nom}`), `keyframe absent : ${nom}`)
+    assert.doesNotMatch(bloc, /(?:^|[\s;{])(width|height|top|left|margin|box-shadow|filter)\s*:/)
+  }
+})
+
+test('la cadence des poussières est la même dans le CSS et le markup', () => {
+  // Given la période nommée dans le bloc du markup et la déclaration CSS
+  const bloc = SOURCE.slice(SOURCE.indexOf('const HERO_MOTES = '), SOURCE.indexOf('const THEME_CSS = '))
+  const periode = Number(bloc.match(/period: (\d+),/)[1])
+  const declaration = ligneDe('animation: missions-hero-mote')
+
+  // Then le CSS anime les poussières sur cette période
+  assert.match(declaration, new RegExp(`animation: missions-hero-mote ${periode}s linear infinite`))
+})
+
+test('le mouvement réduit coupe les quatre animations du bandeau', () => {
   // Given le bloc de mouvement réduit dédié au bandeau
   const at = SOURCE.indexOf(`@media (prefers-reduced-motion: reduce) {\n  ${PHOTO_HERO}`)
   assert.ok(at >= 0, 'le bandeau a son propre bloc de mouvement réduit')
@@ -8505,11 +8610,13 @@ test('le mouvement réduit coupe les trois animations du bandeau', () => {
   // When les sélecteurs coupés sont lus
   const bloc = SOURCE.slice(at, SOURCE.indexOf('\n}', at))
 
-  // Then les trois animations du bandeau s'arrêtent, et elles seules
-  for (const selecteur of [PHOTO_HERO, PORTRAIT_HERO, BULLE_HERO]) {
+  // Then la photo revient au cadrage d'origine, sans zoom ni dérive
+  assert.match(bloc, /{ animation: none; transform: none; }/)
+
+  // Then la brume, la lumière et les poussières s'arrêtent aussi
+  for (const selecteur of [`${CADRE_HERO}::before`, `${CADRE_HERO}::after`, `${AIR_HERO} i`]) {
     assert.ok(bloc.includes(selecteur), `animation non coupée : ${selecteur}`)
   }
-  assert.match(bloc, /\{ animation: none; \}/)
 })
 
 test('les animations du bandeau ne vivent que sous la peau papier', () => {
@@ -8533,7 +8640,7 @@ test('le thème Default ne monte ni bandeau ni animation', () => {
 
   // Then il ne porte ni le décor de Konoha, ni ses animations
   assert.doesNotMatch(flat, /missions-hero/)
-  assert.doesNotMatch(flat, /missions-hero-breathe|missions-hero-float|missions-hero-bubble-follow/)
+  assert.doesNotMatch(flat, /missions-hero-drift|missions-hero-mist|missions-hero-sweep|missions-hero-mote/)
 })
 
 test('la source ne garde aucune trace du thème Noël', () => {
