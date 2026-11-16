@@ -1792,7 +1792,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 }),
               },
                 bugs.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'No unresolved bug before its release.')
+                  ? h('p', { className: 'missions-card-empty' }, 'No unblocked bug before its release.')
                   : h('ul', { className: 'missions-rows' },
                       bugsShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
@@ -1809,7 +1809,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 }),
               },
                 stories.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'No high-priority story before its release.')
+                  ? h('p', { className: 'missions-card-empty' }, 'No unblocked high-priority story before its release.')
                   : h('ul', { className: 'missions-rows' },
                       storiesShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
@@ -1826,7 +1826,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 }),
               },
                 flight.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'Nothing is in progress.')
+                  ? h('p', { className: 'missions-card-empty' }, 'Nothing in progress is unblocked.')
                   : h('ul', { className: 'missions-rows' },
                       flightShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
@@ -1843,7 +1843,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 }),
               },
                 queue.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'Nothing is waiting on you.')
+                  ? h('p', { className: 'missions-card-empty' }, 'Nothing unblocked is waiting on you.')
                   : h('ul', { className: 'missions-rows' },
                       queueShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: true, onOpen })),
                     ),

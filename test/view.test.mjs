@@ -1292,6 +1292,41 @@ test('un bug ou une story prêt pour la production ne prend plus la tête des wi
   assert.deepEqual(highPriorityStories([]), [])
 })
 
+test('les quatre lentilles du digest écartent une mission bloquée, par label comme par dépendance', () => {
+  // Given quatre missions qu'une lentille prendrait sans la règle — deux
+  // bloquées, l'une par la seule étiquette, l'autre par la seule dépendance —
+  // plus une dont la dépendance a atteint la revue, et deux saines.
+  const missions = [
+    { key: 'bug-label', type: 'bug', priority: 'urgent', state: 'in-review', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-01T00:00:00Z' },
+    { key: 'bug-vieux', type: 'bug', priority: 'normal', state: 'to-refine', blocked: false, blockers: [], updatedAt: '2026-10-10T00:00:00Z' },
+    { key: 'bug-neuf', type: 'bug', priority: 'normal', state: 'to-refine', blocked: false, blockers: [], updatedAt: '2026-10-20T00:00:00Z' },
+    { key: 'story-dépendance', type: 'story', priority: 'high', state: 'in-progress', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-9', state: 'ready' }], updatedAt: '2026-09-02T00:00:00Z' },
+    { key: 'story-revue', type: 'story', priority: 'high', state: 'in-review', blocked: false, blockers: [], updatedAt: '2026-10-12T00:00:00Z' },
+    { key: 'en-cours-saine', type: 'story', priority: 'normal', state: 'in-progress', blocked: false, blockers: [], updatedAt: '2026-10-05T00:00:00Z' },
+  ]
+
+  // When les quatre lentilles du digest lisent la même liste.
+  const bugs = assignedBugs(missions).map((mission) => mission.key)
+  const stories = highPriorityStories(missions).map((mission) => mission.key)
+  const queue = needsYou(missions).map((mission) => mission.key)
+  const flight = inFlight(missions).map((mission) => mission.key)
+
+  // Then chaque lentille écarte les deux bloquées — les deux causes empruntent
+  // la même porte — et rend les non bloquées comme avant, dans son ordre :
+  // la plus ancienne d'abord, le rang d'état pour la file.
+  assert.deepEqual(bugs, ['bug-vieux', 'bug-neuf'])
+  assert.deepEqual(stories, ['story-revue'])
+  assert.deepEqual(queue, ['story-revue', 'bug-vieux', 'bug-neuf'])
+  assert.deepEqual(flight, ['en-cours-saine'])
+
+  // Then la règle ne relit ni l'étiquette ni les dépendances : une mission
+  // marquée bloquée sans aucune des deux reste dehors, et une close sort par
+  // son état comme avant.
+  assert.deepEqual(needsYou([{ key: 'seule', state: 'ready', blocked: true }]), [])
+  assert.deepEqual(inFlight([{ key: 'close', state: 'done', blocked: true }]), [])
+  assert.deepEqual(assignedBugs([]), [])
+})
+
 test('rien à décider ne fait pas une file : le prêt pour la prod n’y est pas', () => {
   const missions = [
     { key: 'prod', state: 'ready-for-prod', updatedAt: '2026-09-01T12:00:00Z' },
