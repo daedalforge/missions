@@ -8401,7 +8401,7 @@ function regleDePeau(selector) {
   return SOURCE.slice(at + selector.length + 1, SOURCE.indexOf('}', at))
 }
 
-test('le cadre du bandeau reprend la boîte et la bordure de la photo', () => {
+test('le cadre ceinture le bandeau et porte la photo', () => {
   // Given le bandeau de Naruto rendu
   const arbre = arbreTheme('manga', { 'missions.tab': 'missions' })
   const hero = findAll(arbre, 'div').find((node) => node.props.className === 'missions-hero')
@@ -8420,11 +8420,12 @@ test('le cadre du bandeau reprend la boîte et la bordure de la photo', () => {
   assert.equal(image[0].props.className, 'missions-hero-photo')
   assert.match(image[0].props.src, /^data:image\/webp;base64,/)
 
-  // Then le cadre garde la géométrie que la photo portait sur la base
+  // Then le cadre ceinture le bandeau au même liseré des deux côtés
   assert.match(cadre, /position: absolute/)
   assert.match(cadre, /inset: 9px 9px 0/)
+  assert.match(cadre, /box-sizing: border-box/)
   assert.match(cadre, /width: calc\(100% - 18px\)/)
-  assert.match(cadre, /height: calc\(100% - 9px\)/)
+  assert.match(cadre, /height: calc\(100% - 7\.5px\)/)
   assert.match(cadre, /overflow: hidden/)
   assert.match(cadre, /border: 1\.5px solid var\(--skin-ink\)/)
   assert.match(cadre, /border-radius: 6px/)
@@ -8482,7 +8483,7 @@ test('les docks étroits gardent une amplitude minimale', () => {
   assert.match(SOURCE, /--hero-scale: 1\.36; --hero-pan: max\(6%, 28px\)/)
 })
 
-test('le portrait et la bulle ne bougent plus', () => {
+test('le portrait, la pastille et la bulle s’alignent sur l’anneau', () => {
   // Given le bandeau de Konoha monté sous la peau papier
   const arbre = arbreTheme('manga', { 'missions.tab': 'missions' })
   const hero = findAll(arbre, 'div').find((node) => node.props.className === 'missions-hero')
@@ -8495,12 +8496,17 @@ test('le portrait et la bulle ne bougent plus', () => {
   assert.doesNotMatch(portrait, /animation/)
   assert.doesNotMatch(bulle, /animation/)
 
-  // Then leur géométrie et leur ombre restent celles d'avant
-  assert.match(portrait, /right: 26px; bottom: 16px; width: 112px; height: 112px/)
+  // Then leur géométrie partage l'axe de l'anneau et le centre du cercle
+  assert.match(portrait, /right: 21px; bottom: 10\.5px; width: 112px; height: 112px/)
   assert.match(portrait, /box-shadow: 0 0 0 1\.5px var\(--skin-ink\), 4px 4px 0 var\(--skin-shadow\)/)
-  assert.match(bulle, /right: 152px; bottom: 54px/)
+  assert.match(bulle, /right: 149px; bottom: 69\.5px/)
+  assert.match(bulle, /transform: translateY\(50%\)/)
   assert.match(bulle, /box-shadow: 2px 2px 0 var\(--skin-shadow\)/)
-  assert.match(regle(`${BULLE_HERO}::after`), /right: -7px; bottom: 12px/)
+  assert.match(regle(`${BULLE_HERO}::after`), /right: -7px; bottom: calc\(50% - 6\.25px\)/)
+
+  // Then la pastille s'aligne sur le bord droit de l'anneau
+  const actions = regle('.missions-panel[data-skin="paper"] .missions-head--hero .missions-actions')
+  assert.match(actions, /right: 19px/)
 
   // Then la bulle garde son texte : un titre et un sous-titre, intacts
   const bulleNode = hero.children.find((node) => node.props.className === 'missions-hero-bubble')
@@ -8511,6 +8517,26 @@ test('le portrait et la bulle ne bougent plus', () => {
   assert.match(regle(`${BULLE_HERO} span`), /font-size: 8\.5px/)
   assert.doesNotMatch(regle(`${BULLE_HERO} b`), /animation/)
   assert.doesNotMatch(regle(`${BULLE_HERO} span`), /animation/)
+})
+
+test('le bandeau étroit garde l’anneau à neuf pixels du bord', () => {
+  // Given le palier de largeur étroite du bandeau
+  const debut = SOURCE.indexOf('@container (max-width: 760px) {')
+  assert.ok(debut >= 0, 'le palier étroit existe')
+
+  // When son bloc de règles est extrait jusqu'à l'accolade de fermeture
+  const bloc = SOURCE.slice(debut, SOURCE.indexOf('\n}', debut) + 2)
+
+  // Then le bandeau et la coiffe raccourcissent ensemble
+  assert.match(bloc, /\.missions-hero \{ height: 150px; \}/)
+
+  // Then le portrait rétrécit sans reprendre l'ancrage de peau
+  assert.match(bloc, /\.missions-hero-avatar \{ width: 84px; height: 84px; \}/)
+  assert.doesNotMatch(bloc, /missions-hero-avatar \{[^}]*(?:right|bottom):/)
+
+  // Then la bulle disparaît et la pastille garde son bord, sans reprise locale
+  assert.match(bloc, /\.missions-hero-bubble \{ display: none; \}/)
+  assert.doesNotMatch(bloc, /missions-actions/)
 })
 
 test('la brume glisse d’une tuile entière par cycle', () => {
