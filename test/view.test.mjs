@@ -1258,23 +1258,34 @@ test('la file du dashboard suit l’urgence, puis la plus ancienne, sans l’en-
   assert.deepEqual(needsYou([]), [])
 })
 
-test('les widgets sélectionnent les bugs non résolus et les stories hautes, les plus anciennes d’abord', () => {
+test('un bug ou une story prêt pour la production ne prend plus la tête des widgets', () => {
+  // Given un bug et une story prêts à partir, les plus anciens de leur famille,
+  // parmi des voisins à tous les états ouverts.
   const missions = [
+    { key: 'bug-prod', type: 'bug', state: 'ready-for-prod', updatedAt: '2026-07-01T00:00:00Z' },
     { key: 'bug-old', type: 'bug', state: 'to-refine', updatedAt: '2026-10-01T00:00:00Z' },
+    { key: 'bug-progress', type: 'bug', state: 'in-progress', updatedAt: '2026-10-15T00:00:00Z' },
+    { key: 'bug-review', type: 'bug', state: 'in-review', updatedAt: '2026-10-20T00:00:00Z' },
     { key: 'bug-new', type: 'bug', state: 'ready', updatedAt: '2026-11-01T00:00:00Z' },
-    // Un bug clos n'est pas « non résolu » : le tracker peut l'envoyer (une
-    // mission done déclarée sur le poste), le helper ne dépend pas de cette promesse.
+    { key: 'bug-unknown', type: 'bug', state: null, updatedAt: '2026-11-02T00:00:00Z' },
     { key: 'bug-done', type: 'bug', state: 'done', updatedAt: '2026-09-01T00:00:00Z' },
-    { key: 'story-urgent', type: 'story', priority: 'urgent', state: 'in-progress', updatedAt: '2026-11-05T00:00:00Z' },
+    { key: 'story-prod', type: 'story', priority: 'urgent', state: 'ready-for-prod', updatedAt: '2026-06-01T00:00:00Z' },
     { key: 'story-high', type: 'story', priority: 'high', state: 'ready', updatedAt: '2026-11-03T00:00:00Z' },
-    { key: 'story-normal', type: 'story', priority: 'normal', state: 'ready', updatedAt: '2026-10-01T00:00:00Z' },
-    // Aucun état connu : la story reste dans le widget, tous états confondus.
+    { key: 'story-urgent', type: 'story', priority: 'urgent', state: 'in-progress', updatedAt: '2026-11-05T00:00:00Z' },
     { key: 'task-high', type: 'story', priority: 'high', state: null, updatedAt: '2026-11-04T00:00:00Z' },
-    // Une story close reste close : les widgets ne comptent que l'ouvert.
+    { key: 'story-review', type: 'story', priority: 'urgent', state: 'in-review', updatedAt: '2026-11-06T00:00:00Z' },
+    { key: 'story-normal', type: 'story', priority: 'normal', state: 'ready', updatedAt: '2026-10-01T00:00:00Z' },
     { key: 'story-done', type: 'story', priority: 'urgent', state: 'done', updatedAt: '2026-08-01T00:00:00Z' },
   ]
-  assert.deepEqual(assignedBugs(missions).map((m) => m.key), ['bug-old', 'bug-new'])
-  assert.deepEqual(highPriorityStories(missions).map((m) => m.key), ['story-high', 'task-high', 'story-urgent'])
+
+  // When les deux lentilles du digest retiennent leur famille.
+  const bugs = assignedBugs(missions).map((mission) => mission.key)
+  const stories = highPriorityStories(missions).map((mission) => mission.key)
+
+  // Then le prêt à partir et le clos restent dehors, tous les autres états
+  // ouverts restent rendus, les plus anciens d'abord.
+  assert.deepEqual(bugs, ['bug-old', 'bug-progress', 'bug-review', 'bug-new', 'bug-unknown'])
+  assert.deepEqual(stories, ['story-high', 'task-high', 'story-urgent', 'story-review'])
   assert.deepEqual(assignedBugs([]), [])
   assert.deepEqual(highPriorityStories([]), [])
 })
