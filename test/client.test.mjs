@@ -4146,7 +4146,9 @@ test('le cadre du pin se double d’encre dans le thème Default', () => {
   // que la rangée garde ses métriques.
   assert.match(repos, /background: transparent/)
   assert.match(repos, /border: 1px solid var\(--dsw-alias-border-l2/)
-  assert.match(regle('.missions-action--pin:not(.missions-action--pinned)'), /border-color: transparent/)
+  // Then le pin au repos réserve exactement la largeur du cadre planté :
+  // 1,5 px transparent, pour que la boîte intérieure ne bouge pas au clic.
+  assert.match(regle('.missions-action--pin:not(.missions-action--pinned)'), /border: 1\.5px solid transparent/)
 })
 
 test('la peau Naruto redouble le pin à l’encre, sur le papier', () => {

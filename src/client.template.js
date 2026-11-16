@@ -838,8 +838,9 @@ window.__ModuleLoader__.load({
 .missions-action--pinned:hover { background: transparent; color: var(--dsw-alias-label-primary, #1f1f1f); }
 .missions-action--pinned::before { content: ""; position: absolute; inset: 4px; border: 1.5px solid currentColor; border-radius: 4px; opacity: .9; pointer-events: none; }
 /* Waiting, the pin keeps no frame: the double filet is the planted state's
-   mark. The border stays (transparent) so the row keeps its metrics. */
-.missions-action--pin:not(.missions-action--pinned) { border-color: transparent; }
+   mark. The frame keeps the planted width (1,5 px) while transparent, so the
+   button's border box and inner box do not move when it plants. */
+.missions-action--pin:not(.missions-action--pinned) { border: 1.5px solid transparent; }
 .missions-drawer-note--error { color: var(--dsw-alias-label-danger, #b42318); }
 .missions-drawer-note { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 11.5px; }
 .missions-drawer-note--blocked { color: var(--dsw-alias-label-secondary, #5c534b); }
