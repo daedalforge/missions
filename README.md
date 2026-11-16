@@ -254,7 +254,10 @@ compter toutes les missions ouvertes, prêtes à partir incluses.
 Un projet peut déclarer ses **traductions** dans sa copie locale de
 `missions/projects.yml` — `translations.locales`,
 `translations.languageFile`, `translations.reference`. Le volet d'une mission de
-ce projet gagne alors un bouton **Tolgee import** : il lit le contenu de la
+ce projet gagne alors un bouton **Tolgee import**, tant que la mission est en
+`in-progress` ou `in-review` — le geste s'arrête là : prête pour la production ou
+livrée, la mission ne l'offre plus, et un projet sans locales ne l'offre jamais.
+Le bouton lit le contenu de la
 branche (`git show <branche>:<fichier>`) pour les fichiers que son diff change,
 relève les clés `t()` qu'ils utilisent et écrit
 `missions/<dossier>/import-tolgee.xliff` avec celles qui manquent ou sont vides
