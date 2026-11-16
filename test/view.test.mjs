@@ -1319,13 +1319,14 @@ test('les quatre lentilles du digest écartent une mission bloquée, par label c
   assert.deepEqual(queue, ['story-revue', 'bug-vieux', 'bug-neuf'])
   assert.deepEqual(flight, ['en-cours-saine'])
 
-  // Then la règle ne relit ni l'étiquette ni les dépendances : une mission
-  // marquée bloquée sans aucune des deux reste dehors, et seule cette porte
-  // l'écarte d'une lentille où son état l'aurait laissée passer.
-  assert.deepEqual(needsYou([{ key: 'seule', state: 'ready', blocked: true }]), [])
-  assert.deepEqual(inFlight([{ key: 'seule', state: 'in-progress', blocked: true }]), [])
+  // Then un `blocked` que l'hôte peut poser — le label suffit — reste la seule
+  // porte : dans chaque lentille, elle écarte une mission que son état, son
+  // type et sa priorité laissaient passer.
+  const retenue = { key: 'seule', blocked: true, blockedByLabel: true, blockers: [] }
+  assert.deepEqual(needsYou([{ ...retenue, state: 'ready' }]), [])
+  assert.deepEqual(inFlight([{ ...retenue, state: 'in-progress' }]), [])
   assert.deepEqual(
-    assignedBugs([{ key: 'isolée', type: 'bug', state: 'to-refine', priority: 'low', blocked: true }]),
+    assignedBugs([{ ...retenue, key: 'isolée', type: 'bug', state: 'to-refine', priority: 'low' }]),
     [],
   )
 })
