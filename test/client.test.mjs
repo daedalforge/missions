@@ -4124,7 +4124,8 @@ test('le cadre du pin se double d’encre dans le thème Default', () => {
 
   // Then le cadre extérieur prend l'encre du texte, sur le fond du panneau :
   // aucun aplat, c'est le dessin qui porte l'état. La V1 dessine un cadre de
-  // 1,5 px (le repos reste à 1 px), posé explicitement et non par recoloration.
+  // 1,5 px (le pin au repos réserve la même largeur, transparente ; les autres
+  // boutons restent à 1 px), posé explicitement et non par recoloration.
   assert.match(cadre, /border: 1\.5px solid var\(--dsw-alias-label-primary, #1f1f1f\)/)
   assert.doesNotMatch(cadre, /border-color:/)
   assert.match(cadre, /background: transparent/)
