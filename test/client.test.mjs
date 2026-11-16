@@ -1923,6 +1923,27 @@ test('le dashboard rend les quatre cartes, dans l’ordre', () => {
   assert.match(textOf(findAll(flight, 'div').find((node) => node.props.className === 'missions-card-foot')), /8 pts in flight · oldest 11 d/)
 })
 
+test('le pied du Dashboard écrit la demi-pointe et ne met le pluriel qu’au-delà de 1', () => {
+  // Given deux missions en cours qui valent 0.5 et 2.
+  const missions = [
+    { ...DASH_MISSIONS[2], key: 'MIS-10', points: 0.5 },
+    { ...DASH_MISSIONS[3], key: 'MIS-11', points: 2 },
+  ]
+  const pieds = (view) => findAll(view, 'div')
+    .filter((node) => node.props.className === 'missions-card-foot')
+    .map(textOf)
+
+  // When le Dashboard additionne les deux.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+
+  // Then le total vaut 2.5 et porte le pluriel.
+  assert.ok(pieds(tree).some((text) => /2\.5 pts in flight/.test(text)), `le pied somme les demi-points : ${pieds(tree).join(' | ')}`)
+
+  // La demi-pointe seule reste au singulier.
+  const seule = renderDashboard([EMPTY_BAR, dashboardView([{ ...DASH_MISSIONS[2], key: 'MIS-12', points: 0.5 }]), 'dashboard'], { now: DASH_NOW })
+  assert.ok(pieds(seule.tree).some((text) => /0\.5 pt in flight/.test(text)), `la demi-pointe seule reste au singulier : ${pieds(seule.tree).join(' | ')}`)
+})
+
 test('la bande résume le périmètre et compte les missions qu’elle montre', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
@@ -3787,6 +3808,136 @@ test('un refus du tracker laisse l’ancienne priorité et le dit', async () => 
   const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
   assert.equal(note.error, true)
   assert.match(note.text, /Priority failed: tracker refused/)
+})
+
+test('le volet rend les points comme un select natif sur l’échelle du panneau', () => {
+  const { tree } = monterVolet({ ...MISSION, points: 3, updatedAt: MISSION.updated })
+
+  // La priorité reste le premier select : l'estimation vient juste après elle.
+  const select = findAll(tree, 'select')[1]
+  assert.ok(select, 'le volet doit rendre un select de points')
+  assert.equal(select.props.className, 'missions-points-select')
+  assert.equal(select.props['aria-label'], 'Points')
+  assert.equal(select.props.disabled, false)
+  assert.equal(select.props.value, '3')
+
+  // Les sept tailles de l'échelle, dans l'ordre, la valeur courante une seule fois.
+  const options = select.children.filter((child) => child.type === 'option')
+  assert.deepEqual(options.map((option) => option.props.value), ['0.5', '1', '2', '3', '5', '8', '13'])
+  assert.deepEqual(options.map((option) => option.props.selected), [false, false, false, true, false, false, false])
+  assert.deepEqual(options.map((option) => textOf(option)), ['0.5 pt', '1 pt', '2 pts', '3 pts', '5 pts', '8 pts', '13 pts'])
+
+  // L'ancienne ligne en lecture seule ne doit pas survivre à côté du select.
+  assert.doesNotMatch(SOURCE, /label: 'Points', value: mission\.points/)
+  assert.match(SOURCE, /const POINTS_URL = 'missions\/api\/points'/)
+  assert.match(SOURCE, /onPointsSaved: applyPoints/)
+
+  // Le CSS du select est présent, focus, état désactivé et message compris.
+  assert.match(regle('.missions-points-select'), /max-width: 100%/)
+  assert.match(SOURCE, /\.missions-points-select:focus \{/)
+  assert.match(SOURCE, /\.missions-points-select:disabled \{/)
+  assert.match(SOURCE, /\.missions-points-note--error \{/)
+  // Les deux thèmes : la bordure encre de manga, comme la priorité.
+  assert.match(regle('.missions-panel[data-skin="paper"] .missions-points-select'), /border: 1\.5px solid var\(--skin-ink\)/)
+  assert.match(SOURCE, /role: pointsNote\.error \? 'alert' : 'status'/)
+})
+
+test('sans estimation, le select propose une option vide non sélectionnable', () => {
+  // Given la mission témoin, dont le tracker ne porte aucune taille.
+  const { tree } = monterVolet()
+
+  // When le volet rend ses points.
+  const select = findAll(tree, 'select')[1]
+
+  // Then l'absence s'écrit, sans se faire passer pour une taille.
+  assert.equal(select.props.value, '')
+  const options = select.children.filter((child) => child.type === 'option')
+  assert.equal(options.length, 8)
+  assert.deepEqual(options[0].props, { value: '', disabled: true, selected: true })
+  assert.equal(textOf(options[0]), 'No points')
+  assert.deepEqual(options.slice(1).map((option) => option.props.value), ['0.5', '1', '2', '3', '5', '8', '13'])
+})
+
+test('une estimation hors échelle reste offerte en fin de liste, sélectionnée', () => {
+  // Given un tracker qui porte encore `sp:4`, une taille que l'échelle a quittée.
+  const { tree } = monterVolet({ ...MISSION, points: 4, updatedAt: MISSION.updated })
+
+  // When le volet rend ses points.
+  const select = findAll(tree, 'select')[1]
+
+  // Then la valeur courante est gardée en fin d'échelle, pas effacée.
+  assert.equal(select.props.value, '4')
+  const options = select.children.filter((child) => child.type === 'option')
+  assert.deepEqual(options.map((option) => option.props.value), ['0.5', '1', '2', '3', '5', '8', '13', '4'])
+  assert.deepEqual(options.map((option) => option.props.selected), [false, false, false, false, false, false, false, true])
+  assert.equal(textOf(options.at(-1)), '4 pts')
+})
+
+test('choisir une taille écrit le nombre et ne patche que ce champ', async () => {
+  const saved = []
+  const calls = []
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) })
+    return { ok: true, status: 200, json: async () => ({ key: 'MIS-42', value: 'sp:5', points: 5, project: 'missions' }) }
+  }
+
+  const { tree, drawer, setters } = monterVolet(
+    { ...MISSION, points: 3, updatedAt: MISSION.updated },
+    { onPointsSaved: (data) => saved.push(data) },
+  )
+  const select = findAll(tree, 'select')[1]
+
+  // When le volet choisit une autre taille.
+  await select.props.onChange({ target: { value: '5' } })
+
+  // Then un seul POST, en nombre, et la ligne avance après l'accord du tracker.
+  assert.deepEqual(writes(calls), [
+    { url: 'missions/api/points', method: 'POST', body: { key: 'MIS-42', points: 5 } },
+  ])
+  assert.deepEqual(saved, [{ key: 'MIS-42', points: 5 }])
+  assert.ok(setters.includes(5))
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, false)
+  assert.match(note.text, /Points enregistrés/)
+
+  // Choisir la taille déjà affichée n'écrit rien.
+  await select.props.onChange({ target: { value: '3' } })
+  assert.equal(writes(calls).length, 1)
+
+  // La mise à jour du panneau ne touche que `points` : la déclaration
+  // (folder, branch, base) et le blocage restent intacts.
+  const previous = { ...MISSION, updatedAt: MISSION.updated, points: 3, folder: '/w/missions/MIS-42', branch: 'fix/mis-42', base: 'main', blocked: false }
+  const previousView = { loading: false, missions: [previous], errors: [], workspaceId: 'w', workspaceRoot: '/w' }
+  drawer.props.onPointsSaved({ key: 'MIS-42', points: 5 })
+  const setView = setters.at(-2)
+  const setSelected = setters.at(-1)
+  const nextView = setView(previousView)
+  assert.deepEqual(nextView.missions[0], { ...previous, points: 5 })
+  assert.deepEqual(
+    [nextView.missions[0].folder, nextView.missions[0].branch, nextView.missions[0].base, nextView.missions[0].blocked],
+    ['/w/missions/MIS-42', 'fix/mis-42', 'main', false],
+  )
+  const nextSelected = setSelected(previous)
+  assert.deepEqual(nextSelected, { ...previous, points: 5 })
+})
+
+test('un refus du tracker laisse l’ancienne taille et le dit', async () => {
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 502,
+    json: async () => ({ error: 'tracker refused' }),
+  })
+
+  const { tree, setters } = monterVolet({ ...MISSION, points: 3, updatedAt: MISSION.updated })
+  const select = findAll(tree, 'select')[1]
+
+  await select.props.onChange({ target: { value: '5' } })
+
+  // Aucun setter n'a reçu la nouvelle taille : l'affichage reste l'ancienne.
+  assert.ok(!setters.includes(5))
+  const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
+  assert.equal(note.error, true)
+  assert.match(note.text, /Points failed: tracker refused/)
 })
 
 test('la punaise du volet écrit pins.yml et ne patche que ce drapeau', async () => {
@@ -7158,7 +7309,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(51\)/)
+  assert.match(texte, /Never used \(52\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -7174,7 +7325,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(54\)/)
+  assert.match(textOf(zero.inner), /Never used \(55\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -7603,7 +7754,7 @@ function monterVoletAvec(mission, etatsVolet = []) {
   return { inner: renderTree(noeud), setters, queue }
 }
 
-test('chaque onglet du volet, la priorité et le tracker comptent un seul POST', () => {
+test('chaque onglet du volet, la priorité, l’estimation et le tracker comptent un seul POST', () => {
   const spy = espionUsage()
   try {
     const { inner } = monterVoletAvec({ ...MISSION, url: 'https://github.com/daedalforge/missions/issues/42' })
@@ -7618,6 +7769,11 @@ test('chaque onglet du volet, la priorité et le tracker comptent un seul POST',
     assert.ok(priorite, 'le sélecteur de priorité est rendu')
     priorite.props.onChange({ target: { value: 'urgent' } })
     spy.geste('mission.priority', 'urgent')
+
+    const estimation = findAll(inner, 'select').find((node) => node.props.className === 'missions-points-select')
+    assert.ok(estimation, 'le sélecteur de points est rendu')
+    estimation.props.onChange({ target: { value: '5' } })
+    spy.geste('mission.points', '5')
 
     const tracker = findAll(inner, 'a').find((node) => node.props['aria-label'] === 'Open on the tracker')
     assert.ok(tracker, 'le lien du tracker est rendu')
