@@ -2167,6 +2167,9 @@ test('le prompt des remontées demande la PR, le tri, le push et le garde-fou', 
   // Journal et checklist restent les preuves de l'étape.
   assert.match(prompt, /Journal de mission : missions\/MIS-42\/journal\.md/)
   assert.match(prompt, /Checklist de mission : missions\/MIS-42\/checklist\.md/)
+  // Le fil n'est jamais résolu par la session : elle répond, le relecteur ferme.
+  assert.match(prompt, /sans en résoudre aucun, même corrigé/)
+  assert.match(prompt, /au relecteur, et à lui seul, de fermer son fil/)
   // Le garde-fou est complet : merge, main, labels, fermeture.
   assert.match(prompt, /tu ne merges jamais la PR/)
   assert.match(prompt, /tu n'écris jamais sur main/)
@@ -2315,7 +2318,7 @@ test('le prompt du squash nomme le chemin, la branche, la mission et le garde-fo
     'Chemin : /Users/moi/projects/missions.',
     'Branche courante : feat/mis-165.',
     '',
-    'Trouve d’abord la mission qui déclare cette branche : parcours missions/*/mission.yml et retiens celui dont le champ branch vaut exactement feat/mis-165. Si aucune mission ne la déclare, dis-le et arrête-toi sans geste git. Sinon, lis son ticket avec le CLI, jamais sa page HTML, puis lis son playbook : playbook/execution.md pour les gestes et playbook/workspace.md pour les treize interdits.',
+    'Trouve d’abord la mission qui déclare cette branche : parcours missions/*/mission.yml et retiens celui dont le champ branch vaut exactement feat/mis-165. Si aucune mission ne la déclare, dis-le et arrête-toi sans geste git. Sinon, lis son ticket avec le CLI, jamais sa page HTML, puis lis son playbook : playbook/execution.md pour les gestes et playbook/workspace.md pour les quatorze interdits.',
     '',
     'Replie ensuite la branche sur sa base déclarée (le champ base de mission.yml), en capturant la pointe avant tout geste :',
     '',

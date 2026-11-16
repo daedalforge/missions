@@ -184,7 +184,7 @@ const FAUTES = [
     page: 'workspace',
     name: 'workspace.md',
     label: 'interdits mal numérotés',
-    transform: (text) => text.replace(/^13\. /m, '14. '),
+    transform: (text) => text.replace(/^14\. /m, '15. '),
   },
 ]
 
