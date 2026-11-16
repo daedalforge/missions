@@ -28,8 +28,8 @@ qu'un seul état à la fois.
 | `in-progress` | `in-review` | PR ouverte et complète | session | `label in-review` | PR assignée, typée, milestone posée, `Closes #N`, revue interne à l'aveugle validée |
 | `in-progress` | `to-refine` | cadrage faux | demandeur | `label to-refine` | le cadrage ou le périmètre change |
 | `in-review` | `ready-for-prod` | validation des collègues constatée | session | `label ready-for-prod` | cinq cases de sortie de revue cochées |
-| `in-review` | `in-progress` | changements demandés | demandeur | `label in-progress` | un critère ou une preuve manque |
-| `in-review` | `to-refine` | diff hors périmètre | demandeur | `label to-refine` | le diff sort du cadrage |
+| `in-review` | `in-progress` | changements demandés | demandeur | `label in-progress` | une preuve manque |
+| `in-review` | `to-refine` | diff hors périmètre | demandeur | `label to-refine` | le diff sort du cadrage, ou un critère n'a pas de scénario |
 | `ready-for-prod` | `done` | merge et ticket fermé | demandeur | issue fermée | PR mergée et ticket fermé |
 
 Les trois retours (`in-progress` → `to-refine`, `in-review` → `in-progress`,

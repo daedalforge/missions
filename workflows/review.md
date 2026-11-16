@@ -31,9 +31,9 @@ geste de l'exécution, pas celui-ci.
 
 | Constat | Décision | Label |
 | --- | --- | --- |
-| Validation citée, critères et preuves complets, périmètre et tests vérifiés, journal et checklist à jour | La revue est faite : on enregistre et on passe le ticket | `ready-for-prod` |
+| Validation citée, critères et scénarios complets, périmètre et tests vérifiés, journal et checklist à jour | La revue est faite : on enregistre et on passe le ticket | `ready-for-prod` |
 | Les collègues ont remonté des changements sur la PR | La revue renvoie en exécution : le demandeur pose le label, la session de remontées corrige sur la branche | `in-progress` |
-| La PR sort du périmètre du cadrage | Le cadrage reprend la main : le demandeur pose le label, la branche et la PR restent ouvertes | `to-refine` |
+| La PR sort du périmètre du cadrage, ou un critère n'a pas de scénario | Le cadrage reprend la main : le demandeur pose le label, la branche et la PR restent ouvertes | `to-refine` |
 
 La décision retenue est écrite en commentaire daté dans le ticket, jamais
 seulement dans la session. Le merge et la fermeture sont les gestes du

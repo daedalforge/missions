@@ -14,11 +14,11 @@ nodes:
     artifact: la validation citée, verdict et date
     gate: le verdict des collègues est prouvé sur la PR
   - id: constater-criteres
-    label: Constater que chaque critère porte sa preuve
+    label: Constater que chaque critère a son scénario
     section: Ce qu'on constate
     writer: session
-    artifact: la liste des critères, chacun avec sa preuve
-    gate: chaque critère d'acceptation cite sa preuve
+    artifact: la liste des critères, chacun avec le scénario qui le couvre
+    gate: chaque critère d'acceptation cite le scénario qui le couvre
   - id: verifier-perimetre
     label: Vérifier le périmètre
     section: Ce qu'on constate
@@ -68,7 +68,7 @@ nodes:
     section: Sur le tracker
     writer: session
     artifact: le commentaire daté, avec les preuves
-    gate: le commentaire est daté et cite la preuve de chaque critère
+    gate: le commentaire est daté et cite le scénario et la preuve de chaque critère
   - id: verifier-sortie
     label: Vérifier la condition de sortie
     section: Condition de sortie
@@ -106,7 +106,10 @@ edges:
     when: tout est conforme
   - from: decider
     to: reprendre
-    when: un critère ou une preuve manque
+    when: une preuve manque
+  - from: decider
+    to: renvoyer-cadrage
+    when: un critère n'a pas de scénario
   - from: enregistrer-validation
     to: verifier-sortie
   - from: verifier-sortie
