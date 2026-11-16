@@ -9317,6 +9317,16 @@ function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS, 
   return { ...harness, tree, vue, noeud, arbre }
 }
 
+// La bande d'états : le nom et le nombre de chaque segment, dans l'ordre rendu.
+function bandOf(rendu) {
+  return findAll(rendu, 'button')
+    .filter((node) => node.props.className === 'missions-band-seg')
+    .map((node) => {
+      const spans = findAll(node, 'span')
+      return [textOf(spans[0]), textOf(spans[1])]
+    })
+}
+
 test('les deux onglets montent le même arbre générique, jamais une carte', () => {
   // Un seul Workbench dans la source, monté une seule fois : le composant est
   // générique, il sert Missions et Done, et la carte de mission n'existe plus.
@@ -9796,24 +9806,112 @@ test('les actions passent avant les missions et se déclenchent au clavier', () 
   assert.deepEqual(declenchees, [['declare-mission', 'action']])
 })
 
-test('la bande garde les comptes du portefeuille sous toute requête', () => {
+test('au repos, la bande compte les missions du portefeuille', () => {
+  // Given la fixture de douze missions, une prête et deux en revue.
   const { arbre } = monterArbre()
-  const comptes = (rendu) => findAll(rendu, 'span')
-    .filter((node) => node.props.className === 'missions-band-n')
-    .map((node) => textOf(node))
 
-  const repos = arbre()
-  assert.ok(comptes(repos).length > 0, 'la bande porte un segment par état')
-  assert.deepEqual(comptes(arbre({ query: 'session' })), comptes(repos), 'la requête ne recalcule pas la bande')
-  assert.deepEqual(comptes(arbre({ query: 'workflows' })), comptes(repos))
+  // When la vue rend la bande, sans requête ni filtre.
+  const bande = bandOf(arbre())
 
-  // Un compte de mission n'est jamais additionné à un compte de lot.
-  const label = (rendu) => textOf(findAll(rendu, 'span').find((node) => node.props.className === 'missions-wb-count'))
-  assert.equal(label(arbre({ query: 'session' })), '1 of 12 · esc')
-  // La mission épic répond par son titre seul : une famille, un compte, et
-  // plus d'entrée de lot.
-  assert.equal(label(arbre({ query: 'workflows' })), '1 of 12 · esc')
-  assert.doesNotMatch(label(arbre({ query: 'workflows' })), /open/)
+  // Then les trois états du workflow gardent leur ordre et leurs comptes.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '9'],
+    ['in review', '2'],
+  ])
+})
+
+test('une requête par titre réduit la bande au compte qu’elle montre', () => {
+  // Given la fixture de douze missions.
+  const { arbre } = monterArbre()
+
+  // When la requête ne garde que « Workflows skeleton ».
+  const bande = bandOf(arbre({}, { query: 'workflows' }))
+
+  // Then seule la mission en cours entre dans la bande, les autres à zéro.
+  assert.deepEqual(bande, [
+    ['ready', '0'],
+    ['in progress', '1'],
+    ['in review', '0'],
+  ])
+})
+
+test('une mission trouvée par sa checklist compte dans la bande', () => {
+  // Given la fixture dont la checklist de MIS-206 porte « session key ».
+  const { arbre } = monterArbre()
+
+  // When la requête ne correspond qu'à cette ligne de checklist.
+  const bande = bandOf(arbre({}, { query: 'session' }))
+
+  // Then sa mission, en revue, entre dans la bande.
+  assert.deepEqual(bande, [
+    ['ready', '0'],
+    ['in progress', '0'],
+    ['in review', '1'],
+  ])
+})
+
+test('un filtre d’épopée réduit la bande aux missions qu’il montre', () => {
+  // Given la fixture et les quatre lots qui portent l'épic MIS-2.
+  const { arbre } = monterArbre()
+
+  // When la vue rend la bande sous le filtre d'épopée MIS-2.
+  const bande = bandOf(arbre({}, { filters: { epic: 'MIS-2' } }))
+
+  // Then la bande somme les quatre missions du lot, pas l'épic qui les porte.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '2'],
+    ['in review', '1'],
+  ])
+})
+
+test('un état que les filtres excluent reste affiché à zéro', () => {
+  // Given la fixture et le filtre de type « epic ».
+  const { arbre } = monterArbre()
+
+  // When la vue rend la bande sous ce filtre.
+  const bande = bandOf(arbre({}, { filters: { type: 'epic' } }))
+
+  // Then les trois segments gardent leur nom et leur ordre, l'épic comptée seule.
+  assert.deepEqual(bande, [
+    ['ready', '0'],
+    ['in progress', '1'],
+    ['in review', '0'],
+  ])
+})
+
+test('sélectionner des états laisse les comptes de la bande intacts', () => {
+  // Given la fixture, montée avec deux états sélectionnés.
+  const { arbre } = monterArbre({ filters: { state: ['ready', 'in-review'] } })
+
+  // When la vue rend la bande sous cette sélection.
+  const bande = bandOf(arbre())
+
+  // Then ses segments comptent le portefeuille, et Clear retrouve le repos.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '9'],
+    ['in review', '2'],
+  ])
+  assert.deepEqual(bandOf(arbre({}, { filters: EMPTY_BAR.filters })), bandOf(arbre()))
+})
+
+test('une mission dont l’état n’est pas du workflow compte dans « unknown state »', () => {
+  // Given la fixture plus une mission que le tracker n'a pas su classer.
+  const inconnue = { ...ARBRE_EPIC, key: 'MIS-999', title: 'État inconnu', state: null }
+  const { arbre } = monterArbre({ missions: [...ARBRE_MISSIONS, inconnue] })
+
+  // When la vue rend la bande.
+  const bande = bandOf(arbre())
+
+  // Then son segment la compte, comme la liste la montre.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '9'],
+    ['in review', '2'],
+    ['unknown state', '1'],
+  ])
 })
 
 test('l’arbre tient dans la largeur et ses titres sont ellipsés', () => {
