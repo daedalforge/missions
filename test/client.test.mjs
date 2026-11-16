@@ -8454,7 +8454,7 @@ test('le thème sombre filtre le cadre, bordure comprise', () => {
   assert.match(sombre[0], /body\[data-ds-dark-theme\]/)
 })
 
-test('la dérive de la caméra dure quatorze secondes, sans quitter le cadre', () => {
+test('la dérive de la caméra dure quatorze secondes, avec sa réserve de cadrage', () => {
   // Given le bundle construit et son bloc de thème
   // When la règle de la photo et le keyframes de la dérive sont extraits
   const photo = regleDePeau(PHOTO_HERO)
@@ -8463,6 +8463,10 @@ test('la dérive de la caméra dure quatorze secondes, sans quitter le cadre', (
   // Then la photo est cadrée en réserve, puis dérive d'un bord à l'autre
   assert.match(photo, /--hero-scale: 1\.12/)
   assert.match(photo, /--hero-pan: 4%/)
+  // Then la réserve du zoom couvre le pan : aucun bord ne peut apparaître
+  const echelle = Number(photo.match(/--hero-scale: ([\d.]+)/)[1])
+  const pan = Number(photo.match(/--hero-pan: ([\d.]+)%/)[1])
+  assert.ok(pan <= (echelle - 1) * 50, 'la réserve couvre le pan')
   assert.match(photo, /transform: scale\(var\(--hero-scale\)\)/)
   assert.match(photo, /animation: missions-hero-drift 14s ease-in-out infinite alternate/)
 
@@ -8471,8 +8475,18 @@ test('la dérive de la caméra dure quatorze secondes, sans quitter le cadre', (
   assert.match(derive, /to \{ transform: scale\(var\(--hero-scale, 1\.12\)\) translateX\(var\(--hero-pan, 4%\)\); \}/)
 })
 
+test('les docks étroits gardent une amplitude minimale', () => {
+  // Given les deux paliers de largeur du bandeau
+  // Then le pan ne descend pas sous 28 px et le zoom grandit pour le couvrir
+  assert.match(SOURCE, /--hero-scale: 1\.28; --hero-pan: max\(6%, 28px\)/)
+  assert.match(SOURCE, /--hero-scale: 1\.36; --hero-pan: max\(6%, 28px\)/)
+})
+
 test('le portrait et la bulle ne bougent plus', () => {
   // Given le bandeau de Konoha monté sous la peau papier
+  const arbre = arbreTheme('manga', { 'missions.tab': 'missions' })
+  const hero = findAll(arbre, 'div').find((node) => node.props.className === 'missions-hero')
+
   // When les règles du portrait et de la bulle sont extraites
   const portrait = regle(PORTRAIT_HERO)
   const bulle = regle(BULLE_HERO)
@@ -8487,15 +8501,25 @@ test('le portrait et la bulle ne bougent plus', () => {
   assert.match(bulle, /right: 152px; bottom: 54px/)
   assert.match(bulle, /box-shadow: 2px 2px 0 var\(--skin-shadow\)/)
   assert.match(regle(`${BULLE_HERO}::after`), /right: -7px; bottom: 12px/)
+
+  // Then la bulle garde son texte : un titre et un sous-titre, intacts
+  const bulleNode = hero.children.find((node) => node.props.className === 'missions-hero-bubble')
+  assert.deepEqual(bulleNode.children.map((node) => node.type), ['b', 'span'])
+  assert.match(textOf(bulleNode.children[0]), /^\d+ missions?!$/)
+  assert.match(textOf(bulleNode.children[1]), /^\d+ projects?$/)
+  assert.match(regle(`${BULLE_HERO} b`), /font-size: 11px/)
+  assert.match(regle(`${BULLE_HERO} span`), /font-size: 8\.5px/)
+  assert.doesNotMatch(regle(`${BULLE_HERO} b`), /animation/)
+  assert.doesNotMatch(regle(`${BULLE_HERO} span`), /animation/)
 })
 
-test('la brume glisse sur un cycle qui se raccorde au pixel', () => {
+test('la brume glisse d’une tuile entière par cycle', () => {
   // Given la couche de brume du cadre et son keyframes
   // When la règle du pseudo-élément et la translation sont lues
   const brume = regle(`${CADRE_HERO}::before`)
   const glisse = ligneDe('@keyframes missions-hero-mist')
 
-  // Then deux nappes tuilées horizontalement, sans couture visible
+  // Then deux nappes tuilées horizontalement, d’une période par cycle
   assert.match(brume, /width: 200%/)
   assert.match(brume, /background-size: 50% 100%, 25% 100%/)
   assert.match(brume, /background-repeat: repeat-x/)
@@ -8566,6 +8590,16 @@ test('les animations du bandeau ne touchent que transform et opacity', () => {
     assert.ok(bloc.includes(`@keyframes ${nom}`), `keyframe absent : ${nom}`)
     assert.doesNotMatch(bloc, /(?:^|[\s;{])(width|height|top|left|margin|box-shadow|filter)\s*:/)
   }
+})
+
+test('la cadence des poussières est la même dans le CSS et le markup', () => {
+  // Given la période nommée dans le bloc du markup et la déclaration CSS
+  const bloc = SOURCE.slice(SOURCE.indexOf('const HERO_MOTES = '), SOURCE.indexOf('const THEME_CSS = '))
+  const periode = Number(bloc.match(/period: (\d+),/)[1])
+  const declaration = ligneDe('animation: missions-hero-mote')
+
+  // Then le CSS anime les poussières sur cette période
+  assert.match(declaration, new RegExp(`animation: missions-hero-mote ${periode}s linear infinite`))
 })
 
 test('le mouvement réduit coupe les quatre animations du bandeau', () => {
