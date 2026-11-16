@@ -1978,9 +1978,9 @@ test('la bande résume le périmètre et compte les missions qu’elle montre', 
   assert.equal(textOf(scope), '3 need you · 9 open · 2 projects')
   assert.equal(rendered.length, 10)
   // Les deux bloquées comptent au périmètre sans tenir une ligne du digest :
-  // leurs clés n'apparaissent nulle part dans les lignes rendues.
-  const cles = rendered.map((button) => textOf(button))
-  assert.equal(cles.filter((text) => /\bMIS-(9|10)\b/.test(text)).length, 0, 'aucune ligne bloquée ne doit être rendue')
+  // aucune ligne rendue ne porte leur clé.
+  const cles = findAll(tree, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  assert.deepEqual(cles.filter((cle) => cle === 'MIS-9' || cle === 'MIS-10'), [], 'aucune ligne bloquée ne doit être rendue')
 })
 
 test('un bug prêt pour la production ne prend plus la tête du digest', () => {
