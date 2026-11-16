@@ -3817,7 +3817,8 @@ test('la punaise du volet écrit pins.yml et ne patche que ce drapeau', async ()
   assert.ok(bouton, 'le volet offre la punaise dans toutes les missions')
   assert.equal(bouton.props['aria-pressed'], 'false')
   assert.equal(bouton.props['data-pinned'], 'false')
-  assert.match(bouton.props.className, /missions-action--pin/)
+  assert.match(bouton.props.className, /\bmissions-action--pin\b/)
+  assert.doesNotMatch(bouton.props.className, /missions-action--pinned/, 'au repos, le bouton ne porte pas la classe de l’état')
 
   // La punaise est le premier geste de la rangée : elle ne prend pas la place
   // de la session, qui reste la primaire et la dernière.
@@ -3868,6 +3869,7 @@ test('un refus de pin laisse la punaise en place et le dit', async () => {
   const bouton = findAll(tree, 'button').find((node) => node.props['aria-label'] === 'Unpin')
   assert.ok(bouton, 'une mission épinglée montre le geste inverse')
   assert.equal(bouton.props['aria-pressed'], 'true')
+  assert.match(bouton.props.className, /\bmissions-action--pinned\b/, 'le cadre épinglé est porté par le bouton')
 
   await bouton.props.onClick()
 
@@ -3895,6 +3897,7 @@ test('un second clic sur la punaise retire la clé et rend la ligne à son rang'
   assert.ok(bouton, 'une mission épinglée montre le geste inverse')
   assert.equal(bouton.props['aria-pressed'], 'true')
   assert.equal(bouton.props['data-pinned'], 'true')
+  assert.match(bouton.props.className, /\bmissions-action--pinned\b/, 'le cadre épinglé est porté par le bouton')
 
   // When on clique sur la punaise déjà posée.
   await bouton.props.onClick()
