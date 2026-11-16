@@ -8523,6 +8523,8 @@ test('le bandeau étroit garde l’anneau à neuf pixels du bord', () => {
   // Given le palier de largeur étroite du bandeau
   const debut = SOURCE.indexOf('@container (max-width: 760px) {')
   assert.ok(debut >= 0, 'le palier étroit existe')
+
+  // When son bloc de règles est extrait jusqu'à l'accolade de fermeture
   const bloc = SOURCE.slice(debut, SOURCE.indexOf('\n}', debut) + 2)
 
   // Then le bandeau et la coiffe raccourcissent ensemble
