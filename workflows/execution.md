@@ -87,8 +87,9 @@ condition de sortie, pas un geste de confort.
 - **Un seul sujet.** Une idée qui n'est pas dans les critères devient un ticket,
   pas un commit de plus.
 - **Un scénario, un `it`.** Chaque scénario principal de la fiche donne un `it`
-  unique, nommé en français, avec plusieurs assertions ; un test par critère
-  d'acceptation est exclu. Les variantes de forme et cas limites sans effet
+  unique, nommé en anglais en `should…`, corps en Given / When / Then sans
+  commentaire, avec plusieurs assertions ; un test par critère d'acceptation
+  est exclu. Les variantes de forme et cas limites sans effet
   observable ne s'écrivent pas en test ; un défaut constaté garde son test de
   régression.
 - **Pas de mélange de forme et de fond** dans un même commit : un reformatage se
