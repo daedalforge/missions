@@ -1977,8 +1977,10 @@ test('la bande résume le périmètre et compte les missions qu’elle montre', 
   const scope = findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope')
   assert.equal(textOf(scope), '3 need you · 9 open · 2 projects')
   assert.equal(rendered.length, 10)
-  // Les deux bloquées comptent au périmètre sans tenir une ligne du digest.
-  assert.equal(rendered.filter((button) => button.props['data-state'] === 'blocked').length, 0)
+  // Les deux bloquées comptent au périmètre sans tenir une ligne du digest :
+  // leurs clés n'apparaissent nulle part dans les lignes rendues.
+  const cles = rendered.map((button) => textOf(button))
+  assert.equal(cles.filter((text) => /\bMIS-(9|10)\b/.test(text)).length, 0, 'aucune ligne bloquée ne doit être rendue')
 })
 
 test('un bug prêt pour la production ne prend plus la tête du digest', () => {
@@ -3843,9 +3845,10 @@ test('la mission bloquée reste dans la liste, à sa place de bloquée', () => {
     { ...MISSION, key: 'MIS-82', title: 'Saine', state: 'in-review', priority: 'low', blocked: false, blockers: [], updatedAt: '2026-10-01T00:00:00Z' },
   ]
   const { arbre } = monterArbre({ missions: liste })
+  const ouverts = []
 
   // When la liste plate est rendue.
-  const rendu = arbre()
+  const rendu = arbre({}, { onSelect: (mission, from) => ouverts.push([mission.key, from]) })
   const lignes = findAll(rendu, 'div').filter((node) => node.props.className === 'missions-tree-row')
 
   // Then la bloquée est rendue, dans l'étage des bloquées, après la saine :
@@ -3863,6 +3866,11 @@ test('la mission bloquée reste dans la liste, à sa place de bloquée', () => {
   }
   assert.deepEqual(badges('MIS-81'), ['blocked'])
   assert.deepEqual(badges('MIS-82'), [])
+
+  // Then sa ligne s'ouvre comme avant : le clic sélectionne la bloquée et
+  // bascule sur l'onglet Missions, le geste que la liste garde entier.
+  lignes.find((node) => textOf(node).includes('MIS-81')).props.onClick()
+  assert.deepEqual(ouverts, [['MIS-81', 'row']], "l'ouverture doit monter la fiche de la bloquée")
 })
 
 test('une raison écrite est posée sans attendre la lecture suivante', () => {
