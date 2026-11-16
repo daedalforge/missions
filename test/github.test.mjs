@@ -111,6 +111,22 @@ test('a ready-for-prod label is read as its own state', async () => {
   assert.equal(missions[0].points, 2)
 })
 
+test('la lecture reconnaît une demi-pointe et laisse un libellé étranger intact', async () => {
+  const fetchImpl = route(async () =>
+    response([
+      issue(10, { labels: ['ready', 'sp:0.5'] }),
+      issue(11, { labels: ['ready', 'sp:3'] }),
+      issue(12, { labels: ['ready', 'sp:moyen'] }),
+    ]),
+  )
+
+  const missions = await list(PROJECT, { fetchImpl })
+
+  assert.equal(missions[0].points, 0.5)
+  assert.equal(missions[1].points, 3)
+  assert.equal(missions[2].points, null)
+})
+
 test('two state labels leave the state unknown instead of picking one', async () => {
   const fetchImpl = route(async () =>
     response([
@@ -350,6 +366,44 @@ test('changer les points lit l’issue, retire les anciennes tailles puis pose l
     'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
   ])
   assert.deepEqual(JSON.parse(calls[4].body), { labels: ['sp:5'] })
+})
+
+test('écrire une demi-pointe retire l’ancienne taille et pose sp:0.5', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    if ((init.method ?? 'GET') === 'GET') return response({ labels: [{ name: 'ready' }, { name: 'sp:3' }] })
+    return response({})
+  }
+
+  const result = await setPoints(PROJECT, 'MIS-110', { points: 0.5, fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', value: 'sp:0.5' })
+  assert.deepEqual(calls.map((call) => `${call.method} ${decodeURIComponent(call.url)}`), [
+    'GET https://api.github.com/repos/daedalforge/missions/issues/110',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:3',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+  assert.deepEqual(JSON.parse(calls[2].body), { labels: ['sp:0.5'] })
+})
+
+test('remplacer une demi-pointe par une taille entière la retire', async () => {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ?? null })
+    if ((init.method ?? 'GET') === 'GET') return response({ labels: [{ name: 'ready' }, { name: 'sp:0.5' }] })
+    return response({})
+  }
+
+  const result = await setPoints(PROJECT, 'MIS-110', { points: 5, fetchImpl })
+
+  assert.deepEqual(result, { key: 'MIS-110', value: 'sp:5' })
+  assert.deepEqual(calls.map((call) => `${call.method} ${decodeURIComponent(call.url)}`), [
+    'GET https://api.github.com/repos/daedalforge/missions/issues/110',
+    'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:0.5',
+    'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
+  ])
+  assert.deepEqual(JSON.parse(calls[2].body), { labels: ['sp:5'] })
 })
 
 test('une taille déjà portée n’est pas retirée pour être reposée', async () => {
