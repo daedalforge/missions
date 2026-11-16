@@ -248,8 +248,10 @@ leur sous-titre nomme la borne. Une mission bloquée n'y apparaît pas non plus,
 et la file, l'en-cours, les bugs comme les stories l'écartent : elle attend une
 autre mission, pas vous, qu'elle le soit par le label `blocked` ou par un lien
 `Blocks` entrant vers une mission qui n'a pas atteint la revue. Leur état vide
-le dit (« No unblocked bug before its release. », « Nothing unblocked is
-waiting on you. »). Le lien *View all N* de chaque carte transporte les états
+le dit, chacun dans son vocabulaire (« No unblocked bug before its release. »,
+« No unblocked high-priority story before its release. », « Nothing in progress
+is unblocked. », « Nothing unblocked is waiting on you. »). Le lien *View all N*
+de chaque carte transporte les états
 qu'elle montre — jamais `ready-for-prod` — et N compte ses seules lignes non
 bloquées ; la liste ouverte, elle, garde les missions bloquées de ces états, à
 leur étage. La ligne de section continue de
