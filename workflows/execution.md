@@ -37,7 +37,8 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
 - [ ] Les commits sont préfixés de la clé, un sujet par commit.
 - [ ] Les tests du projet passent (ou l'absence de tests est justifiée dans la PR).
 - [ ] La PR est ouverte, liée au ticket.
-- [ ] Chaque critère d'acceptation porte sa preuve dans la description de la PR.
+- [ ] Chaque critère d'acceptation porte sa preuve dans la description de la PR :
+      le scénario qui le couvre, son test, sa capture ou son commentaire daté.
 - [ ] La revue interne à l'aveugle est validée, et son verdict est consigné au journal.
 - [ ] Le journal porte la section d'exécution (changements, preuves, écarts).
 - [ ] La checklist est à jour : chaque case cochée porte sa preuve, les cases ouvertes sont nommées.
@@ -85,6 +86,11 @@ condition de sortie, pas un geste de confort.
 
 - **Un seul sujet.** Une idée qui n'est pas dans les critères devient un ticket,
   pas un commit de plus.
+- **Un scénario, un `it`.** Chaque scénario principal de la fiche donne un `it`
+  unique, nommé en français, avec plusieurs assertions ; un test par critère
+  d'acceptation est exclu. Les variantes de forme et cas limites sans effet
+  observable ne s'écrivent pas en test ; un défaut constaté garde son test de
+  régression.
 - **Pas de mélange de forme et de fond** dans un même commit : un reformatage se
   fait à part, ou pas du tout.
 - **Le périmètre change ?** Retour au cadrage : mettre à jour la fiche, faire
