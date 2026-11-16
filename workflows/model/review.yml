@@ -29,7 +29,7 @@ nodes:
     label: Vérifier les tests
     section: Ce qu'on constate
     writer: session
-    artifact: la suite verte, et le compte des tests ajoutés
+    artifact: la suite verte, chaque scénario couvert ; aucun compte de tests
     gate: les tests passent sur la tête de branche
   - id: verifier-journal
     label: Vérifier le journal
