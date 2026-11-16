@@ -1331,7 +1331,7 @@ test('les quatre lentilles du digest écartent une mission bloquée, par label c
     { key: 'bug-label', type: 'bug', priority: 'urgent', state: 'in-review', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-01T00:00:00Z' },
     { key: 'bug-vieux', type: 'bug', priority: 'normal', state: 'to-refine', blocked: false, blockers: [], updatedAt: '2026-10-10T00:00:00Z' },
     { key: 'bug-neuf', type: 'bug', priority: 'normal', state: 'to-refine', blocked: false, blockers: [], updatedAt: '2026-10-20T00:00:00Z' },
-    { key: 'story-dépendance', type: 'story', priority: 'high', state: 'in-progress', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-9', state: 'ready' }], updatedAt: '2026-09-02T00:00:00Z' },
+    { key: 'story-dépendance', type: 'story', priority: 'high', state: 'in-progress', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-9', title: 'Contrat', state: 'ready', url: null }], updatedAt: '2026-09-02T00:00:00Z' },
     { key: 'story-revue', type: 'story', priority: 'high', state: 'in-review', blocked: false, blockers: [], updatedAt: '2026-10-12T00:00:00Z' },
     { key: 'en-cours-saine', type: 'story', priority: 'normal', state: 'in-progress', blocked: false, blockers: [], updatedAt: '2026-10-05T00:00:00Z' },
   ]
@@ -1364,6 +1364,15 @@ test('les quatre lentilles du digest écartent une mission bloquée, par label c
     highPriorityStories([{ ...retenue, key: 'haute', type: 'story', state: 'ready', priority: 'high' }]),
     [],
   )
+
+  // Then la dépendance seule ferme les mêmes portes : un bug en revue et une
+  // demande en attente qu'elle retient restent dehors, sans étiquette.
+  const dépendance = { blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-9', title: 'Contrat', state: 'to-refine', url: null }] }
+  assert.deepEqual(
+    assignedBugs([{ ...dépendance, key: 'bug-retenu', type: 'bug', state: 'in-review', priority: 'urgent' }]),
+    [],
+  )
+  assert.deepEqual(needsYou([{ ...dépendance, key: 'demande-retenue', state: 'ready' }]), [])
 })
 
 test('rien à décider ne fait pas une file : le prêt pour la prod n’y est pas', () => {

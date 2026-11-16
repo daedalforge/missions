@@ -1735,7 +1735,7 @@ const DASH_MISSIONS = [
   // lentilles les laissent dehors — un bug par son label, une story par sa
   // dépendance — alors que rien ne les a fermées.
   { key: 'MIS-9', title: 'bug bloqué', state: 'in-review', type: 'bug', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-15T12:00:00Z', blocked: true, blockedByLabel: true, blockers: [] },
-  { key: 'MIS-10', title: 'story bloquée', state: 'ready', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-20T12:00:00Z', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-77', state: 'ready' }] },
+  { key: 'MIS-10', title: 'story bloquée', state: 'ready', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-20T12:00:00Z', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-77', title: 'Contrat', state: 'ready', url: null }] },
 ]
 
 function dashboardView(missions, loading = false) {
@@ -2061,7 +2061,7 @@ test('la carte Bugs écarte un bug bloqué, fût-il le plus ancien de sa famille
     { key: 'MIS-50', title: 'bloqué par étiquette', state: 'in-review', type: 'bug', priority: 'urgent', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
     { key: 'MIS-51', title: 'revoir la recherche', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-11-01T00:00:00Z' },
     { key: 'MIS-52', title: 'corriger le filtre', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T00:00:00Z' },
-    { key: 'MIS-53', title: 'bloqué par dépendance', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-54', title: 'Contrat', state: 'in-progress' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
+    { key: 'MIS-53', title: 'bloqué par dépendance', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-54', title: 'Contrat', state: 'in-progress', url: null }], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
   ]
 
   // When l'onglet Dashboard est rendu.
@@ -2081,7 +2081,7 @@ test('les deux causes du blocage tiennent la même porte sur le digest', () => {
   // story en revue bloquée par la seule étiquette, une story en revue dont la
   // dépendance est arrivée en revue, et une mission saine à raffiner.
   const missions = [
-    { key: 'MIS-60', title: 'en cours retenue', state: 'in-progress', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-64', title: 'Contrat', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
+    { key: 'MIS-60', title: 'en cours retenue', state: 'in-progress', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-64', title: 'Contrat', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
     { key: 'MIS-61', title: 'en revue retenue', state: 'in-review', type: 'story', priority: 'high', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T00:00:00Z' },
     { key: 'MIS-62', title: 'dépendance revue', state: 'in-review', type: 'story', priority: 'high', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
     { key: 'MIS-63', title: 'saine à raffiner', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-02T00:00:00Z' },
@@ -2107,7 +2107,7 @@ test('une carte vide le dit sans mentir, et le total du panneau ne perd rien', (
   // à raffiner bloquée, qu'une file laisserait passer.
   const missions = [
     { key: 'MIS-70', title: 'en cours bloquée', state: 'in-progress', type: 'story', priority: 'high', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
-    { key: 'MIS-71', title: 'en cours retenue', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-72', title: 'Contrat', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T00:00:00Z' },
+    { key: 'MIS-71', title: 'en cours retenue', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-72', title: 'Contrat', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T00:00:00Z' },
     { key: 'MIS-73', title: 'à raffiner bloquée', state: 'to-refine', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-03T00:00:00Z' },
   ]
 
@@ -2134,7 +2134,7 @@ test('une carte vide nomme la borne, même quand des missions bloquées ou prêt
     { key: 'MIS-40', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
     { key: 'MIS-41', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T12:00:00Z' },
     { key: 'MIS-42', title: 'bug bloqué', state: 'to-refine', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T12:00:00Z' },
-    { key: 'MIS-43', title: 'story bloquée', state: 'in-review', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-74', title: 'Contrat', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-03T12:00:00Z' },
+    { key: 'MIS-43', title: 'story bloquée', state: 'in-review', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-74', title: 'Contrat', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-03T12:00:00Z' },
     { key: 'MIS-44', title: 'en cours bloquée', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-04T12:00:00Z' },
   ]
 
@@ -2186,9 +2186,9 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
   }
   // Deux bloquées, les plus anciennes du plateau : un bug en cours et une
   // story haute en cours à deux points. Ni l'en-tête ni le pied ne les
-  // comptent — sinon les comptes mentiraient sur les lignes rendues.
+  // comptent — sinon ils compteraient des missions que la carte n'affiche pas.
   missions.push({ key: 'B-0', title: 'bug bloqué', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 8, 1)).toISOString() })
-  missions.push({ key: 'S-0', title: 'story bloquée', state: 'in-progress', type: 'story', priority: 'high', points: 2, blocked: true, blockedByLabel: false, blockers: [{ key: 'Q-0', state: 'ready' }], project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 8, 2)).toISOString() })
+  missions.push({ key: 'S-0', title: 'story bloquée', state: 'in-progress', type: 'story', priority: 'high', points: 2, blocked: true, blockedByLabel: false, blockers: [{ key: 'Q-0', title: 'file 0', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 8, 2)).toISOString() })
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
   const [bugs, stories, flight, queue] = findAll(tree, 'article')
 
@@ -2535,7 +2535,7 @@ test('le lien du widget ouvre la liste sur les états de la carte', () => {
   assert.ok(setters.includes(''), 'le clic efface la recherche')
 })
 
-test('le compte annoncé par un widget vaut les lignes que son lien ouvre', () => {
+test('sans bloquée, le compte annoncé par un widget vaut les lignes que son lien ouvre', () => {
   // Given douze bugs à raffiner et douze stories prêtes, chacune précédée d'une
   // mission prête à partir plus ancienne qu'elle.
   const missions = []
@@ -3818,7 +3818,7 @@ test('la liste place une mission bloquée après sa bloqueuse, même épinglée'
       priority: 'urgent',
       blocked: true,
       blockedByLabel: false,
-      blockers: [{ key: 'MIS-472', title: 'Bloqueuse', state: 'ready' }],
+      blockers: [{ key: 'MIS-472', title: 'Bloqueuse', state: 'ready', url: null }],
     },
     { ...MISSION, key: 'MIS-472', title: 'Bloqueuse', priority: 'low' },
   ]
