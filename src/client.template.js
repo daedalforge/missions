@@ -766,9 +766,8 @@ window.__ModuleLoader__.load({
 .missions-row[data-state="ready"] .missions-rowdot { background: #1a7f37; }
 .missions-row[data-state="to-refine"] .missions-rowdot { background: #8250df; }
 /* A repository row: the repository, its branch, why it is there, its age. */
-.missions-dash-card--branches, .missions-dash-card--checkouts, .missions-dash-card--closed, .missions-dash-card--left { grid-column: span 3; }
+.missions-dash-card--branches, .missions-dash-card--checkouts { grid-column: span 3; }
 .missions-row--repo { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr) auto 42px; }
-.missions-row--closed { grid-template-columns: 56px minmax(0, 1fr) auto 42px; }
 .missions-rowwhy { justify-self: end; max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--dsw-alias-label-primary, #1f1f1f) 7%, transparent); color: var(--dsw-alias-label-secondary, #4a4a4a); font-size: 10px; font-variant-numeric: tabular-nums; }
 .missions-rowwhy[data-reason="never-pushed"] { background: color-mix(in srgb, #bf8700 18%, transparent); color: #8a5a00; }
 .missions-rowwhy[data-reason="error"] { background: color-mix(in srgb, #cf222e 14%, transparent); color: #b31d28; }
@@ -778,7 +777,7 @@ window.__ModuleLoader__.load({
 .missions-sect-error-text { min-width: 0; overflow-wrap: anywhere; color: #b31d28; }
 .missions-sect-error .missions-retry { flex: none; margin-left: auto; }
 @media (prefers-reduced-motion: reduce) { .missions-sect-arrow, .missions-rowarrow { transition: none; } }
-@container (max-width: 820px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } .missions-dash-card--flight, .missions-dash-card--queue, .missions-dash-card--bugs, .missions-dash-card--stories, .missions-dash-card--branches, .missions-dash-card--checkouts, .missions-dash-card--closed, .missions-dash-card--left { grid-column: auto; } }
+@container (max-width: 820px) { .missions-sectgrid { grid-template-columns: minmax(0, 1fr); } .missions-dash-card--flight, .missions-dash-card--queue, .missions-dash-card--bugs, .missions-dash-card--stories, .missions-dash-card--branches, .missions-dash-card--checkouts { grid-column: auto; } }
 .missions-drawer { flex: none; width: 380px; max-width: 46%; display: flex; flex-direction: column; gap: 16px; padding: 16px 22px 24px; overflow: auto; border-left: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12)); animation: missions-slide .14s ease; }
 @keyframes missions-slide { from { opacity: 0 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .missions-drawer { animation: none; } }
@@ -1681,39 +1680,12 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
     }
 
     /**
-     * One row of the Done digest: the closed mission, the points it carried,
-     * and the tracker's last update — the closest the model comes to a closure
-     * date. The row opens the mission in its drawer.
-     */
-    function ClosedRow({ mission, now, onOpen }) {
-      const age = missionAge(mission.updatedAt, now)
-      const points = pointsText(mission.points)
-      return h('li', { className: 'missions-rowitem' },
-        h('button', {
-          type: 'button',
-          className: 'missions-row missions-row--closed',
-          'data-state': 'done',
-          onClick: () => onOpen(mission),
-          title: `Open ${mission.key}`,
-          'aria-label': `${mission.key} ${mission.title}${points ? `, ${points}` : ''}${
-            age.label ? `, last updated ${age.label} ago` : ''
-          }`,
-        },
-          h('span', { className: 'missions-rowkey' }, mission.key),
-          h('span', { className: 'missions-rowtitle' }, mission.title),
-          h('span', { className: 'missions-rowpoints' }, points),
-          h('span', { className: 'missions-rowage', 'data-quiet': age.quiet ? 'true' : 'false' }, age.label),
-        ),
-      )
-    }
-
-    /**
      * The dashboard: a section per domain, a card per widget. Missions opens on
-     * the four lenses the list makes you filter by hand; Repositories and Done
-     * digest the reads their own tabs make — the root's cached scan, and the
-     * Done tab's list — so no section pays for a second read. A section whose
-     * read failed keeps what it already showed and names the failure: the
-     * digest never turns a broken read into a zero.
+     * the four lenses the list makes you filter by hand; Repositories digests
+     * the read its own tab makes — the root's cached scan — so no section pays
+     * for a second read. A section whose read failed keeps what it already
+     * showed and names the failure: the digest never turns a broken read into a
+     * zero.
      */
     function DashboardView({
       missions = [],
@@ -1726,10 +1698,8 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       onViewAll,
       summary = null,
       summaryError = null,
-      closed = null,
       onOpenSection,
       onOpenRepository,
-      onOpenClosed,
       onRetrySummary,
     }) {
       const queue = needsYou(missions)
@@ -1935,69 +1905,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           )
         : null
 
-      // The Done digest. Its rows are the Done tab's read, shared on the host
-      // with the badge, so the dashboard opens it once and the tick leaves it
-      // alone. `closed` is null while that read has nothing to show — a failed
-      // read is not "nothing is closed", so the section waits instead.
-      const closedMissions = Array.isArray(closed) ? closed : null
-      const closedCount = closedMissions ? doneScope(closedMissions).count : 0
-      const recent = closedMissions ? recentlyClosed(closedMissions) : []
-      const leftovers = closedMissions && summary ? leftBehind(closedMissions, repositories) : []
-      const recentHidden = closedCount - recent.length
-
-      const doneSection = closedMissions
-        ? h('section', { className: 'missions-sect', 'aria-labelledby': 'missions-sect-done' },
-            h(SectionHead, {
-              id: 'missions-sect-done',
-              title: 'Done',
-              scope: doneScope(closedMissions).label,
-              label: 'Open Done',
-              tab: 'done',
-              onOpen: onOpenSection,
-            }),
-            h('div', { className: 'missions-sectgrid' },
-              h(DashboardCard, {
-                title: 'Recently closed',
-                sub: 'The three last closed, by their last tracker update: the model keeps no closure date.',
-                meta: recentHidden > 0 ? `${recent.length} of ${closedCount}` : String(closedCount),
-                className: 'missions-dash-card--closed',
-                footer: widgetFoot({
-                  note: recentHidden > 0 ? `${recentHidden} more closed` : null,
-                  total: closedCount,
-                  cap: RECENT_CLOSED_ROWS,
-                  onViewAll: () => onOpenSection('done'),
-                }),
-              },
-                recent.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'No mission is closed yet.')
-                  : h('ul', { className: 'missions-rows' },
-                      recent.map((mission) => h(ClosedRow, { key: mission.key, mission, now, onOpen: onOpenClosed })),
-                    ),
-              ),
-              h(DashboardCard, {
-                title: 'Left behind',
-                sub: 'Closed missions whose branch still sits in a worktree.',
-                meta: summary ? leftovers.length : '—',
-                className: 'missions-dash-card--left',
-                footer: summary ? 'Removing a worktree happens in the repositories tab.' : null,
-              },
-                !summary
-                  ? h('p', { className: 'missions-card-empty' }, 'The repository scan has not run, so leftovers are unknown.')
-                  : leftovers.length === 0
-                    ? h('p', { className: 'missions-card-empty' }, 'No closed mission still holds a worktree.')
-                    : h('ul', { className: 'missions-rows' },
-                        leftovers.map((row) => h(DigestRow, {
-                          key: row.mission.key,
-                          row,
-                          now,
-                          onOpen: onOpenRepository,
-                        })),
-                      ),
-              ),
-            ),
-          )
-        : null
-
       return h('div', { className: 'missions-dashboard' },
         h('section', { className: 'missions-sect', 'aria-labelledby': 'missions-sect-missions' },
           h('header', { className: 'missions-sect-head' },
@@ -2011,7 +1918,6 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           body,
         ),
         repositoriesSection,
-        doneSection,
       )
     }
 
@@ -6663,14 +6569,12 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       }, [tab, loadDone])
 
       // The dashboard owns its digest: it reads it when the tab opens, and the
-      // tick keeps it fresh. Another tab never pays the read, and the closed
-      // rows come from the Done tab's read, which the tick leaves alone.
+      // tick keeps it fresh. Another tab never pays the read.
       React.useEffect(() => {
         if (tab !== 'dashboard') return undefined
         loadSummary()
-        loadDone()
         return undefined
-      }, [tab, loadSummary, loadDone])
+      }, [tab, loadSummary])
 
       // The tick keeps the perimeter of the open view: Done refreshes the
       // closed read, the tracker views refresh the open one — Settings reads
@@ -7162,19 +7066,17 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                   // Only a read that failed carries an error: a warm refresh
                   // keeps the data the section already shows.
                   summaryError: summaryView.error,
-                  closed: doneView.loading || doneView.errors.length > 0 ? null : doneMissions,
                   onOpen: (mission) => { openMission(mission); setTab('missions') },
                   onOpenAll: () => { setSelected(null); changeTab('missions') },
                   onViewAll,
                   onOpenSection: (next) => changeTab(next),
                   // A row of the digest opens what it names: the repository
-                  // drawer for a checkout, the mission's drawer for a closed
-                  // mission. The tab follows, so the drawer is not a ghost.
+                  // drawer for a checkout. The tab follows, so the drawer is
+                  // not a ghost.
                   onOpenRepository: (repository) => {
                     changeTab('repositories')
                     openRepository(repository)
                   },
-                  onOpenClosed: (mission) => { openMission(mission); setTab('done') },
                   onRetrySummary: () => { track('list.retry', 'summary'); return loadSummary({ refresh: true }) },
                 })
               : h(MissionsView, {
