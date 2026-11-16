@@ -106,6 +106,7 @@ import {
   respectBlockers,
   sortMissions,
   sortRepositories,
+  stateInRange,
   stateOptions,
   suggestBranch,
   TAB_KEY,
@@ -270,6 +271,38 @@ test('les statuts proposés suivent l’ordre du workflow, unknown en dernier', 
     ['to-refine', 'ready', 'in-review', 'ready-for-prod', 'unknown'],
   )
   assert.deepEqual(stateOptions([]), [])
+})
+
+test('le seuil d’état couvre le travail en cours et sa relecture, bornes comprises', () => {
+  // Given: la fenêtre du geste, du travail en cours à la relecture.
+  const from = 'in-progress'
+  const to = 'in-review'
+
+  // When: le seuil juge les six états du workflow, puis la fenêtre entière.
+  // Then: seuls les deux états de la fenêtre passent, et l'ordre lu est celui
+  // du workflow : une fenêtre ouverte sur tout le parcours laisse tout passer.
+  assert.equal(stateInRange('to-refine', from, to), false)
+  assert.equal(stateInRange('ready', from, to), false)
+  assert.equal(stateInRange('in-progress', from, to), true)
+  assert.equal(stateInRange('in-review', from, to), true)
+  assert.equal(stateInRange('ready-for-prod', from, to), false)
+  assert.equal(stateInRange('done', from, to), false)
+
+  const parcours = ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done']
+  assert.deepEqual(parcours.filter((state) => stateInRange(state, 'to-refine', 'done')), parcours)
+})
+
+test('un état inconnu ne tombe dans aucune fenêtre', () => {
+  // Given: des valeurs que le workflow ne connaît pas.
+  const inconnus = [null, undefined, 'unknown', 'shipped', '']
+
+  // When: le seuil les juge contre la fenêtre du geste.
+  const verdicts = inconnus.map((state) => stateInRange(state, 'in-progress', 'in-review'))
+
+  // Then: aucun n'est offert par défaut, et une borne hors liste ferme tout.
+  assert.deepEqual(verdicts, inconnus.map(() => false))
+  assert.equal(stateInRange('in-progress', 'nowhere', 'in-review'), false)
+  assert.equal(stateInRange('in-progress', 'in-progress', 'nowhere'), false)
 })
 
 test('done garde son groupe en dernier, mais la liste ouverte ne le relit jamais', () => {
