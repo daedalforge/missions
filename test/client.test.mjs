@@ -7380,28 +7380,31 @@ test('une mission traduite n’offre le geste qu’entre le travail en cours et 
 
   // When: le volet s'ouvre sur un état d'avant le travail, d'après la relecture,
   // ou que le workflow ne connaît pas.
+  const arbres = horsSeuil.map((state) => monterVolet({ ...MISSION, state, translations: TRANSLATIONS, updatedAt: MISSION.updated }).tree)
 
   // Then: le geste est absent, et son bilan n'a aucune raison d'être à l'écran.
-  for (const state of horsSeuil) {
-    const { tree } = monterVolet({ ...MISSION, state, translations: TRANSLATIONS, updatedAt: MISSION.updated })
-    assert.equal(boutonTolgee(tree), null, `aucun import Tolgee en ${state}`)
+  arbres.forEach((tree, index) => {
+    assert.equal(boutonTolgee(tree), null, `aucun import Tolgee en ${horsSeuil[index]}`)
     assert.equal(
       findAll(tree, 'p').some((node) => node.props.className === 'missions-tolgee-note'),
       false,
-      `aucun bilan Tolgee en ${state}`,
+      `aucun bilan Tolgee en ${horsSeuil[index]}`,
     )
-  }
+  })
 })
 
 test('une mission traduite garde le geste du travail en cours et de sa relecture', () => {
-  // Given: un projet qui déclare ses locales.
-  // When: le volet s'ouvre sur une mission qui démarre, puis sur sa relecture.
+  // Given: un projet qui déclare ses locales, une mission qui démarre puis sa
+  // relecture.
+  const etats = ['in-progress', 'in-review']
 
-  // Then: le geste est rendu dans les deux états, actif, avec ses deux noms.
-  for (const state of ['in-progress', 'in-review']) {
-    const { tree } = monterVolet({ ...MISSION, state, translations: TRANSLATIONS, updatedAt: MISSION.updated })
+  // When: le volet s'ouvre dans chacun de ces états.
+  const arbres = etats.map((state) => monterVolet({ ...MISSION, state, translations: TRANSLATIONS, updatedAt: MISSION.updated }).tree)
+
+  // Then: le geste est rendu, actif, avec ses deux noms, et il se clique.
+  arbres.forEach((tree, index) => {
     const bouton = boutonTolgee(tree)
-    assert.ok(bouton, `le bouton est rendu en ${state}`)
+    assert.ok(bouton, `le bouton est rendu en ${etats[index]}`)
     assert.equal(bouton.props.className, 'missions-action missions-action--icon')
     assert.equal(infobulleDe(tree, bouton), 'Tolgee import')
     assert.equal(bouton.props['aria-label'], 'Tolgee import')
@@ -7410,7 +7413,7 @@ test('une mission traduite garde le geste du travail en cours et de sa relecture
     assert.equal(findAll(bouton, 'svg').length, 1, 'le bouton porte son dessin')
     assert.equal('aria-describedby' in bouton.props, false, 'le geste ne dépend pas du verrou de session')
     assert.equal(typeof bouton.props.onClick, 'function')
-  }
+  })
 })
 
 test('l’import Tolgee se place entre le ticket et les remontées', () => {
@@ -7559,8 +7562,6 @@ test('le bundle câble l’URL, le dessin et le rapport Tolgee', () => {
   assert.match(SOURCE, /className: 'missions-tolgee'/)
   // Le style existe dans le bundle généré, pas seulement dans le template.
   assert.match(regle('.missions-tolgee'), /display: grid/)
-  // Le geste n'existe que sur un projet traduit, entre le travail en cours et
-  // sa relecture : la fenêtre est celle du workflow, bornes comprises.
   assert.match(SOURCE, /mission\.translations && stateInRange\(mission\.state, 'in-progress', 'in-review'\)/)
 })
 
