@@ -210,8 +210,16 @@ simple, il ne touche ni le tracker ni `main`.
 - **Ce qu'il déplace.** Le dossier entier, avec son nom, son `mission.yml`, son
   journal et sa checklist. Rien n'est supprimé, rien n'est réécrit.
 - **Ce qu'il vérifie.** L'hôte relit l'issue fermée dans le tracker et refuse
-  (409) tout dossier absent, déjà archivé ou dont la mission n'est plus `done`.
-  Le panneau n'envoie que `{ key }` ; le second clic confirme.
+  (409) tout dossier absent, dont la mission n'est plus `done`, ou dont
+  l'archive du même nom contient un fichier différent. Le panneau n'envoie que
+  `{ key }` ; le second clic confirme.
+- **Une clé re-déclarée.** Une clé archivée peut être redéclarée plus tard
+  (même ticket, nouveau dossier) : le dossier neuf se range dans l'archive
+  existante au lieu d'être refusé. Un fichier que l'archive tient déjà, octet
+  pour octet, est le même fichier — il n'est pas dupliqué — ; un fichier qui
+  diffère refuse le geste avec son nom (`missions/archives/<dossier> already
+  exists: journal.md differs`) et rien n'a bougé. Un dossier d'archive qui
+  n'est pas un dossier est refusé de même.
 - **Ce qu'il ne fait pas.** Aucun écrit tracker, aucune branche, aucun commit,
   aucun `main` touché. Le geste ne remplace ni le merge ni la fermeture.
 - **Après.** Le dossier n'étant plus sous `missions/`, la mission quitte

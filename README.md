@@ -139,7 +139,11 @@ réponse, la pastille porte l'icône de refresh animée du thème, pas un zéro.
 
 Depuis cet onglet, une mission close peut être **archivée** : son dossier passe
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
-modifié — la mission quitte Done et reste sur le disque.
+modifié — la mission quitte Done et reste sur le disque. Une même clé peut être
+archivée plusieurs fois : si `missions/archives/<dossier>/` existe déjà (une
+mission re-déclarée après un premier archivage), l'ancien dossier accueille les
+fichiers du nouveau sans les écraser — un fichier identique n'est pas dupliqué —
+et un fichier de même nom au contenu différent refuse le geste en le nommant.
 
 Done affiche ces closes avec l'arbre des missions : le même champ de recherche
 (`aria-label` « Done outline »), les mêmes filtres Type, Épic, Projet,

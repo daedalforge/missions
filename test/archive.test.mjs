@@ -88,9 +88,10 @@ test('refuse un dossier source absent', async (t) => {
   await assert.rejects(stat(join(dir, ARCHIVES_FOLDER)), { code: 'ENOENT' })
 })
 
-test('refuse une destination déjà occupée, sans l’écraser', async (t) => {
+test('refuse une destination déjà occupée par un contenu différent, sans l’écraser', async (t) => {
   const dir = await fixtures(t, {
     'MIS-42/journal.md': 'nouveau\n',
+    'MIS-42/fiche.md': '# Fiche — MIS-42\n',
     [join(ARCHIVES_FOLDER, 'MIS-42', 'journal.md')]: 'ancien\n',
   })
 
@@ -98,12 +99,73 @@ test('refuse une destination déjà occupée, sans l’écraser', async (t) => {
     archiveMission({ root: dir, key: 'MIS-42', folder: 'MIS-42', mission: DONE }),
     (error) => {
       assert.equal(error.status, 409)
-      assert.match(error.message, /missions\/archives\/MIS-42 already exists/)
+      assert.match(error.message, /missions\/archives\/MIS-42 already exists: journal\.md differs/)
       return true
     },
   )
+  assert.deepEqual((await readdir(join(dir, 'MIS-42'))).sort(), ['fiche.md', 'journal.md'])
   assert.equal(await readFile(join(dir, 'MIS-42', 'journal.md'), 'utf8'), 'nouveau\n')
   assert.equal(await readFile(join(dir, ARCHIVES_FOLDER, 'MIS-42', 'journal.md'), 'utf8'), 'ancien\n')
+  assert.deepEqual(await readdir(join(dir, ARCHIVES_FOLDER, 'MIS-42')), ['journal.md'])
+})
+
+/*
+ * Une clé archivée peut être déclarée de nouveau plus tard : l'ancien dossier
+ * existe alors sous archives/, réduit à sa déclaration. Le geste doit aboutir
+ * sans écraser l'ancien et sans dupliquer le fichier identique.
+ */
+test('un dossier d’archive existant accueille le nouvel archivage sans rien perdre', async (t) => {
+  const declaration = 'key: MIS-42\nbranch: feat/mis-42\nbase: main\n'
+  const dir = await fixtures(t, {
+    'MIS-42/mission.yml': declaration,
+    'MIS-42/journal.md': '# Journal — MIS-42\n',
+    'MIS-42/checklist.md': '# Checklist — MIS-42\n',
+    [join(ARCHIVES_FOLDER, 'MIS-42', 'mission.yml')]: declaration,
+  })
+
+  const result = await archiveMission({ root: dir, key: 'MIS-42', folder: 'MIS-42', mission: DONE })
+
+  assert.deepEqual(result, { key: 'MIS-42', folder: 'MIS-42', archived: 'missions/archives/MIS-42' })
+  await assert.rejects(stat(join(dir, 'MIS-42')), { code: 'ENOENT' })
+  assert.deepEqual((await readdir(join(dir, ARCHIVES_FOLDER, 'MIS-42'))).sort(), [
+    'checklist.md',
+    'journal.md',
+    'mission.yml',
+  ])
+  assert.equal(await readFile(join(dir, ARCHIVES_FOLDER, 'MIS-42', 'mission.yml'), 'utf8'), declaration)
+  assert.equal(
+    await readFile(join(dir, ARCHIVES_FOLDER, 'MIS-42', 'journal.md'), 'utf8'),
+    '# Journal — MIS-42\n',
+  )
+})
+
+test('un dossier d’archive presque vide accueille le dossier déplacé', async (t) => {
+  const dir = await fixtures(t, {
+    'MIS-42/mission.yml': 'key: MIS-42\n',
+    [join(ARCHIVES_FOLDER, 'MIS-42', '.keep')]: '',
+  })
+
+  await archiveMission({ root: dir, key: 'MIS-42', folder: 'MIS-42', mission: DONE })
+
+  assert.deepEqual((await readdir(join(dir, ARCHIVES_FOLDER, 'MIS-42'))).sort(), ['.keep', 'mission.yml'])
+  await assert.rejects(stat(join(dir, 'MIS-42')), { code: 'ENOENT' })
+})
+
+test('une destination qui n’est pas un dossier refuse l’archivage', async (t) => {
+  const dir = await fixtures(t, {
+    'MIS-42/mission.yml': 'key: MIS-42\n',
+    [join(ARCHIVES_FOLDER, 'MIS-42')]: 'pas un dossier\n',
+  })
+
+  await assert.rejects(
+    archiveMission({ root: dir, key: 'MIS-42', folder: 'MIS-42', mission: DONE }),
+    (error) => {
+      assert.equal(error.status, 409)
+      assert.match(error.message, /missions\/archives\/MIS-42 already exists and is not a folder/)
+      return true
+    },
+  )
+  assert.deepEqual(await readdir(join(dir, 'MIS-42')), ['mission.yml'])
 })
 
 test('la clé est obligatoire et le dossier ne sort pas de missions/', async (t) => {
