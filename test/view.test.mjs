@@ -1360,6 +1360,10 @@ test('les quatre lentilles du digest écartent une mission bloquée, par label c
     assignedBugs([{ ...retenue, key: 'isolée', type: 'bug', state: 'to-refine', priority: 'low' }]),
     [],
   )
+  assert.deepEqual(
+    highPriorityStories([{ ...retenue, key: 'haute', type: 'story', state: 'ready', priority: 'high' }]),
+    [],
+  )
 })
 
 test('rien à décider ne fait pas une file : le prêt pour la prod n’y est pas', () => {
