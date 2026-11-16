@@ -8607,7 +8607,7 @@ function regleDePeau(selector) {
   return SOURCE.slice(at + selector.length + 1, SOURCE.indexOf('}', at))
 }
 
-test('le cadre du bandeau reprend la boîte et la bordure de la photo', () => {
+test('le cadre ceinture le bandeau et porte la photo', () => {
   // Given le bandeau de Naruto rendu
   const arbre = arbreTheme('manga', { 'missions.tab': 'missions' })
   const hero = findAll(arbre, 'div').find((node) => node.props.className === 'missions-hero')
@@ -8626,11 +8626,12 @@ test('le cadre du bandeau reprend la boîte et la bordure de la photo', () => {
   assert.equal(image[0].props.className, 'missions-hero-photo')
   assert.match(image[0].props.src, /^data:image\/webp;base64,/)
 
-  // Then le cadre garde la géométrie que la photo portait sur la base
+  // Then le cadre ceinture le bandeau au même liseré des deux côtés
   assert.match(cadre, /position: absolute/)
   assert.match(cadre, /inset: 9px 9px 0/)
+  assert.match(cadre, /box-sizing: border-box/)
   assert.match(cadre, /width: calc\(100% - 18px\)/)
-  assert.match(cadre, /height: calc\(100% - 9px\)/)
+  assert.match(cadre, /height: calc\(100% - 7\.5px\)/)
   assert.match(cadre, /overflow: hidden/)
   assert.match(cadre, /border: 1\.5px solid var\(--skin-ink\)/)
   assert.match(cadre, /border-radius: 6px/)
@@ -8688,7 +8689,7 @@ test('les docks étroits gardent une amplitude minimale', () => {
   assert.match(SOURCE, /--hero-scale: 1\.36; --hero-pan: max\(6%, 28px\)/)
 })
 
-test('le portrait et la bulle ne bougent plus', () => {
+test('le portrait, la pastille et la bulle s’alignent sur l’anneau', () => {
   // Given le bandeau de Konoha monté sous la peau papier
   const arbre = arbreTheme('manga', { 'missions.tab': 'missions' })
   const hero = findAll(arbre, 'div').find((node) => node.props.className === 'missions-hero')
@@ -8701,12 +8702,17 @@ test('le portrait et la bulle ne bougent plus', () => {
   assert.doesNotMatch(portrait, /animation/)
   assert.doesNotMatch(bulle, /animation/)
 
-  // Then leur géométrie et leur ombre restent celles d'avant
-  assert.match(portrait, /right: 26px; bottom: 16px; width: 112px; height: 112px/)
+  // Then leur géométrie partage l'axe de l'anneau et le centre du cercle
+  assert.match(portrait, /right: 21px; bottom: 10\.5px; width: 112px; height: 112px/)
   assert.match(portrait, /box-shadow: 0 0 0 1\.5px var\(--skin-ink\), 4px 4px 0 var\(--skin-shadow\)/)
-  assert.match(bulle, /right: 152px; bottom: 54px/)
+  assert.match(bulle, /right: 149px; bottom: 69\.5px/)
+  assert.match(bulle, /transform: translateY\(50%\)/)
   assert.match(bulle, /box-shadow: 2px 2px 0 var\(--skin-shadow\)/)
-  assert.match(regle(`${BULLE_HERO}::after`), /right: -7px; bottom: 12px/)
+  assert.match(regle(`${BULLE_HERO}::after`), /right: -7px; bottom: calc\(50% - 6\.25px\)/)
+
+  // Then la pastille s'aligne sur le bord droit de l'anneau
+  const actions = regle('.missions-panel[data-skin="paper"] .missions-head--hero .missions-actions')
+  assert.match(actions, /right: 19px/)
 
   // Then la bulle garde son texte : un titre et un sous-titre, intacts
   const bulleNode = hero.children.find((node) => node.props.className === 'missions-hero-bubble')
@@ -8717,6 +8723,26 @@ test('le portrait et la bulle ne bougent plus', () => {
   assert.match(regle(`${BULLE_HERO} span`), /font-size: 8\.5px/)
   assert.doesNotMatch(regle(`${BULLE_HERO} b`), /animation/)
   assert.doesNotMatch(regle(`${BULLE_HERO} span`), /animation/)
+})
+
+test('le bandeau étroit garde l’anneau à neuf pixels du bord', () => {
+  // Given le palier de largeur étroite du bandeau
+  const debut = SOURCE.indexOf('@container (max-width: 760px) {')
+  assert.ok(debut >= 0, 'le palier étroit existe')
+
+  // When son bloc de règles est extrait jusqu'à l'accolade de fermeture
+  const bloc = SOURCE.slice(debut, SOURCE.indexOf('\n}', debut) + 2)
+
+  // Then le bandeau et la coiffe raccourcissent ensemble
+  assert.match(bloc, /\.missions-hero \{ height: 150px; \}/)
+
+  // Then le portrait rétrécit sans reprendre l'ancrage de peau
+  assert.match(bloc, /\.missions-hero-avatar \{ width: 84px; height: 84px; \}/)
+  assert.doesNotMatch(bloc, /missions-hero-avatar \{[^}]*(?:right|bottom):/)
+
+  // Then la bulle disparaît et la pastille garde son bord, sans reprise locale
+  assert.match(bloc, /\.missions-hero-bubble \{ display: none; \}/)
+  assert.doesNotMatch(bloc, /missions-actions/)
 })
 
 test('la brume glisse d’une tuile entière par cycle', () => {
@@ -9497,6 +9523,16 @@ function monterArbre({ query = '', filters = {}, checklists = ARBRE_CHECKLISTS, 
   return { ...harness, tree, vue, noeud, arbre }
 }
 
+// La bande d'états : le nom et le nombre de chaque segment, dans l'ordre rendu.
+function bandOf(rendu) {
+  return findAll(rendu, 'button')
+    .filter((node) => node.props.className === 'missions-band-seg')
+    .map((node) => {
+      const spans = findAll(node, 'span')
+      return [textOf(spans[0]), textOf(spans[1])]
+    })
+}
+
 test('les deux onglets montent le même arbre générique, jamais une carte', () => {
   // Un seul Workbench dans la source, monté une seule fois : le composant est
   // générique, il sert Missions et Done, et la carte de mission n'existe plus.
@@ -9976,24 +10012,112 @@ test('les actions passent avant les missions et se déclenchent au clavier', () 
   assert.deepEqual(declenchees, [['declare-mission', 'action']])
 })
 
-test('la bande garde les comptes du portefeuille sous toute requête', () => {
+test('au repos, la bande compte les missions du portefeuille', () => {
+  // Given la fixture de douze missions, une prête et deux en revue.
   const { arbre } = monterArbre()
-  const comptes = (rendu) => findAll(rendu, 'span')
-    .filter((node) => node.props.className === 'missions-band-n')
-    .map((node) => textOf(node))
 
-  const repos = arbre()
-  assert.ok(comptes(repos).length > 0, 'la bande porte un segment par état')
-  assert.deepEqual(comptes(arbre({ query: 'session' })), comptes(repos), 'la requête ne recalcule pas la bande')
-  assert.deepEqual(comptes(arbre({ query: 'workflows' })), comptes(repos))
+  // When la vue rend la bande, sans requête ni filtre.
+  const bande = bandOf(arbre())
 
-  // Un compte de mission n'est jamais additionné à un compte de lot.
-  const label = (rendu) => textOf(findAll(rendu, 'span').find((node) => node.props.className === 'missions-wb-count'))
-  assert.equal(label(arbre({ query: 'session' })), '1 of 12 · esc')
-  // La mission épic répond par son titre seul : une famille, un compte, et
-  // plus d'entrée de lot.
-  assert.equal(label(arbre({ query: 'workflows' })), '1 of 12 · esc')
-  assert.doesNotMatch(label(arbre({ query: 'workflows' })), /open/)
+  // Then les trois états du workflow gardent leur ordre et leurs comptes.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '9'],
+    ['in review', '2'],
+  ])
+})
+
+test('une requête par titre réduit la bande au compte qu’elle montre', () => {
+  // Given la fixture de douze missions.
+  const { arbre } = monterArbre()
+
+  // When la requête ne garde que « Workflows skeleton ».
+  const bande = bandOf(arbre({}, { query: 'workflows' }))
+
+  // Then seule la mission en cours entre dans la bande, les autres à zéro.
+  assert.deepEqual(bande, [
+    ['ready', '0'],
+    ['in progress', '1'],
+    ['in review', '0'],
+  ])
+})
+
+test('une mission trouvée par sa checklist compte dans la bande', () => {
+  // Given la fixture dont la checklist de MIS-206 porte « session key ».
+  const { arbre } = monterArbre()
+
+  // When la requête ne correspond qu'à cette ligne de checklist.
+  const bande = bandOf(arbre({}, { query: 'session' }))
+
+  // Then sa mission, en revue, entre dans la bande.
+  assert.deepEqual(bande, [
+    ['ready', '0'],
+    ['in progress', '0'],
+    ['in review', '1'],
+  ])
+})
+
+test('un filtre d’épopée réduit la bande aux missions qu’il montre', () => {
+  // Given la fixture et les quatre lots qui portent l'épic MIS-2.
+  const { arbre } = monterArbre()
+
+  // When la vue rend la bande sous le filtre d'épopée MIS-2.
+  const bande = bandOf(arbre({}, { filters: { epic: 'MIS-2' } }))
+
+  // Then la bande somme les quatre missions du lot, pas l'épic qui les porte.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '2'],
+    ['in review', '1'],
+  ])
+})
+
+test('un état que les filtres excluent reste affiché à zéro', () => {
+  // Given la fixture et le filtre de type « epic ».
+  const { arbre } = monterArbre()
+
+  // When la vue rend la bande sous ce filtre.
+  const bande = bandOf(arbre({}, { filters: { type: 'epic' } }))
+
+  // Then les trois segments gardent leur nom et leur ordre, l'épic comptée seule.
+  assert.deepEqual(bande, [
+    ['ready', '0'],
+    ['in progress', '1'],
+    ['in review', '0'],
+  ])
+})
+
+test('sélectionner des états laisse les comptes de la bande intacts', () => {
+  // Given la fixture, montée avec deux états sélectionnés.
+  const { arbre } = monterArbre({ filters: { state: ['ready', 'in-review'] } })
+
+  // When la vue rend la bande sous cette sélection.
+  const bande = bandOf(arbre())
+
+  // Then ses segments comptent le portefeuille, et Clear retrouve le repos.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '9'],
+    ['in review', '2'],
+  ])
+  assert.deepEqual(bandOf(arbre({}, { filters: EMPTY_BAR.filters })), bandOf(arbre()))
+})
+
+test('une mission dont l’état n’est pas du workflow compte dans « unknown state »', () => {
+  // Given la fixture plus une mission que le tracker n'a pas su classer.
+  const inconnue = { ...ARBRE_EPIC, key: 'MIS-999', title: 'État inconnu', state: null }
+  const { arbre } = monterArbre({ missions: [...ARBRE_MISSIONS, inconnue] })
+
+  // When la vue rend la bande.
+  const bande = bandOf(arbre())
+
+  // Then son segment la compte, comme la liste la montre.
+  assert.deepEqual(bande, [
+    ['ready', '1'],
+    ['in progress', '9'],
+    ['in review', '2'],
+    ['unknown state', '1'],
+  ])
 })
 
 test('l’arbre tient dans la largeur et ses titres sont ellipsés', () => {
