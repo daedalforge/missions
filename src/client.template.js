@@ -6926,10 +6926,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         if (term) track('filter.search', term)
       }
 
-      // A widget's link opens the list on exactly the rows the widget showed:
-      // its states, its type, its priority — no search, no other filter. The
-      // bar is reset rather than completed, so the count the widget announced
-      // is the count the list shows.
+      // A widget's link opens the list on the rows the widget showed: its
+      // states, its type, its priority — no search, no other filter. The bar is
+      // reset rather than completed, so the card's count stays what the card
+      // counted; the list itself keeps the blocked missions at their stage.
       const onViewAll = (filters = {}) => {
         track('dashboard.view-all', Object.keys(filters).join(','))
         setSelected(null)
