@@ -9,7 +9,7 @@ nodes:
     label: Préparer la livraison
     section: Ce qu'on fait
     writer: session
-    gate: la PR est approuvée et chaque critère porte sa preuve
+    gate: la PR est approuvée et chaque critère cite le scénario qui le couvre
     artifact: le ticket prêt à partir
   - id: rendre-la-main
     label: Rendre la main au demandeur

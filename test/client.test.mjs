@@ -3160,7 +3160,7 @@ test('le losange du choix se dessine, montre les conditions entières et ouvre l
   const labels = findAll(graph, 'text').filter((node) => /wf-link-label--forward/.test(node.props.className ?? ''))
   const texts = labels.map((node) => textOf(node))
   assert.ok(texts.includes('tout est conforme'))
-  assert.ok(texts.includes('un critère ou une preuve manque'), 'la condition longue s’affiche entière')
+  assert.ok(texts.includes("un critère n'a pas de scénario"), 'la condition longue s’affiche entière')
   assert.ok(texts.includes('la PR sort du périmètre'))
   assert.equal(texts.some((text) => text.includes('…')), false, 'aucune étiquette n’est tronquée')
 

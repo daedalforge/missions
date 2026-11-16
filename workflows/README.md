@@ -75,9 +75,10 @@ périmètre retourne en cadrage — mais jamais sauter une étape.
    dans le titre.
 3. **Un commit, un sujet.** Un commit qui mélange deux sujets se scinde avant la
    revue.
-4. **Chaque critère d'acceptation porte sa preuve.** À la sortie de l'exécution
-   et à la clôture, chaque critère est coché avec la commande, le test ou
-   l'observation qui le démontre.
+4. **Chaque critère d'acceptation désigne le scénario qui le prouve.** À la
+   sortie de l'exécution et à la clôture, chaque critère est coché avec le
+   scénario qui le couvre — son test, une capture ou une observation datée. Un
+   scénario donne un seul `it` ; la revue ne compte pas les tests.
 5. **Le périmètre ne s'élargit pas en cours de route.** Une idée hors périmètre
    devient un ticket, pas un commit supplémentaire.
 6. **Le demandeur valide le cadrage.** Sans validation explicite, la mission

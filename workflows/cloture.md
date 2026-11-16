@@ -7,10 +7,10 @@ constate et solde le journal et la checklist.
 ## Ce qu'on fait
 
 1. **(session) Préparer la livraison.** Vérifier que la PR est approuvée et que
-   chaque critère d'acceptation porte sa preuve, puis laisser le ticket en
-   `ready-for-prod` — c'est l'état d'entrée de cette étape. La session s'arrête
-   ici : elle ne merge pas, elle ne ferme pas le ticket, elle ne supprime pas la
-   branche.
+   chaque critère d'acceptation porte sa preuve contre le scénario qui le couvre,
+   puis laisser le ticket en `ready-for-prod` — c'est l'état d'entrée de cette
+   étape. La session s'arrête ici : elle ne merge pas, elle ne ferme pas le
+   ticket, elle ne supprime pas la branche.
 2. **(demandeur) Merger et livrer.** Merger la PR dans la branche principale
    selon la méthode du projet (merge, squash ou rebase — le résultat doit rester
    lisible), fermer le ticket en y déposant les preuves : critères cochés, lien
@@ -80,7 +80,7 @@ session du panneau — pas dans les droits du tracker.
 ## Condition de sortie — la mission est « terminée »
 
 - [ ] La PR est mergée dans la branche principale — par le demandeur.
-- [ ] Chaque critère d'acceptation est coché avec sa preuve.
+- [ ] Chaque critère d'acceptation est coché avec son scénario et sa preuve.
 - [ ] Le ticket est fermé avec le lien du merge.
 - [ ] La branche est supprimée (locale et distante) — la locale par le geste du
       panneau ou à la main, la distante par le demandeur.

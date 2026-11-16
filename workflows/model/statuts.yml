@@ -66,13 +66,13 @@ edges:
     when: changements demandés
     writer: demandeur
     artifact: label in-progress
-    gate: un critère ou une preuve manque
+    gate: une preuve manque
   - from: in-review
     to: to-refine
     when: diff hors périmètre
     writer: demandeur
     artifact: label to-refine
-    gate: le diff sort du cadrage
+    gate: le diff sort du cadrage, ou un critère n'a pas de scénario
   - from: ready-for-prod
     to: done
     when: merge et ticket fermé

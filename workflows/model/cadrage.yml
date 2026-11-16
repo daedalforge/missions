@@ -26,7 +26,8 @@ nodes:
     label: Écrire la fiche
     section: Ce qu'on fait
     writer: session
-    artifact: la fiche du ticket
+    artifact: la fiche du ticket, avec 2 à 4 scénarios et le scénario de chaque critère
+    gate: la fiche nomme 2 à 4 scénarios, et chaque critère cite le sien
   - id: decouper
     label: Découper si le travail dépasse une mission
     section: Ce qu'on fait

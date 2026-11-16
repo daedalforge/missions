@@ -1647,7 +1647,7 @@ test('la revue porte un losange sur chaque geste qui tranche', async () => {
 
   assert.deepEqual(deciding, ['decider', 'verifier-perimetre'])
   const labels = graph.links.filter((link) => link.from === 'decider' && link.when).map((link) => link.when).sort()
-  assert.deepEqual(labels, ['tout est conforme', 'un critère ou une preuve manque'])
+  assert.deepEqual(labels, ['tout est conforme', "un critère n'a pas de scénario", 'une preuve manque'])
   // Aucun autre geste n'en porte : le losange ne se pose que sur un vrai choix.
   for (const node of review.nodes) {
     const outs = review.edges.filter((edge) => edge.from === node.id).length

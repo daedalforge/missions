@@ -15,11 +15,12 @@ avant d'agir.
   `gh pr view <n> --json reviewDecision,reviews,comments`. Un `reviewDecision`
   vide n'est pas une absence de validation : une approbation explicite en
   commentaire compte, citée avec son verdict et sa date.
-- **Chaque critère d'acceptation** avec sa preuve : le test, le commentaire
-  daté, le fichier. Un critère sans preuve est un refus.
+- **Chaque critère d'acceptation** contre le scénario qui le couvre : le test
+  du scénario, le commentaire daté, la capture. Un critère sans scénario est un
+  refus, et il renvoie au cadrage sans réclamer de test supplémentaire.
 - **Le périmètre** : la PR ne contient que ce que le cadrage a décidé.
-- **Les tests** : la suite s'exécute sur la tête de branche, et le compte des
-  tests ajoutés est noté.
+- **Les tests** : la suite s'exécute sur la tête de branche, scénario par
+  scénario ; la revue ne compte pas les tests ajoutés.
 - **Le journal et la checklist** : chaque étape et chaque case cochée annonce
   une preuve que l'on peut retrouver.
 
@@ -30,9 +31,9 @@ geste de l'exécution, pas celui-ci.
 
 | Constat | Décision | Label |
 | --- | --- | --- |
-| Validation citée, critères et preuves complets, périmètre et tests vérifiés, journal et checklist à jour | La revue est faite : on enregistre et on passe le ticket | `ready-for-prod` |
+| Validation citée, critères et scénarios complets, périmètre et tests vérifiés, journal et checklist à jour | La revue est faite : on enregistre et on passe le ticket | `ready-for-prod` |
 | Les collègues ont remonté des changements sur la PR | La revue renvoie en exécution : le demandeur pose le label, la session de remontées corrige sur la branche | `in-progress` |
-| La PR sort du périmètre du cadrage | Le cadrage reprend la main : le demandeur pose le label, la branche et la PR restent ouvertes | `to-refine` |
+| La PR sort du périmètre du cadrage, ou un critère n'a pas de scénario | Le cadrage reprend la main : le demandeur pose le label, la branche et la PR restent ouvertes | `to-refine` |
 
 La décision retenue est écrite en commentaire daté dans le ticket, jamais
 seulement dans la session. Le merge et la fermeture sont les gestes du
@@ -41,7 +42,8 @@ demandeur : la revue ne les fait pas.
 ## Condition de sortie
 
 - [ ] La validation des collègues est citée (verdict et date) sur la PR.
-- [ ] Chaque critère d'acceptation porte sa preuve, vérifiée une à une.
+- [ ] Chaque critère d'acceptation porte sa preuve contre le scénario qui le
+      couvre, vérifié un à un.
 - [ ] Le périmètre et les tests sont vérifiés sur la tête de branche.
 - [ ] Le journal et la checklist sont à jour, chaque case avec sa preuve.
 - [ ] La décision datée est écrite dans le ticket et le label d'état est posé.

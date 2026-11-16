@@ -13,6 +13,9 @@ moins cher et qui évite le plus de travail perdu.
 3. **Écrire la fiche** dans le tracker à partir de
    [`../missions/gabarit-mission.md`](../missions/gabarit-mission.md) : contexte,
    objectif, périmètre (dedans / dehors), critères d'acceptation, contraintes.
+   La fiche nomme 2 à 4 scénarios principaux en Given/When/Then, et chaque
+   critère d'acceptation désigne le scénario qui le prouve : un critère sans
+   scénario bloque le cadrage.
 4. **Découper** si le travail dépasse une mission : plusieurs tickets, chacun avec
    son objectif propre. Un ticket trop gros revient en cadrage.
 5. **Proposer un plan** : les étapes d'exécution, dans l'ordre, avec ce qui est
@@ -46,7 +49,8 @@ moins cher et qui évite le plus de travail perdu.
 - [ ] L'objectif tient en une phrase à l'infinitif.
 - [ ] Le périmètre dit explicitement ce qui est **dehors**.
 - [ ] Chaque critère d'acceptation est vérifiable par une commande, un test ou une
-      observation précise.
+      observation précise, et désigne le scénario qui le prouve ; la fiche nomme
+      2 à 4 scénarios principaux.
 - [ ] Aucun critère ne dépend d'une décision non tranchée.
 - [ ] Le plan d'exécution est écrit et tient en quelques étapes.
 - [ ] La branche et sa base sont déclarées dans `missions/<dossier>/mission.yml`.
