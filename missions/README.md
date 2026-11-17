@@ -129,6 +129,7 @@ Chaque mission exécutable a **un dossier** sous `missions/`, avec un
 
 ```yaml
 key: MIS-41
+project: missions
 branch: feat/mis-41
 base: main
 ```
@@ -140,6 +141,11 @@ base: main
   correspondance est exacte : après le passage à `MIS-n`, une déclaration
   restée sur l'ancienne clé `daedalforge/missions#n` ne correspond plus à la
   mission ; renommer `key` dans le fichier (le dossier peut garder son nom).
+- **`project` nomme le dépôt** : c'est l'id d'un projet de `projects.yml`. Il
+  est facultatif ; sans lui, la mission retombe sur l'unique projet de son
+  tracker, sinon elle reste « sans projet ». Deux dossiers peuvent déclarer la
+  même clé dans deux projets ; la même clé deux fois dans le même projet est
+  une erreur, qui nomme les deux dossiers.
 - **Pas de session sans les deux** : un dossier absent, ou un champ manquant,
   laisse `branch`/`base` vides ; le volet de détail laisse alors les champs
   vides et désactive « Start a session » plutôt que de supposer une branche.

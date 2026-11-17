@@ -3013,11 +3013,11 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
 
       React.useEffect(() => {
         let alive = true
-        fetch(`${JOURNAL_URL}?key=${encodeURIComponent(mission.key)}`, { headers: { accept: 'application/json' } })
+        fetch(`${JOURNAL_URL}?key=${encodeURIComponent(mission.key)}&project=${encodeURIComponent(mission.project ?? '')}`, { headers: { accept: 'application/json' } })
           .then((response) => response.json())
           .then((data) => { if (alive) setJournal(data) })
           .catch(() => { if (alive) setJournal({ exists: false, source: '', error: true }) })
-        fetch(`${CHECKLIST_URL}?key=${encodeURIComponent(mission.key)}`, { headers: { accept: 'application/json' } })
+        fetch(`${CHECKLIST_URL}?key=${encodeURIComponent(mission.key)}&project=${encodeURIComponent(mission.project ?? '')}`, { headers: { accept: 'application/json' } })
           .then((response) => {
             if (!response.ok) throw new Error(String(response.status))
             return response.json()
@@ -3141,6 +3141,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       // nothing: a question, not work on the ticket.
       const startFreeSession = () => openSession(freePrompt)
 
+      // The host names the folder, the drawer only echoes it back: a save for a
+      // key that two projects declare must land in the folder the row shows.
+      const folderName = mission.folder ? String(mission.folder).split('/').filter(Boolean).at(-1) : undefined
+
       const saveDeclaration = async () => {
         track('mission.declare')
         setSaving(true)
@@ -3149,7 +3153,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(DECLARE_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key, branch: branch.trim(), base: base.trim() }),
+            body: JSON.stringify({ key: mission.key, folder: folderName, branch: branch.trim(), base: base.trim() }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `save failed (${response.status})`)
@@ -3171,7 +3175,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(DECLARE_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key, project: wanted }),
+            body: JSON.stringify({ key: mission.key, folder: folderName, project: wanted }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `save failed (${response.status})`)
@@ -3200,7 +3204,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(BLOCKED_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key, blocked: next, message }),
+            body: JSON.stringify({ key: mission.key, project: mission.project ?? null, blocked: next, message }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `blocked failed (${response.status})`)
@@ -3235,7 +3239,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(PRIORITY_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key, priority: next }),
+            body: JSON.stringify({ key: mission.key, project: mission.project ?? null, priority: next }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `priority failed (${response.status})`)
@@ -3261,7 +3265,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(POINTS_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key, points: value }),
+            body: JSON.stringify({ key: mission.key, project: mission.project ?? null, points: value }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `points failed (${response.status})`)
@@ -3320,7 +3324,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(LOCAL_CLOSE_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key }),
+            body: JSON.stringify({ key: mission.key, project: mission.project ?? null }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `local close failed (${response.status})`)
@@ -3355,7 +3359,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(ARCHIVE_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key }),
+            body: JSON.stringify({ key: mission.key, project: mission.project ?? null }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `archive failed (${response.status})`)
@@ -3379,7 +3383,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(TOLGEE_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key }),
+            body: JSON.stringify({ key: mission.key, project: mission.project ?? null }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `tolgee import failed (${response.status})`)
@@ -6865,10 +6869,14 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       // `applyArchive` is the one reducer of the removal, single entry or batch.
       const archiveBatch = async (keys) => {
         track('mission.archive.batch', String(keys.length))
+        const projects = {}
+        for (const mission of doneView.missions ?? []) {
+          if (keys.includes(mission.key)) projects[mission.key] = mission.project ?? ''
+        }
         const response = await fetch(ARCHIVE_BATCH_URL, {
           method: 'POST',
           headers: { accept: 'application/json', 'content-type': 'application/json' },
-          body: JSON.stringify({ keys }),
+          body: JSON.stringify({ keys, projects }),
         })
         const data = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(data?.error ?? `archive failed (${response.status})`)

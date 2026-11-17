@@ -3934,6 +3934,41 @@ projects:
     assert.equal(avec.status, 200)
     assert.deepEqual(avec.body, { key: 'SOC-3', points: 3, project: 'clienthub', value: 'sp:3' })
     assert.ok(appels.some((entry) => entry.method === 'POST' && entry.href.includes('/issues/3/labels')))
+
+    // When une route partagée ne reçoit pas le projet, Then toutes refusent
+    const routes = [
+      ['/missions/api/blocked', { key: 'SOC-3', blocked: false }],
+      ['/missions/api/priority', { key: 'SOC-3', priority: 'high' }],
+      ['/missions/api/points', { key: 'SOC-3', points: 3 }],
+      ['/missions/api/local-close', { key: 'SOC-3' }],
+      ['/missions/api/archive', { key: 'SOC-3' }],
+      ['/missions/api/tolgee', { key: 'SOC-3' }],
+    ]
+    for (const [path, body] of routes) {
+      const refused = await call(handler, { method: 'POST', path, body })
+      assert.equal(refused.status, 400, `${path} sans projet`)
+      assert.equal(refused.body.error, 'project is required', `${path} sans projet`)
+    }
+
+    // When le projet est nommé, Then les écritures de la board acceptent la clé
+    const blocked = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/blocked',
+      body: { key: 'SOC-3', project: 'backend', blocked: false },
+    })
+    assert.equal(blocked.status, 200)
+    const priority = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/priority',
+      body: { key: 'SOC-3', project: 'backend', priority: 'high' },
+    })
+    assert.equal(priority.status, 200)
+
+    // When une route de dossier nomme le projet, Then elle ne le redemande pas
+    for (const path of ['/missions/api/local-close', '/missions/api/archive', '/missions/api/tolgee']) {
+      const routed = await call(handler, { method: 'POST', path, body: { key: 'SOC-3', project: 'backend' } })
+      assert.notEqual(routed.body.error, 'project is required', `${path} avec projet`)
+    }
   } finally {
     if (before === undefined) delete process.env.GH_TOKEN
     else process.env.GH_TOKEN = before

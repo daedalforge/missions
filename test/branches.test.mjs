@@ -398,3 +398,25 @@ test('saveDeclaration crée un dossier préfixé quand le slug est pris', async 
   assert.equal(byProject.get('clienthub\u0000SOC-1493').folder, 'clienthub-SOC-1493')
   assert.equal(byProject.get('backend\u0000SOC-1493').folder, 'SOC-1493')
 })
+
+test('retirer le projet garde le dossier de la mission au lieu d’en créer un second', async (t) => {
+  // Given deux dossiers pour la même clé, chacun dans son projet
+  const dir = await fixtures(t, {
+    'clienthub-SOC-1493/mission.yml': 'key: SOC-1493\nproject: clienthub\nbranch: feat/soc-1493\nbase: main\n',
+    'backend-SOC-1493/mission.yml': 'key: SOC-1493\nproject: backend\nbranch: feat/soc-1493\nbase: main\n',
+  })
+
+  // When le volet retire le projet du premier dossier
+  const saved = await saveDeclaration(dir, {
+    key: 'SOC-1493', folder: 'clienthub-SOC-1493', project: null,
+  })
+
+  // Then la déclaration reste dans le dossier nommé, sans projet
+  assert.equal(saved.folder, 'clienthub-SOC-1493')
+  assert.equal(saved.project, null)
+  const { byProject, duplicates } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  assert.equal(byProject.get('\u0000SOC-1493').folder, 'clienthub-SOC-1493')
+  assert.equal(byProject.get('backend\u0000SOC-1493').folder, 'backend-SOC-1493')
+  assert.ok(duplicates.has('SOC-1493'))
+  assert.equal((await readdir(dir)).length, 2)
+})
