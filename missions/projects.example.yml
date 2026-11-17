@@ -1,13 +1,25 @@
-# Gabarit de déclaration des projets.
+# Gabarit de déclaration des trackers et des projets.
 #
 # Copiez ce fichier en `missions/projects.yml` — ignoré par git — puis adaptez
-# les projets à votre poste. Aucun projet réel n'est versionné : chaque poste
-# déclare ses dépôts, ses trackers et le vocabulaire de son équipe.
+# les deux sections à votre poste. Aucun tracker ni projet réel n'est versionné.
+#
+# Deux notions séparées :
+#   - un *tracker* est la board qui se lit : un dépôt GitHub, ou un projet Jira.
+#     Il porte la `reference` qui préfixe les clés de mission (EX-52), le
+#     vocabulaire (`map`) et les accès de lecture/écriture.
+#   - un *projet* est le dépôt où la mission se travaille. Il porte le `repo`
+#     (le clone sur le poste), un `tracker` facultatif et, pour Tolgee, ses
+#     `translations`.
+#
+# Plusieurs projets peuvent pointer sur le même tracker : `backend` et
+# `clienthub` peuvent partager la board `SOC`. La `reference` n'est unique
+# qu'entre trackers ; c'est elle qui décide de la board d'une clé. Sans tracker,
+# un projet ne reçoit aucune mission : il reste un dépôt de la vue Repositories.
 #
 # Le workspace a un vocabulaire canonique, fixé par le workflow : les états
 # `to-refine`, `ready`, `in-progress`, `in-review`, `ready-for-prod`, `done`,
 # les types `bug`, `story` et les priorités `urgent`, `high`, `normal`, `low`.
-# Chaque projet les projette sur son tracker par le bloc `map`.
+# Chaque tracker les projette sur sa board par le bloc `map`.
 #
 # Règles de la projection :
 #   - la clé est le nom canonique, la valeur est le nom exact dans le tracker ;
@@ -20,38 +32,42 @@
 #     seul état, et un statut absent de la table reste « inconnu » — jamais
 #     rabattu sur un voisin.
 #
-# Champs d'un projet :
+# Champs d'un tracker :
 #   id         identifiant court du workspace (minuscules)
-#   name       nom lisible
+#   name       nom lisible (facultatif, `id` par défaut)
 #   reference  référence courte obligatoire, en majuscules et unique entre
-#              projets : elle préfixe les clés de mission (EX-52) et les
+#              trackers : elle préfixe les clés de mission (EX-52) et les
 #              epics (EX-1 · …) ; côté Jira, c'est aussi la clé du projet
 #              interrogé par la JQL
-#   repo       chemin du clone sur le poste
 #   tracker    jira | github
 #   jira       site, cloud_id (facultatif, résolu depuis le site sinon), adresse
 #              du compte et champ des story points (tracker: jira) ; le jeton
 #              vient du Trousseau (service `atlassian-token`) ou de
 #              JIRA_API_TOKEN, jamais de ce fichier
 #   github     owner et repo du dépôt distant (tracker: github)
-#   translations  facultatif : locales Tolgee à vérifier, fichier de chaque
-#              locale et locale de référence
 #   map        correspondance canonique -> tracker (obligatoire)
+#
+# Champs d'un projet :
+#   id           identifiant court du workspace (minuscules)
+#   name         nom lisible (facultatif, `id` par défaut)
+#   repo         chemin du clone sur le poste (obligatoire)
+#   tracker      id d'un tracker déclaré (facultatif)
+#   translations facultatif : locales Tolgee à vérifier, fichier de chaque
+#                locale et locale de référence
 
 canonical:
   states: [to-refine, ready, in-progress, in-review, ready-for-prod, done]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
 
-# Facultatif : libellés Jira -> nom de produit affiché dans le panneau.
+# Facultatif : libellés Jira -> nom lisible affiché dans le panneau.
 # products:
 #   example: Example
 
-projects:
+trackers:
   - id: example
-    name: Example (GitHub)
+    name: Example board
     reference: EX
-    repo: ~/projects/example
     tracker: github
     github:
       owner: your-github-org
@@ -74,11 +90,10 @@ projects:
         low: priority:low
       points: "sp:"
 
-  # Projet Jira : décommentez ce bloc et remplacez les valeurs.
+  # Tracker Jira : décommentez ce bloc et remplacez les valeurs.
   # - id: example-jira
   #   name: Example (Jira)
   #   reference: EXJ
-  #   repo: ~/projects/example-jira
   #   tracker: jira
   #   jira:
   #     site: https://your-site.atlassian.net
@@ -101,3 +116,15 @@ projects:
   #       high: High
   #       normal: Medium
   #       low: Low
+
+projects:
+  - id: example
+    name: Example (GitHub)
+    repo: ~/projects/example
+    tracker: example
+
+  # Un dépôt sans tracker : visible dans la vue Repositories, il ne reçoit
+  # aucune mission et n'apparaît pas dans le filtre Project de la liste.
+  # - id: docs
+  #   name: Documentation
+  #   repo: ~/projects/docs
