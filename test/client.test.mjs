@@ -1966,13 +1966,13 @@ test('le pied du Dashboard écrit la demi-pointe et ne met le pluriel qu’au-de
   assert.ok(pieds(seule.tree).some((text) => /0\.5 pt in flight/.test(text)), `la demi-pointe seule reste au singulier : ${pieds(seule.tree).join(' | ')}`)
 })
 
-test('la bande résume le périmètre et compte les missions qu’elle montre', () => {
+test('la bande compte toutes les ouvertures, bloquées et prêtes à partir incluses', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
   // 9 missions ouvertes, 3 dans la file, 2 projets. Les widgets se recoupent :
-  // dix lignes rendues, mais neuf missions distinctes — le périmètre compte les
-  // missions, pas les occurrences, et garde les deux prêts pour la prod comme
-  // les deux bloquées : seule une mission close sort de son compte.
+  // dix lignes rendues pour cinq missions distinctes, et le périmètre compte
+  // les missions, pas les occurrences : les deux prêts pour la prod comme les
+  // deux bloquées y entrent, seule une mission close sort de son compte.
   const rendered = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
   const scope = findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope')
   assert.equal(textOf(scope), '3 need you · 9 open · 2 projects')
