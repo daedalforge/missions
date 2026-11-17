@@ -3597,6 +3597,66 @@ test('POST /create écrit la mission, son dossier, et ouvre la liste rafraîchie
   assert.equal(reloaded.body.missions[0].state, 'to-refine', 'la mission relue est née to-refine')
 })
 
+test('POST /create écrit le dossier qu’une board Jira ne rend pas', async (t) => {
+  const before = { token: process.env.JIRA_API_TOKEN, email: process.env.JIRA_EMAIL }
+  process.env.JIRA_API_TOKEN = 'test-jira-token'
+  process.env.JIRA_EMAIL = 'me@example.test'
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    const target = String(url)
+    calls.push({ url: target, method: init.method ?? 'GET', body: init.body ?? null })
+    if (target.endsWith('/rest/api/3/myself')) return trackerResponse({ accountId: 'acc-1' })
+    return trackerResponse({ id: '10007', key: 'EX-7' }, { status: 201 })
+  }
+  const { dir, handler } = await mountCreate(t, fetchImpl)
+  await writeFile(join(dir, 'missions', 'projects.yml'), JIRA_POINTS_PROJECTS)
+
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/create',
+      body: {
+        tracker: 'ex',
+        project: 'alpha',
+        title: 'Créer sur une board Jira',
+        description: 'Le formulaire.',
+        type: 'story',
+        priority: 'normal',
+      },
+    })
+
+    assert.equal(response.status, 201)
+    assert.equal(response.body.warning, undefined, 'aucun avertissement : le dossier est écrit')
+    assert.deepEqual(response.body, {
+      key: 'EX-7',
+      tracker: 'jira',
+      reference: 'EX',
+      number: null,
+      url: 'https://example.atlassian.net/browse/EX-7',
+      mission: {
+        key: 'EX-7',
+        project: 'alpha',
+        projectName: 'Alpha',
+        repo: '~/projects/alpha',
+        translations: null,
+        trackerId: 'ex',
+        trackerName: 'Example board',
+      },
+      project: 'alpha',
+    })
+    assert.deepEqual(
+      parse(await readFile(join(dir, 'missions', 'EX-7', MISSION_FILE), 'utf8')),
+      { key: 'EX-7', project: 'alpha' },
+    )
+    assert.ok(calls.some((entry) => entry.url.endsWith('/rest/api/3/issue')), 'l’issue naît sur la board Jira')
+  } finally {
+    if (before.token === undefined) delete process.env.JIRA_API_TOKEN
+    else process.env.JIRA_API_TOKEN = before.token
+    if (before.email === undefined) delete process.env.JIRA_EMAIL
+    else process.env.JIRA_EMAIL = before.email
+  }
+})
+
 test('POST /create écrit l’issue sur la board choisie, pas dans le dépôt', async (t) => {
   process.env.GH_TOKEN = 'test-token'
   forgetToken()
