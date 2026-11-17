@@ -2120,9 +2120,9 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const counts = {}
       const labels = {}
       for (const mission of missions) {
-        if (!mission.project) continue
-        counts[mission.project] = (counts[mission.project] ?? 0) + 1
-        labels[mission.project] = mission.projectName ?? mission.project
+        const id = mission.project ?? NO_PROJECT
+        counts[id] = (counts[id] ?? 0) + 1
+        labels[id] = mission.project ? (mission.projectName ?? mission.project) : 'No project'
       }
       return h(ChecklistFilter, {
         label: 'Project',
@@ -2900,9 +2900,12 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       )
     }
 
-    function DrawerRow({ label, value }) {
-      if (value === null || value === undefined || value === '') return null
-      return h(React.Fragment, null, h('dt', null, label), h('dd', null, value))
+    function DrawerRow({ label, value, children }) {
+      // The test renderer hands an empty array where React hands no children.
+      const hasChildren = children !== undefined && children !== null
+        && !(Array.isArray(children) && children.length === 0)
+      if (!hasChildren && (value === null || value === undefined || value === '')) return null
+      return h(React.Fragment, null, h('dt', null, label), h('dd', null, hasChildren ? children : value))
     }
 
     /** Read-only checklist: the file is written by the agent, the panel shows it. */
@@ -2930,7 +2933,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       )
     }
 
-    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, onPrioritySaved, onPointsSaved, onPinSaved, onArchived, theme }) {
+    function MissionDrawer({ mission, services, workspaceId, workspaceRoot, onClose, onSaved, onProjectSaved, onPrioritySaved, onPointsSaved, onPinSaved, onArchived, theme }) {
       const [note, setNote] = React.useState(null)
       // A declared branch always wins; otherwise show the convention's name.
       // It stays a suggestion: only Save writes it to mission.yml.
@@ -3002,6 +3005,11 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const [tolgeeKeys, setTolgeeKeys] = React.useState(null)
       const [tolgeeUntranslated, setTolgeeUntranslated] = React.useState([])
       const [importingTolgee, setImportingTolgee] = React.useState(false)
+      // The project is a declaration too, but it is one choice: it decides the
+      // repository a session runs in, so the drawer writes it alone.
+      const [projectNow, setProjectNow] = React.useState(mission.project ?? '')
+      const [writingProject, setWritingProject] = React.useState(false)
+      const [projectNote, setProjectNote] = React.useState(null)
 
       React.useEffect(() => {
         let alive = true
@@ -3151,6 +3159,34 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           setDeclareNote({ error: true, text: `Save failed: ${error?.message ?? error}` })
         } finally {
           setSaving(false)
+        }
+      }
+
+      const writeProject = async (next) => {
+        const wanted = next === '' ? null : next
+        if (wanted === (mission.project ?? null)) return
+        setWritingProject(true)
+        setProjectNote(null)
+        try {
+          const response = await fetch(DECLARE_URL, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ key: mission.key, project: wanted }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `save failed (${response.status})`)
+          setProjectNow(wanted ?? '')
+          setProjectNote({
+            error: false,
+            text: wanted
+              ? `Projet enregistré : ${mission.projectChoices?.find((entry) => entry.id === wanted)?.name ?? wanted}.`
+              : 'Projet retiré : la mission reste sans projet.',
+          })
+          onProjectSaved?.({ key: mission.key, project: wanted })
+        } catch (error) {
+          setProjectNote({ error: true, text: `Save failed: ${error?.message ?? error}` })
+        } finally {
+          setWritingProject(false)
         }
       }
 
@@ -3456,7 +3492,25 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               }, pointsText(choice))),
             ),
           ),
-          h(DrawerRow, { label: 'Project', value: mission.projectName ?? mission.project }),
+          h(DrawerRow, {
+            label: 'Project',
+            value: Array.isArray(mission.projectChoices) && mission.projectChoices.length > 0 ? undefined : (mission.projectName ?? mission.project),
+          }, Array.isArray(mission.projectChoices) && mission.projectChoices.length > 0
+            ? h('select', {
+                className: 'missions-priority-select',
+                'aria-label': 'Project',
+                value: projectNow,
+                disabled: writingProject,
+                onChange: (event) => writeProject(event.target.value),
+              },
+                h('option', { value: '' }, 'No project'),
+                mission.projectChoices.map((project) => h('option', {
+                  key: project.id,
+                  value: project.id,
+                  selected: project.id === projectNow,
+                }, project.name)),
+              )
+            : null),
           h(DrawerRow, { label: 'Epic', value: mission.epic }),
           h(DrawerRow, { label: 'Updated', value: relativeAge(mission.updatedAt) }),
         ),
@@ -3466,6 +3520,13 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               className: priorityNote.error ? 'missions-priority-note missions-priority-note--error' : 'missions-priority-note',
               role: priorityNote.error ? 'alert' : 'status',
             }, priorityNote.text)
+          : null,
+
+        projectNote
+          ? h('p', {
+              className: projectNote.error ? 'missions-priority-note missions-priority-note--error' : 'missions-priority-note',
+              role: projectNote.error ? 'alert' : 'status',
+            }, projectNote.text)
           : null,
 
         pointsNote
@@ -5310,6 +5371,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           h('span', { className: 'missions-repo-name' },
             h('span', { className: 'missions-repo-name-text' }, repository.name),
             repository.kind === 'worktree' ? h('span', { className: 'missions-repo-kind' }, 'worktree') : null,
+            repository.declared ? h('span', { className: 'missions-repo-kind' }, 'declared') : null,
           ),
           h('span', { className: 'missions-repo-branch' }, branch),
           h('span', {
@@ -6670,6 +6732,21 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
             : previous
         ))
       }
+      // A project write changes which repository works the mission: the row
+      // follows the choice at once, then the host re-attributes it from the
+      // declaration (a folder left without a project falls back to its board).
+      const applyProject = ({ key, project }) => {
+        const update = (mission) => {
+          if (mission.key !== key) return mission
+          const choice = (mission.projectChoices ?? []).find((entry) => entry.id === project) ?? null
+          return { ...mission, project: project ?? null, projectName: choice?.name ?? null, repo: choice?.repo ?? null }
+        }
+        setView((previous) => ({ ...previous, missions: previous.missions.map(update) }))
+        setDoneView((previous) => ({ ...previous, missions: previous.missions.map(update) }))
+        setSelected((previous) => (previous && previous.key === key ? update(previous) : previous))
+        load({ silent: true })
+      }
+
       // A priority write touches one field only: the declaration (folder,
       // branch, base) stays as the tracker list carried it.
       const applyPriority = (saved) => {
@@ -6938,7 +7015,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
 
       const missionDrawer = selected === null
         ? null
-        : h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onPrioritySaved: applyPriority, onPointsSaved: applyPoints, onPinSaved: applyPin, onArchived: applyArchive, theme })
+        : h(MissionDrawer, { key: selected.key, mission: selected, services, workspaceId, workspaceRoot, onClose: () => setSelected(null), onSaved: applyDeclaration, onProjectSaved: applyProject, onPrioritySaved: applyPriority, onPointsSaved: applyPoints, onPinSaved: applyPin, onArchived: applyArchive, theme })
 
       const createDrawer = tab === 'missions' && creating
         ? h(MissionCreateDrawer, { key: 'create', onClose: () => setCreating(false), onCreated })

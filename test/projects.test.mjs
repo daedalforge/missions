@@ -4,23 +4,45 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { loadProjects } from '../lib/projects.js'
+import { loadProjects, projectsOfTracker, readerFor, resolveMissionProject, trackerForKey } from '../lib/projects.js'
 
 const FIXTURE = new URL('./fixtures/projects.yml', import.meta.url)
 
-/** Write a minimal workspace around the given project blocks. */
-async function writeProjects(projects) {
+const HEADER = [
+  'canonical:',
+  '  states: [to-refine]',
+  '  types: [bug]',
+]
+
+/** One complete tracker block; the caller only varies what the case is about. */
+const TRACKER = [
+  '  - id: mis',
+  '    reference: MIS',
+  '    tracker: github',
+  '    github: { owner: a, repo: b }',
+  '    map:',
+  '      states: { to-refine: to-refine }',
+  '      types: { bug: bug }',
+]
+
+/** Write a workspace with a `trackers:` and a `projects:` section. */
+async function writeWorkspace(trackers, projects) {
   const directory = await mkdtemp(join(tmpdir(), 'projects-'))
   const file = join(directory, 'projects.yml')
   await writeFile(
     file,
-    ['canonical:', '  states: [to-refine]', '  types: [bug]', 'projects:', ...projects, ''].join('\n'),
+    [...HEADER, 'trackers:', ...trackers, 'projects:', ...(projects ?? []), ''].join('\n'),
   )
   return new URL(`file://${file}`)
 }
 
-test('the workspace file declares its projects, complete', async () => {
-  const { canonical, products, projects } = await loadProjects(FIXTURE)
+/** Write a workspace with the standard tracker and the given project blocks. */
+async function writeProjects(projects, trackers = TRACKER) {
+  return writeWorkspace(trackers, projects)
+}
+
+test('the workspace file declares its trackers and repositories, complete', async () => {
+  const { canonical, products, trackers, projects } = await loadProjects(FIXTURE)
 
   assert.deepEqual(canonical.states, ['to-refine', 'ready', 'in-progress', 'in-review', 'ready-for-prod', 'done'])
   assert.deepEqual(canonical.types, ['bug', 'story'])
@@ -33,53 +55,55 @@ test('the workspace file declares its projects, complete', async () => {
     hub: 'Hub',
   })
   assert.deepEqual(
+    trackers.map((tracker) => tracker.id),
+    ['mis', 'alp', 'bet'],
+  )
+  assert.deepEqual(
     projects.map((project) => project.id),
     ['missions', 'alpha', 'beta'],
   )
-  const [missions, alpha, beta] = projects
-  assert.equal(missions.id, 'missions')
-  assert.equal(missions.reference, 'MIS')
-  assert.equal(missions.tracker, 'github')
-  assert.equal(missions.github.owner, 'example')
-  assert.equal(missions.github.repo, 'missions')
-  assert.equal(missions.map.states.done, null)
-  assert.equal(missions.map.states.ready, 'ready')
-  assert.equal(missions.map.states['ready-for-prod'], 'ready-for-prod')
-  assert.equal(missions.map.types.story, 'Feature')
-  assert.equal(missions.map.priorities.urgent, 'priority:urgent')
-  assert.equal(missions.map.points, 'sp:')
 
-  assert.equal(alpha.tracker, 'jira')
-  assert.equal(alpha.reference, 'ALP')
-  assert.equal(alpha.jira.site, 'https://example.atlassian.net')
-  assert.equal(alpha.jira.story_points_field, 'customfield_10032')
-  assert.deepEqual(alpha.map.states['in-progress'], ['In Progress'])
-  assert.deepEqual(alpha.map.states['ready-for-prod'], ['Local Testing', 'Staging Test', 'Ready for prod'])
-  assert.deepEqual(alpha.map.states.done, ['Released'])
-  assert.deepEqual(alpha.map.labels, products)
+  const [mis, alp, bet] = trackers
+  assert.equal(mis.reference, 'MIS')
+  assert.equal(mis.tracker, 'github')
+  assert.equal(mis.github.owner, 'example')
+  assert.equal(mis.github.repo, 'missions')
+  assert.equal(mis.map.states.done, null)
+  assert.equal(mis.map.states.ready, 'ready')
+  assert.equal(mis.map.states['ready-for-prod'], 'ready-for-prod')
+  assert.equal(mis.map.types.story, 'Feature')
+  assert.equal(mis.map.priorities.urgent, 'priority:urgent')
+  assert.equal(mis.map.points, 'sp:')
+
+  assert.equal(alp.reference, 'ALP')
+  assert.equal(alp.tracker, 'jira')
+  assert.equal(alp.jira.site, 'https://example.atlassian.net')
+  assert.equal(alp.jira.story_points_field, 'customfield_10032')
+  assert.deepEqual(alp.map.states['in-progress'], ['In Progress'])
+  assert.deepEqual(alp.map.states['ready-for-prod'], ['Local Testing', 'Staging Test', 'Ready for prod'])
+  assert.deepEqual(alp.map.states.done, ['Released'])
+  assert.deepEqual(alp.map.labels, products)
   // Jira nomme `Story` et `Task` : les deux se lisent `story` en local.
-  assert.deepEqual(alpha.map.types.story, ['Story', 'Task'])
+  assert.deepEqual(alp.map.types.story, ['Story', 'Task'])
 
-  assert.equal(beta.name, 'Beta')
-  assert.equal(beta.reference, 'BET')
-  assert.equal(beta.tracker, 'jira')
-  assert.equal(beta.jira.site, 'https://example.atlassian.net')
-  assert.equal(beta.jira.story_points_field, 'customfield_10032')
-  assert.deepEqual(beta.map.states['to-refine'], ['To Refine', 'Inbox'])
-  assert.equal(beta.map.states.ready, 'Ready for dev')
-  assert.deepEqual(beta.map.states['in-progress'], ['In Progress'])
-  assert.equal(beta.map.states['in-review'], 'Code review')
-  assert.equal(beta.map.states['ready-for-prod'], 'Ready for prod')
-  assert.equal(beta.map.states.done, 'Done')
-  assert.deepEqual(beta.map.types.story, ['Story', 'Task'])
+  assert.equal(bet.reference, 'BET')
+  assert.equal(bet.tracker, 'jira')
+  assert.deepEqual(bet.map.states['to-refine'], ['To Refine', 'Inbox'])
+  assert.equal(bet.map.states.ready, 'Ready for dev')
+  assert.deepEqual(bet.map.types.story, ['Story', 'Task'])
+
+  const [missions, alpha, beta] = projects
+  assert.equal(missions.repo, '~/projects/missions')
+  assert.equal(missions.tracker, 'mis')
+  assert.equal(missions.translations, null)
+  assert.equal(alpha.tracker, 'alp')
+  assert.equal(beta.tracker, 'bet')
 })
 
 test('le bloc translations est rendu pour alpha, absent ailleurs', async () => {
   const { projects } = await loadProjects(FIXTURE)
-  const [missions, alpha, beta] = projects
+  const [, alpha] = projects
 
-  assert.equal(missions.translations, null)
-  assert.equal(beta.translations, null)
   assert.deepEqual(alpha.translations, {
     locales: ['ar', 'de', 'en', 'es', 'fil', 'fr', 'hi', 'pt', 'ru', 'zh'],
     languageFile: 'src/locales/{locale}/translations.json',
@@ -87,17 +111,216 @@ test('le bloc translations est rendu pour alpha, absent ailleurs', async () => {
   })
 })
 
-test('un bloc translations incomplet est refusé', async () => {
-  const project = (translations) => [
-    '  - id: so',
-    '    reference: ALP',
+test('deux projets peuvent partager la board du même tracker', async () => {
+  const url = await writeProjects([
+    '  - id: clienthub',
+    '    repo: ~/projects/clienthub',
+    '    tracker: mis',
+    '  - id: backend',
+    '    repo: ~/projects/backend',
+    '    tracker: mis',
+  ])
+
+  const { trackers, projects } = await loadProjects(url)
+  assert.equal(trackers.length, 1)
+  assert.deepEqual(
+    projects.map((project) => project.tracker),
+    ['mis', 'mis'],
+  )
+  assert.deepEqual(
+    projectsOfTracker(projects, 'mis').map((project) => project.id),
+    ['clienthub', 'backend'],
+  )
+})
+
+test('un projet sans tracker est licite', async () => {
+  const url = await writeProjects([
+    '  - id: docs',
+    '    repo: ~/projects/docs',
+  ])
+
+  const { projects } = await loadProjects(url)
+  assert.equal(projects[0].tracker, null)
+  assert.deepEqual(projectsOfTracker(projects, 'mis'), [])
+})
+
+test('un projet qui pointe sur un tracker inconnu est refusé', async () => {
+  const url = await writeProjects([
+    '  - id: docs',
+    '    repo: ~/projects/docs',
+    '    tracker: nope',
+  ])
+
+  await assert.rejects(() => loadProjects(url), /docs points at an unknown tracker \("nope"\)/)
+})
+
+test('un projet sans repo est refusé en nommant le champ', async () => {
+  const url = await writeProjects([
+    '  - id: docs',
+    '    name: Documentation',
+  ])
+
+  await assert.rejects(() => loadProjects(url), /docs has no repo/)
+})
+
+test('un projet qui garde reference ou map est refusé vers les trackers', async () => {
+  const url = await writeProjects([
+    '  - id: docs',
+    '    repo: ~/projects/docs',
+    '    reference: DOC',
+  ])
+
+  await assert.rejects(() => loadProjects(url), /docs declares reference; reference belongs to a tracker/)
+})
+
+test('un fichier resté à l’ancien schéma explique la migration', async () => {
+  const url = await writeProjects([], [])
+  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
+  const file = join(directory, 'projects.yml')
+  await writeFile(
+    file,
+    [
+      ...HEADER,
+      'projects:',
+      '  - id: old',
+      '    reference: OLD',
+      '    tracker: github',
+      '    map:',
+      '      states: { to-refine: to-refine }',
+      '      types: { bug: bug }',
+      '',
+    ].join('\n'),
+  )
+
+  await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /`trackers:` is missing.*old schema/s)
+  assert.ok(url)
+})
+
+test('deux trackers ne peuvent pas partager une référence', async () => {
+  const tracker = (id) => [
+    `  - id: ${id}`,
+    '    reference: MIS',
     '    tracker: github',
     '    github: { owner: a, repo: b }',
-    '    translations:',
-    ...(translations.length > 0 ? translations.map((line) => `      ${line}`) : ['      {}']),
     '    map:',
     '      states: { to-refine: to-refine }',
     '      types: { bug: bug }',
+  ]
+  const url = await writeWorkspace([...tracker('one'), ...tracker('two')], [])
+
+  await assert.rejects(() => loadProjects(url), /reference "MIS" is used by both one and two/)
+})
+
+test('un tracker de type inconnu est refusé', async () => {
+  const url = await writeWorkspace(
+    [
+      '  - id: x',
+      '    reference: X',
+      '    tracker: gitlab',
+      '    map:',
+      '      states: { to-refine: to-refine }',
+      '      types: { bug: bug }',
+    ],
+    [],
+  )
+
+  await assert.rejects(() => loadProjects(url), /tracker x has an unknown tracker \("gitlab"\)/)
+})
+
+test('une référence invalide est refusée en nommant le champ', async () => {
+  const url = await writeWorkspace(
+    [
+      '  - id: x',
+      '    reference: mis',
+      '    tracker: github',
+      '    github: { owner: a, repo: b }',
+      '    map:',
+      '      states: { to-refine: to-refine }',
+      '      types: { bug: bug }',
+    ],
+    [],
+  )
+
+  await assert.rejects(() => loadProjects(url), /tracker x has an invalid reference \("mis"\)/)
+})
+
+test('un tracker avec une projection incomplète est refusé', async () => {
+  const url = await writeWorkspace(
+    [
+      '  - id: x',
+      '    reference: X',
+      '    tracker: github',
+      '    github: { owner: a, repo: b }',
+      '    map:',
+      '      states: { to-refine: to-refine }',
+      '      types: { bug: bug }',
+    ],
+    [],
+  )
+  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
+  const file = join(directory, 'projects.yml')
+  await writeFile(
+    file,
+    [
+      'canonical:',
+      '  states: [to-refine, ready]',
+      '  types: [bug]',
+      'trackers:',
+      '  - id: x',
+      '    reference: X',
+      '    tracker: github',
+      '    github: { owner: a, repo: b }',
+      '    map:',
+      '      states: { to-refine: to-refine }',
+      '      types: { bug: bug }',
+      '',
+    ].join('\n'),
+  )
+
+  await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /tracker x has no mapping for ready/)
+  assert.ok(url)
+})
+
+test('un état peut nommer plusieurs valeurs du tracker', async () => {
+  const url = await writeWorkspace(
+    [
+      '  - id: jira',
+      '    reference: X',
+      '    tracker: jira',
+      '    map:',
+      '      states: { to-refine: [Inbox, To Refine], done: [Released, Ready for prod] }',
+      '      types: { bug: Bug }',
+    ],
+    [],
+  )
+
+  const { trackers } = await loadProjects(url)
+  assert.deepEqual(trackers[0].map.states.done, ['Released', 'Ready for prod'])
+})
+
+test('une valeur du tracker projetée sur deux états est refusée', async () => {
+  const url = await writeWorkspace(
+    [
+      '  - id: jira',
+      '    reference: X',
+      '    tracker: jira',
+      '    map:',
+      '      states: { to-refine: [Inbox, Released], done: [Released] }',
+      '      types: { bug: Bug }',
+    ],
+    [],
+  )
+
+  await assert.rejects(() => loadProjects(url), /maps "Released" to both/)
+})
+
+test('un bloc translations incomplet est refusé', async () => {
+  const project = (translations) => [
+    '  - id: so',
+    '    repo: ~/projects/so',
+    '    tracker: mis',
+    '    translations:',
+    ...(translations.length > 0 ? translations.map((line) => `      ${line}`) : ['      {}']),
   ]
 
   const cases = [
@@ -115,189 +338,60 @@ test('un bloc translations incomplet est refusé', async () => {
   }
 })
 
-test('the beta map covers the statuses of the BET workflow', async () => {
-  const { projects } = await loadProjects(FIXTURE)
-  const beta = projects.find((project) => project.id === 'beta')
-  const covered = new Set(Object.values(beta.map.states).flat().filter(Boolean))
+test('le trackers se lit par préfixe et le projet se résout sans ambiguïté', async () => {
+  const { trackers, projects } = await loadProjects(FIXTURE)
 
-  // Relevé sur le site : GET /rest/api/3/project/BET/statuses.
-  const workflow = ['To Refine', 'Inbox', 'Ready for dev', 'In Progress', 'Ready for prod', 'Code review', 'Done']
+  assert.equal(trackerForKey(trackers, 'ALP-12')?.id, 'alp')
+  assert.equal(trackerForKey(trackers, 'XXX-1'), null)
 
-  assert.deepEqual(
-    workflow.filter((status) => !covered.has(status)),
-    [],
-  )
-})
+  const one = resolveMissionProject({ projects, trackers }, 'MIS-3')
+  assert.equal(one.project.id, 'missions')
 
-test('the alpha map covers the statuses of the ALP workflow', async () => {
-  const { projects } = await loadProjects(FIXTURE)
-  const alpha = projects.find((project) => project.id === 'alpha')
-  const covered = new Set(Object.values(alpha.map.states).flat())
-
-  // Relevé sur le site : GET /rest/api/3/project/ALP/statuses.
-  const workflow = [
-    'Rejected',
-    'Ready for prod',
-    'To Qualify',
-    'To Dev',
-    'Staging Test',
-    'Released',
-    'Inbox',
-    'To Refine',
-    'Ready to Dev',
-    'In Progress',
-    'Local Testing',
-    'Code review',
-    'Analysis done',
-  ]
-
-  assert.deepEqual(
-    workflow.filter((status) => !covered.has(status)),
-    ['Rejected'],
-  )
-})
-
-test('a project with an incomplete mapping is rejected', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
-  const file = join(directory, 'projects.yml')
-  await writeFile(
-    file,
-    [
-      'canonical:',
-      '  states: [to-refine, ready]',
-      '  types: [bug]',
-      'projects:',
-      '  - id: incomplete',
-      '    reference: X',
-      '    tracker: github',
-      '    github: { owner: a, repo: b }',
-      '    map:',
-      '      states: { to-refine: to-refine }',
-      '      types: { bug: bug }',
-      '',
-    ].join('\n'),
-  )
-
-  await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /ready/)
-})
-
-test('an unknown tracker is rejected', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
-  const file = join(directory, 'projects.yml')
-  await writeFile(
-    file,
-    [
-      'canonical:',
-      '  states: [to-refine]',
-      '  types: [bug]',
-      'projects:',
-      '  - id: x',
-      '    reference: X',
-      '    tracker: gitlab',
-      '    map:',
-      '      states: { to-refine: to-refine }',
-      '      types: { bug: bug }',
-      '',
-    ].join('\n'),
-  )
-
-  await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /unknown tracker/)
-})
-
-test('a state may name several tracker values', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
-  const file = join(directory, 'projects.yml')
-  await writeFile(
-    file,
-    [
-      'canonical:',
-      '  states: [to-refine, done]',
-      '  types: [bug]',
-      'projects:',
-      '  - id: jira',
-      '    reference: X',
-      '    tracker: jira',
-      '    map:',
-      '      states: { to-refine: [Inbox, To Refine], done: [Released, Ready for prod] }',
-      '      types: { bug: Bug }',
-      '',
-    ].join('\n'),
-  )
-
-  const { projects } = await loadProjects(new URL(`file://${file}`))
-  assert.deepEqual(projects[0].map.states.done, ['Released', 'Ready for prod'])
-})
-
-test('a tracker value mapped to two states is rejected', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'projects-'))
-  const file = join(directory, 'projects.yml')
-  await writeFile(
-    file,
-    [
-      'canonical:',
-      '  states: [to-refine, done]',
-      '  types: [bug]',
-      'projects:',
-      '  - id: jira',
-      '    reference: X',
-      '    tracker: jira',
-      '    map:',
-      '      states: { to-refine: [Inbox, Released], done: [Released] }',
-      '      types: { bug: Bug }',
-      '',
-    ].join('\n'),
-  )
-
-  await assert.rejects(() => loadProjects(new URL(`file://${file}`)), /maps "Released" to both/)
-})
-
-test('a project without a reference is rejected', async () => {
-  const url = await writeProjects([
-    '  - id: x',
-    '    tracker: github',
-    '    github: { owner: a, repo: b }',
-    '    map:',
-    '      states: { to-refine: to-refine }',
-    '      types: { bug: bug }',
+  const shared = await writeProjects([
+    '  - id: clienthub',
+    '    repo: ~/projects/clienthub',
+    '    tracker: mis',
+    '  - id: backend',
+    '    repo: ~/projects/backend',
+    '    tracker: mis',
   ])
-
-  await assert.rejects(() => loadProjects(url), /x has no reference/)
+  const workspace = await loadProjects(shared)
+  assert.throws(
+    () => resolveMissionProject(workspace, 'MIS-3'),
+    (error) => error.status === 400 && error.message === 'project is required',
+  )
+  assert.equal(resolveMissionProject(workspace, 'MIS-3', 'backend').project.id, 'backend')
+  assert.throws(
+    () => resolveMissionProject(workspace, 'MIS-3', 'unknown'),
+    (error) => error.status === 400 && error.message === 'project is required',
+  )
+  assert.throws(
+    () => resolveMissionProject(workspace, 'NOPE-3'),
+    (error) => error.status === 404 && /no project declares NOPE-3/.test(error.message),
+  )
 })
 
-test('a reference must be an uppercase token', async () => {
-  const url = await writeProjects([
-    '  - id: x',
-    '    reference: mis',
-    '    tracker: github',
-    '    github: { owner: a, repo: b }',
-    '    map:',
-    '      states: { to-refine: to-refine }',
-    '      types: { bug: bug }',
-  ])
+test('le lecteur de tracker porte le dépôt du projet', async () => {
+  const { trackers, projects } = await loadProjects(FIXTURE)
+  const [mis] = trackers
+  const reader = readerFor(mis, projects[0])
 
-  await assert.rejects(() => loadProjects(url), /invalid reference \("mis"\)/)
-})
-
-test('two projects cannot share a reference', async () => {
-  const project = (id) => [
-    `  - id: ${id}`,
-    '    reference: MIS',
-    '    tracker: github',
-    '    github: { owner: a, repo: b }',
-    '    map:',
-    '      states: { to-refine: to-refine }',
-    '      types: { bug: bug }',
-  ]
-  const url = await writeProjects([...project('one'), ...project('two')])
-
-  await assert.rejects(() => loadProjects(url), /reference "MIS" is used by both one and two/)
+  assert.equal(reader.id, 'mis')
+  assert.equal(reader.projectId, 'missions')
+  assert.equal(reader.projectName, 'Missions workspace')
+  assert.equal(reader.reference, 'MIS')
+  assert.equal(reader.repo, '~/projects/missions')
+  assert.equal(reader.map.states.ready, 'ready')
 })
 
 test("le gabarit d'exemple reste valide", async () => {
   const example = new URL('../missions/projects.example.yml', import.meta.url)
-  const { projects } = await loadProjects(example)
+  const { trackers, projects } = await loadProjects(example)
+  assert.equal(trackers.length, 1)
+  assert.equal(trackers[0].reference, 'EX')
   assert.equal(projects.length, 1)
   assert.equal(projects[0].id, 'example')
+  assert.equal(projects[0].tracker, 'example')
 })
 
 test('un fichier projects.yml absent explique où copier le gabarit', async () => {

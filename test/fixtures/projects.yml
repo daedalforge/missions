@@ -1,4 +1,4 @@
-# Fixture de test : trois projets génériques, aucun projet réel.
+# Fixture de test : trois trackers et trois dépôts génériques, aucun projet réel.
 canonical:
   states: [to-refine, ready, in-progress, in-review, ready-for-prod, done]
   types: [bug, story]
@@ -11,11 +11,10 @@ products:
   beta: Beta
   hub: Hub
 
-projects:
-  - id: missions
-    name: Missions workspace
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
-    repo: ~/projects/missions
     tracker: github
     github:
       owner: example
@@ -38,20 +37,15 @@ projects:
         low: priority:low
       points: "sp:"
 
-  - id: alpha
-    name: Alpha
+  - id: alp
+    name: Alpha board
     reference: ALP
-    repo: ~/projects/alpha
     tracker: jira
     jira:
       site: https://example.atlassian.net
       cloud_id: 00000000-0000-0000-0000-000000000000
       email: dev@example.com
       story_points_field: customfield_10032
-    translations:
-      locales: [ar, de, en, es, fil, fr, hi, pt, ru, zh]
-      languageFile: src/locales/{locale}/translations.json
-      reference: fr
     map:
       states:
         to-refine: [To Refine, Inbox, To Qualify, Analysis done]
@@ -69,10 +63,9 @@ projects:
         normal: Medium
         low: Low
 
-  - id: beta
-    name: Beta
+  - id: bet
+    name: Beta board
     reference: BET
-    repo: ~/projects/beta
     tracker: jira
     jira:
       site: https://example.atlassian.net
@@ -95,3 +88,23 @@ projects:
         high: High
         normal: Medium
         low: Low
+
+projects:
+  - id: missions
+    name: Missions workspace
+    repo: ~/projects/missions
+    tracker: mis
+
+  - id: alpha
+    name: Alpha
+    repo: ~/projects/alpha
+    tracker: alp
+    translations:
+      locales: [ar, de, en, es, fil, fr, hi, pt, ru, zh]
+      languageFile: src/locales/{locale}/translations.json
+      reference: fr
+
+  - id: beta
+    name: Beta
+    repo: ~/projects/beta
+    tracker: bet
