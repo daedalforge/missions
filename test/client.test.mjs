@@ -2209,7 +2209,9 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
   assert.equal(meta(bugs), '14')
   assert.equal(meta(stories), '12')
 
-  // Le pied dit ce qui reste, puis le lien porte le total de la liste.
+  // Le pied des cartes à note dit ce qui reste ; celui d'In flight porte ses
+  // points et son total, sans compter les lignes cachées. Le lien porte le
+  // total de la liste.
   const foot = (card) => textOf(findAll(card, 'div').find((node) => node.props.className === 'missions-card-foot'))
   assert.match(foot(queue), /4 more waiting/)
   assert.match(foot(queue), /View all 14/)

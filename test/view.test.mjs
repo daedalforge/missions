@@ -1342,9 +1342,10 @@ test('les quatre lentilles du digest écartent une mission bloquée, par label c
   const queue = needsYou(missions).map((mission) => mission.key)
   const flight = inFlight(missions).map((mission) => mission.key)
 
-  // Then chaque lentille écarte les deux bloquées — les deux causes empruntent
-  // la même porte — et rend les non bloquées comme avant, dans son ordre :
-  // la plus ancienne d'abord, le rang d'état pour la file.
+  // Then chaque lentille écarte la bloquée qu'elle aurait prise — le bug par
+  // l'étiquette, la story par la dépendance, les deux empruntant la même porte
+  // — et rend les non bloquées comme avant, dans son ordre : la plus ancienne
+  // d'abord, le rang d'état pour la file.
   assert.deepEqual(bugs, ['bug-vieux', 'bug-neuf'])
   assert.deepEqual(stories, ['story-revue'])
   assert.deepEqual(queue, ['story-revue', 'bug-vieux', 'bug-neuf'])
