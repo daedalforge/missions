@@ -244,10 +244,18 @@ l'invitation quand rien n'est choisi.
 
 Les cartes **Bugs** et **High-priority stories** s'arrêtent à la revue : une
 mission prête pour la production n'y apparaît plus, même la plus ancienne, et
-leur sous-titre nomme la borne. Le lien *View all N* de chaque carte transporte
-les états qu'elle montre — jamais `ready-for-prod` — donc N est exactement le
-nombre de lignes que ce lien ouvre. La ligne de section, elle, continue de
-compter toutes les missions ouvertes, prêtes à partir incluses.
+leur sous-titre nomme la borne. Une mission bloquée n'y apparaît pas non plus,
+et la file, l'en-cours, les bugs comme les stories l'écartent : elle attend une
+autre mission, pas vous, qu'elle le soit par le label `blocked` ou par un lien
+`Blocks` entrant vers une mission qui n'a pas atteint la revue. Leur état vide
+le dit, chacun dans son vocabulaire (« No unblocked bug before its release. »,
+« No unblocked high-priority story before its release. », « Nothing in progress
+is unblocked. », « Nothing unblocked is waiting on you. »). Le lien *View all N*
+de chaque carte transporte ce qu'elle cadre — ses états, jamais `ready-for-prod`,
+et son type ou sa priorité quand elle en porte un — et N compte ses seules
+lignes non bloquées ; la liste ouverte, elle, garde les missions bloquées de ce
+cadre, à leur étage. La ligne de section continue de
+compter toutes les missions ouvertes, prêtes à partir et bloquées incluses.
 
 Un projet peut déclarer ses **traductions** dans sa copie locale de
 `missions/projects.yml` — `translations.locales`,

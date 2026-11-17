@@ -1727,10 +1727,16 @@ const DASH_MISSIONS = [
   // pas l'envoyer, mais la section ne dépend pas de cette promesse. Elle reste
   // un bug de priorité haute, pour que les widgets aient à l'exclure.
   { key: 'MIS-6', title: 'mission close', state: 'done', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
-  // Un bug et une story prêts pour la prod, les plus anciens de leur famille :
-  // les quatre cartes les laissent dehors, le périmètre les compte encore.
+  // Un bug et une story prêts pour la prod, plus anciens que les missions en
+  // cours : les quatre cartes les laissent dehors, le périmètre les compte
+  // encore.
   { key: 'MIS-7', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
   { key: 'MIS-8', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'socle', projectName: 'Socle', updatedAt: '2026-09-01T12:00:00Z' },
+  // Deux missions bloquées, les plus anciennes des candidates de leur carte :
+  // les quatre lentilles les laissent dehors — un bug par son label, une story
+  // par sa dépendance — alors que rien ne les a fermées.
+  { key: 'MIS-9', title: 'bug bloqué', state: 'in-review', type: 'bug', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-15T12:00:00Z', blocked: true, blockedByLabel: true, blockers: [] },
+  { key: 'MIS-10', title: 'story bloquée', state: 'ready', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-20T12:00:00Z', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-77', title: 'Contrat', state: 'ready', url: null }] },
 ]
 
 function dashboardView(missions, loading = false) {
@@ -1961,16 +1967,21 @@ test('le pied du Dashboard écrit la demi-pointe et ne met le pluriel qu’au-de
   assert.ok(pieds(seule.tree).some((text) => /0\.5 pt in flight/.test(text)), `la demi-pointe seule reste au singulier : ${pieds(seule.tree).join(' | ')}`)
 })
 
-test('la bande résume le périmètre et compte les missions qu’elle montre', () => {
+test('la bande compte toutes les ouvertures, bloquées et prêtes à partir incluses', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(DASH_MISSIONS), 'dashboard'], { now: DASH_NOW })
 
-  // 7 missions ouvertes, 3 dans la file, 2 projets. Les widgets se recoupent :
-  // dix lignes rendues, mais sept missions distinctes — le périmètre compte les
-  // missions, pas les occurrences, et garde les deux prêts pour la prod.
+  // 9 missions ouvertes, 3 dans la file, 2 projets. Les widgets se recoupent :
+  // dix lignes rendues pour cinq missions distinctes, et le périmètre compte
+  // les missions, pas les occurrences : les deux prêts pour la prod comme les
+  // deux bloquées y entrent, seule une mission close sort de son compte.
   const rendered = findAll(tree, 'button').filter((button) => button.props['data-state'] !== undefined)
   const scope = findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope')
-  assert.equal(textOf(scope), '3 need you · 7 open · 2 projects')
+  assert.equal(textOf(scope), '3 need you · 9 open · 2 projects')
   assert.equal(rendered.length, 10)
+  // Les deux bloquées comptent au périmètre sans tenir une ligne du digest :
+  // aucune ligne rendue ne porte leur clé.
+  const cles = findAll(tree, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  assert.deepEqual(cles.filter((cle) => cle === 'MIS-9' || cle === 'MIS-10'), [], 'aucune ligne bloquée ne doit être rendue')
 })
 
 test('un bug prêt pour la production ne prend plus la tête du digest', () => {
@@ -2043,22 +2054,102 @@ test('le prêt pour la prod ne déplace ni l’en-cours ni la file, et le périm
   assert.equal(scope, '4 need you · 6 open · 1 project')
 })
 
-test('une carte vide nomme la borne, même quand une mission prête à partir existe', () => {
-  // Given un bug et une story prêts à partir, seuls de leur famille.
+test('la carte Bugs écarte un bug bloqué, fût-il le plus ancien de sa famille', () => {
+  // Given un bug en revue bloqué par la seule étiquette, le plus ancien, deux
+  // bugs à raffiner non bloqués et un bug en cours qu'une mission encore hors
+  // revue retient — une dépendance arrivée en revue ne bloque plus l'hôte.
   const missions = [
-    { key: 'MIS-40', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
-    { key: 'MIS-41', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T12:00:00Z' },
+    { key: 'MIS-50', title: 'bloqué par étiquette', state: 'in-review', type: 'bug', priority: 'urgent', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
+    { key: 'MIS-51', title: 'revoir la recherche', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-11-01T00:00:00Z' },
+    { key: 'MIS-52', title: 'corriger le filtre', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-11-02T00:00:00Z' },
+    { key: 'MIS-53', title: 'bloqué par dépendance', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-54', title: 'Contrat', state: 'in-progress', url: null }], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
   ]
 
   // When l'onglet Dashboard est rendu.
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
-  const [bugs, stories] = findAll(tree, 'article')
+  const bugs = findAll(tree, 'article')[0]
 
-  // Then les deux cartes sont vides et disent la borne, sans promettre un
-  // inventaire que le prêt à partir contredirait.
+  // Then la carte ne liste que les deux bugs à raffiner, son compte vaut deux
+  // lignes — le bloqué ne prend pas la tête du digest.
+  const keys = findAll(bugs, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  const meta = textOf(findAll(bugs, 'span').find((span) => span.props.className === 'missions-card-meta'))
+  assert.deepEqual(keys, ['MIS-51', 'MIS-52'])
+  assert.equal(meta, '2')
+})
+
+test('les deux causes du blocage tiennent la même porte sur le digest', () => {
+  // Given une story en cours dont la dépendance n'a pas atteint la revue, une
+  // story en revue bloquée par la seule étiquette, une story en revue dont la
+  // dépendance est arrivée en revue, et une mission saine à raffiner.
+  const missions = [
+    { key: 'MIS-60', title: 'en cours retenue', state: 'in-progress', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-64', title: 'Contrat', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
+    { key: 'MIS-61', title: 'en revue retenue', state: 'in-review', type: 'story', priority: 'high', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T00:00:00Z' },
+    { key: 'MIS-62', title: 'dépendance revue', state: 'in-review', type: 'story', priority: 'high', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T00:00:00Z' },
+    { key: 'MIS-63', title: 'saine à raffiner', state: 'to-refine', type: 'bug', priority: 'normal', blocked: false, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-10-02T00:00:00Z' },
+  ]
+
+  // When le Dashboard est rendu.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const [, , flight, queue] = findAll(tree, 'article')
+
+  // Then In flight ne montre aucune des deux stories bloquées, Needs you montre
+  // les deux non bloquées, et les comptes des cartes valent leurs lignes.
+  const keys = (card) => findAll(card, 'span').filter((span) => span.props.className === 'missions-rowkey').map(textOf)
+  const meta = (card) => textOf(findAll(card, 'span').find((span) => span.props.className === 'missions-card-meta'))
+  assert.deepEqual(keys(flight), [])
+  assert.deepEqual(keys(queue), ['MIS-62', 'MIS-63'])
+  assert.equal(meta(flight), '0')
+  assert.equal(meta(queue), '2')
+})
+
+test('une carte vide le dit sans mentir, et le total du panneau ne perd rien', () => {
+  // Given deux missions en cours bloquées — l'une par l'étiquette, l'autre par
+  // sa dépendance — sans aucune mission en cours non bloquée, et une mission
+  // à raffiner bloquée, qu'une file laisserait passer.
+  const missions = [
+    { key: 'MIS-70', title: 'en cours bloquée', state: 'in-progress', type: 'story', priority: 'high', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T00:00:00Z' },
+    { key: 'MIS-71', title: 'en cours retenue', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-72', title: 'Contrat', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T00:00:00Z' },
+    { key: 'MIS-73', title: 'à raffiner bloquée', state: 'to-refine', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-03T00:00:00Z' },
+  ]
+
+  // When l'onglet Dashboard est rendu.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const flight = findAll(tree, 'article')[2]
+
+  // Then la carte porte son état vide et son compte zéro.
   const empty = (card) => textOf(findAll(card, 'p').find((node) => node.props.className === 'missions-card-empty'))
-  assert.equal(empty(bugs), 'No unresolved bug before its release.')
-  assert.equal(empty(stories), 'No high-priority story before its release.')
+  assert.equal(empty(flight), 'Nothing in progress is unblocked.')
+  assert.equal(textOf(findAll(flight, 'span').find((span) => span.props.className === 'missions-card-meta')), '0')
+
+  // Then la ligne de tête garde les trois missions bloquées dans les ouvertes,
+  // mais n'en met aucune dans ce qui attend un geste du demandeur.
+  const scope = textOf(findAll(tree, 'span').find((span) => span.props.className === 'missions-sect-scope'))
+  assert.equal(scope, '0 need you · 3 open · 1 project')
+})
+
+test('une carte vide nomme la borne, même quand des missions bloquées ou prêtes à partir existent', () => {
+  // Given un bug et une story prêts à partir, plus trois missions bloquées —
+  // dont une par l'étiquette et une par sa dépendance — qui épuisent à elles
+  // seules les quatre familles du digest.
+  const missions = [
+    { key: 'MIS-40', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
+    { key: 'MIS-41', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-01T12:00:00Z' },
+    { key: 'MIS-42', title: 'bug bloqué', state: 'to-refine', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-02T12:00:00Z' },
+    { key: 'MIS-43', title: 'story bloquée', state: 'in-review', type: 'story', priority: 'high', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-74', title: 'Contrat', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-03T12:00:00Z' },
+    { key: 'MIS-44', title: 'en cours bloquée', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: '2026-09-04T12:00:00Z' },
+  ]
+
+  // When l'onglet Dashboard est rendu.
+  const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+  const [bugs, stories, flight, queue] = findAll(tree, 'article')
+
+  // Then les quatre cartes sont vides et disent leur borne, sans promettre un
+  // inventaire que le blocage ou le prêt à partir contredirait.
+  const empty = (card) => textOf(findAll(card, 'p').find((node) => node.props.className === 'missions-card-empty'))
+  assert.equal(empty(bugs), 'No unblocked bug before its release.')
+  assert.equal(empty(stories), 'No unblocked high-priority story before its release.')
+  assert.equal(empty(flight), 'Nothing in progress is unblocked.')
+  assert.equal(empty(queue), 'Nothing unblocked is waiting on you.')
 })
 
 test('cliquer une ligne ouvre la mission dans l’onglet Missions', () => {
@@ -2094,6 +2185,12 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
   for (let index = 0; index < 12; index += 1) {
     missions.push({ key: `F-${index}`, title: `vol ${index}`, state: 'in-progress', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString(), points: 2 })
   }
+  // Deux bloquées, les plus anciennes du plateau : un bug en cours et une
+  // story haute en cours à deux points. Elles sont hors de la lentille, donc
+  // ni l'en-tête ni le pied ne les voient ; l'en-tête garde en revanche, par
+  // convention, les lignes non bloquées qu'il ne rend pas.
+  missions.push({ key: 'B-0', title: 'bug bloqué', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 8, 1)).toISOString() })
+  missions.push({ key: 'S-0', title: 'story bloquée', state: 'in-progress', type: 'story', priority: 'high', points: 2, blocked: true, blockedByLabel: false, blockers: [{ key: 'Q-0', title: 'file 0', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 8, 2)).toISOString() })
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
   const [bugs, stories, flight, queue] = findAll(tree, 'article')
 
@@ -2114,7 +2211,10 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
   assert.equal(meta(bugs), '14')
   assert.equal(meta(stories), '12')
 
-  // Le pied dit ce qui reste, puis le lien porte le total de la liste.
+  // Le pied des cartes à note dit ce qui reste ; celui d'In flight porte ses
+  // points, lignes cachées comprises — elles courent aussi. Le lien porte le
+  // total non bloqué de la lentille, et peut donc ouvrir plus de lignes : les
+  // bloquées de son cadre — états, type, priorité — s'y ajoutent.
   const foot = (card) => textOf(findAll(card, 'div').find((node) => node.props.className === 'missions-card-foot'))
   assert.match(foot(queue), /4 more waiting/)
   assert.match(foot(queue), /View all 14/)
@@ -2440,7 +2540,7 @@ test('le lien du widget ouvre la liste sur les états de la carte', () => {
   assert.ok(setters.includes(''), 'le clic efface la recherche')
 })
 
-test('le compte annoncé par un widget vaut les lignes que son lien ouvre', () => {
+test('sans bloquée, le compte annoncé par un widget vaut les lignes que son lien ouvre', () => {
   // Given douze bugs à raffiner et douze stories prêtes, chacune précédée d'une
   // mission prête à partir plus ancienne qu'elle.
   const missions = []
@@ -2491,6 +2591,62 @@ test('le compte annoncé par un widget vaut les lignes que son lien ouvre', () =
 
   assert.ok(setters.includes('missions'), 'le clic bascule sur l’onglet Missions')
   assert.ok(setters.includes(''), 'le clic efface la recherche')
+})
+
+test('le lien d’une carte ouvre la bloquée de ses états, à son étage', () => {
+  // Given douze bugs en revue non bloqués, un bug en revue bloqué par la
+  // seule étiquette, plus ancien qu'eux, une story en revue bloquée du même
+  // état et un bug à affiner bloqué : la carte Bugs lie ses douze lignes non
+  // bloquées, et la liste de cet état garde la bloquée de sa famille et de son
+  // état — ni celle de l'autre famille, ni celle d'un autre état.
+  const missions = [
+    { ...MISSION, key: 'MIS-95', title: 'Bloquée', state: 'in-review', type: 'bug', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-01T00:00:00Z' },
+    { ...MISSION, key: 'MIS-94', title: 'Bloquée story', state: 'in-review', type: 'story', priority: 'low', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-02T00:00:00Z' },
+    { ...MISSION, key: 'MIS-93', title: 'Bug bloqué à affiner', state: 'to-refine', type: 'bug', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-03T00:00:00Z' },
+  ]
+  for (let index = 0; index < 12; index += 1) {
+    missions.push({
+      ...MISSION,
+      key: `MIS-96${index}`,
+      title: `revue ${index}`,
+      state: 'in-review',
+      type: 'bug',
+      blocked: false,
+      blockers: [],
+      updatedAt: new Date(Date.UTC(2026, 10, 1) + index * 3600000).toISOString(),
+    })
+  }
+  const { tree, setters } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
+
+  // When le lien de la carte Bugs est cliqué, puis la liste s'ouvre sur le
+  // filtre capturé.
+  const bugsCard = findAll(tree, 'article').find((article) => textOf(findAll(article, 'h3')[0]) === 'Bugs')
+  const link = findAll(bugsCard, 'button').find((button) => textOf(button).includes('View all 12'))
+  assert.ok(link, 'la carte doit lier ses douze lignes non bloquées')
+  link.props.onClick()
+  const filters = setters.find((next) => next && typeof next === 'object' && next.type === 'bug')
+  const session = memorySession({ 'missions.tab': 'missions' })
+  const panel = charger(undefined, [EMPTY_BAR, dashboardView(missions)], session)
+  panel.api.apply(panel.ctx)
+  const list = findAll(panel.registered.main({}), 'MissionsView')[0]
+  const opened = renderTree({ type: 'MissionsView', fn: list.fn, props: { ...list.props, filters, query: '' }, children: [] })
+  const lignes = findAll(opened, 'div').filter((node) => node.props.className === 'missions-tree-row')
+
+  // Then la liste ouverte montre treize lignes — la bloquée de la famille en
+  // plus, la story bloquée restant dehors — et la bloquée s'y range au dernier
+  // étage, avec son badge.
+  assert.deepEqual(filters.state, ['in-review'])
+  assert.equal(filters.type, 'bug')
+  assert.equal(lignes.length, 13)
+  assert.equal(lignes.filter((ligne) => textOf(ligne).includes('MIS-94')).length, 0, 'la bloquée d’une autre famille ne doit pas entrer')
+  assert.equal(lignes.filter((ligne) => textOf(ligne).includes('MIS-93')).length, 0, 'la bloquée d’un autre état ne doit pas entrer')
+  const derniere = lignes[lignes.length - 1]
+  assert.ok(textOf(derniere).includes('MIS-95'), 'la bloquée doit rester dans la liste, à son étage')
+  assert.deepEqual(
+    findAll(derniere, 'span').filter((span) => span.props.className === 'missions-tree-blocked').map(textOf),
+    ['blocked'],
+    'la ligne bloquée garde son badge',
+  )
 })
 
 test('la priorité prend plusieurs valeurs et la barre les montre', () => {
@@ -2732,8 +2888,8 @@ test('les widgets sans ligne disent ce qui manque, sans lien', () => {
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
   const [bugs, stories] = findAll(tree, 'article')
 
-  assert.match(textOf(bugs), /No unresolved bug before its release\./)
-  assert.match(textOf(stories), /No high-priority story before its release\./)
+  assert.match(textOf(bugs), /No unblocked bug before its release\./)
+  assert.match(textOf(stories), /No unblocked high-priority story before its release\./)
   assert.equal(findAll(tree, 'button').filter((button) => textOf(button).includes('View all')).length, 0)
 })
 
@@ -3675,7 +3831,7 @@ test('la liste place une mission bloquée après sa bloqueuse, même épinglée'
       priority: 'urgent',
       blocked: true,
       blockedByLabel: false,
-      blockers: [{ key: 'MIS-472', title: 'Bloqueuse', state: 'ready' }],
+      blockers: [{ key: 'MIS-472', title: 'Bloqueuse', state: 'ready', url: null }],
     },
     { ...MISSION, key: 'MIS-472', title: 'Bloqueuse', priority: 'low' },
   ]
@@ -3690,6 +3846,43 @@ test('la liste place une mission bloquée après sa bloqueuse, même épinglée'
 
   // Then l'épingle ne passe pas devant le bloqueur : la règle prime.
   assert.deepEqual(lignes, ['MIS-472', 'MIS-471'])
+})
+
+test('la mission bloquée reste dans la liste, à sa place de bloquée', () => {
+  // Given une mission en revue bloquée par la seule étiquette, la plus
+  // ancienne de la liste, et une mission en revue saine plus récente.
+  const liste = [
+    { ...MISSION, key: 'MIS-81', title: 'Bloquée', state: 'in-review', priority: 'urgent', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-01T00:00:00Z' },
+    { ...MISSION, key: 'MIS-82', title: 'Saine', state: 'in-review', priority: 'low', blocked: false, blockers: [], updatedAt: '2026-10-01T00:00:00Z' },
+  ]
+  const { arbre } = monterArbre({ missions: liste })
+  const ouverts = []
+
+  // When la liste plate est rendue.
+  const rendu = arbre({}, { onSelect: (mission, from) => ouverts.push([mission.key, from]) })
+  const lignes = findAll(rendu, 'div').filter((node) => node.props.className === 'missions-tree-row')
+
+  // Then la bloquée est rendue, dans l'étage des bloquées, après la saine :
+  // l'onglet Missions la garde, quand le digest l'écarte et le prouve de son
+  // côté.
+  const ordre = lignes
+    .map((node) => textOf(node))
+    .filter((text) => text.includes('MIS-8'))
+    .map((text) => (text.includes('MIS-81') ? 'MIS-81' : 'MIS-82'))
+  assert.deepEqual(ordre, ['MIS-82', 'MIS-81'])
+
+  // Then sa ligne porte le badge de blocage, et la saine aucun.
+  const badges = (key) => {
+    const ligne = lignes.find((node) => textOf(node).includes(key))
+    return findAll(ligne, 'span').filter((span) => span.props.className === 'missions-tree-blocked').map(textOf)
+  }
+  assert.deepEqual(badges('MIS-81'), ['blocked'])
+  assert.deepEqual(badges('MIS-82'), [])
+
+  // Then sa ligne s'ouvre comme avant : le clic remonte la sélection de la
+  // bloquée au parent, qui ouvre la fiche — le geste que la liste garde.
+  lignes.find((node) => textOf(node).includes('MIS-81')).props.onClick()
+  assert.deepEqual(ouverts, [['MIS-81', 'row']], "la liste doit remonter l'ouverture de la bloquée au parent")
 })
 
 test('une raison écrite est posée sans attendre la lecture suivante', () => {

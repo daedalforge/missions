@@ -1616,9 +1616,13 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
     /**
      * The foot of a widget: what the card does not show, and the way to the
      * list. The link only appears when the card holds more rows than it shows;
-     * its label carries the list's total, so the number the head announced is
-     * the number the list will show. It returns nothing at all when the card
-     * fits: no empty rule under the last row.
+     * its label carries the card's total — every unblocked row, shown or not.
+     * The list it opens is wider than the card: it keeps the blocked missions
+     * of the frame the link carries — its states, and its type or priority
+     * when it has them — so it can hold more rows than the number the link was
+     * opened with. The note is the card's own — points, hidden rows — and when
+     * the card fits with nothing to note, the foot returns nothing at all: no
+     * empty rule under the last row.
      */
     function widgetFoot({ note, total, onViewAll, cap = WIDGET_ROWS }) {
       const more = total > cap
@@ -1762,7 +1766,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 }),
               },
                 bugs.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'No unresolved bug before its release.')
+                  ? h('p', { className: 'missions-card-empty' }, 'No unblocked bug before its release.')
                   : h('ul', { className: 'missions-rows' },
                       bugsShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
@@ -1779,7 +1783,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 }),
               },
                 stories.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'No high-priority story before its release.')
+                  ? h('p', { className: 'missions-card-empty' }, 'No unblocked high-priority story before its release.')
                   : h('ul', { className: 'missions-rows' },
                       storiesShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
@@ -1796,7 +1800,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 }),
               },
                 flight.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'Nothing is in progress.')
+                  ? h('p', { className: 'missions-card-empty' }, 'Nothing in progress is unblocked.')
                   : h('ul', { className: 'missions-rows' },
                       flightShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: false, onOpen })),
                     ),
@@ -1813,7 +1817,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                 }),
               },
                 queue.length === 0
-                  ? h('p', { className: 'missions-card-empty' }, 'Nothing is waiting on you.')
+                  ? h('p', { className: 'missions-card-empty' }, 'Nothing unblocked is waiting on you.')
                   : h('ul', { className: 'missions-rows' },
                       queueShown.map((mission) => h(DashboardRow, { key: mission.key, mission, now, verb: true, onOpen })),
                     ),
@@ -6827,10 +6831,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         if (term) track('filter.search', term)
       }
 
-      // A widget's link opens the list on exactly the rows the widget showed:
-      // its states, its type, its priority — no search, no other filter. The
-      // bar is reset rather than completed, so the count the widget announced
-      // is the count the list shows.
+      // A widget's link opens the list on the rows the widget showed: its
+      // states, its type, its priority — no search, no other filter. The bar is
+      // reset rather than completed, so the card's count stays what the card
+      // counted; the list itself keeps the blocked missions at their stage.
       const onViewAll = (filters = {}) => {
         track('dashboard.view-all', Object.keys(filters).join(','))
         setSelected(null)
