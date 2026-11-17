@@ -251,10 +251,10 @@ autre mission, pas vous, qu'elle le soit par le label `blocked` ou par un lien
 le dit, chacun dans son vocabulaire (« No unblocked bug before its release. »,
 « No unblocked high-priority story before its release. », « Nothing in progress
 is unblocked. », « Nothing unblocked is waiting on you. »). Le lien *View all N*
-de chaque carte transporte les états
-qu'elle montre — jamais `ready-for-prod` — et N compte ses seules lignes non
-bloquées ; la liste ouverte, elle, garde les missions bloquées de ces états, à
-leur étage. La ligne de section continue de
+de chaque carte transporte ce qu'elle cadre — ses états, jamais `ready-for-prod`,
+et son type ou sa priorité quand elle en porte un — et N compte ses seules
+lignes non bloquées ; la liste ouverte, elle, garde les missions bloquées de ce
+cadre, à leur étage. La ligne de section continue de
 compter toutes les missions ouvertes, prêtes à partir et bloquées incluses.
 
 Un projet peut déclarer ses **traductions** dans sa copie locale de

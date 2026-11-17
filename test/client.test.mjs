@@ -2593,11 +2593,13 @@ test('sans bloquée, le compte annoncé par un widget vaut les lignes que son li
 })
 
 test('le lien d’une carte ouvre la bloquée de ses états, à son étage', () => {
-  // Given douze bugs en revue non bloqués et un bug en revue bloqué par la
-  // seule étiquette, plus ancien qu'eux : la carte Bugs lie ses douze lignes
-  // non bloquées, et la liste de cet état garde la bloquée.
+  // Given douze bugs en revue non bloqués, un bug en revue bloqué par la
+  // seule étiquette, plus ancien qu'eux, et une story en revue bloquée du
+  // même état : la carte Bugs lie ses douze lignes non bloquées, et la liste
+  // de cet état garde la bloquée de sa famille — pas celle de l'autre.
   const missions = [
     { ...MISSION, key: 'MIS-95', title: 'Bloquée', state: 'in-review', type: 'bug', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-01T00:00:00Z' },
+    { ...MISSION, key: 'MIS-94', title: 'Bloquée story', state: 'in-review', type: 'story', priority: 'low', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-02T00:00:00Z' },
   ]
   for (let index = 0; index < 12; index += 1) {
     missions.push({
@@ -2627,10 +2629,13 @@ test('le lien d’une carte ouvre la bloquée de ses états, à son étage', () 
   const opened = renderTree({ type: 'MissionsView', fn: list.fn, props: { ...list.props, filters, query: '' }, children: [] })
   const lignes = findAll(opened, 'div').filter((node) => node.props.className === 'missions-tree-row')
 
-  // Then la liste ouverte montre treize lignes — la bloquée de ces états en
-  // plus — et la bloquée s'y range au dernier étage, avec son badge.
+  // Then la liste ouverte montre treize lignes — la bloquée de la famille en
+  // plus, la story bloquée restant dehors — et la bloquée s'y range au dernier
+  // étage, avec son badge.
   assert.deepEqual(filters.state, ['in-review'])
+  assert.equal(filters.type, 'bug')
   assert.equal(lignes.length, 13)
+  assert.equal(lignes.filter((ligne) => textOf(ligne).includes('MIS-94')).length, 0, 'la bloquée d’une autre famille ne doit pas entrer')
   const derniere = lignes[lignes.length - 1]
   assert.ok(textOf(derniere).includes('MIS-95'), 'la bloquée doit rester dans la liste, à son étage')
   assert.deepEqual(
@@ -3869,10 +3874,10 @@ test('la mission bloquée reste dans la liste, à sa place de bloquée', () => {
   assert.deepEqual(badges('MIS-81'), ['blocked'])
   assert.deepEqual(badges('MIS-82'), [])
 
-  // Then sa ligne s'ouvre comme avant : le clic sélectionne la bloquée et
-  // bascule sur l'onglet Missions, le geste que la liste garde entier.
+  // Then sa ligne s'ouvre comme avant : le clic remonte la sélection de la
+  // bloquée au parent, qui ouvre la fiche — le geste que la liste garde.
   lignes.find((node) => textOf(node).includes('MIS-81')).props.onClick()
-  assert.deepEqual(ouverts, [['MIS-81', 'row']], "l'ouverture doit monter la fiche de la bloquée")
+  assert.deepEqual(ouverts, [['MIS-81', 'row']], "la liste doit remonter l'ouverture de la bloquée au parent")
 })
 
 test('une raison écrite est posée sans attendre la lecture suivante', () => {
