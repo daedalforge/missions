@@ -8,13 +8,14 @@
 #     Il porte la `reference` qui préfixe les clés de mission (EX-52), le
 #     vocabulaire (`map`) et les accès de lecture/écriture.
 #   - un *projet* est le dépôt où la mission se travaille. Il porte le `repo`
-#     (le clone sur le poste), un `tracker` facultatif et, pour Tolgee, ses
-#     `translations`.
+#     (le clone sur le poste) et, pour Tolgee, ses `translations`. Il ne porte
+#     pas de board.
 #
-# Plusieurs projets peuvent pointer sur le même tracker : `backend` et
-# `clienthub` peuvent partager la board `SOC`. La `reference` n'est unique
-# qu'entre trackers ; c'est elle qui décide de la board d'une clé. Sans tracker,
-# un projet ne reçoit aucune mission : il reste un dépôt de la vue Repositories.
+# La board d'une mission vient de sa clé : la `reference` du tracker qui la
+# préfixe, la plus longue d'abord. Le dépôt vient du `project` de son
+# `mission.yml`, donc du choix fait à la création ou dans le volet. Plusieurs
+# dépôts travaillent donc la même board sans la déclarer deux fois, et un dépôt
+# peut travailler des missions de plusieurs boards.
 #
 # Le workspace a un vocabulaire canonique, fixé par le workflow : les états
 # `to-refine`, `ready`, `in-progress`, `in-review`, `ready-for-prod`, `done`,
@@ -51,9 +52,10 @@
 #   id           identifiant court du workspace (minuscules)
 #   name         nom lisible (facultatif, `id` par défaut)
 #   repo         chemin du clone sur le poste (obligatoire)
-#   tracker      id d'un tracker déclaré (facultatif)
 #   translations facultatif : locales Tolgee à vérifier, fichier de chaque
 #                locale et locale de référence
+#
+# Un `tracker` sur un projet est refusé : la board vient de la clé de mission.
 
 canonical:
   states: [to-refine, ready, in-progress, in-review, ready-for-prod, done]
@@ -121,10 +123,10 @@ projects:
   - id: example
     name: Example (GitHub)
     repo: ~/projects/example
-    tracker: example
 
-  # Un dépôt sans tracker : visible dans la vue Repositories, il ne reçoit
-  # aucune mission et n'apparaît pas dans le filtre Project de la liste.
+  # Un dépôt de plus, sans board : il reste un dépôt de la vue Repositories et
+  # apparaît dans le filtre Repository de la liste dès qu'une mission le
+  # déclare dans son `mission.yml`.
   # - id: docs
   #   name: Documentation
   #   repo: ~/projects/docs

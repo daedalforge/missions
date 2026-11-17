@@ -309,11 +309,10 @@ test('saveDeclaration dérive toujours le dossier de la clé', async (t) => {
   assert.deepEqual(await readdir(dir), ['escape'])
 })
 
-/** Une board partagée par deux dépôts, la forme que `resolveMissionProject` rend. */
-const TRACKERS = [{ id: 'soc', reference: 'SOC', tracker: 'jira' }]
+/** Deux dépôts sans board déclarée : un dépôt ne porte plus de tracker. */
 const PROJECTS = [
-  { id: 'clienthub', name: 'Clienthub', repo: '~/projects/clienthub', tracker: 'soc' },
-  { id: 'backend', name: 'Backend', repo: '~/projects/backend', tracker: 'soc' },
+  { id: 'clienthub', name: 'Clienthub', repo: '~/projects/clienthub' },
+  { id: 'backend', name: 'Backend', repo: '~/projects/backend' },
 ]
 
 test('la même clé dans deux projets est deux missions', async (t) => {
@@ -322,7 +321,7 @@ test('la même clé dans deux projets est deux missions', async (t) => {
     'backend-SOC-1493/mission.yml': 'key: SOC-1493\nproject: backend\nbranch: feat/soc-1493\n',
   })
 
-  const { index, byProject, duplicates, errors } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  const { index, byProject, duplicates, errors } = await loadBranches(dir, { projects: PROJECTS })
   assert.deepEqual(errors, [])
   assert.equal(index.size, 1)
   assert.deepEqual([...duplicates], ['SOC-1493'])
@@ -336,29 +335,29 @@ test('la même clé deux fois dans un même projet nomme les dossiers', async (t
     'B/mission.yml': 'key: SOC-1493\nproject: clienthub\n',
   })
 
-  const { errors } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  const { errors } = await loadBranches(dir, { projects: PROJECTS })
   assert.equal(errors.length, 1)
   assert.match(errors[0].message, /B\/mission\.yml: key "SOC-1493" is already declared in A\/mission\.yml for project clienthub/)
 })
 
-test('un dossier sans project retombe sur l’unique projet du tracker', async (t) => {
+test('un dossier sans project reste sans dépôt, même seul sur sa board', async (t) => {
   const dir = await fixtures(t, {
     'SOC-1493/mission.yml': 'key: SOC-1493\nbranch: feat/soc-1493\n',
   })
   const single = [PROJECTS[0]]
 
-  const { byProject, projectByKey, errors } = await loadBranches(dir, { trackers: TRACKERS, projects: single })
+  const { byProject, projectByKey, errors } = await loadBranches(dir, { projects: single })
   assert.deepEqual(errors, [])
-  assert.equal(projectByKey.get('SOC-1493'), 'clienthub')
-  assert.equal(byProject.get('clienthub\u0000SOC-1493').folder, 'SOC-1493')
+  assert.equal(projectByKey.get('SOC-1493'), null)
+  assert.equal(byProject.get('\u0000SOC-1493').folder, 'SOC-1493')
 })
 
-test('un dossier sans project reste sans projet quand la board en porte deux', async (t) => {
+test('un dossier sans project reste sans dépôt quand plusieurs dépôts existent', async (t) => {
   const dir = await fixtures(t, {
     'SOC-1493/mission.yml': 'key: SOC-1493\n',
   })
 
-  const { byProject, projectByKey, errors } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  const { byProject, projectByKey, errors } = await loadBranches(dir, { projects: PROJECTS })
   assert.deepEqual(errors, [])
   assert.equal(projectByKey.get('SOC-1493'), null)
   assert.equal(byProject.get('\u0000SOC-1493').folder, 'SOC-1493')
@@ -393,7 +392,7 @@ test('saveDeclaration crée un dossier préfixé quand le slug est pris', async 
 
   const saved = await saveDeclaration(dir, { key: 'SOC-1493', project: 'clienthub', branch: 'feat/clienthub', base: 'main' })
   assert.equal(saved.folder, 'clienthub-SOC-1493')
-  const { byProject, errors } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  const { byProject, errors } = await loadBranches(dir, { projects: PROJECTS })
   assert.deepEqual(errors, [])
   assert.equal(byProject.get('clienthub\u0000SOC-1493').folder, 'clienthub-SOC-1493')
   assert.equal(byProject.get('backend\u0000SOC-1493').folder, 'SOC-1493')
@@ -414,7 +413,7 @@ test('retirer le projet garde le dossier de la mission au lieu d’en créer un 
   // Then la déclaration reste dans le dossier nommé, sans projet
   assert.equal(saved.folder, 'clienthub-SOC-1493')
   assert.equal(saved.project, null)
-  const { byProject, duplicates } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  const { byProject, duplicates } = await loadBranches(dir, { projects: PROJECTS })
   assert.equal(byProject.get('\u0000SOC-1493').folder, 'clienthub-SOC-1493')
   assert.equal(byProject.get('backend\u0000SOC-1493').folder, 'backend-SOC-1493')
   assert.ok(duplicates.has('SOC-1493'))
