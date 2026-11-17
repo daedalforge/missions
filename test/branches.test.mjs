@@ -163,6 +163,7 @@ test('saveDeclaration crée le dossier d’une mission sans déclaration', async
   assert.deepEqual(saved, {
     key: 'daedalforge/missions#49',
     folder: 'daedalforge-missions-49',
+    project: null,
     branch: 'gh-49',
     base: 'main',
   })
@@ -216,6 +217,7 @@ test('saveDeclaration refuse une déclaration invalide sans rien écrire', async
     (error) => error.status === 400 && /key is missing/.test(error.message),
   )
   await assert.rejects(saveDeclaration(dir, { key: 'a#1', branch: 42 }), /branch must be a string/)
+  await assert.rejects(saveDeclaration(dir, { key: 'a#1', project: 42 }), /project must be a string/)
   await assert.rejects(saveDeclaration(dir, { key: 'a#1', base: ['main'] }), /base must be a string/)
 
   const { index, errors } = await loadBranches(dir)
@@ -223,14 +225,17 @@ test('saveDeclaration refuse une déclaration invalide sans rien écrire', async
   assert.deepEqual(errors, [])
 })
 
-test('saveDeclaration refuse un dossier déjà pris par une autre clé', async (t) => {
-  // Les clés `a#1` et `a-1` donnent le même dossier : la seconde écraserait la
-  // première, donc elle est refusée.
+test('saveDeclaration suffixe un dossier déjà pris par une autre clé', async (t) => {
+  // Les clés `a#1` et `a-1` donnent le même dossier : la seconde reçoit un
+  // suffixe au lieu d'écraser la première.
   const dir = await fixtures(t, { 'a-1/mission.yml': 'key: a-1\nbranch: b\n' })
 
-  await assert.rejects(saveDeclaration(dir, { key: 'a#1', branch: 'x' }), /a-1\/mission\.yml already declares "a-1"/)
-  const { index } = await loadBranches(dir)
+  const saved = await saveDeclaration(dir, { key: 'a#1', branch: 'x' })
+  assert.equal(saved.folder, 'a-1-2')
+  const { index, errors } = await loadBranches(dir)
+  assert.deepEqual(errors, [])
   assert.deepEqual(index.get('a-1'), { folder: 'a-1', branch: 'b', base: null })
+  assert.equal(index.get('a#1').folder, 'a-1-2')
 })
 
 test('saveDeclaration répare une déclaration au champ vide', async (t) => {
@@ -267,28 +272,33 @@ test('saveDeclaration ne duplique pas une déclaration existante invalide', asyn
 test('saveDeclaration sérialise deux écritures concurrentes', async (t) => {
   const dir = await fixtures(t, {})
 
-  // Les deux clés donnent le dossier `a-1` : une seule doit gagner.
+  // Les deux clés visent le dossier `a-1` : la seconde reçoit un suffixe au
+  // lieu d'écraser la première.
   const results = await Promise.allSettled([
     saveDeclaration(dir, { key: 'a#1', branch: 'one', base: 'main' }),
     saveDeclaration(dir, { key: 'a-1', branch: 'two', base: 'main' }),
   ])
 
-  assert.deepEqual(results.map((result) => result.status).sort(), ['fulfilled', 'rejected'])
-  assert.match(String(results.find((result) => result.status === 'rejected').reason), /already declares/)
+  assert.deepEqual(results.map((result) => result.status), ['fulfilled', 'fulfilled'])
+  const folders = results.map((result) => result.value.folder).sort()
+  assert.deepEqual(folders, ['a-1', 'a-1-2'])
   const { index, errors } = await loadBranches(dir)
   assert.deepEqual(errors, [])
-  assert.deepEqual([...index.keys()].sort(), [results.find((result) => result.status === 'fulfilled').value.key])
+  assert.deepEqual([...index.keys()].sort(), ['a#1', 'a-1'])
 })
 
-test('saveDeclaration refuse un fichier de déclaration illisible', async (t) => {
+test('saveDeclaration n’écrit pas dans un dossier de déclaration illisible', async (t) => {
   const dir = await fixtures(t, {})
   // `mission.yml` est un dossier : le fichier ne peut pas être lu.
   await mkdir(join(dir, 'a-1', MISSION_FILE), { recursive: true })
 
-  await assert.rejects(
-    saveDeclaration(dir, { key: 'a#1', branch: 'x', base: 'main' }),
-    (error) => error.status === 400 && /a-1\/mission\.yml/.test(error.message),
-  )
+  const saved = await saveDeclaration(dir, { key: 'a#1', branch: 'x', base: 'main' })
+  assert.equal(saved.folder, 'a-1-2')
+  const { index, errors } = await loadBranches(dir)
+  // Le dossier illisible reste signalé, et la déclaration valide est lisible.
+  assert.equal(errors.length, 1)
+  assert.match(errors[0].message, /a-1\/mission\.yml/)
+  assert.equal(index.get('a#1').folder, 'a-1-2')
 })
 
 test('saveDeclaration dérive toujours le dossier de la clé', async (t) => {
@@ -297,4 +307,116 @@ test('saveDeclaration dérive toujours le dossier de la clé', async (t) => {
   const saved = await saveDeclaration(dir, { key: '../../escape', branch: 'x', base: 'main' })
   assert.equal(saved.folder, 'escape')
   assert.deepEqual(await readdir(dir), ['escape'])
+})
+
+/** Une board partagée par deux dépôts, la forme que `resolveMissionProject` rend. */
+const TRACKERS = [{ id: 'soc', reference: 'SOC', tracker: 'jira' }]
+const PROJECTS = [
+  { id: 'clienthub', name: 'Clienthub', repo: '~/projects/clienthub', tracker: 'soc' },
+  { id: 'backend', name: 'Backend', repo: '~/projects/backend', tracker: 'soc' },
+]
+
+test('la même clé dans deux projets est deux missions', async (t) => {
+  const dir = await fixtures(t, {
+    'clienthub-SOC-1493/mission.yml': 'key: SOC-1493\nproject: clienthub\nbranch: feat/soc-1493\n',
+    'backend-SOC-1493/mission.yml': 'key: SOC-1493\nproject: backend\nbranch: feat/soc-1493\n',
+  })
+
+  const { index, byProject, duplicates, errors } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  assert.deepEqual(errors, [])
+  assert.equal(index.size, 1)
+  assert.deepEqual([...duplicates], ['SOC-1493'])
+  assert.equal(byProject.get('clienthub\u0000SOC-1493').folder, 'clienthub-SOC-1493')
+  assert.equal(byProject.get('backend\u0000SOC-1493').folder, 'backend-SOC-1493')
+})
+
+test('la même clé deux fois dans un même projet nomme les dossiers', async (t) => {
+  const dir = await fixtures(t, {
+    'A/mission.yml': 'key: SOC-1493\nproject: clienthub\n',
+    'B/mission.yml': 'key: SOC-1493\nproject: clienthub\n',
+  })
+
+  const { errors } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  assert.equal(errors.length, 1)
+  assert.match(errors[0].message, /B\/mission\.yml: key "SOC-1493" is already declared in A\/mission\.yml for project clienthub/)
+})
+
+test('un dossier sans project retombe sur l’unique projet du tracker', async (t) => {
+  const dir = await fixtures(t, {
+    'SOC-1493/mission.yml': 'key: SOC-1493\nbranch: feat/soc-1493\n',
+  })
+  const single = [PROJECTS[0]]
+
+  const { byProject, projectByKey, errors } = await loadBranches(dir, { trackers: TRACKERS, projects: single })
+  assert.deepEqual(errors, [])
+  assert.equal(projectByKey.get('SOC-1493'), 'clienthub')
+  assert.equal(byProject.get('clienthub\u0000SOC-1493').folder, 'SOC-1493')
+})
+
+test('un dossier sans project reste sans projet quand la board en porte deux', async (t) => {
+  const dir = await fixtures(t, {
+    'SOC-1493/mission.yml': 'key: SOC-1493\n',
+  })
+
+  const { byProject, projectByKey, errors } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  assert.deepEqual(errors, [])
+  assert.equal(projectByKey.get('SOC-1493'), null)
+  assert.equal(byProject.get('\u0000SOC-1493').folder, 'SOC-1493')
+})
+
+test('attachBranches suit l’identité (projet, clé)', () => {
+  const index = new Map([['SOC-1493', { folder: 'legacy', branch: 'a', base: null }]])
+  const byProject = new Map([
+    ['clienthub\u0000SOC-1493', { key: 'SOC-1493', project: 'clienthub', folder: 'clienthub-SOC-1493', branch: 'b', base: null }],
+  ])
+
+  const attached = attachBranches([{ key: 'SOC-1493', project: 'clienthub' }], index, byProject)
+  assert.equal(attached[0].folder, 'clienthub-SOC-1493')
+  assert.equal(attached[0].branch, 'b')
+})
+
+test('saveDeclaration adopte le dossier sans project quand le projet arrive', async (t) => {
+  const dir = await fixtures(t, {
+    'SOC-1493/mission.yml': 'key: SOC-1493\nbranch: feat/soc-1493\n',
+  })
+
+  const saved = await saveDeclaration(dir, { key: 'SOC-1493', project: 'clienthub', branch: 'feat/soc-1493', base: 'main' })
+  assert.equal(saved.folder, 'SOC-1493')
+  assert.equal(saved.project, 'clienthub')
+  assert.equal(parse(await readFile(join(dir, saved.folder, MISSION_FILE), 'utf8')).project, 'clienthub')
+})
+
+test('saveDeclaration crée un dossier préfixé quand le slug est pris', async (t) => {
+  const dir = await fixtures(t, {
+    'SOC-1493/mission.yml': 'key: SOC-1493\nproject: backend\nbranch: feat/backend\n',
+  })
+
+  const saved = await saveDeclaration(dir, { key: 'SOC-1493', project: 'clienthub', branch: 'feat/clienthub', base: 'main' })
+  assert.equal(saved.folder, 'clienthub-SOC-1493')
+  const { byProject, errors } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  assert.deepEqual(errors, [])
+  assert.equal(byProject.get('clienthub\u0000SOC-1493').folder, 'clienthub-SOC-1493')
+  assert.equal(byProject.get('backend\u0000SOC-1493').folder, 'SOC-1493')
+})
+
+test('retirer le projet garde le dossier de la mission au lieu d’en créer un second', async (t) => {
+  // Given deux dossiers pour la même clé, chacun dans son projet
+  const dir = await fixtures(t, {
+    'clienthub-SOC-1493/mission.yml': 'key: SOC-1493\nproject: clienthub\nbranch: feat/soc-1493\nbase: main\n',
+    'backend-SOC-1493/mission.yml': 'key: SOC-1493\nproject: backend\nbranch: feat/soc-1493\nbase: main\n',
+  })
+
+  // When le volet retire le projet du premier dossier
+  const saved = await saveDeclaration(dir, {
+    key: 'SOC-1493', folder: 'clienthub-SOC-1493', project: null,
+  })
+
+  // Then la déclaration reste dans le dossier nommé, sans projet
+  assert.equal(saved.folder, 'clienthub-SOC-1493')
+  assert.equal(saved.project, null)
+  const { byProject, duplicates } = await loadBranches(dir, { trackers: TRACKERS, projects: PROJECTS })
+  assert.equal(byProject.get('\u0000SOC-1493').folder, 'clienthub-SOC-1493')
+  assert.equal(byProject.get('backend\u0000SOC-1493').folder, 'backend-SOC-1493')
+  assert.ok(duplicates.has('SOC-1493'))
+  assert.equal((await readdir(dir)).length, 2)
 })

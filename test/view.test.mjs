@@ -44,6 +44,7 @@ import {
   freeSessionBlocker,
   missionStep,
   missionWorktree,
+  NO_PROJECT,
   missionSessionPrompt,
   feedbackSessionPrompt,
   freeSessionPrompt,
@@ -198,6 +199,28 @@ test('les filtres epic, priorité et projet se combinent en ET', () => {
   assert.deepEqual(filterMissions(MISSIONS, { epic: 'Workspace', priority: 'urgent' }).map((m) => m.key), ['a#1'])
   assert.deepEqual(filterMissions(MISSIONS, { query: 'cartes', project: 'missions' }).map((m) => m.key), ['a#3'])
   assert.deepEqual(filterMissions(MISSIONS, { project: 'alpha', type: 'bug' }), [])
+})
+
+test('le filtre projet sépare les dépôts et garde les missions sans projet', () => {
+  // Given une mission que nul dépôt ne travaille
+  const sansProjet = { ...MISSIONS[0], key: 'a#9', project: null, projectName: null }
+  // When le filtre demande « sans projet », Then seule cette ligne reste
+  assert.deepEqual(
+    filterMissions([...MISSIONS, sansProjet], { project: [NO_PROJECT] }).map((mission) => mission.key),
+    ['a#9'],
+  )
+  // Then les dépôts nommés ne la retiennent pas
+  assert.deepEqual(filterMissions([...MISSIONS, sansProjet], { project: ['missions'] }).map((mission) => mission.key), ['a#1', 'a#3'])
+  // Then l'option « sans projet » n'apparaît que si une ligne en a besoin
+  assert.deepEqual(projectOptions(MISSIONS), [
+    { id: 'alpha', name: 'Alpha' },
+    { id: 'missions', name: 'Workspace missions' },
+  ])
+  assert.deepEqual(projectOptions([...MISSIONS, sansProjet]), [
+    { id: 'alpha', name: 'Alpha' },
+    { id: NO_PROJECT, name: 'No project' },
+    { id: 'missions', name: 'Workspace missions' },
+  ])
 })
 
 test('les filtres type, epic et projet prennent plusieurs valeurs, réunies en OU', () => {
@@ -920,22 +943,35 @@ test('la raison d’un blocage écrit s’affiche tout de suite, sans nouvelle l
   assert.equal(blockedReasonAfterWrite({ next: false, message: 'Attente.' }), null)
 })
 
-test('une session exige un état unique, une branche et une base déclarées', () => {
-  assert.equal(executionBlocker({ branch: 'gh-41', base: 'main' }), null)
-  assert.equal(executionBlocker({ branch: 'gh-41', base: 'main', stateConflict: [] }), null)
+test('une session exige un projet, un état unique, une branche et une base déclarées', () => {
+  assert.equal(executionBlocker({ project: 'missions', branch: 'gh-41', base: 'main' }), null)
+  assert.equal(executionBlocker({ project: 'missions', branch: 'gh-41', base: 'main', stateConflict: [] }), null)
   assert.equal(
-    executionBlocker({ branch: 'gh-41', base: 'main', stateConflict: ['in-review', 'ready-for-prod'] }),
+    executionBlocker({ project: 'missions', branch: 'gh-41', base: 'main', stateConflict: ['in-review', 'ready-for-prod'] }),
     'state labels conflict (in-review, ready-for-prod), keep one',
   )
-  assert.equal(executionBlocker({ branch: 'gh-41' }), 'base branch is not declared, set it below or in the mission folder')
-  assert.equal(executionBlocker({ base: 'main' }), 'branch is not declared, set it below or in the mission folder')
   assert.equal(
-    executionBlocker({ branch: 'gh-41', base: 'main', state: 'done' }),
+    executionBlocker({ branch: 'gh-41', base: 'main' }),
+    'project is not declared, choose the repository that works this mission',
+  )
+  assert.equal(
+    executionBlocker({ project: 'missions', branch: 'gh-41' }),
+    'base branch is not declared, set it below or in the mission folder',
+  )
+  assert.equal(
+    executionBlocker({ project: 'missions', base: 'main' }),
+    'branch is not declared, set it below or in the mission folder',
+  )
+  assert.equal(
+    executionBlocker({ project: 'missions', branch: 'gh-41', base: 'main', state: 'done' }),
     'mission is done: a closed mission plays no session',
   )
-  assert.equal(executionBlocker({}), 'branch is not declared, set it below or in the mission folder')
-  assert.equal(executionBlocker({ branch: null, base: null }), 'branch is not declared, set it below or in the mission folder')
-  assert.equal(executionBlocker(), 'branch is not declared, set it below or in the mission folder')
+  assert.equal(executionBlocker({}), 'project is not declared, choose the repository that works this mission')
+  assert.equal(
+    executionBlocker({ branch: null, base: null }),
+    'project is not declared, choose the repository that works this mission',
+  )
+  assert.equal(executionBlocker(), 'project is not declared, choose the repository that works this mission')
 })
 
 test('une session libre ne se ferme que sur done, jamais sur un champ manquant', () => {
@@ -2120,6 +2156,7 @@ const TEMOIN = {
   branch: 'fix/mis-42',
   base: 'main',
   folder: 'MIS-42',
+  project: 'missions',
   repo: '~/projects/missions',
 }
 

@@ -82,6 +82,7 @@ test('POST déclare la branche et la base dans le dossier de la mission', async 
   assert.deepEqual(response.body, {
     key: 'daedalforge/missions#49',
     folder: 'daedalforge-missions-49',
+    project: null,
     branch: 'gh-49',
     base: 'main',
   })
@@ -174,9 +175,9 @@ canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
     tracker: github
     github:
@@ -196,6 +197,11 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: mis
 `)
 
   const before = process.env.GH_TOKEN
@@ -235,9 +241,9 @@ canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
     tracker: github
     github:
@@ -257,6 +263,11 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: mis
 `)
   // Une mission close n'est lisible que si son dossier la déclare.
   await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
@@ -306,9 +317,9 @@ canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
     tracker: github
     github:
@@ -328,8 +339,8 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
-  - id: signet
-    name: Signet
+  - id: sig
+    name: Signet board
     reference: SIG
     tracker: github
     github:
@@ -349,6 +360,15 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: mis
+  - id: signet
+    name: Signet
+    repo: ~/projects/signet
+    tracker: sig
 `)
   await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
   await writeFile(join(dir, 'missions', 'MIS-9', MISSION_FILE), 'key: MIS-9\nbranch: feat/mis-9\nbase: main\n')
@@ -405,9 +425,9 @@ canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
     tracker: github
     github:
@@ -427,6 +447,11 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: mis
 `)
   await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
   await writeFile(join(dir, 'missions', 'MIS-9', MISSION_FILE), 'key: MIS-9\nbranch: feat/mis-9\nbase: main\n')
@@ -477,9 +502,9 @@ canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
     tracker: github
     github:
@@ -499,6 +524,11 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: mis
 `)
   // Le dossier existe mais sa déclaration est illisible : le périmètre devient
   // partiel, et le compte ne peut plus prétendre à un nombre.
@@ -1026,9 +1056,9 @@ const BLOCKED_PROJECTS = `canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
     tracker: github
     github:
@@ -1049,6 +1079,11 @@ projects:
         normal: priority:normal
         low: priority:low
       points: "sp:"
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: mis
 `
 
 async function mountBlocked(t, fetchImpl) {
@@ -1308,9 +1343,9 @@ const JIRA_POINTS_PROJECTS = `canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: alpha
-    name: Alpha
+trackers:
+  - id: ex
+    name: Example board
     reference: EX
     tracker: jira
     jira:
@@ -1332,6 +1367,11 @@ projects:
         high: High
         normal: Medium
         low: Low
+projects:
+  - id: alpha
+    name: Alpha
+    repo: ~/projects/alpha
+    tracker: ex
 `
 
 test('POST points pose le label de la taille et rend la forme native', async (t) => {
@@ -1926,11 +1966,10 @@ function closeProjects(repo) {
   states: [to-refine, ready, in-progress, in-review, ready-for-prod]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
-    repo: ${repo}
     tracker: github
     github:
       owner: daedalforge
@@ -1950,6 +1989,11 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ${repo}
+    tracker: mis
 `
 }
 
@@ -2262,9 +2306,9 @@ canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
     tracker: github
     github:
@@ -2284,6 +2328,11 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: mis
 `)
 
   const read = await call(handler, { path: '/missions/api/usage' })
@@ -2784,11 +2833,10 @@ function tolgeeProjects(repo, translations = true) {
   states: [to-refine, ready, in-progress, in-review, ready-for-prod]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
-    repo: ${repo}
     tracker: github
     github:
       owner: daedalforge
@@ -2808,6 +2856,11 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ${repo}
+    tracker: mis
 ${block}`
 }
 
@@ -3287,9 +3340,9 @@ const CREATE_PROJECTS = `canonical:
   states: [to-refine, ready, in-progress, in-review]
   types: [bug, story]
   priorities: [urgent, high, normal, low]
-projects:
-  - id: missions
-    name: Workspace missions
+trackers:
+  - id: mis
+    name: Missions board
     reference: MIS
     tracker: github
     github:
@@ -3309,8 +3362,8 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
-  - id: legacy
-    name: Legacy
+  - id: leg
+    name: Legacy board
     reference: LEG
     tracker: github
     github:
@@ -3330,6 +3383,15 @@ projects:
         high: priority:high
         normal: priority:normal
         low: priority:low
+projects:
+  - id: missions
+    name: Workspace missions
+    repo: ~/projects/missions
+    tracker: mis
+  - id: legacy
+    name: Legacy
+    repo: ~/projects/legacy
+    tracker: leg
 `
 
 async function mountCreate(t, fetchImpl, config = {}) {
@@ -3508,7 +3570,7 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
       type: 'story',
       priority: 'high',
       points: null,
-      repo: null,
+      repo: '~/projects/missions',
       translations: null,
       epic: 'MIS-3 · Fondations',
       url: 'https://github.com/daedalforge/missions/issues/42',
@@ -3645,4 +3707,270 @@ test('la ligne créée ne survit pas à la fenêtre courte', async (t) => {
   clock += 5 * 60_000
   const expired = await call(handler, { path: '/missions/api/list?refresh=1' })
   assert.deepEqual(expired.body.missions, [])
+})
+
+test('une board partagée se lit une fois, chaque ligne porte son dépôt ou rien', async (t) => {
+  // Given deux projets sur la même board et une mission que nul dossier ne déclare
+  const appels = []
+  const fetchImpl = async (url) => {
+    const href = String(url)
+    appels.push(href)
+    const json = (body) => trackerResponse(body)
+    if (href.endsWith('/user')) return json({ login: 'me' })
+    return json([
+      { number: 1, state: 'open', title: 'Clienthub', labels: [{ name: 'ready' }] },
+      { number: 2, state: 'open', title: 'Backend', labels: [{ name: 'ready' }] },
+      { number: 3, state: 'open', title: 'Sans dossier', labels: [{ name: 'ready' }] },
+    ])
+  }
+  const { dir, handler } = await mount(t, { fetchImpl })
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+trackers:
+  - id: soc
+    name: Connect board
+    reference: SOC
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: connect
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+projects:
+  - id: clienthub
+    name: Clienthub
+    repo: ~/projects/clienthub
+    tracker: soc
+  - id: backend
+    name: Backend
+    repo: ~/projects/backend
+    tracker: soc
+`)
+  await mkdir(join(dir, 'missions', 'SOC-1'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'SOC-1', MISSION_FILE), 'key: SOC-1\nproject: clienthub\nbranch: feat/soc-1\nbase: main\n')
+  await mkdir(join(dir, 'missions', 'SOC-2'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'SOC-2', MISSION_FILE), 'key: SOC-2\nproject: backend\nbranch: feat/soc-2\nbase: main\n')
+
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    // When la liste est lue
+    const liste = await call(handler, { path: '/missions/api/list' })
+    assert.equal(liste.status, 200)
+    // Then la board n'a été lue qu'une fois, pas une fois par dépôt
+    assert.equal(appels.filter((href) => href.includes('/issues?')).length, 1)
+    // Then chaque ligne porte le projet de son dossier, la non déclarée reste sans projet
+    assert.deepEqual(
+      liste.body.missions.map((mission) => [mission.key, mission.project, mission.projectName, mission.repo]),
+      [
+        ['SOC-1', 'clienthub', 'Clienthub', '~/projects/clienthub'],
+        ['SOC-2', 'backend', 'Backend', '~/projects/backend'],
+        ['SOC-3', null, null, null],
+      ],
+    )
+    // Then le volet reçoit les dépôts de la board, pour offrir le champ Project
+    assert.deepEqual(liste.body.missions[2].projectChoices.map((choice) => choice.id), ['clienthub', 'backend'])
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('une même clé travaillée dans deux projets donne deux missions, chacune son dépôt', async (t) => {
+  clearCache()
+  t.after(() => clearCache())
+  // Given deux projets sur la même board et la même clé déclarée dans les deux
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'me' })
+    return trackerResponse([{ number: 9, state: 'open', title: 'Partagée', labels: [{ name: 'ready' }] }])
+  }
+  const { dir, handler } = await mount(t, { fetchImpl })
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+trackers:
+  - id: soc
+    name: Connect board
+    reference: SOC
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: connect
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+projects:
+  - id: clienthub
+    name: Clienthub
+    repo: ~/projects/clienthub
+    tracker: soc
+  - id: backend
+    name: Backend
+    repo: ~/projects/backend
+    tracker: soc
+`)
+  await mkdir(join(dir, 'missions', 'clienthub-SOC-9'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'clienthub-SOC-9', MISSION_FILE), 'key: SOC-9\nproject: clienthub\nbranch: feat/soc-9-clienthub\nbase: main\n')
+  await mkdir(join(dir, 'missions', 'backend-SOC-9'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'backend-SOC-9', MISSION_FILE), 'key: SOC-9\nproject: backend\nbranch: feat/soc-9-backend\nbase: main\n')
+
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    // When la liste est lue
+    const liste = await call(handler, { path: '/missions/api/list' })
+    assert.equal(liste.status, 200)
+    // Then la même clé donne deux lignes, une par projet, avec le bon dossier
+    assert.deepEqual(
+      liste.body.missions
+        .map((mission) => [mission.key, mission.project, mission.repo, mission.folder])
+        .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
+      [
+        ['SOC-9', 'backend', '~/projects/backend', 'backend-SOC-9'],
+        ['SOC-9', 'clienthub', '~/projects/clienthub', 'clienthub-SOC-9'],
+      ],
+    )
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
+})
+
+test('une route de mission partagée exige le projet, puis écrit sur la bonne board', async (t) => {
+  // Given deux projets sur la même board et une mission sans projet
+  const appels = []
+  const fetchImpl = async (url, init = {}) => {
+    const href = String(url)
+    appels.push({ href, method: init.method ?? 'GET', body: init.body ?? null })
+    if (href.endsWith('/user')) return trackerResponse({ login: 'me' })
+    if (href.includes('/issues/3') && (init.method ?? 'GET') === 'GET') return trackerResponse({ labels: [] })
+    return trackerResponse({})
+  }
+  const { dir, handler } = await mount(t, { fetchImpl })
+  await writeFile(join(dir, 'missions', 'projects.yml'), `
+canonical:
+  states: [to-refine, ready, in-progress, in-review]
+  types: [bug, story]
+  priorities: [urgent, high, normal, low]
+trackers:
+  - id: soc
+    name: Connect board
+    reference: SOC
+    tracker: github
+    github:
+      owner: daedalforge
+      repo: connect
+    map:
+      states:
+        to-refine: to-refine
+        ready: ready
+        in-progress: in-progress
+        in-review: in-review
+      types:
+        bug: Bug
+        story: Feature
+      priorities:
+        urgent: priority:urgent
+        high: priority:high
+        normal: priority:normal
+        low: priority:low
+      points: 'sp:'
+projects:
+  - id: clienthub
+    name: Clienthub
+    repo: ~/projects/clienthub
+    tracker: soc
+  - id: backend
+    name: Backend
+    repo: ~/projects/backend
+    tracker: soc
+`)
+  const before = process.env.GH_TOKEN
+  process.env.GH_TOKEN = 'test-token'
+  try {
+    // When la route est appelée sans projet, Then elle refuse au lieu de choisir
+    const sans = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/points',
+      body: { key: 'SOC-3', points: 3 },
+    })
+    assert.equal(sans.status, 400)
+    assert.equal(sans.body.error, 'project is required')
+
+    // When le projet est nommé, Then l'écriture part sur sa board
+    const avec = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/points',
+      body: { key: 'SOC-3', project: 'clienthub', points: 3 },
+    })
+    assert.equal(avec.status, 200)
+    assert.deepEqual(avec.body, { key: 'SOC-3', points: 3, project: 'clienthub', value: 'sp:3' })
+    assert.ok(appels.some((entry) => entry.method === 'POST' && entry.href.includes('/issues/3/labels')))
+
+    // When une route partagée ne reçoit pas le projet, Then toutes refusent
+    const routes = [
+      ['/missions/api/blocked', { key: 'SOC-3', blocked: false }],
+      ['/missions/api/priority', { key: 'SOC-3', priority: 'high' }],
+      ['/missions/api/points', { key: 'SOC-3', points: 3 }],
+      ['/missions/api/local-close', { key: 'SOC-3' }],
+      ['/missions/api/archive', { key: 'SOC-3' }],
+      ['/missions/api/tolgee', { key: 'SOC-3' }],
+    ]
+    for (const [path, body] of routes) {
+      const refused = await call(handler, { method: 'POST', path, body })
+      assert.equal(refused.status, 400, `${path} sans projet`)
+      assert.equal(refused.body.error, 'project is required', `${path} sans projet`)
+    }
+
+    // When le projet est nommé, Then les écritures de la board acceptent la clé
+    const blocked = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/blocked',
+      body: { key: 'SOC-3', project: 'backend', blocked: false },
+    })
+    assert.equal(blocked.status, 200)
+    const priority = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/priority',
+      body: { key: 'SOC-3', project: 'backend', priority: 'high' },
+    })
+    assert.equal(priority.status, 200)
+
+    // When une route de dossier nomme le projet, Then elle ne le redemande pas
+    for (const path of ['/missions/api/local-close', '/missions/api/archive', '/missions/api/tolgee']) {
+      const routed = await call(handler, { method: 'POST', path, body: { key: 'SOC-3', project: 'backend' } })
+      assert.notEqual(routed.body.error, 'project is required', `${path} avec projet`)
+    }
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = before
+  }
 })

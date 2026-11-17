@@ -217,7 +217,7 @@ test('le volet déclare la branche et la base, et bloque sans elles', () => {
   assert.match(SOURCE, /const DECLARE_URL = 'missions\/api\/branches'/)
   assert.match(SOURCE, /className: 'missions-declare-label' \}, 'Branch'/)
   assert.match(SOURCE, /className: 'missions-declare-label' \}, 'Base'/)
-  assert.match(SOURCE, /key: mission\.key, branch: branch\.trim\(\), base: base\.trim\(\)/)
+  assert.match(SOURCE, /key: mission\.key, folder: folderName, branch: branch\.trim\(\), base: base\.trim\(\)/)
   assert.match(SOURCE, /disabled: saving \|\| !dirty/)
   // Le champ est prérempli avec le nom conventionnel tant que rien n'est
   // déclaré ; une valeur déclarée reste prioritaire et rien n'est écrit avant
@@ -784,7 +784,7 @@ test('le volet lit le journal de mission, sans dépendance de rendu', () => {
   assert.match(SOURCE, /mission\.folder \? `missions\/\$\{mission\.folder\}\/journal\.md`/)
   assert.match(SOURCE, /Journal de mission : \$\{journalPath\}/)
   // Le journal n'est pas dans la liste : le volet le demande à l'ouverture.
-  assert.match(SOURCE, /fetch\(`\$\{JOURNAL_URL\}\?key=\$\{encodeURIComponent\(mission\.key\)\}`/)
+  assert.match(SOURCE, /fetch\(`\$\{JOURNAL_URL\}\?key=\$\{encodeURIComponent\(mission\.key\)\}&project=\$\{encodeURIComponent\(mission\.project \?\? ''\)\}`/)
 })
 
 test('le volet découpe le détail en trois onglets', () => {
@@ -4029,7 +4029,7 @@ test('choisir une priorité écrit le mot canonique et ne patche que ce champ', 
   await select.props.onChange({ target: { value: 'urgent' } })
 
   assert.deepEqual(writes(calls), [
-    { url: 'missions/api/priority', method: 'POST', body: { key: 'MIS-42', priority: 'urgent' } },
+    { url: 'missions/api/priority', method: 'POST', body: { key: 'MIS-42', project: 'missions', priority: 'urgent' } },
   ])
   assert.deepEqual(saved, [{ key: 'MIS-42', priority: 'urgent' }])
   // La valeur locale ne bouge qu'après l'accord du tracker.
@@ -4163,7 +4163,7 @@ test('choisir une taille écrit le nombre et ne patche que ce champ', async () =
 
   // Then un seul POST, en nombre, et la ligne avance après l'accord du tracker.
   assert.deepEqual(writes(calls), [
-    { url: 'missions/api/points', method: 'POST', body: { key: 'MIS-42', points: 5 } },
+    { url: 'missions/api/points', method: 'POST', body: { key: 'MIS-42', project: 'missions', points: 5 } },
   ])
   assert.deepEqual(saved, [{ key: 'MIS-42', points: 5 }])
   assert.ok(setters.includes(5))
@@ -7398,7 +7398,7 @@ test('le volet ne propose la clôture locale qu’en ready-for-prod', () => {
 
   // Le câblage du bundle, en plus du rendu.
   assert.match(SOURCE, /const LOCAL_CLOSE_URL = 'missions\/api\/local-close'/)
-  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key \}\)/)
+  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key, project: mission\.project \?\? null \}\)/)
   assert.match(SOURCE, /mission\.state === 'ready-for-prod'/)
   assert.match(SOURCE, /\.missions-action--danger \{/)
 })
@@ -7445,7 +7445,7 @@ test('le premier clic arme la clôture, le second envoie la clé', async () => {
 
   await bouton.props.onClick()
   assert.deepEqual(writes(calls), [
-    { url: 'missions/api/local-close', method: 'POST', body: { key: 'MIS-42' } },
+    { url: 'missions/api/local-close', method: 'POST', body: { key: 'MIS-42', project: 'missions' } },
   ])
   const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
   assert.equal(note.error, false)
@@ -7612,7 +7612,7 @@ test('un clic sur l’import Tolgee envoie la clé et rend le bilan', async () =
   await boutonTolgee(tree).props.onClick()
 
   const imports = calls.filter((entry) => entry.url === 'missions/api/tolgee')
-  assert.deepEqual(imports, [{ url: 'missions/api/tolgee', method: 'POST', body: { key: 'MIS-42' } }])
+  assert.deepEqual(imports, [{ url: 'missions/api/tolgee', method: 'POST', body: { key: 'MIS-42', project: 'missions' } }])
   assert.ok(calls.some((entry) => entry.url === 'missions/api/usage'), 'le geste se compte')
   const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
   assert.equal(note.error, false)
@@ -7694,7 +7694,7 @@ test('le bundle câble l’URL, le dessin et le rapport Tolgee', () => {
   assert.match(SOURCE, /const TOLGEE_URL = 'missions\/api\/tolgee'/)
   assert.match(SOURCE, /h\(ActionIcon, \{ name: 'tolgee' \}\)/)
   assert.match(SOURCE, /if \(name === 'tolgee'\)/)
-  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key \}\)/)
+  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key, project: mission\.project \?\? null \}\)/)
   // Le rapport nomme les deux listes, chacune avec sa raison d'être.
   assert.match(SOURCE, /Clés de traduction du diff/)
   assert.match(SOURCE, /À écrire en fr d’abord/)
@@ -8580,7 +8580,7 @@ test('le volet ne propose l’archive qu’en done', () => {
   assert.match(SOURCE, /'aria-label': archiving \? 'Archiving…' : armedArchive \? 'Confirm — archive the mission' : 'Archive',/)
   assert.match(SOURCE, /h\(ActionIcon, \{ name: armedArchive && !archiving \? 'confirm' : 'archive' \}\)/)
   assert.match(SOURCE, /mission\.state === 'done'/)
-  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key \}\)/)
+  assert.match(SOURCE, /body: JSON\.stringify\(\{ key: mission\.key, project: mission\.project \?\? null \}\)/)
   assert.match(SOURCE, /onArchived: applyArchive/)
   assert.match(SOURCE, /const applyArchive = \(archived\) => \{/)
 })
@@ -8638,7 +8638,7 @@ test('le premier clic arme l’archive, le second envoie la clé et ferme le vol
     // cette trace, un clic d'archive ne laissait aucune preuve (MIS-174).
     assert.deepEqual(calls, [
       { url: 'missions/api/usage', method: 'POST', body: { element: 'mission.archive' } },
-      { url: 'missions/api/archive', method: 'POST', body: { key: 'MIS-42' } },
+      { url: 'missions/api/archive', method: 'POST', body: { key: 'MIS-42', project: 'missions' } },
     ])
     const note = setters.filter((value) => value && typeof value === 'object' && 'error' in value).at(-1)
     assert.equal(note.error, false)
@@ -9632,7 +9632,7 @@ test('le lot confirmé n’envoie que les clés affichées', async () => {
 
     const envois = fetchLot.appels.filter((appel) => appel.url === 'missions/api/archive-batch')
     assert.equal(envois.length, 1, 'un seul envoi pour le lot')
-    assert.deepEqual(envois[0].body, { keys: ['MIS-1', 'MIS-2'] }, 'les clés envoyées sont exactement les lignes visibles')
+    assert.deepEqual(envois[0].body, { keys: ['MIS-1', 'MIS-2'], projects: { 'MIS-1': 'missions', 'MIS-2': 'missions' } }, 'les clés envoyées sont exactement les lignes visibles')
   } finally {
     fetchLot.rendre()
   }

@@ -13,10 +13,73 @@ le tracker ne sait pas porter : la branche de la mission et sa base.
 
 La clé est l'identifiant de travail, partout et sans exception : nom de branche,
 préfixe de commit, message de PR, liens entre tickets. On ne réinvente pas de
-numérotation locale. La référence est déclarée par le projet dans
+numérotation locale. La référence est déclarée par le **tracker** dans
 [`projects.example.yml`](projects.example.yml), recopié localement en
 `projects.yml` (ignoré par git) ; sur GitHub, elle préfixe le numéro de
-l'issue, dont l'URL reste `…/issues/52`.
+l'issue, dont l'URL reste `…/issues/52`. Deux projets qui travaillent la même
+board partagent donc la même référence : c'est elle qui range une clé.
+
+## Deux déclarations : le tracker et le projet
+
+Un **tracker** est ce qui se lit : une board Jira ou un dépôt GitHub. Un
+**projet** est ce qui se travaille : un clone sur le poste. Le fichier local
+`projects.yml` porte les deux sections, dans cet ordre.
+
+```yaml
+trackers:
+  - id: soc
+    name: Connect board
+    reference: SOC
+    tracker: jira
+    jira: { site: …, email: …, story_points_field: … }
+    map: { … }
+
+projects:
+  - id: clienthub
+    repo: ~/projects/clienthub
+    tracker: soc
+  - id: backend
+    repo: ~/projects/backend
+    tracker: soc
+```
+
+- Le tracker porte la `reference`, le bloc `jira` ou `github`, et la `map` qui
+  traduit le vocabulaire canonique. Il est lu **une seule fois**, même si
+  plusieurs projets le partagent.
+- Le projet porte le `repo` (obligatoire), un `tracker` **facultatif** et, pour
+  Tolgee, ses `translations`. Un projet sans tracker reste un dépôt de la vue
+  Repositories et ne reçoit aucune mission.
+- Une `reference` est unique **entre trackers**, jamais entre projets : deux
+  projets peuvent la partager. Le panneau refuse deux trackers qui la
+  revendiquent.
+- L'identité d'une mission est le couple **(projet, clé)**. `SOC-1493` déclarée
+  par `clienthub` et par `backend` sont deux missions distinctes, avec deux
+  dossiers, deux branches et deux worktrees. La même clé deux fois dans le même
+  projet est une erreur, qui nomme les deux dossiers.
+- Un dossier `mission.yml` sans `project` retombe sur le projet unique de son
+  tracker ; si le tracker en porte plusieurs, la mission reste **sans projet**
+  et le volet demande lequel avant d'ouvrir une session.
+
+Les routes d'écriture (`blocked`, `priority`, `points`, `tolgee`,
+`local-close`, `archive`) reçoivent le `project` avec la clé. Sans lui, le
+projet unique du tracker est retenu ; quand plusieurs projets se partagent la
+board, l'hôte refuse avec `400 project is required` plutôt que de choisir.
+
+### Migrer un ancien `projects.yml`
+
+L'ancien schéma gardait `reference`, `tracker` (le type), `github`/`jira` et
+`map` sur chaque projet. Le nouveau les déplace dans `trackers:` :
+
+1. recopiez le fichier local (il est ignoré par git) ;
+2. créez un tracker par board, avec sa `reference`, son type, ses accès et sa
+   `map` ;
+3. ne gardez sur chaque projet que `id`, `name`, `repo`, `tracker` (l'id du
+   tracker) et, le cas échéant, `translations` ;
+4. faites pointer chaque projet sur son tracker.
+
+Un fichier resté à l'ancien schéma est refusé avec un message qui nomme la
+section `trackers:` manquante, jamais par un panneau vide. Un projet qui garde
+`reference` ou `map` est refusé de la même façon, avec le champ en cause.
 
 ## États
 
@@ -66,6 +129,7 @@ Chaque mission exécutable a **un dossier** sous `missions/`, avec un
 
 ```yaml
 key: MIS-41
+project: missions
 branch: feat/mis-41
 base: main
 ```
@@ -77,6 +141,11 @@ base: main
   correspondance est exacte : après le passage à `MIS-n`, une déclaration
   restée sur l'ancienne clé `daedalforge/missions#n` ne correspond plus à la
   mission ; renommer `key` dans le fichier (le dossier peut garder son nom).
+- **`project` nomme le dépôt** : c'est l'id d'un projet de `projects.yml`. Il
+  est facultatif ; sans lui, la mission retombe sur l'unique projet de son
+  tracker, sinon elle reste « sans projet ». Deux dossiers peuvent déclarer la
+  même clé dans deux projets ; la même clé deux fois dans le même projet est
+  une erreur, qui nomme les deux dossiers.
 - **Pas de session sans les deux** : un dossier absent, ou un champ manquant,
   laisse `branch`/`base` vides ; le volet de détail laisse alors les champs
   vides et désactive « Start a session » plutôt que de supposer une branche.
@@ -273,12 +342,20 @@ vérifie.
 - **Jamais versionné.** `missions/*/` reste ignoré par git, comme `mission.yml`
   et le journal : la checklist ne se commit pas et ne se partage pas.
 
-## Le projet décide du tracker
+## Le tracker lit la board, le projet décide du dépôt
 
-Chaque projet déclare son dépôt et son tracker dans sa copie locale de
-`projects.yml` ; le gabarit versionné est [`projects.example.yml`](projects.example.yml).
-Une mission hérite du tracker de son projet : il n'y a pas de choix par mission.
-Un projet sans entrée dans `projects.yml` ne peut pas recevoir de mission.
+Chaque projet déclare son dépôt dans sa copie locale de `projects.yml`, et le
+tracker qu'il travaille ; le gabarit versionné est
+[`projects.example.yml`](projects.example.yml). Une mission hérite du tracker de
+son projet : il n'y a pas de choix par mission. Sans tracker, un projet ne peut
+pas recevoir de mission.
+
+Le dépôt du projet décide de tout ce qui touche au travail : le clone d'où part
+le worktree `~/projects/<clone>-<CLÉ>`, le prompt de session, la PR, la
+vérification Tolgee. Changer le `project` d'une mission change donc de dépôt,
+pas de board. Le volet offre la liste des dépôts rattachés au tracker de la
+mission ; tant qu'aucun n'est déclaré, « Start a session » reste fermé et le
+champ Project est proposé.
 
 ## Gabarit
 
@@ -338,19 +415,22 @@ milestone.
 
 ## Lecture
 
-Le panneau lit **plusieurs projets à la fois**, chacun dans son tracker. Un
-projet est une source : il se lit seul, avec ses propres identifiants, et son
-échec ne touche pas les autres.
+Le panneau lit **une board par tracker**, pas une board par projet. Deux
+projets qui pointent sur le même tracker partagent donc une seule lecture : la
+liste ne duplique aucune clé, et chaque ligne est ensuite attribuée au projet
+que son dossier déclare.
 
 - **Indépendance.** Un jeton absent, un quota épuisé, une panne réseau ou des
-  droits insuffisants d'un côté ne suspendent pas la lecture des autres projets ;
-  l'erreur s'affiche pour le projet concerné, les autres restent lisibles.
-- **Aucune hypothèse partagée.** Deux projets ne partagent ni vocabulaire, ni
+  droits insuffisants d'un côté ne suspendent pas la lecture des autres
+  trackers ; l'erreur s'affiche pour le tracker concerné, les autres restent
+  lisibles.
+- **Aucune hypothèse partagée.** Deux trackers ne partagent ni vocabulaire, ni
   pagination, ni cadence de lecture. Ce qui vaut pour l'un n'est pas supposé
   pour l'autre.
 - **Identité complète.** Une mission affichée porte toujours son projet et sa
-  clé (`MIS-52`, `EX-1234`). Deux clés identiques dans deux projets
-  restent deux missions distinctes.
+  clé (`MIS-52`, `EX-1234`). Deux clés identiques dans deux projets restent deux
+  missions distinctes ; une clé que nul dossier ne déclare s'affiche **sans
+  projet** et garde ses gestes de lecture.
 - **Lecture seule.** Lire un tracker ne modifie rien : ni le tracker, ni le
   dépôt, ni un fichier local.
 - **Mes missions seulement.** Chaque lecture est filtrée sur le compte qui
