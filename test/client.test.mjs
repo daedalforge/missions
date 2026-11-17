@@ -2211,8 +2211,9 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
   assert.equal(meta(stories), '12')
 
   // Le pied des cartes à note dit ce qui reste ; celui d'In flight porte ses
-  // points et son total, sans compter les lignes cachées. Le lien porte le
-  // total de la liste.
+  // points, lignes cachées comprises — elles courent aussi. Le lien porte le
+  // total non bloqué de la lentille, et peut donc ouvrir plus de lignes : les
+  // bloquées des états qu'il transporte s'y ajoutent.
   const foot = (card) => textOf(findAll(card, 'div').find((node) => node.props.className === 'missions-card-foot'))
   assert.match(foot(queue), /4 more waiting/)
   assert.match(foot(queue), /View all 14/)
