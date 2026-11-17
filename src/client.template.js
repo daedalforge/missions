@@ -1618,7 +1618,8 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
      * list. The link only appears when the card holds more rows than it shows;
      * its label carries the card's total — every unblocked row, shown or not.
      * The list it opens is wider than the card: it keeps the blocked missions
-     * of these states, so it can hold more rows than the number the link was
+     * of the frame the link carries — its states, and its type or priority
+     * when it has them — so it can hold more rows than the number the link was
      * opened with. The note is the card's own — points, hidden rows — and when
      * the card fits with nothing to note, the foot returns nothing at all: no
      * empty rule under the last row.
