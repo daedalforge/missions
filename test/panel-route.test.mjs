@@ -2952,6 +2952,20 @@ test('la route tolgee est un POST qui demande une clé', async (t) => {
   assert.match(unknown.body.error, /no project declares OTHER-1/)
 })
 
+test('le dossier des missions suit le fichier de projets même sans configuration', () => {
+  // Le panneau tourne sans `projectsFile` dans sa config : la racine des
+  // missions est alors celle du `projects.yml` par défaut. Avant, elle restait
+  // `undefined` et l'import Tolgee répondait `Invalid URL`.
+  const ctx = { effect: (fn) => fn(), webServer: { register: () => {} } }
+
+  const { projectsFile, branchesDir } = apply(ctx, {})
+
+  assert.ok(projectsFile instanceof URL, 'le fichier de projets par défaut est résolu')
+  assert.ok(branchesDir instanceof URL, 'la racine des missions est toujours définie')
+  assert.equal(branchesDir.href, new URL('./', projectsFile).href, 'la racine suit le projects.yml')
+  assert.match(branchesDir.href, /\/missions\/$/, 'les missions vivent dans missions/')
+})
+
 test('GET repositories/summary rend le scan, sa date de lecture et ses erreurs', async (t) => {
   resetRepositorySummary()
   // Le fixture du ticket : deux clones et un worktree, un dossier nu.
