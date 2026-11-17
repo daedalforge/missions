@@ -1727,13 +1727,14 @@ const DASH_MISSIONS = [
   // pas l'envoyer, mais la section ne dépend pas de cette promesse. Elle reste
   // un bug de priorité haute, pour que les widgets aient à l'exclure.
   { key: 'MIS-6', title: 'mission close', state: 'done', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-11-09T12:00:00Z' },
-  // Un bug et une story prêts pour la prod, les plus anciens de leur famille :
-  // les quatre cartes les laissent dehors, le périmètre les compte encore.
+  // Un bug et une story prêts pour la prod, plus anciens que les missions en
+  // cours : les quatre cartes les laissent dehors, le périmètre les compte
+  // encore.
   { key: 'MIS-7', title: 'prête à partir', state: 'ready-for-prod', type: 'bug', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-10-01T12:00:00Z' },
   { key: 'MIS-8', title: 'livraison urgente', state: 'ready-for-prod', type: 'story', priority: 'urgent', project: 'socle', projectName: 'Socle', updatedAt: '2026-09-01T12:00:00Z' },
-  // Deux missions bloquées, les plus anciennes de leur famille : les quatre
-  // lentilles les laissent dehors — un bug par son label, une story par sa
-  // dépendance — alors que rien ne les a fermées.
+  // Deux missions bloquées, les plus anciennes des candidates de leur carte :
+  // les quatre lentilles les laissent dehors — un bug par son label, une story
+  // par sa dépendance — alors que rien ne les a fermées.
   { key: 'MIS-9', title: 'bug bloqué', state: 'in-review', type: 'bug', priority: 'urgent', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-15T12:00:00Z', blocked: true, blockedByLabel: true, blockers: [] },
   { key: 'MIS-10', title: 'story bloquée', state: 'ready', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: '2026-09-20T12:00:00Z', blocked: true, blockedByLabel: false, blockers: [{ key: 'MIS-77', title: 'Contrat', state: 'ready', url: null }] },
 ]
@@ -2594,12 +2595,14 @@ test('sans bloquée, le compte annoncé par un widget vaut les lignes que son li
 
 test('le lien d’une carte ouvre la bloquée de ses états, à son étage', () => {
   // Given douze bugs en revue non bloqués, un bug en revue bloqué par la
-  // seule étiquette, plus ancien qu'eux, et une story en revue bloquée du
-  // même état : la carte Bugs lie ses douze lignes non bloquées, et la liste
-  // de cet état garde la bloquée de sa famille — pas celle de l'autre.
+  // seule étiquette, plus ancien qu'eux, une story en revue bloquée du même
+  // état et un bug à affiner bloqué : la carte Bugs lie ses douze lignes non
+  // bloquées, et la liste de cet état garde la bloquée de sa famille et de son
+  // état — ni celle de l'autre famille, ni celle d'un autre état.
   const missions = [
     { ...MISSION, key: 'MIS-95', title: 'Bloquée', state: 'in-review', type: 'bug', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-01T00:00:00Z' },
     { ...MISSION, key: 'MIS-94', title: 'Bloquée story', state: 'in-review', type: 'story', priority: 'low', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-02T00:00:00Z' },
+    { ...MISSION, key: 'MIS-93', title: 'Bug bloqué à affiner', state: 'to-refine', type: 'bug', blocked: true, blockedByLabel: true, blockers: [], updatedAt: '2026-09-03T00:00:00Z' },
   ]
   for (let index = 0; index < 12; index += 1) {
     missions.push({
@@ -2636,6 +2639,7 @@ test('le lien d’une carte ouvre la bloquée de ses états, à son étage', () 
   assert.equal(filters.type, 'bug')
   assert.equal(lignes.length, 13)
   assert.equal(lignes.filter((ligne) => textOf(ligne).includes('MIS-94')).length, 0, 'la bloquée d’une autre famille ne doit pas entrer')
+  assert.equal(lignes.filter((ligne) => textOf(ligne).includes('MIS-93')).length, 0, 'la bloquée d’un autre état ne doit pas entrer')
   const derniere = lignes[lignes.length - 1]
   assert.ok(textOf(derniere).includes('MIS-95'), 'la bloquée doit rester dans la liste, à son étage')
   assert.deepEqual(
@@ -3859,7 +3863,8 @@ test('la mission bloquée reste dans la liste, à sa place de bloquée', () => {
   const lignes = findAll(rendu, 'div').filter((node) => node.props.className === 'missions-tree-row')
 
   // Then la bloquée est rendue, dans l'étage des bloquées, après la saine :
-  // le digest l'écarte, l'onglet Missions la garde.
+  // l'onglet Missions la garde, quand le digest l'écarte et le prouve de son
+  // côté.
   const ordre = lignes
     .map((node) => textOf(node))
     .filter((text) => text.includes('MIS-8'))
