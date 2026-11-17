@@ -3953,6 +3953,9 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const [epicsError, setEpicsError] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
       const [error, setError] = React.useState(null)
+      // A 201 whose field does not say the whole truth (the issue exists, the
+      // folder does not): the form freezes and says it, so nobody replays it.
+      const [created, setCreated] = React.useState(null)
       // One POST per click, even before React has rendered the disabled button.
       const busyRef = React.useRef(false)
       const tracker = (options?.trackers ?? []).find((entry) => entry.id === trackerId) ?? null
@@ -4070,6 +4073,12 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
           .then(({ ok, data }) => {
             if (!ok || data?.error) throw new Error(data?.error ?? 'create failed')
+            if (data?.warning) {
+              setCreated({ key: data?.key ?? null, warning: data.warning })
+              busyRef.current = false
+              setBusy(false)
+              return
+            }
             onCreated(data)
           })
           .catch((failure) => {
@@ -4086,7 +4095,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const trackerTypes = tracker?.types ?? []
       const trackerPriorities = tracker?.priorities ?? []
       const loading = options === null && optionsError === null
-      const fieldsDisabled = busy || options === null
+      const fieldsDisabled = busy || options === null || created !== null
 
       return h('aside', {
         className: 'missions-drawer missions-drawer--fill',
@@ -4207,14 +4216,19 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
 
           loading ? h('p', { className: 'missions-drawer-note' }, 'Loading the options…') : null,
           error ? h('p', { className: 'wf-error', role: 'alert' }, error) : null,
+          created ? h('p', { className: 'missions-drawer-note', role: 'status' }, created.warning) : null,
 
           h('div', { className: 'wf-form-actions' },
-            h('button', { type: 'button', className: 'missions-btn', onClick: onClose, disabled: busy }, 'Cancel'),
-            h('button', {
-              type: 'submit',
-              className: 'missions-btn wf-primary',
-              disabled: busy || options === null || !trackerId || !projectId || !title.trim(),
-            }, busy ? 'Creating…' : 'Create'),
+            created
+              ? h('button', { type: 'button', className: 'missions-btn wf-primary', onClick: () => onCreated(created) }, 'Close')
+              : h('button', { type: 'button', className: 'missions-btn', onClick: onClose, disabled: busy }, 'Cancel'),
+            created
+              ? null
+              : h('button', {
+                  type: 'submit',
+                  className: 'missions-btn wf-primary',
+                  disabled: busy || options === null || !trackerId || !projectId || !title.trim(),
+                }, busy ? 'Creating…' : 'Create'),
           ),
         ),
       )

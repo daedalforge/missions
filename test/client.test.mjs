@@ -3967,6 +3967,61 @@ function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overr
   return { tree, drawer: premier.drawer, workbench, setters, effects, rerendre }
 }
 
+test('la fiche lit la board et choisit le dépôt, deux champs distincts', async () => {
+  // Given une mission déclarée sur backend, portée par la board SOC, avec tous
+  // les dépôts du poste à offrir.
+  const mission = {
+    ...MISSION,
+    project: 'backend',
+    projectName: 'Backend',
+    trackerId: 'soc',
+    trackerName: 'SOC board',
+    projectChoices: [
+      { id: 'clienthub', name: 'Clienthub', repo: '~/projects/clienthub' },
+      { id: 'backend', name: 'Backend', repo: '~/projects/backend' },
+      { id: 'connect', name: 'Connect', repo: '~/projects/connect' },
+    ],
+  }
+  const calls = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(init.body) : null })
+    return { ok: true, status: 200, json: async () => ({ key: MISSION.key, folder: 'MIS-42', project: 'connect' }) }
+  }
+  try {
+    const saved = []
+    const { tree } = monterVolet(mission, { onProjectSaved: (data) => saved.push(data) })
+
+    // Then la board est lue, jamais offerte au choix.
+    assert.match(textOf(tree), /SOC board/)
+    assert.equal(
+      findAll(tree, 'select').some((node) => node.props['aria-label'] === 'Project'),
+      false,
+      'la board ne se choisit pas dans la fiche',
+    )
+
+    // Then le dépôt se choisit parmi tous, absence comprise.
+    const select = findAll(tree, 'select').find((node) => node.props['aria-label'] === 'Repository')
+    assert.ok(select, 'le volet doit rendre un select de dépôt')
+    assert.equal(select.props.value, 'backend')
+    assert.deepEqual(
+      select.children.filter((child) => child.type === 'option').map((child) => child.props.value),
+      ['', 'clienthub', 'backend', 'connect'],
+    )
+
+    // When on enregistre connect.
+    await select.props.onChange({ target: { value: 'connect' } })
+
+    // Then un seul POST porte le dépôt, et rien de la déclaration branche.
+    assert.deepEqual(writes(calls), [
+      { url: 'missions/api/branches', method: 'POST', body: { key: MISSION.key, folder: 'MIS-42', project: 'connect' } },
+    ])
+    assert.deepEqual(saved, [{ key: MISSION.key, project: 'connect' }])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
 test('le volet rend la priorité comme un select natif, plus comme une ligne morte', () => {
   const { tree } = monterVolet()
 
@@ -10959,6 +11014,7 @@ function etatsCreation({ title = '', description = '', epic = '', options = CREA
     null,
     false,
     null,
+    null,
   ]
 }
 
@@ -11122,6 +11178,55 @@ test('un refus affiche son message, garde la saisie et n’ouvre aucun tiroir', 
     assert.match(textOf(apres), /GitHub: validation failed/)
     assert.equal(findAll(apres, 'input').find((node) => node.props['aria-label'] === 'Title').props.value, 'Créer une mission')
     assert.equal(findAll(apres, 'button').find((node) => textOf(node) === 'Create').props.disabled, false)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un avertissement de création se lit, puis la ligne s’ouvre sur fermeture', async () => {
+  const avertissement = 'the issue was created, but its mission folder could not be written: EACCES'
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    const cible = String(url)
+    appels.push({ url: cible, method: init.method ?? 'GET' })
+    if (cible === 'missions/api/create') {
+      return { ok: true, status: 201, json: async () => ({ ...CREATE_MISSION, warning: avertissement }) }
+    }
+    if (cible === 'missions/api/list?refresh=1') {
+      return { ok: true, json: async () => ({ missions: [CREATE_MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+    }
+    throw new Error(`appel inattendu : ${cible}`)
+  }
+  try {
+    // Given le tiroir monté, dont la création répond 201 avec un avertissement.
+    const montage = monterCreation({ title: 'Créer une mission' })
+    findAll(montage.inner, 'form')[0].props.onSubmit({ preventDefault() {} })
+    await new Promise((done) => setTimeout(done, 10))
+
+    // Then aucune ligne ne s'ouvre, et l'avertissement est l'état du tiroir.
+    assert.deepEqual(montage.created, [], 'aucune ligne ouverte tant que l’avertissement est affiché')
+    const etat = montage.setters.filter((value) => value && typeof value === 'object' && 'warning' in value).at(-1)
+    assert.match(etat.warning, new RegExp(avertissement.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+
+    // Then le formulaire rendu gèle et dit ce qui n'a pas été écrit.
+    const etats = montage.etats
+    etats[etats.length - 1] = etat
+    montage.resetHooks()
+    montage.queue.length = 0
+    montage.queue.push(...etats)
+    const apres = renderTree(findAll(montage.registered.main({}), 'MissionCreateDrawer')[0])
+    assert.match(textOf(apres), /its mission folder could not be written/)
+    assert.equal(findAll(apres, 'button').some((node) => textOf(node) === 'Create'), false, 'le formulaire ne peut plus être rejoué')
+    assert.equal(findAll(apres, 'input').find((node) => node.props['aria-label'] === 'Title').props.disabled, true)
+
+    // When on ferme.
+    findAll(apres, 'button').find((node) => textOf(node) === 'Close').props.onClick()
+    await new Promise((done) => setTimeout(done, 10))
+
+    // Then la ligne créée est relue, sans avoir rejoué la création.
+    assert.equal(appels.filter((appel) => appel.method === 'POST').length, 1, 'un seul POST de création')
+    assert.ok(appels.some((appel) => appel.url === 'missions/api/list?refresh=1'), 'la liste est relue à la fermeture')
   } finally {
     globalThis.fetch = vraiFetch
   }
