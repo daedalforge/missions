@@ -2185,8 +2185,9 @@ test('une carte plafonne à dix lignes, compte le tout et lie le reste', () => {
     missions.push({ key: `F-${index}`, title: `vol ${index}`, state: 'in-progress', type: 'story', priority: 'high', project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 9, 1) + index * 3600000).toISOString(), points: 2 })
   }
   // Deux bloquées, les plus anciennes du plateau : un bug en cours et une
-  // story haute en cours à deux points. Ni l'en-tête ni le pied ne les
-  // comptent — sinon ils compteraient des missions que la carte n'affiche pas.
+  // story haute en cours à deux points. Elles sont hors de la lentille, donc
+  // ni l'en-tête ni le pied ne les voient ; l'en-tête garde en revanche, par
+  // convention, les lignes non bloquées qu'il ne rend pas.
   missions.push({ key: 'B-0', title: 'bug bloqué', state: 'in-progress', type: 'bug', priority: 'normal', blocked: true, blockedByLabel: true, blockers: [], project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 8, 1)).toISOString() })
   missions.push({ key: 'S-0', title: 'story bloquée', state: 'in-progress', type: 'story', priority: 'high', points: 2, blocked: true, blockedByLabel: false, blockers: [{ key: 'Q-0', title: 'file 0', state: 'ready', url: null }], project: 'missions', projectName: 'Missions', updatedAt: new Date(Date.UTC(2026, 8, 2)).toISOString() })
   const { tree } = renderDashboard([EMPTY_BAR, dashboardView(missions), 'dashboard'], { now: DASH_NOW })
