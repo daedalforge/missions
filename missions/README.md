@@ -37,33 +37,31 @@ trackers:
 projects:
   - id: clienthub
     repo: ~/projects/clienthub
-    tracker: soc
   - id: backend
     repo: ~/projects/backend
-    tracker: soc
 ```
 
 - Le tracker porte la `reference`, le bloc `jira` ou `github`, et la `map` qui
   traduit le vocabulaire canonique. Il est lu **une seule fois**, même si
   plusieurs projets le partagent.
-- Le projet porte le `repo` (obligatoire), un `tracker` **facultatif** et, pour
-  Tolgee, ses `translations`. Un projet sans tracker reste un dépôt de la vue
-  Repositories et ne reçoit aucune mission.
+- Le projet porte le `repo` (obligatoire) et, pour Tolgee, ses `translations`.
+  Il ne porte **pas** de board : la clé de la mission désigne la board, le
+  `project` de son `mission.yml` désigne le dépôt.
 - Une `reference` est unique **entre trackers**, jamais entre projets : deux
   projets peuvent la partager. Le panneau refuse deux trackers qui la
   revendiquent.
-- L'identité d'une mission est le couple **(projet, clé)**. `SOC-1493` déclarée
+- L'identité d'une mission est le couple **(dépôt, clé)**. `SOC-1493` déclarée
   par `clienthub` et par `backend` sont deux missions distinctes, avec deux
   dossiers, deux branches et deux worktrees. La même clé deux fois dans le même
-  projet est une erreur, qui nomme les deux dossiers.
-- Un dossier `mission.yml` sans `project` retombe sur le projet unique de son
-  tracker ; si le tracker en porte plusieurs, la mission reste **sans projet**
-  et le volet demande lequel avant d'ouvrir une session.
+  dépôt est une erreur, qui nomme les deux dossiers.
+- Un dossier `mission.yml` sans `project` reste **sans dépôt** : aucun projet
+  n'est choisi à sa place, même quand la board n'en déclare qu'un. Le volet
+  affiche « No repository » et n'ouvre pas de session avant le choix.
 
-Les routes d'écriture (`blocked`, `priority`, `points`, `tolgee`,
-`local-close`, `archive`) reçoivent le `project` avec la clé. Sans lui, le
-projet unique du tracker est retenu ; quand plusieurs projets se partagent la
-board, l'hôte refuse avec `400 project is required` plutôt que de choisir.
+`blocked`, `priority` et `points` n'ont besoin que de la clé : la board suffit
+et le dépôt n'est pas lu. Les routes qui touchent au checkout (`tolgee`,
+`local-close`, `archive`) reçoivent le `project` avec la clé et refusent sans
+lui avec `400 project is required` — jamais en choisissant un dépôt.
 
 ### Migrer un ancien `projects.yml`
 
@@ -73,13 +71,15 @@ L'ancien schéma gardait `reference`, `tracker` (le type), `github`/`jira` et
 1. recopiez le fichier local (il est ignoré par git) ;
 2. créez un tracker par board, avec sa `reference`, son type, ses accès et sa
    `map` ;
-3. ne gardez sur chaque projet que `id`, `name`, `repo`, `tracker` (l'id du
-   tracker) et, le cas échéant, `translations` ;
-4. faites pointer chaque projet sur son tracker.
+3. ne gardez sur chaque projet que `id`, `name`, `repo` et, le cas échéant,
+   `translations` ;
+4. déclarez le dépôt de chaque mission dans son `mission.yml` (`project:`),
+   quand il n'y est pas déjà.
 
 Un fichier resté à l'ancien schéma est refusé avec un message qui nomme la
 section `trackers:` manquante, jamais par un panneau vide. Un projet qui garde
-`reference` ou `map` est refusé de la même façon, avec le champ en cause.
+`reference`, `map` ou `tracker` est refusé de la même façon, avec le dépôt et le
+champ en cause : la board vient de la clé de mission, jamais du dépôt.
 
 ## États
 
@@ -142,10 +142,10 @@ base: main
   restée sur l'ancienne clé `daedalforge/missions#n` ne correspond plus à la
   mission ; renommer `key` dans le fichier (le dossier peut garder son nom).
 - **`project` nomme le dépôt** : c'est l'id d'un projet de `projects.yml`. Il
-  est facultatif ; sans lui, la mission retombe sur l'unique projet de son
-  tracker, sinon elle reste « sans projet ». Deux dossiers peuvent déclarer la
-  même clé dans deux projets ; la même clé deux fois dans le même projet est
-  une erreur, qui nomme les deux dossiers.
+  est facultatif, mais sans lui la mission reste « sans dépôt » : aucun projet
+  n'est retenu à sa place. Deux dossiers peuvent déclarer la même clé dans deux
+  dépôts ; la même clé deux fois dans le même dépôt est une erreur, qui nomme
+  les deux dossiers.
 - **Pas de session sans les deux** : un dossier absent, ou un champ manquant,
   laisse `branch`/`base` vides ; le volet de détail laisse alors les champs
   vides et désactive « Start a session » plutôt que de supposer une branche.
@@ -342,20 +342,25 @@ vérifie.
 - **Jamais versionné.** `missions/*/` reste ignoré par git, comme `mission.yml`
   et le journal : la checklist ne se commit pas et ne se partage pas.
 
-## Le tracker lit la board, le projet décide du dépôt
+## La board vient de la clé, le dépôt de la mission
 
-Chaque projet déclare son dépôt dans sa copie locale de `projects.yml`, et le
-tracker qu'il travaille ; le gabarit versionné est
-[`projects.example.yml`](projects.example.yml). Une mission hérite du tracker de
-son projet : il n'y a pas de choix par mission. Sans tracker, un projet ne peut
-pas recevoir de mission.
+`projects.yml` déclare deux choses séparées : les **trackers** (les boards :
+référence, accès, `map`) et les **projets** (les dépôts du poste : `repo`,
+`translations`). Le gabarit versionné est
+[`projects.example.yml`](projects.example.yml).
 
-Le dépôt du projet décide de tout ce qui touche au travail : le clone d'où part
-le worktree `~/projects/<clone>-<CLÉ>`, le prompt de session, la PR, la
+La board d'une mission vient de sa clé : c'est la référence du tracker qui la
+préfixe, la plus longue d'abord. Aucun dépôt ne porte de board, et un dépôt peut
+travailler des missions de plusieurs boards.
+
+Le dépôt d'une mission se déclare dans son `mission.yml` (`project:`, l'id d'un
+projet). C'est lui qui décide de tout ce qui touche au travail : le clone d'où
+part le worktree `~/projects/<clone>-<CLÉ>`, le prompt de session, la PR, la
 vérification Tolgee. Changer le `project` d'une mission change donc de dépôt,
-pas de board. Le volet offre la liste des dépôts rattachés au tracker de la
-mission ; tant qu'aucun n'est déclaré, « Start a session » reste fermé et le
-champ Project est proposé.
+pas de board. À la création, le panneau demande les deux : la board (Project)
+qui reçoit l'issue, et le dépôt (Repository) qui la travaillera ; le
+`mission.yml` du dossier est écrit dans la foulée. Tant qu'aucun dépôt n'est
+déclaré, « No repository » s'affiche et « Start a session » reste fermé.
 
 ## Gabarit
 
