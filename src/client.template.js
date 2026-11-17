@@ -2122,15 +2122,15 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       for (const mission of missions) {
         const id = mission.project ?? NO_PROJECT
         counts[id] = (counts[id] ?? 0) + 1
-        labels[id] = mission.project ? (mission.projectName ?? mission.project) : 'No project'
+        labels[id] = mission.project ? (mission.projectName ?? mission.project) : 'No repository'
       }
       return h(ChecklistFilter, {
-        label: 'Project',
+        label: 'Repository',
         value,
         options: projectOptions(missions).map((project) => project.id),
         labels,
         counts,
-        allLabel: 'All projects',
+        allLabel: 'All repositories',
         onChange,
       })
     }
@@ -3005,8 +3005,8 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const [tolgeeKeys, setTolgeeKeys] = React.useState(null)
       const [tolgeeUntranslated, setTolgeeUntranslated] = React.useState([])
       const [importingTolgee, setImportingTolgee] = React.useState(false)
-      // The project is a declaration too, but it is one choice: it decides the
-      // repository a session runs in, so the drawer writes it alone.
+      // The repository is a declaration too, but it is one choice: it decides
+      // the checkout a session runs in, so the drawer writes it alone.
       const [projectNow, setProjectNow] = React.useState(mission.project ?? '')
       const [writingProject, setWritingProject] = React.useState(false)
       const [projectNote, setProjectNote] = React.useState(null)
@@ -3183,8 +3183,8 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           setProjectNote({
             error: false,
             text: wanted
-              ? `Projet enregistré : ${mission.projectChoices?.find((entry) => entry.id === wanted)?.name ?? wanted}.`
-              : 'Projet retiré : la mission reste sans projet.',
+              ? `Dépôt enregistré : ${mission.projectChoices?.find((entry) => entry.id === wanted)?.name ?? wanted}.`
+              : 'Dépôt retiré : la mission reste sans dépôt.',
           })
           onProjectSaved?.({ key: mission.key, project: wanted })
         } catch (error) {
@@ -3204,7 +3204,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(BLOCKED_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key, project: mission.project ?? null, blocked: next, message }),
+            body: JSON.stringify({ key: mission.key, blocked: next, message }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `blocked failed (${response.status})`)
@@ -3239,7 +3239,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(PRIORITY_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key, project: mission.project ?? null, priority: next }),
+            body: JSON.stringify({ key: mission.key, priority: next }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `priority failed (${response.status})`)
@@ -3265,7 +3265,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           const response = await fetch(POINTS_URL, {
             method: 'POST',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ key: mission.key, project: mission.project ?? null, points: value }),
+            body: JSON.stringify({ key: mission.key, points: value }),
           })
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data?.error ?? `points failed (${response.status})`)
@@ -3496,18 +3496,23 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               }, pointsText(choice))),
             ),
           ),
+          // Two owners, two rows: the board that carries the issue follows the
+          // key, so it is read and never chosen here; the repository that works
+          // the mission is one choice, and writing it moves the prompt, the
+          // worktree and the row.
+          h(DrawerRow, { label: 'Project', value: mission.trackerName ?? mission.trackerId ?? null }),
           h(DrawerRow, {
-            label: 'Project',
+            label: 'Repository',
             value: Array.isArray(mission.projectChoices) && mission.projectChoices.length > 0 ? undefined : (mission.projectName ?? mission.project),
           }, Array.isArray(mission.projectChoices) && mission.projectChoices.length > 0
             ? h('select', {
                 className: 'missions-priority-select',
-                'aria-label': 'Project',
+                'aria-label': 'Repository',
                 value: projectNow,
                 disabled: writingProject,
                 onChange: (event) => writeProject(event.target.value),
               },
-                h('option', { value: '' }, 'No project'),
+                h('option', { value: '' }, 'No repository'),
                 mission.projectChoices.map((project) => h('option', {
                   key: project.id,
                   value: project.id,
@@ -3927,14 +3932,16 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
      * The creation drawer: one form over the options the host declares, a
      * canonical payload, and the created key back to the panel.
      *
-     * The panel never names a tracker field. The project select carries the
-     * vocabulary its own mapping accepts, the epics are read for the chosen
-     * project alone, and the two read-only lines say what the host will write:
-     * the project's initial status, and the current account.
+     * Two choices, two owners: the project is the board that receives the
+     * issue and carries its vocabulary, the repository is the checkout that
+     * will work it. The epics are read for the chosen board alone, and the two
+     * read-only lines say what the host will write: the initial status, and the
+     * current account.
      */
     function MissionCreateDrawer({ onClose, onCreated }) {
       const [options, setOptions] = React.useState(null)
       const [optionsError, setOptionsError] = React.useState(null)
+      const [trackerId, setTrackerId] = React.useState('')
       const [projectId, setProjectId] = React.useState('')
       const [title, setTitle] = React.useState('')
       const [description, setDescription] = React.useState('')
@@ -3948,7 +3955,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const [error, setError] = React.useState(null)
       // One POST per click, even before React has rendered the disabled button.
       const busyRef = React.useRef(false)
-      const project = (options?.projects ?? []).find((entry) => entry.id === projectId) ?? null
+      const tracker = (options?.trackers ?? []).find((entry) => entry.id === trackerId) ?? null
 
       React.useEffect(() => {
         let alive = true
@@ -3957,14 +3964,16 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           .then(({ ok, data }) => {
             if (!alive) return
             if (!ok || data?.error) throw new Error(data?.error ?? 'options unavailable')
-            const projects = Array.isArray(data?.projects) ? data.projects : []
-            setOptions({ ...data, projects })
-            const first = projects[0] ?? null
+            const trackers = Array.isArray(data?.trackers) ? data.trackers : []
+            const repositories = Array.isArray(data?.repositories) ? data.repositories : []
+            setOptions({ ...data, trackers, repositories })
+            const first = trackers[0] ?? null
             if (first) {
-              setProjectId(first.id)
+              setTrackerId(first.id)
               setType(first.types?.[0] ?? '')
               setPriority(data.defaultPriority ?? first.priorities?.[0] ?? '')
             }
+            setProjectId(repositories[0]?.id ?? '')
           })
           .catch((failure) => {
             if (alive) setOptionsError(failure?.message ?? 'options unavailable')
@@ -3974,15 +3983,15 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         }
       }, [])
 
-      // The epics belong to the chosen project: another project's tracker is
-      // never called, and a late answer for a project already left is dropped.
+      // The epics belong to the chosen board: another tracker is never called,
+      // and a late answer for a board already left is dropped.
       React.useEffect(() => {
-        if (!projectId) return undefined
+        if (!trackerId) return undefined
         let alive = true
         setEpicsLoading(true)
         setEpicsError(null)
         setEpics([])
-        fetch(`${CREATE_EPICS_URL}?project=${encodeURIComponent(projectId)}`, { headers: { accept: 'application/json' } })
+        fetch(`${CREATE_EPICS_URL}?tracker=${encodeURIComponent(trackerId)}`, { headers: { accept: 'application/json' } })
           .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
           .then(({ ok, data }) => {
             if (!alive) return
@@ -3998,7 +4007,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         return () => {
           alive = false
         }
-      }, [projectId])
+      }, [trackerId])
 
       React.useEffect(() => {
         const onKey = (event) => {
@@ -4008,12 +4017,14 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         return () => document.removeEventListener('keydown', onKey)
       }, [onClose])
 
-      const chooseProject = (nextId) => {
-        const next = (options?.projects ?? []).find((entry) => entry.id === nextId) ?? null
+      // Changing the board changes the vocabulary: the type and priority that
+      // board cannot write are replaced, and the epics start over.
+      const chooseTracker = (nextId) => {
+        const next = (options?.trackers ?? []).find((entry) => entry.id === nextId) ?? null
         const nextTypes = next?.types ?? []
         const nextPriorities = next?.priorities ?? []
         const wantedPriority = options?.defaultPriority ?? priority
-        setProjectId(nextId)
+        setTrackerId(nextId)
         setType(nextTypes.includes(type) ? type : (nextTypes[0] ?? ''))
         setPriority(nextPriorities.includes(priority) ? priority : (nextPriorities.includes(wantedPriority) ? wantedPriority : (nextPriorities[0] ?? '')))
         setEpic('')
@@ -4024,8 +4035,12 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const submit = (event) => {
         event.preventDefault()
         if (busyRef.current) return
-        if (!projectId) {
+        if (!trackerId) {
           setError('Choose a project.')
+          return
+        }
+        if (!projectId) {
+          setError('Choose a repository.')
           return
         }
         if (!title.trim()) {
@@ -4043,6 +4058,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           method: 'POST',
           headers: { 'content-type': 'application/json', accept: 'application/json' },
           body: JSON.stringify({
+            tracker: trackerId,
             project: projectId,
             title: title.trim(),
             description: description.trim(),
@@ -4065,9 +4081,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           })
       }
 
-      const projects = options?.projects ?? []
-      const projectTypes = project?.types ?? []
-      const projectPriorities = project?.priorities ?? []
+      const trackers = options?.trackers ?? []
+      const repositories = options?.repositories ?? []
+      const trackerTypes = tracker?.types ?? []
+      const trackerPriorities = tracker?.priorities ?? []
       const loading = options === null && optionsError === null
       const fieldsDisabled = busy || options === null
 
@@ -4092,14 +4109,28 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           h('label', { className: 'wf-field' },
             h('span', null, 'Project'),
             h('select', {
-              value: projectId,
-              onChange: (event) => chooseProject(event.target.value),
+              value: trackerId,
+              onChange: (event) => chooseTracker(event.target.value),
               disabled: fieldsDisabled,
               'aria-label': 'Project',
             },
-              projects.length === 0
+              trackers.length === 0
                 ? h('option', { value: '' }, loading ? 'Loading…' : 'No project')
-                : projects.map((entry) => h('option', { key: entry.id, value: entry.id }, entry.name)),
+                : trackers.map((entry) => h('option', { key: entry.id, value: entry.id }, entry.name)),
+            ),
+          ),
+
+          h('label', { className: 'wf-field' },
+            h('span', null, 'Repository'),
+            h('select', {
+              value: projectId,
+              onChange: (event) => setProjectId(event.target.value),
+              disabled: fieldsDisabled,
+              'aria-label': 'Repository',
+            },
+              repositories.length === 0
+                ? h('option', { value: '' }, loading ? 'Loading…' : 'No repository')
+                : repositories.map((entry) => h('option', { key: entry.id, value: entry.id }, entry.name)),
             ),
           ),
 
@@ -4134,10 +4165,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               h('select', {
                 value: type,
                 onChange: (event) => setType(event.target.value),
-                disabled: fieldsDisabled || projectTypes.length === 0,
+                disabled: fieldsDisabled || trackerTypes.length === 0,
                 'aria-label': 'Type',
               },
-                projectTypes.map((entry) => h('option', { key: entry, value: entry }, CREATE_TYPE_LABELS[entry] ?? entry)),
+                trackerTypes.map((entry) => h('option', { key: entry, value: entry }, CREATE_TYPE_LABELS[entry] ?? entry)),
               ),
             ),
             h('label', { className: 'wf-field' },
@@ -4145,10 +4176,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               h('select', {
                 value: priority,
                 onChange: (event) => setPriority(event.target.value),
-                disabled: fieldsDisabled || projectPriorities.length === 0,
+                disabled: fieldsDisabled || trackerPriorities.length === 0,
                 'aria-label': 'Priority',
               },
-                projectPriorities.map((entry) => h('option', { key: entry, value: entry }, CREATE_PRIORITY_LABELS[entry] ?? entry)),
+                trackerPriorities.map((entry) => h('option', { key: entry, value: entry }, CREATE_PRIORITY_LABELS[entry] ?? entry)),
               ),
             ),
           ),
@@ -4182,7 +4213,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
             h('button', {
               type: 'submit',
               className: 'missions-btn wf-primary',
-              disabled: busy || options === null || !projectId || !title.trim(),
+              disabled: busy || options === null || !trackerId || !projectId || !title.trim(),
             }, busy ? 'Creating…' : 'Create'),
           ),
         ),
@@ -6736,9 +6767,9 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
             : previous
         ))
       }
-      // A project write changes which repository works the mission: the row
+      // A repository write changes which checkout works the mission: the row
       // follows the choice at once, then the host re-attributes it from the
-      // declaration (a folder left without a project falls back to its board).
+      // declaration (a folder that names no repository stays without one).
       const applyProject = ({ key, project }) => {
         const update = (mission) => {
           if (mission.key !== key) return mission

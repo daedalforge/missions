@@ -179,7 +179,7 @@ const MISSIONS = [
   },
 ]
 
-test('la recherche porte sur le titre, la clé, le projet et l’epic', () => {
+test('la recherche porte sur le titre, la clé, le dépôt et l’epic', () => {
   assert.deepEqual(filterMissions(MISSIONS, { query: 'panneau' }).map((m) => m.key), ['a#1'])
   assert.deepEqual(filterMissions(MISSIONS, { query: 'A#3' }).map((m) => m.key), ['a#3'])
   assert.deepEqual(filterMissions(MISSIONS, { query: 'alpha' }).map((m) => m.key), ['a#2'])
@@ -191,7 +191,7 @@ test('le filtre de type se combine avec la recherche', () => {
   assert.deepEqual(filterMissions(MISSIONS, { type: 'bug', query: 'cartes' }), [])
 })
 
-test('les filtres epic, priorité et projet se combinent en ET', () => {
+test('les filtres epic, priorité et dépôt se combinent en ET', () => {
   assert.deepEqual(filterMissions(MISSIONS, { epic: 'Workspace' }).map((m) => m.key), ['a#1', 'a#3'])
   assert.deepEqual(filterMissions(MISSIONS, { priority: 'normal' }).map((m) => m.key), ['a#2'])
   assert.deepEqual(filterMissions(MISSIONS, { project: 'missions' }).map((m) => m.key), ['a#1', 'a#3'])
@@ -201,29 +201,29 @@ test('les filtres epic, priorité et projet se combinent en ET', () => {
   assert.deepEqual(filterMissions(MISSIONS, { project: 'alpha', type: 'bug' }), [])
 })
 
-test('le filtre projet sépare les dépôts et garde les missions sans projet', () => {
+test('le filtre dépôt sépare les dépôts et garde les missions sans dépôt', () => {
   // Given une mission que nul dépôt ne travaille
   const sansProjet = { ...MISSIONS[0], key: 'a#9', project: null, projectName: null }
-  // When le filtre demande « sans projet », Then seule cette ligne reste
+  // When le filtre demande « sans dépôt », Then seule cette ligne reste
   assert.deepEqual(
     filterMissions([...MISSIONS, sansProjet], { project: [NO_PROJECT] }).map((mission) => mission.key),
     ['a#9'],
   )
   // Then les dépôts nommés ne la retiennent pas
   assert.deepEqual(filterMissions([...MISSIONS, sansProjet], { project: ['missions'] }).map((mission) => mission.key), ['a#1', 'a#3'])
-  // Then l'option « sans projet » n'apparaît que si une ligne en a besoin
+  // Then l'option « sans dépôt » n'apparaît que si une ligne en a besoin
   assert.deepEqual(projectOptions(MISSIONS), [
     { id: 'alpha', name: 'Alpha' },
     { id: 'missions', name: 'Workspace missions' },
   ])
   assert.deepEqual(projectOptions([...MISSIONS, sansProjet]), [
     { id: 'alpha', name: 'Alpha' },
-    { id: NO_PROJECT, name: 'No project' },
+    { id: NO_PROJECT, name: 'No repository' },
     { id: 'missions', name: 'Workspace missions' },
   ])
 })
 
-test('les filtres type, epic et projet prennent plusieurs valeurs, réunies en OU', () => {
+test('les filtres type, epic et dépôt prennent plusieurs valeurs, réunies en OU', () => {
   // Cocher deux valeurs dans une dimension élargit au lieu de restreindre : la
   // mission doit porter l'une ou l'autre, et les dimensions restent en ET.
   assert.deepEqual(filterMissions(MISSIONS, { type: ['bug', 'story'] }).map((m) => m.key), ['a#1', 'a#2', 'a#3'])
@@ -943,7 +943,7 @@ test('la raison d’un blocage écrit s’affiche tout de suite, sans nouvelle l
   assert.equal(blockedReasonAfterWrite({ next: false, message: 'Attente.' }), null)
 })
 
-test('une session exige un projet, un état unique, une branche et une base déclarées', () => {
+test('une session exige un dépôt, un état unique, une branche et une base déclarées', () => {
   assert.equal(executionBlocker({ project: 'missions', branch: 'gh-41', base: 'main' }), null)
   assert.equal(executionBlocker({ project: 'missions', branch: 'gh-41', base: 'main', stateConflict: [] }), null)
   assert.equal(
@@ -952,7 +952,7 @@ test('une session exige un projet, un état unique, une branche et une base déc
   )
   assert.equal(
     executionBlocker({ branch: 'gh-41', base: 'main' }),
-    'project is not declared, choose the repository that works this mission',
+    'repository is not declared, choose it below or in the mission folder',
   )
   assert.equal(
     executionBlocker({ project: 'missions', branch: 'gh-41' }),
@@ -966,12 +966,12 @@ test('une session exige un projet, un état unique, une branche et une base déc
     executionBlocker({ project: 'missions', branch: 'gh-41', base: 'main', state: 'done' }),
     'mission is done: a closed mission plays no session',
   )
-  assert.equal(executionBlocker({}), 'project is not declared, choose the repository that works this mission')
+  assert.equal(executionBlocker({}), 'repository is not declared, choose it below or in the mission folder')
   assert.equal(
     executionBlocker({ branch: null, base: null }),
-    'project is not declared, choose the repository that works this mission',
+    'repository is not declared, choose it below or in the mission folder',
   )
-  assert.equal(executionBlocker(), 'project is not declared, choose the repository that works this mission')
+  assert.equal(executionBlocker(), 'repository is not declared, choose it below or in the mission folder')
 })
 
 test('une session libre ne se ferme que sur done, jamais sur un champ manquant', () => {
@@ -1104,7 +1104,7 @@ test('un instantané ne retient que ce que la barre peut sélectionner', () => {
     query: 42,
     filters: { type: 'feat', state: 'cancelled', epic: '  Workspace  ', priority: '', project: 7, missing: 'yes' },
   })
-  // Type et état hors vocabulaire, priorité vide, projet non textuel : la barre
+  // Type et état hors vocabulaire, priorité vide, dépôt non textuel : la barre
   // ne peut pas les afficher, ils tombent au lieu d'être restaurés.
   assert.deepEqual(snapshot, {
     query: '',
