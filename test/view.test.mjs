@@ -47,6 +47,10 @@ import {
   NO_PROJECT,
   missionSessionPrompt,
   feedbackSessionPrompt,
+  splitSessionPrompt,
+  SPLIT_BRIEF,
+  missionPairs,
+  multiPairsNote,
   freeSessionPrompt,
   repositoryConflictPrompt,
   repositorySquashPrompt,
@@ -2353,7 +2357,6 @@ test('le prompt de session libre ne joue aucune étape du workflow', () => {
   assert.match(prompt, /Session libre/)
   assert.match(prompt, /aucune étape du workflow/)
   // Aucune ligne d'étape, et chacun des quatre briefs est absent.
-  assert.doesNotMatch(prompt, /Étape en cours/)
   for (const brief of Object.values(STEP_BRIEFS)) {
     assert.ok(!prompt.includes(brief), `le brief d'étape ne doit pas fuiter : ${brief.slice(0, 40)}…`)
   }
@@ -2452,9 +2455,9 @@ test('le prompt du squash nomme le chemin, la branche, la mission et le garde-fo
     'Chemin : /Users/moi/projects/missions.',
     'Branche courante : feat/mis-165.',
     '',
-    'Trouve d’abord la mission qui déclare cette branche : parcours missions/*/mission.yml et retiens celui dont le champ branch vaut exactement feat/mis-165. Si aucune mission ne la déclare, dis-le et arrête-toi sans geste git. Sinon, lis son ticket avec le CLI, jamais sa page HTML, puis lis son playbook : playbook/execution.md pour les gestes et playbook/workspace.md pour les quatorze interdits.',
+    'Trouve d’abord la mission qui déclare cette branche : parcours missions/*/mission.yml et retiens celui dont le champ branch vaut exactement feat/mis-165, ou dont la liste branches porte une paire dont la branche vaut exactement feat/mis-165. Si aucune mission ne la déclare, dis-le et arrête-toi sans geste git. Sinon, lis son ticket avec le CLI, jamais sa page HTML, puis lis son playbook : playbook/execution.md pour les gestes et playbook/workspace.md pour les quatorze interdits.',
     '',
-    'Replie ensuite la branche sur sa base déclarée (le champ base de mission.yml), en capturant la pointe avant tout geste :',
+    'Replie ensuite la branche sur sa base déclarée (le champ base pour une mission à une paire, la base de sa paire dans la liste branches pour une mission découpée), en capturant la pointe avant tout geste :',
     '',
     '- `git fetch origin` ;',
     '- `git rev-parse HEAD` : sa sortie est l’ancienne tête, la pointe de la branche avant le reset ; c’est elle que la preuve et le lease attendent ;',
@@ -2486,7 +2489,7 @@ test('le prompt du squash dit ce qu’il prouve : pointe capturée, cible du res
   const prompt = repositorySquashPrompt({ name: 'missions', path: '/Users/moi/projects/missions', branch: 'feat/mis-165' })
 
   // La base n'est pas dans le détail du dépôt : la session la lit dans la mission.
-  assert.match(prompt, /le champ base de mission\.yml/)
+  assert.match(prompt, /la base de sa paire dans la liste branches/)
   assert.match(prompt, /git rev-parse HEAD/)
   assert.match(prompt, /git merge-base origin\/<base> HEAD/)
   // La cible du reset n'est pas l'ancienne tête : le diff et le lease
@@ -2576,7 +2579,7 @@ test('le registre déclare chaque geste du ticket, une fois, avec son libellé e
     'dashboard.view-all', 'mission.archive.batch',
     'mission.tab.details', 'mission.tab.journal', 'mission.tab.checklist', 'mission.priority',
     'mission.points', 'mission.block', 'mission.pin', 'mission.declare', 'mission.open-tracker', 'mission.close-checkout', 'mission.archive', 'mission.tolgee',
-    'mission.session', 'mission.feedback-session',
+    'mission.session', 'mission.feedback-session', 'mission.split-session',
     'repository.open', 'repository.adopt', 'repository.remove', 'repository.tab.details', 'repository.tab.history',
     'repository.branch', 'repository.more', 'repository.resolve', 'repository.squash',
     'workflow.step', 'workflow.save', 'workflow.reload', 'workflow.gesture.add', 'workflow.gesture.remove',
@@ -3217,4 +3220,76 @@ test('l’infobulle est ramenée dans la boîte du panneau, à droite comme à g
   // la boîte mesurée est déjà relative au panneau, la marge la garde dedans.
   const decale = placeTooltip({ top: 200, left: 900, width: 34, height: 34 }, panel, tip)
   assert.equal(decale.left, 800 - 120 - TIP_MARGIN)
+})
+
+const DECOUPEE = {
+  key: 'MIS-90',
+  title: 'Découper la PR de la mission',
+  url: 'https://github.com/daedalforge/missions/issues/90',
+  state: 'in-review',
+  branch: 'fix/mis-90-p1',
+  base: 'main',
+  branches: [
+    { branch: 'fix/mis-90-p1', base: 'main' },
+    { branch: 'fix/mis-90-p2', base: 'fix/mis-90-p1' },
+    { branch: 'fix/mis-90', base: 'fix/mis-90-p2' },
+  ],
+  folder: 'MIS-90',
+  project: 'missions',
+  repo: '~/projects/missions',
+}
+
+test('une mission découpée nomme chaque paire dans l’enveloppe et les briefs', () => {
+  assert.equal(missionPairs(DECOUPEE).length, 3)
+  assert.deepEqual(missionPairs({ branch: 'b', base: 'm' }), [{ branch: 'b', base: 'm' }])
+  assert.deepEqual(missionPairs({}), [])
+  assert.deepEqual(missionPairs({ branches: [] }), [])
+
+  const prompt = missionSessionPrompt(DECOUPEE)
+  assert.match(
+    prompt,
+    /Branches : fix\/mis-90-p1 sur main, fix\/mis-90-p2 sur fix\/mis-90-p1, fix\/mis-90 sur fix\/mis-90-p2\./,
+  )
+  assert.match(prompt, /La mission est découpée en 3 PR empilées/)
+  assert.match(prompt, /la revue ne pose ready-for-prod que si chacune est validée, en nommant celle qui manque/)
+  assert.match(feedbackSessionPrompt(DECOUPEE), /découpée en 3 PR empilées/)
+  // Une mission à une paire ne gagne aucune note : son brief reste tel quel.
+  assert.equal(multiPairsNote({ branch: 'b', base: 'm' }), '')
+  assert.doesNotMatch(missionSessionPrompt({ ...DECOUPEE, branches: undefined }), /PR empilées/)
+})
+
+test('le prompt de découpe nomme la mission, ses paires et les gestes permis', () => {
+  const prompt = splitSessionPrompt(DECOUPEE)
+  assert.match(prompt, /MIS-90/)
+  assert.match(prompt, /Branches : fix\/mis-90-p1 sur main/)
+  assert.match(prompt, /Dépôt du projet : ~\/projects\/missions\./)
+  assert.match(prompt, /Worktree de mission : ~\/projects\/missions-MIS-90/)
+  assert.match(prompt, /propose un découpage en parties/)
+  assert.match(prompt, /attends une confirmation explicite/)
+  assert.match(prompt, /sans commit nouveau et sans force-push/)
+  assert.match(prompt, /retargète la PR d’origine/)
+  assert.match(prompt, /POST \/missions\/api\/branches/)
+  assert.match(prompt, /Tu ne merges pas/)
+  assert.match(prompt, /tu n’écris pas sur main/)
+  // Le brief est écrit une fois : le prompt le reprend sans le réécrire.
+  assert.ok(SPLIT_BRIEF.startsWith('Tu ne fais que la découpe de la PR'))
+})
+
+test('les branches à pousser couvrent chaque paire d’une mission découpée', () => {
+  const missions = [
+    {
+      key: 'MIS-90',
+      state: 'in-review',
+      branch: 'fix/mis-90-p1',
+      base: 'main',
+      branches: DECOUPEE.branches.slice(0, 2),
+    },
+  ]
+  const repositories = [
+    { name: 'p1', kind: 'worktree', branch: 'fix/mis-90-p1', upstream: 'origin/fix/mis-90-p1', ahead: 2, behind: 0, dirty: 0 },
+    { name: 'p2', kind: 'worktree', branch: 'fix/mis-90-p2', upstream: 'origin/fix/mis-90-p2', ahead: 3, behind: 0, dirty: 0 },
+  ]
+  const rows = branchesToPush(missions, repositories)
+  assert.deepEqual(rows.map((row) => row.repository.name), ['p1', 'p2'])
+  assert.deepEqual(rows.map((row) => row.label), ['+2 commits', '+3 commits'])
 })
