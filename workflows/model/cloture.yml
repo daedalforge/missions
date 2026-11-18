@@ -9,7 +9,7 @@ nodes:
     label: Préparer la livraison
     section: Ce qu'on fait
     writer: session
-    gate: la PR est approuvée et chaque critère cite le scénario qui le couvre
+    gate: la PR est approuvée — ou chaque PR de la pile — et chaque critère cite le scénario qui le couvre
     artifact: le ticket prêt à partir
   - id: rendre-la-main
     label: Rendre la main au demandeur
@@ -17,10 +17,10 @@ nodes:
     writer: session
     gate: aucun merge, aucune écriture sur main, aucun force — même sur demande explicite
   - id: merger
-    label: Merger la PR
+    label: Merger les PR
     section: Ce qu'on fait
     writer: demandeur
-    gate: la méthode du projet est suivie
+    gate: la méthode du projet est suivie, et les PR empilées sont mergées dans l'ordre
     artifact: le commit de merge
   - id: fermer-ticket
     label: Fermer le ticket avec les preuves
@@ -41,7 +41,7 @@ nodes:
     section: Ce qu'on fait
     writer: session
     condition: le demandeur a dit explicitement que c'est mergé
-    gate: la PR est mergée, le ticket fermé, la branche absente
+    gate: chaque PR est mergée, le ticket fermé, les branches absentes
   - id: clore-journal
     label: Clore le journal
     section: Ce qu'on fait

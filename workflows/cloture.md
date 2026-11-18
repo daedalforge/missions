@@ -6,11 +6,12 @@ constate et solde le journal et la checklist.
 
 ## Ce qu'on fait
 
-1. **(session) Préparer la livraison.** Vérifier que la PR est approuvée et que
-   chaque critère d'acceptation porte sa preuve contre le scénario qui le couvre,
-   puis laisser le ticket en `ready-for-prod` — c'est l'état d'entrée de cette
-   étape. La session s'arrête ici : elle ne merge pas, elle ne ferme pas le
-   ticket, elle ne supprime pas la branche.
+1. **(session) Préparer la livraison.** Vérifier que la PR est approuvée — ou,
+   pour une mission découpée, que **chaque** PR l'est — et que chaque critère
+   d'acceptation porte sa preuve contre le scénario qui le couvre, puis laisser
+   le ticket en `ready-for-prod` — c'est l'état d'entrée de cette étape. La
+   session s'arrête ici : elle ne merge pas, elle ne ferme pas le ticket, elle
+   ne supprime pas la branche.
 2. **(demandeur) Merger et livrer.** Merger la PR dans la branche principale
    selon la méthode du projet (merge, squash ou rebase — le résultat doit rester
    lisible), fermer le ticket en y déposant les preuves : critères cochés, lien
@@ -39,17 +40,25 @@ tracker, que le travail est livré ; il ne touche ensuite qu'à la machine :
    vide ou ne contenir que des merges de synchronisation dont les autres parents
    sont sur `origin/<base>`. Un `git fetch origin <base>` précède la seconde
    vérification ; sans preuve, rien n'est supprimé.
-2. **Les worktrees.** `git worktree remove` sur chaque worktree qui porte la
-   branche, jamais avec `--force` : un worktree sale refuse et le dit.
+
+   Une mission découpée fait cette preuve **paire par paire** : chaque PR doit
+   être mergée vers la base de sa paire, et chaque merge commit ancêtre de
+   `origin/<base de mission>` (la base de la première paire). Un refus nomme la
+   paire (`MIS-90 (fix/mis-90-p2 sur fix/mis-90-p1): …`) et ne supprime rien.
+2. **Les worktrees.** `git worktree remove` sur chaque worktree qui porte une
+   branche de la mission, jamais avec `--force` : un worktree sale refuse et le
+   dit.
 3. **Le clone.** Il n'est pas supprimé : il passe sur la base
    (`git checkout <base>` puis `git merge --ff-only origin/<base>`).
-4. **La branche.** `git branch -D` (les projets squash-mergent : `-d` refuserait
-   les commits déjà livrés).
-5. **Le machete.** La ligne est retirée du fichier `.git/machete` à la main ; ses
-   enfants remontent d'un niveau, annotations et indentation des autres branches
-   conservées. Aucun processus `git machete` n'est lancé.
+4. **Les branches.** `git branch -D` sur chaque branche de la liste (les
+   projets squash-mergent : `-d` refuserait les commits déjà livrés).
+5. **Le machete.** Les lignes sont retirées du fichier `.git/machete` à la main,
+   en une seule réécriture ; leurs enfants remontent d'un niveau, annotations et
+   indentation des autres branches conservées. Aucun processus `git machete`
+   n'est lancé.
 6. **Le journal.** Une section `## <date> — Clôture` est ajoutée à
-   `missions/<dossier>/journal.md` (PR, merge commit, gestes, clone, machete).
+   `missions/<dossier>/journal.md` (PR, merge commit, gestes, clone, machete),
+   avec une ligne `- PR :` et une ligne `- Branche :` par paire.
 
 Le bouton s'arme en deux temps (un clic pour dire ce qu'il va supprimer, un
 second pour agir). Chaque refus est un message, pas une suppression partielle :
@@ -79,7 +88,8 @@ session du panneau — pas dans les droits du tracker.
 
 ## Condition de sortie — la mission est « terminée »
 
-- [ ] La PR est mergée dans la branche principale — par le demandeur.
+- [ ] La PR est mergée dans la branche principale — par le demandeur — ou
+      chaque PR de la pile, dans l'ordre empilé.
 - [ ] Chaque critère d'acceptation est coché avec son scénario et sa preuve.
 - [ ] Le ticket est fermé avec le lien du merge.
 - [ ] La branche est supprimée (locale et distante) — la locale par le geste du

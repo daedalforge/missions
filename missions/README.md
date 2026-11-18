@@ -134,6 +134,28 @@ branch: feat/mis-41
 base: main
 ```
 
+Une mission découpée à la revue déclare une **liste ordonnée de paires**,
+`branches:`, à la place de `branch`/`base` — les deux formes ne se mélangent
+pas :
+
+```yaml
+key: MIS-90
+project: missions
+branches:
+  - branch: fix/mis-90-p1
+    base: main
+  - branch: fix/mis-90-p2
+    base: fix/mis-90-p1
+  - branch: fix/mis-90
+    base: fix/mis-90-p2
+```
+
+La première paire donne la **base de mission** (`main` ci-dessus) : c'est elle
+que la clôture lit comme base de référence, et chaque partie s'empile sur la
+précédente. La branche d'origine reste la dernière partie ; `mission.branch`
+et `mission.base` valent la première paire pour le code qui n'a pas besoin de
+la liste.
+
 - **`key` fait foi** : c'est lui qui relie le fichier à la mission du tracker
   (`MIS-52` ou clé Jira). Le nom du dossier est libre ; quand il manque, le
   panneau le crée à partir de la clé en remplaçant les caractères non
@@ -149,6 +171,15 @@ base: main
 - **Pas de session sans les deux** : un dossier absent, ou un champ manquant,
   laisse `branch`/`base` vides ; le volet de détail laisse alors les champs
   vides et désactive « Start a session » plutôt que de supposer une branche.
+- **Une seule forme à la fois** : mélanger `branch`/`base` et `branches`, vider
+  la liste, répéter une branche, omettre `branch` ou `base` dans une paire, ou
+  écrire un champ inconnu est refusé en nommant le champ. Sauver une seule
+  paire sur un fichier qui en déclare plusieurs est refusé sans écrire : la
+  liste s'écrit par la route `POST missions/api/branches`, jamais à la main.
+- **Le volet suit la liste** : à plusieurs paires, il affiche les branches et
+  leurs bases (la première marquée « base de mission ») et masque les deux
+  champs ; à une paire, l'éditeur reste exactement celui d'avant, et une
+  sauvegarde qui ne porte pas `branches` retire la liste.
 - **Une erreur se voit** : champ inconnu, clé dupliquée entre deux dossiers,
   YAML invalide ou valeur vide sont signalés dans le panneau, pas avalés. Le
   volet peut réparer une valeur vide ou mal typée en l'enregistrant ; un champ
@@ -163,16 +194,43 @@ base: main
 Chaque exécution travaille dans `~/projects/<clone>-<CLÉ>` — un enfant direct
 de `~/projects`, dérivé du clone et de la clé — et le clone reste sur sa base,
 réservé aux tests manuels avant validation. Le panneau nomme ce chemin dans le
-prompt d'exécution, dans celui des remontées de PR et dans celui de la session
-libre ; `missions/<dossier>/` et `playbook/` restent dans le clone, que le
-panneau lit.
+prompt d'exécution, dans celui des remontées de PR, dans celui de la session
+libre et dans celui de la découpe ; `missions/<dossier>/` et `playbook/`
+restent dans le clone, que le panneau lit. Une mission découpée garde le même
+worktree : il reste sur la branche d'origine, qui est la dernière partie de la
+pile.
+
+### Découper une PR en plusieurs (revue)
+
+Une PR trop grosse pour la revue peut être découpée en plusieurs PR empilées,
+mais **seulement à l'étape revue** : le bouton « Split into several PRs » du
+volet, désactivé par le même blocker que la session, ouvre une session dédiée
+sur `splitSessionPrompt(mission)`. Il n'apparaît que pour une mission à une
+paire et disparaît une fois la liste déclarée.
+
+La session retrouve la PR de la branche, lit les commits depuis la base,
+propose les bornes et **attend une confirmation explicite** avant d'agir. Elle
+crée chaque partie au commit de coupe (`git branch <partie> <commit>`), sans
+commit nouveau et sans force-push : la partie 1 part de la base de mission, la
+partie k de la partie k-1, et la branche d'origine devient la dernière partie.
+Elle pousse les branches, ouvre une PR par partie (la 1 vers la base de
+mission, la k vers la k-1), retargete la PR d'origine sur la dernière partie,
+écrit la liste `branches:` **par la route** (`POST missions/api/branches`) et
+consigne la découpe au journal. Elle ne merge pas, ne ferme rien, ne pose aucun
+label, n'approuve pas et n'écrit pas sur `main` : le merge et la fermeture
+restent les gestes du demandeur.
+
+La revue lit alors **chaque PR** ; `ready-for-prod` n'est posé que si chacune
+est validée, et un refus nomme celle qui manque. Les remontées de revue
+corrigent la branche concernée, sans merger ni résoudre les fils.
 
 **Depuis le panneau** : le volet de détail se lit en trois onglets —
 **Details** (propriétés et champs ci-dessous), **Journal** et **Checklist** —
 et les actions restent en pied de volet, sous les onglets. Elles tiennent en une
 seule rangée d'icônes — ouvrir le ticket, vérifier les remontées d'une PR,
-démarrer une session libre, fermer le checkout local, archiver une mission
-terminée, démarrer la session de l'étape — et chaque bouton porte son nom dans
+découper la PR en plusieurs, démarrer une session libre, fermer le checkout
+local, archiver une mission terminée, démarrer la session de l'étape — et
+chaque bouton porte son nom dans
 une infobulle (`title`) comme dans
 son libellé accessible (`aria-label`) : l'icône se reconnaît au survol et au
 lecteur d'écran, et la rangée tient sur une ligne. Aucun geste ne fait
@@ -236,15 +294,21 @@ qui restent ceux du demandeur.
   contenir que des merges de synchronisation (autres parents sur
   `origin/<base>`). Un `git fetch` précède la seconde vérification. Sans
   preuve, rien n'est supprimé.
+
+  Pour une mission découpée, la preuve se fait **paire par paire** : chaque PR
+  doit être mergée vers la base de sa paire, et son merge commit ancêtre de
+  `origin/<base de mission>` (la base de la première paire). Un refus nomme la
+  paire (`MIS-90 (fix/mis-90-p2 sur fix/mis-90-p1): …`) et ne supprime rien.
 - **Deux temps.** Un premier clic annonce ce qui va disparaître, un second
   envoie la clé. Le panneau n'envoie que `{ key }` : chemins, noms et gestes
   sont décidés par l'hôte.
 - **Ce qu'il fait.** `git worktree remove` (jamais `--force`, un worktree sale
   refuse) ; le clone passe sur la base par `checkout` puis
-  `merge --ff-only origin/<base>` ; `git branch -D` ; la ligne est retirée de
-  `.git/machete` à la main (enfants remontés, annotations conservées, aucun
-  processus `git machete`) ; une section `## <date> — Clôture` est ajoutée au
-  journal avec la PR et les gestes.
+  `merge --ff-only origin/<base>` ; `git branch -D` sur chaque branche de la
+  liste ; les lignes sont retirées de `.git/machete` à la main, en une seule
+  réécriture (enfants remontés, annotations conservées, aucun processus
+  `git machete`) ; une section `## <date> — Clôture` est ajoutée au journal,
+  avec une ligne `- PR :` et une ligne `- Branche :` par paire.
 - **Ce qu'il ne fait pas.** Aucun écrit tracker, aucune branche distante, aucun
   `main` touché. Chaque refus (pas de clone, état, PR, base, commit, worktree
   sale, commit local non livré) est un 409 et un message, sans suppression

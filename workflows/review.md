@@ -15,6 +15,11 @@ avant d'agir.
   `gh pr view <n> --json reviewDecision,reviews,comments`. Un `reviewDecision`
   vide n'est pas une absence de validation : une approbation explicite en
   commentaire compte, citée avec son verdict et sa date.
+- **Chaque PR d'une mission découpée** : la liste `branches:` du `mission.yml`
+  donne les paires ; `gh pr list --head <branche> --state all` retrouve la PR
+  de chacune. La revue lit les PR une à une ; `ready-for-prod` n'est posé que
+  si **chacune** est validée, et le refus nomme la PR qui manque. Une mission
+  encore à une paire se lit exactement comme avant.
 - **Chaque critère d'acceptation** contre le scénario qui le couvre : le test
   du scénario, le commentaire daté, la capture. Un critère sans scénario est un
   refus, et il renvoie au cadrage sans réclamer de test supplémentaire.
@@ -31,7 +36,7 @@ geste de l'exécution, pas celui-ci.
 
 | Constat | Décision | Label |
 | --- | --- | --- |
-| Validation citée, critères et scénarios complets, périmètre et tests vérifiés, journal et checklist à jour | La revue est faite : on enregistre et on passe le ticket | `ready-for-prod` |
+| Validation citée sur chaque PR, critères et scénarios complets, périmètre et tests vérifiés, journal et checklist à jour | La revue est faite : on enregistre et on passe le ticket | `ready-for-prod` |
 | Les collègues ont remonté des changements sur la PR | La revue renvoie en exécution : le demandeur pose le label, la session de remontées corrige sur la branche | `in-progress` |
 | La PR sort du périmètre du cadrage, ou un critère n'a pas de scénario | Le cadrage reprend la main : le demandeur pose le label, la branche et la PR restent ouvertes | `to-refine` |
 
@@ -41,7 +46,8 @@ demandeur : la revue ne les fait pas.
 
 ## Condition de sortie
 
-- [ ] La validation des collègues est citée (verdict et date) sur la PR.
+- [ ] La validation des collègues est citée (verdict et date) sur chaque PR,
+      et une mission découpée nomme celle qui manque s'il en manque une.
 - [ ] Chaque critère d'acceptation porte sa preuve contre le scénario qui le
       couvre, vérifié un à un.
 - [ ] Le périmètre et les tests sont vérifiés sur la tête de branche.

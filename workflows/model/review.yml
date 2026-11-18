@@ -8,11 +8,11 @@ exit:
   - to-refine
 nodes:
   - id: constater-validation
-    label: Constater la validation des collègues
+    label: Constater la validation des collègues sur chaque PR
     section: Ce qu'on constate
     writer: session
-    artifact: la validation citée, verdict et date
-    gate: le verdict des collègues est prouvé sur la PR
+    artifact: la validation de chaque PR citée, verdict et date
+    gate: le verdict des collègues est prouvé sur chaque PR, et une mission découpée nomme celle qui manque
   - id: constater-criteres
     label: Constater que chaque critère a son scénario
     section: Ce qu'on constate
@@ -80,7 +80,7 @@ nodes:
     section: Sur le tracker
     writer: session
     artifact: le libellé ready-for-prod
-    gate: le ticket porte ready-for-prod et plus in-review
+    gate: le ticket porte ready-for-prod et plus in-review, et chaque PR de la mission est validée
 edges:
   - from: in-review
     to: constater-validation

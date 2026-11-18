@@ -64,12 +64,17 @@ rattachée à un epic, qui est un milestone (voir
 | Clôture | ticket prêt à partir | ticket **terminée** par le demandeur : merge, ticket fermé, branche supprimée ; journal et checklist soldés par la session | [cloture.md](cloture.md) |
 
 Une étape peut renvoyer à la précédente — un cadrage faux se refait, un diff hors
-périmètre retourne en cadrage — mais jamais sauter une étape.
+périmètre retourne en cadrage — mais jamais sauter une étape. La revue est la
+seule à pouvoir découper une PR trop grosse en plusieurs PR empilées : le geste
+« Split into several PRs » du volet ouvre la session qui écrit la liste des
+paires et ouvre une PR par partie.
 
 ## Règles invariantes
 
-1. **Une mission = un ticket = une branche = une PR.** Pas de branche fourre-tout,
-   pas de PR qui règle deux missions.
+1. **Une mission = un ticket ; à l'exécution, une branche et une PR.** Pas de
+   branche fourre-tout, pas de PR qui règle deux missions. À la revue, la PR
+   peut être découpée en plusieurs PR empilées : chaque partie a sa branche et
+   sa PR, et la branche d'origine devient la dernière partie.
 2. **La clé du ticket nomme tout.** Branche : `<type>/<clé en minuscules>`
    (`feat/mis-12`, `fix/ex-1541`). Commit : `<CLÉ>: <impératif>`. PR : la clé
    dans le titre.
