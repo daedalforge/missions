@@ -2357,6 +2357,7 @@ test('le prompt de session libre ne joue aucune étape du workflow', () => {
   assert.match(prompt, /Session libre/)
   assert.match(prompt, /aucune étape du workflow/)
   // Aucune ligne d'étape, et chacun des quatre briefs est absent.
+  assert.doesNotMatch(prompt, /Étape en cours/)
   for (const brief of Object.values(STEP_BRIEFS)) {
     assert.ok(!prompt.includes(brief), `le brief d'étape ne doit pas fuiter : ${brief.slice(0, 40)}…`)
   }
@@ -3239,6 +3240,19 @@ const DECOUPEE = {
   repo: '~/projects/missions',
 }
 
+test('la session libre liste les paires d’une mission découpée', () => {
+  const prompt = freeSessionPrompt(DECOUPEE)
+
+  assert.match(prompt, /Branches : fix\/mis-90-p1 sur main, fix\/mis-90-p2 sur fix\/mis-90-p1, fix\/mis-90 sur fix\/mis-90-p2\./)
+  assert.match(prompt, /Le worktree porte la branche d’origine, la dernière partie\./)
+  assert.doesNotMatch(prompt, /Branche : fix\/mis-90-p1 ; base : main\./)
+
+  // Une mission à une paire garde sa ligne, sans note de worktree.
+  const mono = freeSessionPrompt({ ...DECOUPEE, branches: undefined })
+  assert.match(mono, /Branche : fix\/mis-90-p1 ; base : main\./)
+  assert.doesNotMatch(mono, /Le worktree porte la branche d’origine/)
+})
+
 test('une mission découpée nomme chaque paire dans l’enveloppe et les briefs', () => {
   assert.equal(missionPairs(DECOUPEE).length, 3)
   assert.deepEqual(missionPairs({ branch: 'b', base: 'm' }), [{ branch: 'b', base: 'm' }])
@@ -3252,7 +3266,16 @@ test('une mission découpée nomme chaque paire dans l’enveloppe et les briefs
   )
   assert.match(prompt, /La mission est découpée en 3 PR empilées/)
   assert.match(prompt, /la revue ne pose ready-for-prod que si chacune est validée, en nommant celle qui manque/)
-  assert.match(feedbackSessionPrompt(DECOUPEE), /découpée en 3 PR empilées/)
+  const feedback = feedbackSessionPrompt(DECOUPEE)
+  assert.match(feedback, /découpée en 3 PR empilées/)
+  assert.match(feedback, /retrouve les PR de la pile/)
+  assert.match(feedback, /une fois par branche de la liste `branches`/)
+  assert.match(feedback, /corrige sur la branche de la PR concernée et pousse/)
+  assert.doesNotMatch(feedback, /corrige sur la branche et pousse/)
+  // Une mission à une paire garde le brief d'origine, mot pour mot.
+  const monofeedback = feedbackSessionPrompt({ ...DECOUPEE, branches: undefined })
+  assert.match(monofeedback, /gh pr list --head fix\/mis-90-p1 --state all/)
+  assert.match(monofeedback, /corrige sur la branche et pousse/)
   // Une mission à une paire ne gagne aucune note : son brief reste tel quel.
   assert.equal(multiPairsNote({ branch: 'b', base: 'm' }), '')
   assert.doesNotMatch(missionSessionPrompt({ ...DECOUPEE, branches: undefined }), /PR empilées/)
@@ -3267,7 +3290,9 @@ test('le prompt de découpe nomme la mission, ses paires et les gestes permis', 
   assert.match(prompt, /propose un découpage en parties/)
   assert.match(prompt, /attends une confirmation explicite/)
   assert.match(prompt, /sans commit nouveau et sans force-push/)
-  assert.match(prompt, /retargète la PR d’origine/)
+  assert.match(prompt, /ouvre une PR pour chaque partie précédente/)
+  assert.match(prompt, /retargète la PR d’origine vers la partie précédente/)
+  assert.doesNotMatch(prompt, /retargète la PR d’origine vers la dernière partie/)
   assert.match(prompt, /POST \/missions\/api\/branches/)
   assert.match(prompt, /Tu ne merges pas/)
   assert.match(prompt, /tu n’écris pas sur main/)
