@@ -21,8 +21,9 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
    description qui dit ce que ça change et comment le vérifier.
 6. **Faire relire le diff à l'aveugle** : une fois la PR renseignée, un
    sous-agent en contexte neuf lit le ticket et le diff, puis valide ou rend ses
-   constats ; un refus renvoie aux correctifs, puis à une nouvelle relecture
-   (voir [Revue interne à l'aveugle](#revue-interne-à-laveugle)).
+   constats ; un premier refus renvoie aux correctifs, puis à une deuxième
+   relecture. La revue se joue en deux passages au plus : un deuxième refus sort
+   en `blocked` (voir [Revue interne à l'aveugle](#revue-interne-à-laveugle)).
 7. **Tenir le journal** : ajouter la section du jour à
    `missions/<dossier>/journal.md` — ce qui a changé, les preuves, les écarts.
 8. **Cocher la checklist** : à chaque point vérifié, cocher `- [x]` dans
@@ -77,10 +78,16 @@ condition de sortie, pas un geste de confort.
   et la preuve manquante. Le verdict et les constats s'écrivent au journal et à
   la checklist ; aucune revue ni aucun commentaire ne se publie sur la PR — la
   publication reste le geste du demandeur.
-- **Les deux issues.** Validé : le ticket passe en `in-review`, la PR avec lui.
-  Refusé : la session corrige sur la branche, pousse, et fait relire — sans
-  borne de passages, jusqu'à validation. Un constat qui sort du périmètre
-  renvoie au cadrage.
+- **Validé.** Le ticket passe en `in-review`, la PR avec lui.
+- **Un premier refus.** La session corrige sur la branche, pousse, et fait
+  relire une deuxième fois. La revue se joue en deux passages au plus : un
+  passage, c'est une relecture par un sous-agent en contexte neuf.
+- **Un deuxième refus.** Aucun troisième passage ne se lance. La session
+  consigne au ticket les constats restants — pour chacun le critère visé et la
+  preuve manquante —, pose le label `blocked` avec son motif en commentaire, et
+  termine sa session. Le ticket reste `in-progress` : le demandeur tranche avant
+  de rouvrir une exécution, qui repart de la fiche et du ticket.
+- **Un constat hors périmètre** renvoie au cadrage, pas à `blocked`.
 
 ## Règles de conduite
 
@@ -96,8 +103,16 @@ condition de sortie, pas un geste de confort.
   fait à part, ou pas du tout.
 - **Le périmètre change ?** Retour au cadrage : mettre à jour la fiche, faire
   revalider, puis reprendre. Un élargissement silencieux est un défaut de mission.
+- **Aucune question bloquante.** Un choix que la fiche du cadrage ne tranche pas
+  — une dépendance, un arbitrage de périmètre à l'intérieur du plan — ne
+  s'arrête pas sur une question au demandeur : la session consigne le choix
+  manquant et ses conséquences dans le journal et dans un commentaire du
+  ticket, pose le label `blocked`, et termine sa session. Le demandeur tranche
+  hors session et rouvre une exécution. La question reste la règle au cadrage :
+  l'interdiction ne vaut que pour l'exécution.
 - **Bloqué ?** Le dire dans le ticket le jour où ça arrive, avec ce qui bloque et
-  ce qu'il faudrait pour débloquer.
+  ce qu'il faudrait pour débloquer : le motif en commentaire, le label
+  `blocked`, et la session s'arrête.
 
 ## Sur le tracker
 
