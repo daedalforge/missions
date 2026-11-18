@@ -13,6 +13,12 @@ nodes:
     writer: session
     artifact: la validation de chaque PR citée, verdict et date
     gate: le verdict des collègues est prouvé sur chaque PR, et une mission découpée nomme celle qui manque
+  - id: decouper
+    label: Découper une PR trop grosse
+    section: Quand la PR est trop grosse
+    writer: session
+    artifact: la liste branches écrite par la route, les PR empilées ouvertes
+    gate: le demandeur a confirmé le découpage
   - id: constater-criteres
     label: Constater que chaque critère a son scénario
     section: Ce qu'on constate
@@ -84,6 +90,12 @@ nodes:
 edges:
   - from: in-review
     to: constater-validation
+  - from: in-review
+    to: decouper
+    when: la PR est trop grosse
+  - from: decouper
+    to: constater-validation
+    when: la pile est ouverte
   - from: constater-validation
     to: constater-criteres
   - from: constater-criteres

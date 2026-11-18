@@ -213,9 +213,10 @@ propose les bornes et **attend une confirmation explicite** avant d'agir. Elle
 crée chaque partie au commit de coupe (`git branch <partie> <commit>`), sans
 commit nouveau et sans force-push : la partie 1 part de la base de mission, la
 partie k de la partie k-1, et la branche d'origine devient la dernière partie.
-Elle pousse les branches, ouvre une PR par partie (la 1 vers la base de
-mission, la k vers la k-1), retargete la PR d'origine sur la dernière partie,
-écrit la liste `branches:` **par la route** (`POST missions/api/branches`) et
+Elle pousse les branches, ouvre une PR pour chaque partie précédente (la 1
+vers la base de mission, la k vers la k-1), puis retargete la PR d'origine sur
+la partie précédente — elle reste la PR de la dernière partie ; elle écrit la
+liste `branches:` **par la route** (`POST missions/api/branches`) et
 consigne la découpe au journal. Elle ne merge pas, ne ferme rien, ne pose aucun
 label, n'approuve pas et n'écrit pas sur `main` : le merge et la fermeture
 restent les gestes du demandeur.

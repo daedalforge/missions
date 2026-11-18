@@ -28,7 +28,7 @@ nodes:
     writer: demandeur
     artifact: l'issue fermée avec le lien du merge
   - id: supprimer-branche
-    label: Supprimer la branche
+    label: Supprimer les branches
     section: Ce qu'on fait
     writer: demandeur
   - id: fermer-epic

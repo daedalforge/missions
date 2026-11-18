@@ -32,6 +32,20 @@ avant d'agir.
 Un constat ne se transforme pas en relecture : refaire la revue du diff est le
 geste de l'exécution, pas celui-ci.
 
+## Quand la PR est trop grosse
+
+Une PR trop grosse pour une revue sérieuse peut être découpée **à la revue**,
+par le bouton « Split into several PRs » du volet : il n'est rendu qu'à
+`in-review`, pour une mission à une paire, et il est désactivé quand la session
+est bloquée. La session de découpe retrouve la PR, propose les bornes et les
+fait confirmer ; elle crée les branches aux commits existants (aucun commit
+nouveau, aucun force-push), ouvre une PR pour chaque partie précédente,
+retargete la PR d'origine sur la partie précédente et écrit la liste
+`branches:` par la route. La revue reprend ensuite sur chaque PR de la pile.
+
+Découper n'est pas un geste de la revue : le demandeur confirme le découpage,
+la revue constate seulement que la pile est ouverte.
+
 ## Décisions possibles
 
 | Constat | Décision | Label |
