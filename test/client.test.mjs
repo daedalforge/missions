@@ -359,7 +359,7 @@ test('le volet rend « Check the PR feedback » et « PR validated » en revue, 
   const boutons = gestesDeLaRangee(actions)
   const iRemontees = boutons.findIndex((node) => nomDuGeste(node) === 'Check the PR feedback')
   const iValidation = boutons.findIndex((node) => nomDuGeste(node) === 'PR validated')
-  assert.equal(iValidation, iRemontees + 1, 'la validation suit les remontées')
+  assert.equal(iValidation, iRemontees + 2, 'la découpe s’intercale entre les remontées et la validation')
   assert.equal(iValidation, boutons.length - 1, 'la validation est le dernier geste')
   // La session du pas n'a plus de sens : la revue est faite par les collègues.
   assert.equal(boutonSession(tree), null, 'aucune session d’étape en revue')
@@ -679,6 +679,7 @@ test('chaque geste de la rangée ne porte que son icône, nommée', () => {
     'Open on the tracker',
     'Start a free session',
     'Check the PR feedback',
+    'Split into several PRs',
     'PR validated',
   ])
 
@@ -7921,7 +7922,7 @@ test('le relevé se lit comme un rapport : gestes rangés, verdicts, jamais util
   // Le détail retenu s'affiche, les jamais utilisés se comptent, et le geste
   // retiré garde son compte dans une section à part.
   assert.match(texte, /in-review ×4/)
-  assert.match(texte, /Never used \(52\)/)
+  assert.match(texte, /Never used \(53\)/)
   assert.match(texte, /Retired/)
   assert.match(texte, /old.gesture/)
   assert.match(texte, /Dashboard tab/)
@@ -7937,7 +7938,7 @@ test('un relevé absent, vide ou corrompu ne se confondent pas', () => {
   // porte n'est pas franchie — donc une recommandation serait un mensonge.
   const zero = monterUsage({ version: 1, startedAt: USAGE_AGO(2), elements: {} })
   assert.match(textOf(zero.inner), /0 gestures counted/)
-  assert.match(textOf(zero.inner), /Never used \(55\)/)
+  assert.match(textOf(zero.inner), /Never used \(56\)/)
   assert.match(textOf(zero.inner), /No verdict yet: the tally needs 7 days and 20 gestures/)
 
   // Un fichier illisible se dit corrompu, il ne se fait pas passer pour vide.
@@ -11362,13 +11363,13 @@ test('chaque bouton à icône seule, dans tous les volets, est nommé par un dat
   assert.ok(muets >= 15, 'l’inventaire monte bien tous les gestes muets des volets')
 })
 
-test('l’inventaire couvre les vingt et un gestes muets, y compris ceux de l’éditeur de workflow', () => {
+test('l’inventaire couvre les vingt-deux gestes muets, y compris ceux de l’éditeur de workflow', () => {
   // La fiche en comptait dix-neuf : la bascule « Bring … into … » du worktree,
   // icône seule elle aussi, manquait à l'appel, et la validation des collègues
   // est arrivée avec la revue.
   // Given le bundle livré
   // Then il porte un déclencheur par geste muet, et les quatre croix muettes
-  assert.equal((SOURCE.match(/'data-tip':/g) ?? []).length, 21, 'vingt et un déclencheurs, un par geste muet')
+  assert.equal((SOURCE.match(/'data-tip':/g) ?? []).length, 22, 'vingt-deux déclencheurs, un par geste muet')
   assert.equal(
     (SOURCE.match(/className: 'missions-drawer-close'[^}]*'data-tip': 'Close'/g) ?? []).length,
     3,
@@ -11724,4 +11725,126 @@ test('le mouvement réduit coupe la transition du switch papier', () => {
     SOURCE.indexOf('.missions-panel[data-skin="paper"] .missions-clear {'),
   )
   assert.doesNotMatch(papier, /transition/)
+})
+
+test('le volet ne rend le bouton de découpe qu’en revue, pour une mission à une paire', () => {
+  const decoupe = (tree) => boutonGeste(tree, 'Split into several PRs')
+
+  for (const state of ['to-refine', 'ready', 'in-progress', 'ready-for-prod', 'done', 'blocked', null]) {
+    const { tree } = monterVolet({ ...MISSION, state, updatedAt: MISSION.updated })
+    assert.equal(decoupe(tree), null, `aucune découpe pour ${state}`)
+  }
+
+  const { tree } = monterVolet({ ...MISSION, state: 'in-review', updatedAt: MISSION.updated })
+  const bouton = decoupe(tree)
+  assert.ok(bouton, 'la découpe est rendue en revue')
+  assert.equal(bouton.props.className, 'missions-action missions-action--icon')
+  assert.equal(bouton.props.disabled, false)
+  assert.equal(bouton.props['aria-label'], 'Split into several PRs')
+  assert.equal(infobulleDe(tree, bouton), 'Split into several PRs')
+  // Une mission déjà découpée ne propose plus le geste.
+  const deja = monterVolet({
+    ...MISSION,
+    state: 'in-review',
+    branches: [
+      { branch: 'fix/mis-42-p1', base: 'main' },
+      { branch: 'fix/mis-42', base: 'fix/mis-42-p1' },
+    ],
+    updatedAt: MISSION.updated,
+  }).tree
+  assert.equal(decoupe(deja), null, 'le bouton disparaît après la découpe')
+})
+
+test('le bouton de découpe est désarmé par le même verrou que la session', () => {
+  const { tree } = monterVolet({
+    ...MISSION,
+    state: 'in-review',
+    branch: null,
+    updatedAt: MISSION.updated,
+  })
+  const bouton = boutonGeste(tree, 'Split into several PRs')
+  assert.ok(bouton, 'le bouton reste rendu, désarmé')
+  assert.equal(bouton.props.disabled, true)
+  assert.equal(infobulleDe(tree, bouton), 'branch is not declared, set it below or in the mission folder')
+  assert.equal(bouton.props['aria-label'], 'Split into several PRs')
+  assert.equal(bouton.props['aria-describedby'], 'missions-session-blocked')
+})
+
+test('le clic sur la découpe ouvre la session du prompt de découpe', async () => {
+  const captures = []
+  const services = {
+    getService: (name) =>
+      name === 'uiWorkspace'
+        ? { startSession: (id, options) => captures.push(options?.prompt) }
+        : null,
+  }
+  const { tree } = monterVolet(
+    { ...MISSION, state: 'in-review', repo: '~/projects/missions', updatedAt: MISSION.updated },
+    { services, workspaceId: 'w' },
+  )
+  await boutonGeste(tree, 'Split into several PRs').props.onClick()
+
+  assert.equal(captures.length, 1)
+  assert.match(captures[0], /^Travaille sur la mission MIS-42 — Reload onglet mission\./)
+  assert.match(captures[0], /Étape en cours : revue \(statut in-review\)\./)
+  assert.match(captures[0], /Tu ne fais que la découpe de la PR/)
+  assert.match(captures[0], /attends une confirmation explicite/)
+  assert.match(captures[0], /POST \/missions\/api\/branches/)
+  assert.match(captures[0], /Branche : fix\/mis-42 ; base : main\./)
+  assert.match(captures[0], /Playbook à lire : playbook\/revue\.md/)
+  assert.match(captures[0], /tu n’écris pas sur main/)
+})
+
+test('le volet d’une mission découpée affiche la liste et masque l’éditeur', () => {
+  const paires = [
+    { branch: 'fix/mis-42-p1', base: 'main' },
+    { branch: 'fix/mis-42-p2', base: 'fix/mis-42-p1' },
+    { branch: 'fix/mis-42', base: 'fix/mis-42-p2' },
+  ]
+  const { tree } = monterVolet({ ...MISSION, state: 'in-review', branches: paires, updatedAt: MISSION.updated })
+
+  const liste = findAll(tree, 'ul').find((node) => node.props.className === 'missions-pairs-list')
+  assert.ok(liste, 'la liste des paires est rendue')
+  assert.equal(findAll(liste, 'li').length, 3)
+  const items = findAll(liste, 'li')
+  assert.match(textOf(items[0]), /fix\/mis-42-p1 sur main/)
+  assert.match(textOf(items[0]), /base de mission/)
+  assert.match(textOf(items[1]), /fix\/mis-42-p2 sur fix\/mis-42-p1/)
+  assert.doesNotMatch(textOf(items[1]), /base de mission/)
+  assert.match(textOf(items[2]), /fix\/mis-42 sur fix\/mis-42-p2/)
+
+  // L'éditeur d'une paire est masqué : ni champ Branch/Base, ni Save.
+  assert.equal(findAll(tree, 'input').filter((node) => node.props.className === 'missions-declare-input').length, 0)
+  assert.equal(findAll(tree, 'button').filter((node) => node.props.className === 'missions-declare-save').length, 0)
+  assert.match(textOf(tree), /la liste se lit ici et s’écrit par la session de découpe/)
+
+  // À une paire, le volet garde ses deux champs et son Save.
+  const simple = monterVolet({ ...MISSION, state: 'in-progress', updatedAt: MISSION.updated }).tree
+  assert.equal(findAll(simple, 'input').filter((node) => node.props.className === 'missions-declare-input').length, 2)
+  assert.equal(findAll(simple, 'button').filter((node) => node.props.className === 'missions-declare-save').length, 1)
+})
+
+test('applyDeclaration suit les paires renvoyées par le serveur', () => {
+  const paires = [
+    { branch: 'fix/mis-42-p1', base: 'main' },
+    { branch: 'fix/mis-42', base: 'fix/mis-42-p1' },
+  ]
+  const { drawer, setters } = monterVolet({ ...MISSION, updatedAt: MISSION.updated })
+  const onSaved = drawer.props.onSaved
+  assert.equal(typeof onSaved, 'function')
+
+  onSaved({ key: MISSION.key, folder: 'MIS-42', branch: 'fix/mis-42-p1', base: 'main', branches: paires })
+  const [setView, setDoneView, setSelected] = setters.slice(-3)
+  const vue = setView({ missions: [{ ...MISSION }] })
+  assert.deepEqual(vue.missions[0].branches, paires)
+  assert.equal(vue.missions[0].branch, 'fix/mis-42-p1')
+  assert.deepEqual(setDoneView({ missions: [{ ...MISSION }] }).missions[0].branches, paires)
+  assert.deepEqual(setSelected({ ...MISSION }).branches, paires)
+
+  // Une sauvegarde héritée efface la liste : la mission redevient une paire.
+  onSaved({ key: MISSION.key, folder: 'MIS-42', branch: 'fix/mis-42', base: 'main' })
+  const [setView2, , setSelected2] = setters.slice(-3)
+  const vue2 = setView2({ missions: [{ ...MISSION, branches: paires }] })
+  assert.equal('branches' in vue2.missions[0], false)
+  assert.equal('branches' in setSelected2({ ...MISSION, branches: paires }), false)
 })
