@@ -27,7 +27,7 @@ nodes:
     label: Vérifier au fur et à mesure
     section: Ce qu'on fait
     writer: session
-    artifact: les tests du projet au vert
+    artifact: les tests ciblés au vert, la suite complète une fois avant la PR
   - id: ouvrir-pr
     label: Ouvrir la PR vers la base
     section: Ce qu'on fait

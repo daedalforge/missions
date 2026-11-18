@@ -15,8 +15,10 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
 2. **Passer le ticket en cours** dans le tracker, une fois la branche poussée.
 3. **Travailler par petits commits**, un sujet par commit, chacun préfixé de la
    clé : `EX-1541: referme l'accès au panneau`.
-4. **Vérifier au fur et à mesure** : les tests du projet passent, le changement
-   fait ce que le cadrage annonce.
+4. **Vérifier au fur et à mesure** : les tests ciblés du changement passent
+   pendant la session, et le changement fait ce que le cadrage annonce ; la
+   suite complète se lance une seule fois, avant la PR, pas après chaque
+   correctif de revue.
 5. **Ouvrir la PR** vers la `base` déclarée : titre préfixé de la clé,
    description qui dit ce que ça change et comment le vérifier.
 6. **Faire relire le diff à l'aveugle** : une fois la PR renseignée, un
