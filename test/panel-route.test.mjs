@@ -91,6 +91,32 @@ test('POST déclare la branche et la base dans le dossier de la mission', async 
   assert.match(text, /^branch: gh-49$/m)
 })
 
+test('POST déclare plusieurs paires et répond la liste', async (t) => {
+  const { dir, handler } = await mount(t)
+  const branches = [
+    { branch: 'fix/mis-90-p1', base: 'main' },
+    { branch: 'fix/mis-90-p2', base: 'fix/mis-90-p1' },
+    { branch: 'fix/mis-90', base: 'fix/mis-90-p2' },
+  ]
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/branches',
+    body: { key: 'MIS-90', folder: 'MIS-90', project: 'missions', branches },
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body.branches, branches)
+  assert.equal(response.body.branch, 'fix/mis-90-p1', 'la première paire reste branch')
+  assert.equal(response.body.base, 'main', 'la première paire reste base')
+
+  const text = await readFile(join(dir, 'missions', 'MIS-90', MISSION_FILE), 'utf8')
+  const declared = parse(text)
+  assert.deepEqual(declared.branches, branches)
+  assert.equal(declared.branch, undefined)
+  assert.equal(declared.base, undefined)
+})
+
 test('POST vide un champ retiré, GET est refusé', async (t) => {
   const { dir, handler } = await mount(t)
   await call(handler, {
@@ -2246,7 +2272,7 @@ test('POST local-close refuse en nommant la paire dont la PR n’est pas mergée
   })
 
   assert.equal(response.status, 409)
-  assert.match(response.body.error, /pull request #8 is not merged/)
+  assert.match(response.body.error, /MIS-136 \(feat\/mis-136 sur feat\/mis-136-p1\): pull request #8 is not merged/)
   assert.deepEqual(calls, [], 'un refus ne lance aucun verbe git')
 })
 
