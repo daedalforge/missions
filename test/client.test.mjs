@@ -1004,7 +1004,7 @@ test('l’onglet Done garde les filtres de l’arbre, sans statut ni bande', () 
   // Then la barre de l'arbre est là, ses chips aussi, sans select ni bande
   const rendu = renderTree(vue)
   const text = textOf(rendu)
-  for (const chip of ['Type', 'Epic', 'Project', 'Priority', 'Missing']) {
+  for (const chip of ['Type', 'Epic', 'Repository', 'Priority', 'Missing']) {
     assert.match(text, new RegExp(chip), `le chip ${chip} est rendu`)
   }
   assert.deepEqual(findAll(rendu, 'select'), [])
@@ -2679,7 +2679,7 @@ test('la priorité prend plusieurs valeurs et la barre les montre', () => {
   assert.match(SOURCE, /allLabel: 'All priorities'/)
   assert.match(SOURCE, /type: 'checkbox'/)
 })
-test('les chips Type, Epic et Project prennent plusieurs valeurs et la barre les montre', () => {
+test('les chips Type, Epic et Repository prennent plusieurs valeurs et la barre les montre', () => {
   const session = memorySession({ 'missions.tab': 'missions' })
   const { api, ctx, registered } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], session)
   api.apply(ctx)
@@ -2710,10 +2710,10 @@ test('les chips Type, Epic et Project prennent plusieurs valeurs et la barre les
   assert.match(textOf(montrer('Epic', { epic: ['Socle'] })), /EpicSocle/)
   assert.equal(montrer('Epic', { epic: ['Socle', 'Workspace'] }).props['aria-label'], 'Filter by epic (2 selected)')
 
-  assert.match(textOf(montrer('Project', { project: null })), /ProjectAll/)
-  // Le chip nomme le projet par son nom, comme la barre le faisait.
-  assert.match(textOf(montrer('Project', { project: ['missions'] })), /ProjectMissions/)
-  assert.equal(montrer('Project', { project: ['missions', 'socle'] }).props['aria-label'], 'Filter by project (2 selected)')
+  assert.match(textOf(montrer('Repository', { project: null })), /RepositoryAll/)
+  // Le chip nomme le dépôt par son nom, comme la barre le faisait.
+  assert.match(textOf(montrer('Repository', { project: ['missions'] })), /RepositoryMissions/)
+  assert.equal(montrer('Repository', { project: ['missions', 'socle'] }).props['aria-label'], 'Filter by repository (2 selected)')
 
   const inactif = montrer('Type', { type: null })
   assert.equal(inactif.props['data-active'], 'false')
@@ -3967,6 +3967,61 @@ function monterVolet(mission = { ...MISSION, updatedAt: MISSION.updated }, overr
   return { tree, drawer: premier.drawer, workbench, setters, effects, rerendre }
 }
 
+test('la fiche lit la board et choisit le dépôt, deux champs distincts', async () => {
+  // Given une mission déclarée sur backend, portée par la board SOC, avec tous
+  // les dépôts du poste à offrir.
+  const mission = {
+    ...MISSION,
+    project: 'backend',
+    projectName: 'Backend',
+    trackerId: 'soc',
+    trackerName: 'SOC board',
+    projectChoices: [
+      { id: 'clienthub', name: 'Clienthub', repo: '~/projects/clienthub' },
+      { id: 'backend', name: 'Backend', repo: '~/projects/backend' },
+      { id: 'connect', name: 'Connect', repo: '~/projects/connect' },
+    ],
+  }
+  const calls = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(init.body) : null })
+    return { ok: true, status: 200, json: async () => ({ key: MISSION.key, folder: 'MIS-42', project: 'connect' }) }
+  }
+  try {
+    const saved = []
+    const { tree } = monterVolet(mission, { onProjectSaved: (data) => saved.push(data) })
+
+    // Then la board est lue, jamais offerte au choix.
+    assert.match(textOf(tree), /SOC board/)
+    assert.equal(
+      findAll(tree, 'select').some((node) => node.props['aria-label'] === 'Project'),
+      false,
+      'la board ne se choisit pas dans la fiche',
+    )
+
+    // Then le dépôt se choisit parmi tous, absence comprise.
+    const select = findAll(tree, 'select').find((node) => node.props['aria-label'] === 'Repository')
+    assert.ok(select, 'le volet doit rendre un select de dépôt')
+    assert.equal(select.props.value, 'backend')
+    assert.deepEqual(
+      select.children.filter((child) => child.type === 'option').map((child) => child.props.value),
+      ['', 'clienthub', 'backend', 'connect'],
+    )
+
+    // When on enregistre connect.
+    await select.props.onChange({ target: { value: 'connect' } })
+
+    // Then un seul POST porte le dépôt, et rien de la déclaration branche.
+    assert.deepEqual(writes(calls), [
+      { url: 'missions/api/branches', method: 'POST', body: { key: MISSION.key, folder: 'MIS-42', project: 'connect' } },
+    ])
+    assert.deepEqual(saved, [{ key: MISSION.key, project: 'connect' }])
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
 test('le volet rend la priorité comme un select natif, plus comme une ligne morte', () => {
   const { tree } = monterVolet()
 
@@ -4029,7 +4084,7 @@ test('choisir une priorité écrit le mot canonique et ne patche que ce champ', 
   await select.props.onChange({ target: { value: 'urgent' } })
 
   assert.deepEqual(writes(calls), [
-    { url: 'missions/api/priority', method: 'POST', body: { key: 'MIS-42', project: 'missions', priority: 'urgent' } },
+    { url: 'missions/api/priority', method: 'POST', body: { key: 'MIS-42', priority: 'urgent' } },
   ])
   assert.deepEqual(saved, [{ key: 'MIS-42', priority: 'urgent' }])
   // La valeur locale ne bouge qu'après l'accord du tracker.
@@ -4163,7 +4218,7 @@ test('choisir une taille écrit le nombre et ne patche que ce champ', async () =
 
   // Then un seul POST, en nombre, et la ligne avance après l'accord du tracker.
   assert.deepEqual(writes(calls), [
-    { url: 'missions/api/points', method: 'POST', body: { key: 'MIS-42', project: 'missions', points: 5 } },
+    { url: 'missions/api/points', method: 'POST', body: { key: 'MIS-42', points: 5 } },
   ])
   assert.deepEqual(saved, [{ key: 'MIS-42', points: 5 }])
   assert.ok(setters.includes(5))
@@ -8065,7 +8120,7 @@ function cliquerCaseFiltre(brut, queue, label, index = 0) {
     Priority: 'PriorityFilter',
     Type: 'TypeFilter',
     Epic: 'EpicFilter',
-    Project: 'ProjectFilter',
+    Repository: 'ProjectFilter',
   }[label]
   const conteneur = findAll(brut, nom)[0]
   assert.ok(conteneur, `le filtre ${label} est monté`)
@@ -8158,10 +8213,10 @@ test('chaque filtre de la barre compte un seul POST, avec son détail', () => {
     epic.caisse.props.onChange()
     spy.geste('filter.epic', optionEpic.props['data-state'])
 
-    const project = cliquerCaseFiltre(brut, queue, 'Project')
-    const optionProject = findAll(project.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
-    project.caisse.props.onChange()
-    spy.geste('filter.project', optionProject.props['data-state'])
+    const repository = cliquerCaseFiltre(brut, queue, 'Repository')
+    const optionRepository = findAll(repository.ouvert, 'label').find((node) => String(node.props.className) === 'missions-status-option')
+    repository.caisse.props.onChange()
+    spy.geste('filter.project', optionRepository.props['data-state'])
 
     // L'onglet Missions filtre par état par sa bande : un segment par état,
     // jamais une somme — le clic envoie la liste ordonnée.
@@ -10682,7 +10737,7 @@ test('les filtres vivent dans la colonne, sous le champ et au-dessus de la bande
   const libelles = findAll(filtres, 'span')
     .filter((node) => node.props.className === 'missions-select-label')
     .map(textOf)
-  assert.deepEqual(libelles, ['Type', 'Epic', 'Project', 'Priority'])
+  assert.deepEqual(libelles, ['Type', 'Epic', 'Repository', 'Priority'])
   // L'ordre est fixe : plus aucun select de tri dans la barre.
   assert.deepEqual(findAll(filtres, 'select'), [], 'la barre ne porte plus de select de tri')
   assert.doesNotMatch(textOf(filtres), /Sort/)
@@ -10901,9 +10956,13 @@ test('la fiche se ferme par sa croix, et Échap ne vide pas la requête tant qu�
 const CREATE_OPTIONS = {
   status: 'to-refine',
   defaultPriority: 'normal',
-  projects: [
-    { id: 'missions', name: 'Workspace missions', reference: 'MIS', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
-    { id: 'legacy', name: 'Legacy', reference: 'LEG', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+  trackers: [
+    { id: 'mis', name: 'Missions board', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+    { id: 'leg', name: 'Legacy board', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+  ],
+  repositories: [
+    { id: 'missions', name: 'Workspace missions', repo: '~/projects/missions' },
+    { id: 'legacy', name: 'Legacy', repo: '~/projects/legacy' },
   ],
 }
 
@@ -10940,9 +10999,10 @@ function etatsCreation({ title = '', description = '', epic = '', options = CREA
     true,
     // La couche d'infobulle, éteinte au repos.
     null,
-    // Le tiroir : options lues, projet choisi, puis le formulaire.
+    // Le tiroir : options lues, board et dépôt choisis, puis le formulaire.
     options,
     null,
+    'mis',
     'missions',
     title,
     description,
@@ -10953,6 +11013,7 @@ function etatsCreation({ title = '', description = '', epic = '', options = CREA
     false,
     null,
     false,
+    null,
     null,
   ]
 }
@@ -11011,7 +11072,7 @@ test('le tiroir montre les sept champs et les deux lignes du serveur', () => {
   const labels = findAll(inner, 'label')
     .filter((node) => node.props.className === 'wf-field')
     .map((node) => textOf(node.children[0]))
-  assert.deepEqual(labels, ['Project', 'Title', 'Description', 'Type', 'Priority', 'Epic'])
+  assert.deepEqual(labels, ['Project', 'Repository', 'Title', 'Description', 'Type', 'Priority', 'Epic'])
   const texte = textOf(inner)
   assert.match(texte, /Status/)
   assert.match(texte, /to-refine/)
@@ -11050,22 +11111,22 @@ test('le tiroir montre les sept champs et les deux lignes du serveur', () => {
   }
 })
 
-test('changer de projet recharge ses listes et remet l’epic à « No epic »', () => {
+test('changer de board recharge ses listes et remet l’epic à « No epic »', () => {
   const { inner, setters, rerendre } = monterCreation({ epic: '1' })
 
-  const projet = findAll(inner, 'select').find((node) => node.props['aria-label'] === 'Project')
-  projet.props.onChange({ target: { value: 'legacy' } })
-  assert.ok(setters.includes('legacy'), 'le projet choisi est posé')
+  const board = findAll(inner, 'select').find((node) => node.props['aria-label'] === 'Project')
+  board.props.onChange({ target: { value: 'leg' } })
+  assert.ok(setters.includes('leg'), 'la board choisie est posée')
   assert.ok(setters.includes(''), 'l’epic revient à « No epic »')
 
   const apres = rerendre()
-  const projetApres = findAll(apres, 'select').find((node) => node.props['aria-label'] === 'Project')
-  assert.equal(projetApres.props.value, 'legacy')
+  const boardApres = findAll(apres, 'select').find((node) => node.props['aria-label'] === 'Project')
+  assert.equal(boardApres.props.value, 'leg')
   const epicApres = findAll(apres, 'select').find((node) => node.props['aria-label'] === 'Epic')
   assert.equal(epicApres.props.value, '')
-  // L'effet des épics ne part qu'une fois un projet choisi, et le redit.
-  assert.match(SOURCE, /if \(!projectId\) return undefined/)
-  assert.match(SOURCE, /CREATE_EPICS_URL\}\?project=\$\{encodeURIComponent\(projectId\)\}/)
+  // L'effet des épics ne part qu'une fois une board choisie, et la nomme.
+  assert.match(SOURCE, /if \(!trackerId\) return undefined/)
+  assert.match(SOURCE, /CREATE_EPICS_URL\}\?tracker=\$\{encodeURIComponent\(trackerId\)\}/)
 })
 
 test('créer envoie le canonique une seule fois, puis relit la liste et ouvre la ligne', async () => {
@@ -11093,7 +11154,7 @@ test('créer envoie le canonique une seule fois, puis relit la liste et ouvre la
     assert.deepEqual(appels[0], {
       url: 'missions/api/create',
       method: 'POST',
-      body: { project: 'missions', title: 'Créer une mission', description: 'Le formulaire.', type: 'story', priority: 'normal', epic: '1' },
+      body: { tracker: 'mis', project: 'missions', title: 'Créer une mission', description: 'Le formulaire.', type: 'story', priority: 'normal', epic: '1' },
     })
     assert.equal(appels[1].url, 'missions/api/list?refresh=1', 'la liste est relue avant tout détail')
     assert.deepEqual(created, [CREATE_MISSION])
@@ -11117,6 +11178,55 @@ test('un refus affiche son message, garde la saisie et n’ouvre aucun tiroir', 
     assert.match(textOf(apres), /GitHub: validation failed/)
     assert.equal(findAll(apres, 'input').find((node) => node.props['aria-label'] === 'Title').props.value, 'Créer une mission')
     assert.equal(findAll(apres, 'button').find((node) => textOf(node) === 'Create').props.disabled, false)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un avertissement de création se lit, puis la ligne s’ouvre sur fermeture', async () => {
+  const avertissement = 'the issue was created, but its mission folder could not be written: EACCES'
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    const cible = String(url)
+    appels.push({ url: cible, method: init.method ?? 'GET' })
+    if (cible === 'missions/api/create') {
+      return { ok: true, status: 201, json: async () => ({ ...CREATE_MISSION, warning: avertissement }) }
+    }
+    if (cible === 'missions/api/list?refresh=1') {
+      return { ok: true, json: async () => ({ missions: [CREATE_MISSION], errors: [], workspaceId: 'w', workspaceRoot: '/w' }) }
+    }
+    throw new Error(`appel inattendu : ${cible}`)
+  }
+  try {
+    // Given le tiroir monté, dont la création répond 201 avec un avertissement.
+    const montage = monterCreation({ title: 'Créer une mission' })
+    findAll(montage.inner, 'form')[0].props.onSubmit({ preventDefault() {} })
+    await new Promise((done) => setTimeout(done, 10))
+
+    // Then aucune ligne ne s'ouvre, et l'avertissement est l'état du tiroir.
+    assert.deepEqual(montage.created, [], 'aucune ligne ouverte tant que l’avertissement est affiché')
+    const etat = montage.setters.filter((value) => value && typeof value === 'object' && 'warning' in value).at(-1)
+    assert.match(etat.warning, new RegExp(avertissement.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+
+    // Then le formulaire rendu gèle et dit ce qui n'a pas été écrit.
+    const etats = montage.etats
+    etats[etats.length - 1] = etat
+    montage.resetHooks()
+    montage.queue.length = 0
+    montage.queue.push(...etats)
+    const apres = renderTree(findAll(montage.registered.main({}), 'MissionCreateDrawer')[0])
+    assert.match(textOf(apres), /its mission folder could not be written/)
+    assert.equal(findAll(apres, 'button').some((node) => textOf(node) === 'Create'), false, 'le formulaire ne peut plus être rejoué')
+    assert.equal(findAll(apres, 'input').find((node) => node.props['aria-label'] === 'Title').props.disabled, true)
+
+    // When on ferme.
+    findAll(apres, 'button').find((node) => textOf(node) === 'Close').props.onClick()
+    await new Promise((done) => setTimeout(done, 10))
+
+    // Then la ligne créée est relue, sans avoir rejoué la création.
+    assert.equal(appels.filter((appel) => appel.method === 'POST').length, 1, 'un seul POST de création')
+    assert.ok(appels.some((appel) => appel.url === 'missions/api/list?refresh=1'), 'la liste est relue à la fermeture')
   } finally {
     globalThis.fetch = vraiFetch
   }

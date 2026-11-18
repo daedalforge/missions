@@ -93,12 +93,10 @@ projects:
   - id: missions
     name: Missions workspace
     repo: ~/projects/missions
-    tracker: mis
 
   - id: alpha
     name: Alpha
     repo: ~/projects/alpha
-    tracker: alp
     translations:
       locales: [ar, de, en, es, fil, fr, hi, pt, ru, zh]
       languageFile: src/locales/{locale}/translations.json
@@ -107,4 +105,3 @@ projects:
   - id: beta
     name: Beta
     repo: ~/projects/beta
-    tracker: bet

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { loadProjects, projectsOfTracker, readerFor, resolveMissionProject, trackerForKey } from '../lib/projects.js'
+import { loadProjects, readerFor, resolveMissionProject, trackerForKey } from '../lib/projects.js'
 
 const FIXTURE = new URL('./fixtures/projects.yml', import.meta.url)
 
@@ -92,12 +92,20 @@ test('the workspace file declares its trackers and repositories, complete', asyn
   assert.equal(bet.map.states.ready, 'Ready for dev')
   assert.deepEqual(bet.map.types.story, ['Story', 'Task'])
 
-  const [missions, alpha, beta] = projects
-  assert.equal(missions.repo, '~/projects/missions')
-  assert.equal(missions.tracker, 'mis')
-  assert.equal(missions.translations, null)
-  assert.equal(alpha.tracker, 'alp')
-  assert.equal(beta.tracker, 'bet')
+  assert.deepEqual(projects[0], {
+    id: 'missions',
+    name: 'Missions workspace',
+    repo: '~/projects/missions',
+    translations: null,
+  })
+  assert.deepEqual(
+    projects.map((project) => Object.keys(project).sort()),
+    [
+      ['id', 'name', 'repo', 'translations'],
+      ['id', 'name', 'repo', 'translations'],
+      ['id', 'name', 'repo', 'translations'],
+    ],
+  )
 })
 
 test('le bloc translations est rendu pour alpha, absent ailleurs', async () => {
@@ -111,47 +119,44 @@ test('le bloc translations est rendu pour alpha, absent ailleurs', async () => {
   })
 })
 
-test('deux projets peuvent partager la board du même tracker', async () => {
+test('deux dépôts peuvent travailler la même board sans la déclarer', async () => {
   const url = await writeProjects([
     '  - id: clienthub',
     '    repo: ~/projects/clienthub',
-    '    tracker: mis',
     '  - id: backend',
     '    repo: ~/projects/backend',
-    '    tracker: mis',
   ])
 
   const { trackers, projects } = await loadProjects(url)
   assert.equal(trackers.length, 1)
   assert.deepEqual(
-    projects.map((project) => project.tracker),
-    ['mis', 'mis'],
-  )
-  assert.deepEqual(
-    projectsOfTracker(projects, 'mis').map((project) => project.id),
+    projects.map((project) => project.id),
     ['clienthub', 'backend'],
   )
+  assert.equal(trackerForKey(trackers, 'MIS-3')?.id, 'mis')
 })
 
-test('un projet sans tracker est licite', async () => {
+test('un dépôt qui ne nomme aucune board se lit tel quel', async () => {
   const url = await writeProjects([
     '  - id: docs',
     '    repo: ~/projects/docs',
   ])
 
   const { projects } = await loadProjects(url)
-  assert.equal(projects[0].tracker, null)
-  assert.deepEqual(projectsOfTracker(projects, 'mis'), [])
+  assert.deepEqual(projects[0], { id: 'docs', name: 'docs', repo: '~/projects/docs', translations: null })
 })
 
-test('un projet qui pointe sur un tracker inconnu est refusé', async () => {
+test('un dépôt qui garde un tracker est refusé en nommant le dépôt et le champ', async () => {
   const url = await writeProjects([
     '  - id: docs',
     '    repo: ~/projects/docs',
-    '    tracker: nope',
+    '    tracker: soc',
   ])
 
-  await assert.rejects(() => loadProjects(url), /docs points at an unknown tracker \("nope"\)/)
+  await assert.rejects(
+    () => loadProjects(url),
+    /docs declares tracker; the board comes from the mission key, not from a repository\. Remove tracker from docs\./,
+  )
 })
 
 test('un projet sans repo est refusé en nommant le champ', async () => {
@@ -318,7 +323,6 @@ test('un bloc translations incomplet est refusé', async () => {
   const project = (translations) => [
     '  - id: so',
     '    repo: ~/projects/so',
-    '    tracker: mis',
     '    translations:',
     ...(translations.length > 0 ? translations.map((line) => `      ${line}`) : ['      {}']),
   ]
@@ -338,37 +342,40 @@ test('un bloc translations incomplet est refusé', async () => {
   }
 })
 
-test('le trackers se lit par préfixe et le projet se résout sans ambiguïté', async () => {
+test('le tracker se lit par préfixe et le dépôt se résout par son id', async () => {
   const { trackers, projects } = await loadProjects(FIXTURE)
 
   assert.equal(trackerForKey(trackers, 'ALP-12')?.id, 'alp')
   assert.equal(trackerForKey(trackers, 'XXX-1'), null)
 
-  const one = resolveMissionProject({ projects, trackers }, 'MIS-3')
-  assert.equal(one.project.id, 'missions')
-
-  const shared = await writeProjects([
-    '  - id: clienthub',
-    '    repo: ~/projects/clienthub',
-    '    tracker: mis',
-    '  - id: backend',
-    '    repo: ~/projects/backend',
-    '    tracker: mis',
-  ])
-  const workspace = await loadProjects(shared)
+  // Sans dépôt nommé, le lecteur ne choisit pas à la place de la mission : le
+  // repli sur l'unique dépôt de la board a disparu.
   assert.throws(
-    () => resolveMissionProject(workspace, 'MIS-3'),
+    () => resolveMissionProject({ projects, trackers }, 'MIS-3'),
     (error) => error.status === 400 && error.message === 'project is required',
   )
-  assert.equal(resolveMissionProject(workspace, 'MIS-3', 'backend').project.id, 'backend')
+  assert.equal(resolveMissionProject({ projects, trackers }, 'MIS-3', 'missions').project.id, 'missions')
   assert.throws(
-    () => resolveMissionProject(workspace, 'MIS-3', 'unknown'),
-    (error) => error.status === 400 && error.message === 'project is required',
+    () => resolveMissionProject({ projects, trackers }, 'MIS-3', 'unknown'),
+    (error) => error.status === 400 && error.message === 'project "unknown" is not declared',
   )
   assert.throws(
-    () => resolveMissionProject(workspace, 'NOPE-3'),
+    () => resolveMissionProject({ projects, trackers }, 'NOPE-3', 'missions'),
     (error) => error.status === 404 && /no project declares NOPE-3/.test(error.message),
   )
+})
+
+test('un dépôt se résout sur sa board ou sur une autre, sans rattachement', async () => {
+  const url = await writeProjects([
+    '  - id: clienthub',
+    '    repo: ~/projects/clienthub',
+    '  - id: backend',
+    '    repo: ~/projects/backend',
+  ])
+  const workspace = await loadProjects(url)
+
+  assert.equal(resolveMissionProject(workspace, 'MIS-3', 'backend').project.id, 'backend')
+  assert.equal(resolveMissionProject(workspace, 'MIS-3', 'clienthub').project.id, 'clienthub')
 })
 
 test('le lecteur de tracker porte le dépôt du projet', async () => {
@@ -391,7 +398,8 @@ test("le gabarit d'exemple reste valide", async () => {
   assert.equal(trackers[0].reference, 'EX')
   assert.equal(projects.length, 1)
   assert.equal(projects[0].id, 'example')
-  assert.equal(projects[0].tracker, 'example')
+  assert.equal(projects[0].repo.startsWith('~/projects/'), true)
+  assert.equal('tracker' in projects[0], false)
 })
 
 test('un fichier projects.yml absent explique où copier le gabarit', async () => {

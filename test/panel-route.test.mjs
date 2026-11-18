@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { access, chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createServer, request } from 'node:http'
 import { join } from 'node:path'
@@ -201,7 +201,6 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ~/projects/missions
-    tracker: mis
 `)
 
   const before = process.env.GH_TOKEN
@@ -267,7 +266,6 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ~/projects/missions
-    tracker: mis
 `)
   // Une mission close n'est lisible que si son dossier la déclare.
   await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
@@ -364,11 +362,9 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ~/projects/missions
-    tracker: mis
   - id: signet
     name: Signet
     repo: ~/projects/signet
-    tracker: sig
 `)
   await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
   await writeFile(join(dir, 'missions', 'MIS-9', MISSION_FILE), 'key: MIS-9\nbranch: feat/mis-9\nbase: main\n')
@@ -451,7 +447,6 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ~/projects/missions
-    tracker: mis
 `)
   await mkdir(join(dir, 'missions', 'MIS-9'), { recursive: true })
   await writeFile(join(dir, 'missions', 'MIS-9', MISSION_FILE), 'key: MIS-9\nbranch: feat/mis-9\nbase: main\n')
@@ -528,7 +523,6 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ~/projects/missions
-    tracker: mis
 `)
   // Le dossier existe mais sa déclaration est illisible : le périmètre devient
   // partiel, et le compte ne peut plus prétendre à un nombre.
@@ -1083,7 +1077,6 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ~/projects/missions
-    tracker: mis
 `
 
 async function mountBlocked(t, fetchImpl) {
@@ -1114,7 +1107,7 @@ test('POST pose le label bloqué puis commente la raison', async (t) => {
     key: 'MIS-110',
     blocked: true,
     comment: 'https://github.com/daedalforge/missions/issues/110#issuecomment-9',
-    project: 'missions',
+    project: null,
   })
   assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), [
     'POST https://api.github.com/repos/daedalforge/missions/issues/110/labels',
@@ -1138,7 +1131,7 @@ test('POST retire le label sans commentaire', async (t) => {
   })
 
   assert.equal(response.status, 200)
-  assert.deepEqual(response.body, { key: 'MIS-110', blocked: false, comment: null, project: 'missions' })
+  assert.deepEqual(response.body, { key: 'MIS-110', blocked: false, comment: null, project: null })
   assert.deepEqual(calls, ['DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/blocked'])
 })
 
@@ -1223,7 +1216,7 @@ test('POST priorité retire les autres labels puis pose le libellé cible', asyn
 
   assert.equal(response.status, 200)
   // Le panneau a envoyé un mot canonique ; l'hôte a choisi la valeur du tracker.
-  assert.deepEqual(response.body, { key: 'MIS-110', value: 'priority:high', priority: 'high', project: 'missions' })
+  assert.deepEqual(response.body, { key: 'MIS-110', value: 'priority:high', priority: 'high', project: null })
   assert.deepEqual(calls.map((c) => `${c.method} ${decodeURIComponent(c.url)}`), [
     'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/priority:urgent',
     'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/priority:normal',
@@ -1308,7 +1301,7 @@ test('une priorité que le projet ne projette pas répond 400 sans toucher le tr
     body: { key: 'MIS-110', priority: 'low' },
   })
   assert.equal(response.status, 400)
-  assert.match(response.body.error, /priority low has no tracker value for missions/)
+  assert.match(response.body.error, /priority low has no tracker value for mis/)
   assert.equal(touched, 0)
 })
 
@@ -1371,7 +1364,6 @@ projects:
   - id: alpha
     name: Alpha
     repo: ~/projects/alpha
-    tracker: ex
 `
 
 test('POST points pose le label de la taille et rend la forme native', async (t) => {
@@ -1391,7 +1383,7 @@ test('POST points pose le label de la taille et rend la forme native', async (t)
   })
 
   assert.equal(response.status, 200)
-  assert.deepEqual(response.body, { key: 'MIS-110', value: 'sp:5', points: 5, project: 'missions' })
+  assert.deepEqual(response.body, { key: 'MIS-110', value: 'sp:5', points: 5, project: null })
   assert.deepEqual(calls, [
     'GET https://api.github.com/repos/daedalforge/missions/issues/110',
     'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:8',
@@ -1418,7 +1410,7 @@ test('POST points sur Jira écrit le champ du projet, une seule fois', async (t)
     })
 
     assert.equal(response.status, 200)
-    assert.deepEqual(response.body, { key: 'EX-7', field: 'customfield_10032', points: 3, project: 'alpha' })
+    assert.deepEqual(response.body, { key: 'EX-7', field: 'customfield_10032', points: 3, project: null })
     assert.deepEqual(calls.map((entry) => `${entry.method} ${entry.url}`), [
       'PUT https://api.atlassian.com/ex/jira/cloud-1/rest/api/3/issue/EX-7',
     ])
@@ -1454,7 +1446,7 @@ test('POST points accepte la demi-pointe sur GitHub comme sur Jira', async (t) =
   })
 
   assert.equal(github.status, 200)
-  assert.deepEqual(github.body, { key: 'MIS-110', value: 'sp:0.5', points: 0.5, project: 'missions' })
+  assert.deepEqual(github.body, { key: 'MIS-110', value: 'sp:0.5', points: 0.5, project: null })
   assert.deepEqual(githubCalls, [
     'GET https://api.github.com/repos/daedalforge/missions/issues/110',
     'DELETE https://api.github.com/repos/daedalforge/missions/issues/110/labels/sp:3',
@@ -1474,7 +1466,7 @@ test('POST points accepte la demi-pointe sur GitHub comme sur Jira', async (t) =
     })
 
     assert.equal(jira.status, 200)
-    assert.deepEqual(jira.body, { key: 'EX-7', field: 'customfield_10032', points: 0.5, project: 'alpha' })
+    assert.deepEqual(jira.body, { key: 'EX-7', field: 'customfield_10032', points: 0.5, project: null })
     assert.deepEqual(jiraCalls.map((entry) => `${entry.method} ${entry.url}`), [
       'PUT https://api.atlassian.com/ex/jira/cloud-1/rest/api/3/issue/EX-7',
     ])
@@ -1557,7 +1549,7 @@ test('POST points refuse un projet dont la taille n’a pas de forme native', as
   })
 
   assert.equal(response.status, 400)
-  assert.match(response.body.error, /points have no tracker value for missions/)
+  assert.match(response.body.error, /points have no tracker value for mis/)
   assert.equal(touched, 0)
 })
 
@@ -1993,7 +1985,6 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ${repo}
-    tracker: mis
 `
 }
 
@@ -2014,7 +2005,7 @@ async function mountClose(t, { fetchImpl } = {}) {
   await writeFile(join(mounted.dir, 'missions', 'projects.yml'), closeProjects(repo))
   await writeFile(
     join(mounted.dir, 'missions', 'MIS-136', MISSION_FILE),
-    'key: MIS-136\nbranch: feat/mis-136\nbase: main\n',
+    'key: MIS-136\nproject: missions\nbranch: feat/mis-136\nbase: main\n',
   )
   await writeFile(join(repo, '.git', 'machete'), 'main\n  feat/mis-136\n    fix/one\n')
   return { ...mounted, repo, worktree, useRun: (run) => { runner.fn = run } }
@@ -2077,7 +2068,7 @@ test('POST local-close ferme le checkout après la preuve tracker', async (t) =>
   const response = await call(handler, {
     method: 'POST',
     path: '/missions/api/local-close',
-    body: { key: 'MIS-136' },
+    body: { key: 'MIS-136', project: 'missions' },
   })
 
   assert.equal(response.status, 200)
@@ -2134,7 +2125,7 @@ test('POST local-close refuse un commit de travail caché derrière un merge de 
   const response = await call(handler, {
     method: 'POST',
     path: '/missions/api/local-close',
-    body: { key: 'MIS-136' },
+    body: { key: 'MIS-136', project: 'missions' },
   })
 
   assert.equal(response.status, 409)
@@ -2154,7 +2145,7 @@ test('POST local-close refuse une mission pas ready-for-prod sans écrire', asyn
   const response = await call(handler, {
     method: 'POST',
     path: '/missions/api/local-close',
-    body: { key: 'MIS-136' },
+    body: { key: 'MIS-136', project: 'missions' },
   })
 
   assert.equal(response.status, 409)
@@ -2172,7 +2163,7 @@ test('POST local-close valide la clé, le projet et la méthode', async (t) => {
   assert.equal(missing.status, 400)
   assert.match(missing.body.error, /key is missing/)
 
-  const unknown = await call(handler, { method: 'POST', path: '/missions/api/local-close', body: { key: 'ZZZ-1' } })
+  const unknown = await call(handler, { method: 'POST', path: '/missions/api/local-close', body: { key: 'ZZZ-1', project: 'missions' } })
   assert.equal(unknown.status, 404)
   assert.match(unknown.body.error, /no project declares ZZZ-1/)
 
@@ -2332,7 +2323,6 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ~/projects/missions
-    tracker: mis
 `)
 
   const read = await call(handler, { path: '/missions/api/usage' })
@@ -2390,7 +2380,7 @@ async function mountArchive(t, { issue = null, issues = null, closedStatus = 200
     await mkdir(join(mounted.dir, 'missions', key), { recursive: true })
     await writeFile(
       join(mounted.dir, 'missions', key, MISSION_FILE),
-      `key: ${key}\nbranch: feat/mis-${closedIssue.number}\nbase: main\n`,
+      `key: ${key}\nproject: missions\nbranch: feat/mis-${closedIssue.number}\nbase: main\n`,
     )
     await writeFile(join(mounted.dir, 'missions', key, 'journal.md'), `# Journal — ${key}\n`)
   }
@@ -2408,7 +2398,7 @@ test('POST /archive déplace une mission done et la retire de la lecture done', 
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive',
-      body: { key: 'MIS-42' },
+      body: { key: 'MIS-42', project: 'missions' },
     })
 
     assert.equal(response.status, 200)
@@ -2424,7 +2414,7 @@ test('POST /archive déplace une mission done et la retire de la lecture done', 
     )
     assert.equal(
       await readFile(join(dir, 'missions', 'archives', 'MIS-42', MISSION_FILE), 'utf8'),
-      'key: MIS-42\nbranch: feat/mis-42\nbase: main\n',
+      'key: MIS-42\nproject: missions\nbranch: feat/mis-42\nbase: main\n',
     )
 
     const done = await call(handler, { path: '/missions/api/list?done=1' })
@@ -2435,7 +2425,7 @@ test('POST /archive déplace une mission done et la retire de la lecture done', 
     const again = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive',
-      body: { key: 'MIS-42' },
+      body: { key: 'MIS-42', project: 'missions' },
     })
     assert.equal(again.status, 409)
     assert.match(again.body.error, /no mission folder for MIS-42/)
@@ -2456,7 +2446,7 @@ test('POST /archive déplace une mission done et la retire de la lecture done', 
  */
 test('POST /archive se pose sur l’archive existante d’une clé re-déclarée', async (t) => {
   const { dir, handler } = await mountArchive(t, { issue: CLOSED_42 })
-  const declaration = 'key: MIS-42\nbranch: feat/mis-42\nbase: main\n'
+  const declaration = 'key: MIS-42\nproject: missions\nbranch: feat/mis-42\nbase: main\n'
   await mkdir(join(dir, 'missions', 'archives', 'MIS-42'), { recursive: true })
   await writeFile(join(dir, 'missions', 'archives', 'MIS-42', MISSION_FILE), declaration)
   const before = process.env.GH_TOKEN
@@ -2465,7 +2455,7 @@ test('POST /archive se pose sur l’archive existante d’une clé re-déclarée
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive',
-      body: { key: 'MIS-42' },
+      body: { key: 'MIS-42', project: 'missions' },
     })
 
     assert.equal(response.status, 200)
@@ -2511,7 +2501,7 @@ test('un refus d’archive ne déplace rien : méthode, corps, projet, dossier',
   const unknownProject = await call(handler, {
     method: 'POST',
     path: '/missions/api/archive',
-    body: { key: 'ZZZ-1' },
+    body: { key: 'ZZZ-1', project: 'missions' },
   })
   assert.equal(unknownProject.status, 404)
   assert.match(unknownProject.body.error, /no project declares/)
@@ -2519,7 +2509,7 @@ test('un refus d’archive ne déplace rien : méthode, corps, projet, dossier',
   const unknownMission = await call(handler, {
     method: 'POST',
     path: '/missions/api/archive',
-    body: { key: 'MIS-99' },
+    body: { key: 'MIS-99', project: 'missions' },
   })
   assert.equal(unknownMission.status, 409)
   assert.match(unknownMission.body.error, /no mission folder for MIS-99/)
@@ -2536,7 +2526,7 @@ test('refuse une mission que le tracker ne dit pas done', async (t) => {
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive',
-      body: { key: 'MIS-42' },
+      body: { key: 'MIS-42', project: 'missions' },
     })
     assert.equal(response.status, 409)
     assert.match(response.body.error, /MIS-42 is not done/)
@@ -2557,7 +2547,7 @@ test('une destination déjà occupée est refusée sans écrasement', async (t) 
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive',
-      body: { key: 'MIS-42' },
+      body: { key: 'MIS-42', project: 'missions' },
     })
     assert.equal(response.status, 409)
     assert.match(response.body.error, /missions\/archives\/MIS-42 already exists/)
@@ -2582,7 +2572,7 @@ test('un refus d’archive ne tronque pas la lecture Done', async (t) => {
     const refused = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive',
-      body: { key: 'MIS-42' },
+      body: { key: 'MIS-42', project: 'missions' },
     })
     assert.equal(refused.status, 409)
     assert.match(refused.body.error, /missions\/archives\/MIS-42 already exists/)
@@ -2610,7 +2600,7 @@ test('un échec interne du déplacement répond 500 et ne déplace rien', async 
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive',
-      body: { key: 'MIS-42' },
+      body: { key: 'MIS-42', project: 'missions' },
     })
     assert.equal(response.status, 500)
     assert.match(response.body.error, /EEXIST|file already exists/)
@@ -2630,7 +2620,7 @@ test('une panne du tracker répond 502 et ne déplace rien', async (t) => {
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive',
-      body: { key: 'MIS-42' },
+      body: { key: 'MIS-42', project: 'missions' },
     })
     assert.equal(response.status, 502)
     assert.match(response.body.error, /done missions: GitHub token missing or invalid/)
@@ -2649,7 +2639,7 @@ test('une panne du tracker répond 502 et ne déplace rien', async (t) => {
 test('POST /archive-batch archive les done et refuse les autres dans une réponse', async (t) => {
   const { dir, handler } = await mountArchive(t, { issues: [CLOSED_42, CLOSED_43] })
   await mkdir(join(dir, 'missions', 'MIS-44'), { recursive: true })
-  await writeFile(join(dir, 'missions', 'MIS-44', MISSION_FILE), 'key: MIS-44\nbranch: feat/mis-44\nbase: main\n')
+  await writeFile(join(dir, 'missions', 'MIS-44', MISSION_FILE), 'key: MIS-44\nproject: missions\nbranch: feat/mis-44\nbase: main\n')
   await writeFile(join(dir, 'missions', 'MIS-44', 'journal.md'), '# Journal — MIS-44\n')
   const before = process.env.GH_TOKEN
   process.env.GH_TOKEN = 'test-token'
@@ -2657,7 +2647,10 @@ test('POST /archive-batch archive les done et refuse les autres dans une répons
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive-batch',
-      body: { keys: ['MIS-42', 'MIS-43', 'MIS-44', 'MIS-99', 'ZZZ-1'] },
+      body: {
+        keys: ['MIS-42', 'MIS-43', 'MIS-44', 'MIS-99', 'ZZZ-1'],
+        projects: { 'MIS-42': 'missions', 'MIS-43': 'missions', 'MIS-44': 'missions', 'MIS-99': 'missions' },
+      },
     })
 
     assert.equal(response.status, 200)
@@ -2692,7 +2685,7 @@ test('POST /archive-batch dit le refus d’une ligne sans défaire les autres', 
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive-batch',
-      body: { keys: ['MIS-42', 'MIS-43'] },
+      body: { keys: ['MIS-42', 'MIS-43'], projects: { 'MIS-42': 'missions', 'MIS-43': 'missions' } },
     })
 
     assert.equal(response.status, 200)
@@ -2740,7 +2733,7 @@ test('POST /archive-batch : une panne du tracker répond 502 et ne déplace rien
     const response = await call(handler, {
       method: 'POST',
       path: '/missions/api/archive-batch',
-      body: { keys: ['MIS-42', 'MIS-43'] },
+      body: { keys: ['MIS-42', 'MIS-43'], projects: { 'MIS-42': 'missions', 'MIS-43': 'missions' } },
     })
 
     assert.equal(response.status, 502)
@@ -2860,7 +2853,6 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ${repo}
-    tracker: mis
 ${block}`
 }
 
@@ -2893,13 +2885,13 @@ async function mountTolgee(t, {
   await mkdir(join(mounted.dir, 'missions', 'MIS-171'), { recursive: true })
   await writeFile(
     join(mounted.dir, 'missions', 'MIS-171', MISSION_FILE),
-    'key: MIS-171\nbranch: feat/mis-171\nbase: main\n',
+    'key: MIS-171\nproject: missions\nbranch: feat/mis-171\nbase: main\n',
   )
   return { ...mounted, repo }
 }
 
 function postTolgee(handler, key = 'MIS-171') {
-  return call(handler, { method: 'POST', path: '/missions/api/tolgee', body: { key } })
+  return call(handler, { method: 'POST', path: '/missions/api/tolgee', body: { key, project: 'missions' } })
 }
 
 test('POST tolgee écrit le XLIFF de la mission et rend le bilan', async (t) => {
@@ -3333,8 +3325,8 @@ test('un déplacement qui collisionne répond 409 sans toucher la source', async
 })
 
 /**
- * La déclaration de projet de la création : deux projets GitHub au vocabulaire
- * différent, pour prouver que le formulaire ne lit que ce que la carte accepte.
+ * La déclaration de la création : deux boards GitHub au vocabulaire différent et
+ * deux dépôts, pour prouver que le formulaire sépare la carte du checkout.
  */
 const CREATE_PROJECTS = `canonical:
   states: [to-refine, ready, in-progress, in-review]
@@ -3377,9 +3369,9 @@ trackers:
         in-review: in-review
       types:
         bug: Bug
-        story: Feature
+        story: User Story
       priorities:
-        urgent: priority:urgent
+        urgent: block
         high: priority:high
         normal: priority:normal
         low: priority:low
@@ -3387,11 +3379,9 @@ projects:
   - id: missions
     name: Workspace missions
     repo: ~/projects/missions
-    tracker: mis
   - id: legacy
     name: Legacy
     repo: ~/projects/legacy
-    tracker: leg
 `
 
 async function mountCreate(t, fetchImpl, config = {}) {
@@ -3401,7 +3391,7 @@ async function mountCreate(t, fetchImpl, config = {}) {
   return mounted
 }
 
-test('GET /create rend les projets et le vocabulaire que chacun accepte', async (t) => {
+test('GET /create rend les boards et les dépôts, séparés', async (t) => {
   process.env.GH_TOKEN = 'test-token'
   const { handler } = await mountCreate(t, async () => trackerResponse({}))
 
@@ -3411,9 +3401,13 @@ test('GET /create rend les projets et le vocabulaire que chacun accepte', async 
   assert.deepEqual(response.body, {
     status: 'to-refine',
     defaultPriority: 'normal',
-    projects: [
-      { id: 'missions', name: 'Workspace missions', reference: 'MIS', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
-      { id: 'legacy', name: 'Legacy', reference: 'LEG', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+    trackers: [
+      { id: 'mis', name: 'Missions board', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+      { id: 'leg', name: 'Legacy board', tracker: 'github', types: ['bug', 'story'], priorities: ['urgent', 'high', 'normal', 'low'] },
+    ],
+    repositories: [
+      { id: 'missions', name: 'Workspace missions', repo: '~/projects/missions' },
+      { id: 'legacy', name: 'Legacy', repo: '~/projects/legacy' },
     ],
   })
 
@@ -3422,7 +3416,7 @@ test('GET /create rend les projets et le vocabulaire que chacun accepte', async 
   assert.equal(refused.headers.allow, 'GET')
 })
 
-test('GET /create/epics exige un projet connu et rend ses milestones', async (t) => {
+test('GET /create/epics exige une board connue et rend ses milestones', async (t) => {
   process.env.GH_TOKEN = 'test-token'
   forgetToken()
   const calls = []
@@ -3438,17 +3432,17 @@ test('GET /create/epics exige un projet connu et rend ses milestones', async (t)
 
   const missing = await call(handler, { path: '/missions/api/create/epics' })
   assert.equal(missing.status, 400)
-  assert.match(missing.body.error, /project is missing/)
+  assert.match(missing.body.error, /tracker is missing/)
 
-  const unknown = await call(handler, { path: '/missions/api/create/epics?project=inconnu' })
+  const unknown = await call(handler, { path: '/missions/api/create/epics?tracker=inconnu' })
   assert.equal(unknown.status, 404)
-  assert.match(unknown.body.error, /unknown project: inconnu/)
+  assert.match(unknown.body.error, /unknown tracker: inconnu/)
   assert.deepEqual(calls, [])
 
-  const response = await call(handler, { path: '/missions/api/create/epics?project=missions' })
+  const response = await call(handler, { path: '/missions/api/create/epics?tracker=mis' })
   assert.equal(response.status, 200)
   assert.deepEqual(response.body, {
-    project: 'missions',
+    tracker: 'mis',
     epics: [{ id: '1', label: 'MIS-1 · Fondations' }],
   })
   assert.deepEqual(calls, ['https://api.github.com/repos/daedalforge/missions/milestones?state=all&per_page=100'])
@@ -3459,7 +3453,7 @@ test('GET /create/epics nomme un refus du tracker en 502', async (t) => {
   forgetToken()
   const { handler } = await mountCreate(t, async () => trackerResponse({ message: 'Bad credentials' }, { status: 401 }))
 
-  const response = await call(handler, { path: '/missions/api/create/epics?project=missions' })
+  const response = await call(handler, { path: '/missions/api/create/epics?tracker=mis' })
 
   assert.equal(response.status, 502)
   assert.match(response.body.error, /GitHub token missing or invalid/)
@@ -3475,15 +3469,17 @@ test('POST /create refuse chaque champ invalide avant tout appel au tracker', as
   })
 
   const invalid = [
-    [{ title: 'T', type: 'story', priority: 'normal' }, 400, /project is missing/],
-    [{ project: 'missions', type: 'story', priority: 'normal' }, 400, /title is missing/],
-    [{ project: 'missions', title: '   ', type: 'story', priority: 'normal' }, 400, /title is missing/],
-    [{ project: 'missions', title: 'x'.repeat(256), type: 'story', priority: 'normal' }, 400, /title is longer than 255/],
-    [{ project: 'missions', title: 'T', description: 'x'.repeat(4001), type: 'story', priority: 'normal' }, 400, /description is longer than 4000/],
-    [{ project: 'missions', title: 'T', type: 'epic', priority: 'normal' }, 400, /unknown type: epic/],
-    [{ project: 'missions', title: 'T', type: 'story', priority: 'critical' }, 400, /unknown priority: critical/],
-    [{ project: 'missions', title: 'T', type: 'story', priority: 'normal', epic: 'MIS-7' }, 400, /epic must be a GitHub milestone number/],
-    [{ project: 'inconnu', title: 'T', type: 'story', priority: 'normal' }, 404, /unknown project: inconnu/],
+    [{ project: 'missions', title: 'T', type: 'story', priority: 'normal' }, 400, /tracker is missing/],
+    [{ tracker: 'mis', title: 'T', type: 'story', priority: 'normal' }, 400, /project is missing/],
+    [{ tracker: 'mis', project: 'missions', type: 'story', priority: 'normal' }, 400, /title is missing/],
+    [{ tracker: 'mis', project: 'missions', title: '   ', type: 'story', priority: 'normal' }, 400, /title is missing/],
+    [{ tracker: 'mis', project: 'missions', title: 'x'.repeat(256), type: 'story', priority: 'normal' }, 400, /title is longer than 255/],
+    [{ tracker: 'mis', project: 'missions', title: 'T', description: 'x'.repeat(4001), type: 'story', priority: 'normal' }, 400, /description is longer than 4000/],
+    [{ tracker: 'mis', project: 'missions', title: 'T', type: 'epic', priority: 'normal' }, 400, /unknown type: epic/],
+    [{ tracker: 'mis', project: 'missions', title: 'T', type: 'story', priority: 'critical' }, 400, /unknown priority: critical/],
+    [{ tracker: 'mis', project: 'missions', title: 'T', type: 'story', priority: 'normal', epic: 'MIS-7' }, 400, /epic must be a GitHub milestone number/],
+    [{ tracker: 'inconnu', project: 'missions', title: 'T', type: 'story', priority: 'normal' }, 404, /unknown tracker: inconnu/],
+    [{ tracker: 'mis', project: 'inconnu', title: 'T', type: 'story', priority: 'normal' }, 404, /unknown project: inconnu/],
   ]
   for (const [body, status, error] of invalid) {
     const response = await call(handler, { method: 'POST', path: '/missions/api/create', body })
@@ -3493,7 +3489,7 @@ test('POST /create refuse chaque champ invalide avant tout appel au tracker', as
   assert.equal(touched, 0)
 })
 
-test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', async (t) => {
+test('POST /create écrit la mission, son dossier, et ouvre la liste rafraîchie', async (t) => {
   process.env.GH_TOKEN = 'test-token'
   forgetToken()
   clearCache()
@@ -3529,7 +3525,7 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
     }]
     return trackerResponse(createdFlag ? created : [])
   }
-  const { handler } = await mountCreate(t, fetchImpl)
+  const { dir, handler } = await mountCreate(t, fetchImpl)
 
   const warm = await call(handler, { path: '/missions/api/list' })
   assert.deepEqual(warm.body.missions, [])
@@ -3538,6 +3534,7 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
     method: 'POST',
     path: '/missions/api/create',
     body: {
+      tracker: 'mis',
       project: 'missions',
       title: 'Créer une mission',
       description: 'Le formulaire du tiroir.',
@@ -3550,8 +3547,8 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
   assert.equal(created.status, 201)
   assert.deepEqual(created.body, {
     key: 'MIS-42',
-    tracker: 'github',
     reference: 'MIS',
+    tracker: 'github',
     number: 42,
     url: 'https://github.com/daedalforge/missions/issues/42',
     // Le 201 prouve la ligne : le panneau la reçoit déjà normalisée, comme la
@@ -3559,6 +3556,8 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
     mission: {
       project: 'missions',
       projectName: 'Workspace missions',
+      trackerId: 'mis',
+      trackerName: 'Missions board',
       key: 'MIS-42',
       number: 42,
       title: 'Créer une mission',
@@ -3587,10 +3586,170 @@ test('POST /create écrit la mission canonique et ouvre la liste rafraîchie', a
     milestone: 3,
   })
 
+  // Le dossier de la mission est écrit juste après l'issue : la clé et le
+  // dépôt choisi, rien de la board.
+  const declaration = parse(await readFile(join(dir, 'missions', 'MIS-42', MISSION_FILE), 'utf8'))
+  assert.deepEqual(declaration, { key: 'MIS-42', project: 'missions' })
+
   const reloaded = await call(handler, { path: '/missions/api/list' })
   assert.equal(reads, 2, 'la création jette la liste ouverte en cache')
   assert.deepEqual(reloaded.body.missions.map((mission) => mission.key), ['MIS-42'])
   assert.equal(reloaded.body.missions[0].state, 'to-refine', 'la mission relue est née to-refine')
+})
+
+test('POST /create écrit le dossier qu’une board Jira ne rend pas', async (t) => {
+  const before = { token: process.env.JIRA_API_TOKEN, email: process.env.JIRA_EMAIL }
+  process.env.JIRA_API_TOKEN = 'test-jira-token'
+  process.env.JIRA_EMAIL = 'me@example.test'
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    const target = String(url)
+    calls.push({ url: target, method: init.method ?? 'GET', body: init.body ?? null })
+    if (target.endsWith('/rest/api/3/myself')) return trackerResponse({ accountId: 'acc-1' })
+    return trackerResponse({ id: '10007', key: 'EX-7' }, { status: 201 })
+  }
+  const { dir, handler } = await mountCreate(t, fetchImpl)
+  await writeFile(join(dir, 'missions', 'projects.yml'), JIRA_POINTS_PROJECTS)
+
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/create',
+      body: {
+        tracker: 'ex',
+        project: 'alpha',
+        title: 'Créer sur une board Jira',
+        description: 'Le formulaire.',
+        type: 'story',
+        priority: 'normal',
+      },
+    })
+
+    assert.equal(response.status, 201)
+    assert.equal(response.body.warning, undefined, 'aucun avertissement : le dossier est écrit')
+    assert.deepEqual(response.body, {
+      key: 'EX-7',
+      tracker: 'jira',
+      reference: 'EX',
+      number: null,
+      url: 'https://example.atlassian.net/browse/EX-7',
+      mission: {
+        key: 'EX-7',
+        project: 'alpha',
+        projectName: 'Alpha',
+        repo: '~/projects/alpha',
+        translations: null,
+        trackerId: 'ex',
+        trackerName: 'Example board',
+      },
+      project: 'alpha',
+    })
+    assert.deepEqual(
+      parse(await readFile(join(dir, 'missions', 'EX-7', MISSION_FILE), 'utf8')),
+      { key: 'EX-7', project: 'alpha' },
+    )
+    assert.ok(calls.some((entry) => entry.url.endsWith('/rest/api/3/issue')), 'l’issue naît sur la board Jira')
+  } finally {
+    if (before.token === undefined) delete process.env.JIRA_API_TOKEN
+    else process.env.JIRA_API_TOKEN = before.token
+    if (before.email === undefined) delete process.env.JIRA_EMAIL
+    else process.env.JIRA_EMAIL = before.email
+  }
+})
+
+test('POST /create écrit l’issue sur la board choisie, pas dans le dépôt', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  clearCache()
+  const posted = []
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'slucienvauthier-so' })
+    if (init.method === 'POST') {
+      posted.push({ url: String(url), body: JSON.parse(init.body) })
+      return trackerResponse({
+        number: 42,
+        title: 'Une mission du dépôt missions',
+        labels: [{ name: 'to-refine' }, { name: 'block' }],
+        milestone: null,
+        type: { name: 'User Story' },
+        html_url: 'https://github.com/daedalforge/legacy/issues/42',
+        updated_at: '2026-11-14T10:00:00Z',
+      }, { status: 201 })
+    }
+    return trackerResponse([])
+  }
+  const { dir, handler } = await mountCreate(t, fetchImpl)
+
+  const created = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/create',
+    body: { tracker: 'leg', project: 'missions', title: 'Une mission du dépôt missions', type: 'story', priority: 'urgent' },
+  })
+
+  assert.equal(created.status, 201)
+  assert.equal(created.body.key, 'LEG-42')
+  assert.equal(created.body.mission.project, 'missions')
+  assert.equal(created.body.mission.trackerId, 'leg')
+  // Le vocabulaire est celui de la board, pas celui du dépôt.
+  assert.deepEqual(posted[0].body.labels, ['to-refine', 'block'])
+  assert.equal(posted[0].body.type, 'User Story')
+  assert.equal(posted[0].url, 'https://api.github.com/repos/daedalforge/legacy/issues')
+  assert.deepEqual(
+    parse(await readFile(join(dir, 'missions', 'LEG-42', MISSION_FILE), 'utf8')),
+    { key: 'LEG-42', project: 'missions' },
+  )
+})
+
+test('POST /create n’écrit aucun dossier quand la board refuse', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'moi' })
+    if (init.method === 'POST') return trackerResponse({ message: 'Validation Failed' }, { status: 422 })
+    return trackerResponse([])
+  }
+  const { dir, handler } = await mountCreate(t, fetchImpl)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/create',
+    body: { tracker: 'mis', project: 'missions', title: 'T', type: 'story', priority: 'normal' },
+  })
+
+  assert.equal(response.status, 502)
+  const entries = await readdir(join(dir, 'missions'), { withFileTypes: true })
+  assert.deepEqual(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name), [])
+})
+
+test('POST /create répond 201 et prévient quand le dossier ne s’écrit pas', async (t) => {
+  process.env.GH_TOKEN = 'test-token'
+  forgetToken()
+  clearCache()
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).endsWith('/user')) return trackerResponse({ login: 'slucienvauthier-so' })
+    if (init.method === 'POST') return trackerResponse(CREATED_ISSUE_42, { status: 201 })
+    return trackerResponse([])
+  }
+  const { dir, handler } = await mountCreate(t, fetchImpl)
+  // Le dossier des missions n'accueille plus aucune écriture : la déclaration
+  // échoue après l'issue. La réponse le dit sans faire rejouer le formulaire.
+  const root = join(dir, 'missions')
+  await chmod(root, 0o555)
+
+  try {
+    const response = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/create',
+      body: { tracker: 'mis', project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high' },
+    })
+
+    assert.equal(response.status, 201)
+    assert.equal(response.body.project, 'missions')
+    assert.match(response.body.warning, /the issue was created, but its mission folder could not be written/)
+    assert.deepEqual((await readdir(root)).sort(), ['projects.yml'])
+  } finally {
+    await chmod(root, 0o755)
+  }
 })
 
 test('POST /create nomme un refus du tracker en 502', async (t) => {
@@ -3605,7 +3764,7 @@ test('POST /create nomme un refus du tracker en 502', async (t) => {
   const response = await call(handler, {
     method: 'POST',
     path: '/missions/api/create',
-    body: { project: 'missions', title: 'T', type: 'story', priority: 'normal' },
+    body: { tracker: 'mis', project: 'missions', title: 'T', type: 'story', priority: 'normal' },
   })
 
   assert.equal(response.status, 502)
@@ -3638,7 +3797,7 @@ test('la liste rafraîchie porte la mission créée même quand le tracker ne la
   const created = await call(handler, {
     method: 'POST',
     path: '/missions/api/create',
-    body: { project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high', epic: '3' },
+    body: { tracker: 'mis', project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high', epic: '3' },
   })
   assert.equal(created.status, 201)
 
@@ -3666,7 +3825,7 @@ test('la ligne créée ne se double pas et disparaît dès que le tracker porte 
   await call(handler, {
     method: 'POST',
     path: '/missions/api/create',
-    body: { project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high' },
+    body: { tracker: 'mis', project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high' },
   })
   const before = await call(handler, { path: '/missions/api/list?refresh=1' })
   assert.deepEqual(before.body.missions.map((mission) => mission.key), ['MIS-42'])
@@ -3698,7 +3857,7 @@ test('la ligne créée ne survit pas à la fenêtre courte', async (t) => {
   await call(handler, {
     method: 'POST',
     path: '/missions/api/create',
-    body: { project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high' },
+    body: { tracker: 'mis', project: 'missions', title: 'Créer une mission', type: 'story', priority: 'high' },
   })
   const present = await call(handler, { path: '/missions/api/list?refresh=1' })
   assert.deepEqual(present.body.missions.map((mission) => mission.key), ['MIS-42'])
@@ -3755,11 +3914,9 @@ projects:
   - id: clienthub
     name: Clienthub
     repo: ~/projects/clienthub
-    tracker: soc
   - id: backend
     name: Backend
     repo: ~/projects/backend
-    tracker: soc
 `)
   await mkdir(join(dir, 'missions', 'SOC-1'), { recursive: true })
   await writeFile(join(dir, 'missions', 'SOC-1', MISSION_FILE), 'key: SOC-1\nproject: clienthub\nbranch: feat/soc-1\nbase: main\n')
@@ -3831,11 +3988,9 @@ projects:
   - id: clienthub
     name: Clienthub
     repo: ~/projects/clienthub
-    tracker: soc
   - id: backend
     name: Backend
     repo: ~/projects/backend
-    tracker: soc
 `)
   await mkdir(join(dir, 'missions', 'clienthub-SOC-9'), { recursive: true })
   await writeFile(join(dir, 'missions', 'clienthub-SOC-9', MISSION_FILE), 'key: SOC-9\nproject: clienthub\nbranch: feat/soc-9-clienthub\nbase: main\n')
@@ -3864,8 +4019,8 @@ projects:
   }
 })
 
-test('une route de mission partagée exige le projet, puis écrit sur la bonne board', async (t) => {
-  // Given deux projets sur la même board et une mission sans projet
+test('les routes de board lisent la clé seule, les routes de dossier le dépôt', async (t) => {
+  // Given deux dépôts et une mission dont le dossier ne nomme aucun d'eux
   const appels = []
   const fetchImpl = async (url, init = {}) => {
     const href = String(url)
@@ -3907,67 +4062,53 @@ projects:
   - id: clienthub
     name: Clienthub
     repo: ~/projects/clienthub
-    tracker: soc
   - id: backend
     name: Backend
     repo: ~/projects/backend
-    tracker: soc
 `)
   const before = process.env.GH_TOKEN
   process.env.GH_TOKEN = 'test-token'
   try {
-    // When la route est appelée sans projet, Then elle refuse au lieu de choisir
-    const sans = await call(handler, {
+    // When points est appelée sans dépôt, Then la clé suffit et la board reçoit
+    const points = await call(handler, {
       method: 'POST',
       path: '/missions/api/points',
       body: { key: 'SOC-3', points: 3 },
     })
-    assert.equal(sans.status, 400)
-    assert.equal(sans.body.error, 'project is required')
+    assert.equal(points.status, 200)
+    assert.deepEqual(points.body, { key: 'SOC-3', points: 3, project: null, value: 'sp:3' })
+    assert.ok(appels.some((entry) => entry.method === 'POST' && entry.href.includes('/issues/3/labels')))
 
-    // When le projet est nommé, Then l'écriture part sur sa board
+    // When priorité et blocage la suivent, Then elles n'ont pas plus besoin du dépôt
+    const priority = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/priority',
+      body: { key: 'SOC-3', priority: 'high' },
+    })
+    assert.equal(priority.status, 200)
+    assert.equal(priority.body.project, null)
+    const blocked = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/blocked',
+      body: { key: 'SOC-3', blocked: false },
+    })
+    assert.equal(blocked.status, 200)
+    assert.equal(blocked.body.project, null)
+
+    // When un dépôt est quand même envoyé, Then il n'est pas relu
     const avec = await call(handler, {
       method: 'POST',
       path: '/missions/api/points',
       body: { key: 'SOC-3', project: 'clienthub', points: 3 },
     })
     assert.equal(avec.status, 200)
-    assert.deepEqual(avec.body, { key: 'SOC-3', points: 3, project: 'clienthub', value: 'sp:3' })
-    assert.ok(appels.some((entry) => entry.method === 'POST' && entry.href.includes('/issues/3/labels')))
+    assert.equal(avec.body.project, null)
 
-    // When une route partagée ne reçoit pas le projet, Then toutes refusent
-    const routes = [
-      ['/missions/api/blocked', { key: 'SOC-3', blocked: false }],
-      ['/missions/api/priority', { key: 'SOC-3', priority: 'high' }],
-      ['/missions/api/points', { key: 'SOC-3', points: 3 }],
-      ['/missions/api/local-close', { key: 'SOC-3' }],
-      ['/missions/api/archive', { key: 'SOC-3' }],
-      ['/missions/api/tolgee', { key: 'SOC-3' }],
-    ]
-    for (const [path, body] of routes) {
-      const refused = await call(handler, { method: 'POST', path, body })
-      assert.equal(refused.status, 400, `${path} sans projet`)
-      assert.equal(refused.body.error, 'project is required', `${path} sans projet`)
-    }
-
-    // When le projet est nommé, Then les écritures de la board acceptent la clé
-    const blocked = await call(handler, {
-      method: 'POST',
-      path: '/missions/api/blocked',
-      body: { key: 'SOC-3', project: 'backend', blocked: false },
-    })
-    assert.equal(blocked.status, 200)
-    const priority = await call(handler, {
-      method: 'POST',
-      path: '/missions/api/priority',
-      body: { key: 'SOC-3', project: 'backend', priority: 'high' },
-    })
-    assert.equal(priority.status, 200)
-
-    // When une route de dossier nomme le projet, Then elle ne le redemande pas
+    // When une route de dossier part sans dépôt, Then elle refuse en le nommant
     for (const path of ['/missions/api/local-close', '/missions/api/archive', '/missions/api/tolgee']) {
-      const routed = await call(handler, { method: 'POST', path, body: { key: 'SOC-3', project: 'backend' } })
-      assert.notEqual(routed.body.error, 'project is required', `${path} avec projet`)
+      const refused = await call(handler, { method: 'POST', path, body: { key: 'SOC-3' } })
+      assert.equal(refused.status, 400, `${path} sans dépôt`)
+      assert.equal(refused.body.error, 'project is required', `${path} sans dépôt`)
     }
   } finally {
     if (before === undefined) delete process.env.GH_TOKEN
