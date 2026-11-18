@@ -287,3 +287,77 @@ function hasXmllint() {
     return false
   }
 }
+
+test('une mission découpée diffe chaque paire et réunit les clés', async (t) => {
+  const { root } = await fixture(t, {
+    files: {
+      'src/p1.js': "export const one = t('account.one')\n",
+      'src/p2.js': "export const two = t('account.two')\n",
+    },
+    locales: {
+      fr: { 'account.one': 'Un', 'account.two': 'Deux' },
+      en: { 'account.one': 'One' },
+      de: { 'account.two': 'Zwei' },
+    },
+  })
+  const diffs = {
+    'main...feat/p1': 'src/p1.js\n',
+    'feat/p1...feat/p2': 'src/p2.js\n',
+  }
+  const run = async (_command, args) => {
+    if (args.includes('diff')) {
+      const spec = args.at(-1)
+      return { stdout: diffs[spec] ?? '', stderr: '' }
+    }
+    const spec = args.at(-1)
+    const file = spec.slice(spec.indexOf(':') + 1)
+    return { stdout: await (async () => {
+      if (file === 'src/p1.js') return "export const one = t('account.one')\n"
+      return "export const two = t('account.two')\n"
+    })(), stderr: '' }
+  }
+
+  const plan = await planImport({
+    repo: root,
+    translations: TRANSLATIONS,
+    run,
+    pairs: [
+      { branch: 'feat/p1', base: 'main' },
+      { branch: 'feat/p2', base: 'feat/p1' },
+    ],
+  })
+
+  assert.deepEqual(plan.files, ['src/p1.js', 'src/p2.js'])
+  assert.deepEqual(plan.keys.map((entry) => entry.key), ['account.one', 'account.two'])
+  assert.deepEqual(plan.keys[0].missing, ['de'])
+  assert.deepEqual(plan.keys[1].missing, ['en'])
+  assert.deepEqual(plan.untranslated, [])
+})
+
+test('une paire sans fichier de source est un refus qui nomme la paire', async (t) => {
+  const { root, run } = await fixture(t, {
+    files: { 'src/p1.js': "t('account.one')" },
+    locales: { fr: { 'account.one': 'Un' }, en: { 'account.one': 'One' }, de: { 'account.one': 'Eins' } },
+    diff: 'src/p1.js\n',
+  })
+
+  await assert.rejects(
+    () =>
+      planImport({
+        repo: root,
+        translations: TRANSLATIONS,
+        run: async (command, args) => {
+          if (args.includes('diff') && args.at(-1) === 'feat/p1...feat/p2') return { stdout: '', stderr: '' }
+          return run(command, args)
+        },
+        pairs: [
+          { branch: 'feat/p1', base: 'main' },
+          { branch: 'feat/p2', base: 'feat/p1' },
+        ],
+      }),
+    (error) =>
+      error instanceof TolgeeError &&
+      error.status === 409 &&
+      /no changed source file on feat\/p2 against feat\/p1/.test(error.message),
+  )
+})

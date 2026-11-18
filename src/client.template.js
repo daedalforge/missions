@@ -853,6 +853,12 @@ window.__ModuleLoader__.load({
 .missions-declare-save:disabled { opacity: .55; cursor: default; }
 .missions-declare-note { margin: 0; color: var(--dsw-alias-label-secondary, #5c534b); font-size: 11.5px; }
 .missions-declare-note--error { color: var(--dsw-alias-label-danger, #b42318); }
+.missions-pairs { display: grid; gap: 6px; }
+.missions-pairs-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.missions-pairs-item { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.missions-pairs-branch { font-family: var(--skin-mono, ui-monospace, monospace); font-size: 11.5px; }
+.missions-pairs-base { color: var(--dsw-alias-label-secondary, #5c534b); }
+.missions-pairs-first { color: var(--dsw-alias-label-tertiary, #7a7168); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
 /* The Tolgee report: the keys the branch's changed files call that a locale
    misses, then the keys that cannot be imported before they are written in
    the reference. */
@@ -1393,6 +1399,10 @@ body[data-ds-dark-theme] .missions-panel[data-skin="paper"] .missions-prio[data-
 .missions-panel[data-skin="paper"] .missions-declare-save:hover:not(:disabled) { background: var(--skin-page-3); }
 .missions-panel[data-skin="paper"] .missions-declare-note { color: var(--skin-ink-3); font-size: 10.5px; }
 .missions-panel[data-skin="paper"] .missions-declare-note--error { color: var(--skin-danger-strong); }
+.missions-panel[data-skin="paper"] .missions-pairs-item { color: var(--skin-ink); font-size: 11.5px; }
+.missions-panel[data-skin="paper"] .missions-pairs-branch { font-family: var(--skin-mono); }
+.missions-panel[data-skin="paper"] .missions-pairs-base { color: var(--skin-ink-3); }
+.missions-panel[data-skin="paper"] .missions-pairs-first { color: var(--skin-ink-3); }
 .missions-panel[data-skin="paper"] .missions-tolgee-note { color: var(--skin-ink-3); font-size: 10.5px; }
 .missions-panel[data-skin="paper"] .missions-tolgee-note--error { color: var(--skin-danger-strong); }
 .missions-panel[data-skin="paper"] .missions-journal-meta { color: var(--skin-ink-3); }
@@ -3101,11 +3111,15 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       // A free session answers a question without moving the ticket: its label
       // names the gesture, and the row's tooltip shows the same words.
       const freeLabel = 'Start a free session'
+      // Cutting the mission's PR into a stack is the review's gesture: the
+      // session reads the commits, confirms the cuts, and writes the list.
+      const splitLabel = 'Split into several PRs'
       // Every prompt lives in `lib/view.js`, inlined into this bundle: the
       // drawer only picks which one a button sends.
       const prompt = missionSessionPrompt(mission)
       const feedbackPrompt = feedbackSessionPrompt(mission)
       const freePrompt = freeSessionPrompt(mission)
+      const splitPrompt = splitSessionPrompt(mission)
 
       // DSH tears the panel down the moment a session opens (`replaceMain` closes
       // it), so a note written after a successful click lives under 50 ms: long
@@ -3140,6 +3154,13 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       // Same gesture again, with the prompt that plays no step and writes
       // nothing: a question, not work on the ticket.
       const startFreeSession = () => openSession(freePrompt)
+      // The split session cuts the mission's PR into a stack: it is the only
+      // session allowed to write `branches:`, and it stops before every
+      // requester gesture.
+      const startSplitSession = () => {
+        track('mission.split-session')
+        return openSession(splitPrompt)
+      }
 
       // The host names the folder, the drawer only echoes it back: a save for a
       // key that two projects declare must land in the folder the row shows.
@@ -3426,6 +3447,9 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const savedBranch = mission.branch ?? ''
       const savedBase = mission.base ?? ''
       const dirty = branch.trim() !== savedBranch || base.trim() !== savedBase
+      // A mission split into several PRs declares a list: the drawer shows it
+      // and masks the single pair editor, so a save cannot flatten the stack.
+      const declaredPairs = Array.isArray(mission.branches) && mission.branches.length > 1 ? mission.branches : null
       const checklistView = checklist?.exists ? parseChecklist(checklist.source) : null
 
       // The dependencies that hold the mission: a `Blocks` link whose target
@@ -3600,7 +3624,24 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         ),
 
         h('div', { className: 'missions-declare' },
-          h('label', { className: 'missions-declare-field' },
+          declaredPairs
+            ? h('div', { className: 'missions-pairs' },
+                h('span', { className: 'missions-declare-label' }, 'Branches'),
+                h('ul', { className: 'missions-pairs-list' },
+                  declaredPairs.map((pair, index) => h('li', { key: pair.branch, className: 'missions-pairs-item' },
+                    h('code', { className: 'missions-pairs-branch' }, pair.branch),
+                    h('span', { className: 'missions-pairs-base' }, ` sur ${pair.base}`),
+                    index === 0 ? h('span', { className: 'missions-pairs-first' }, ' base de mission') : null,
+                  )),
+                ),
+                h('p', { className: 'missions-declare-note' },
+                  'Mission découpée en plusieurs PR : la liste se lit ici et s’écrit par la session de découpe.',
+                ),
+              )
+            : null,
+          declaredPairs
+            ? null
+            : h('label', { className: 'missions-declare-field' },
             h('span', { className: 'missions-declare-label' }, 'Branch'),
             h('input', {
               type: 'text',
@@ -3613,7 +3654,9 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               onChange: (event) => setBranch(event.target.value),
             }),
           ),
-          h('label', { className: 'missions-declare-field' },
+          declaredPairs
+            ? null
+            : h('label', { className: 'missions-declare-field' },
             h('span', { className: 'missions-declare-label' }, 'Base'),
             h('input', {
               type: 'text',
@@ -3626,12 +3669,14 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               onChange: (event) => setBase(event.target.value),
             }),
           ),
-          h('button', {
-            type: 'button',
-            className: 'missions-declare-save',
-            onClick: saveDeclaration,
-            disabled: saving || !dirty,
-          }, saving ? 'Saving…' : 'Save'),
+          declaredPairs
+            ? null
+            : h('button', {
+              type: 'button',
+              className: 'missions-declare-save',
+              onClick: saveDeclaration,
+              disabled: saving || !dirty,
+            }, saving ? 'Saving…' : 'Save'),
           declareNote
             ? h('p', { className: declareNote.error ? 'missions-declare-note missions-declare-note--error' : 'missions-declare-note', role: declareNote.error ? 'alert' : 'status' }, declareNote.text)
             : null,
@@ -3890,6 +3935,20 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
                       'aria-label': feedbackLabel,
                       'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
                     }, h(ActionIcon, { name: 'feedback' })),
+                  )
+                : null,
+              // A mission in review, declared as one pair, can be cut into a
+              // stack of PRs; once the list is written, the button disappears.
+              mission.state === 'in-review' && missionPairs(mission).length <= 1
+                ? h('span', { className: 'missions-tip-anchor', 'data-tip': blocker ?? splitLabel },
+                    h('button', {
+                      type: 'button',
+                      className: 'missions-action missions-action--icon',
+                      onClick: startSplitSession,
+                      disabled: blocker !== null,
+                      'aria-label': splitLabel,
+                      'aria-describedby': blocker ? 'missions-session-blocked' : undefined,
+                    }, h(ActionIcon, { name: 'split' })),
                   )
                 : null,
               // The colleagues' validation is the review's own gesture: it
@@ -4413,6 +4472,14 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
           h('path', { d: 'M6.4 4.6V2.8h3.2v1.8' }),
           h('path', { d: 'M4.2 4.6l.7 8.6a1 1 0 0 0 1 .9h4.2a1 1 0 0 0 1-.9l.7-8.6' }),
           h('path', { d: 'M6.8 7.2v4M9.2 7.2v4' }),
+        )
+      }
+      if (name === 'split') {
+        // One trunk forking into two: the mission's PR cut into a stack.
+        return h('svg', common,
+          h('path', { d: 'M8 13.6V8.4' }),
+          h('path', { d: 'M8 8.4 3.4 3.8' }),
+          h('path', { d: 'M8 8.4l4.6-4.6' }),
         )
       }
       if (name === 'squash') {
@@ -6757,29 +6824,20 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       // The declaration route already wrote the file; reflect it without a
       // full reload so the drawer and the session gate see the new values.
       const applyDeclaration = (saved) => {
-        setView((previous) => ({
-          ...previous,
-          missions: previous.missions.map((mission) => (
-            mission.key === saved.key
-              ? { ...mission, folder: saved.folder, branch: saved.branch, base: saved.base }
-              : mission
-          )),
-        }))
+        // A split mission's answer carries the complete list; a legacy save
+        // drops it, so the row falls back to its single pair.
+        const declared = (mission) => {
+          if (mission.key !== saved.key) return mission
+          const next = { ...mission, folder: saved.folder, branch: saved.branch, base: saved.base }
+          if (Array.isArray(saved.branches)) next.branches = saved.branches
+          else delete next.branches
+          return next
+        }
+        setView((previous) => ({ ...previous, missions: previous.missions.map(declared) }))
         // The Done view is a second copy of the same rows: a save made from
         // its drawer must not leave its own list stale.
-        setDoneView((previous) => ({
-          ...previous,
-          missions: previous.missions.map((mission) => (
-            mission.key === saved.key
-              ? { ...mission, folder: saved.folder, branch: saved.branch, base: saved.base }
-              : mission
-          )),
-        }))
-        setSelected((previous) => (
-          previous && previous.key === saved.key
-            ? { ...previous, folder: saved.folder, branch: saved.branch, base: saved.base }
-            : previous
-        ))
+        setDoneView((previous) => ({ ...previous, missions: previous.missions.map(declared) }))
+        setSelected((previous) => (previous ? declared(previous) : previous))
       }
       // A repository write changes which checkout works the mission: the row
       // follows the choice at once, then the host re-attributes it from the

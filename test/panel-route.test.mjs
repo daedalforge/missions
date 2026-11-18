@@ -91,6 +91,32 @@ test('POST déclare la branche et la base dans le dossier de la mission', async 
   assert.match(text, /^branch: gh-49$/m)
 })
 
+test('POST déclare plusieurs paires et répond la liste', async (t) => {
+  const { dir, handler } = await mount(t)
+  const branches = [
+    { branch: 'fix/mis-90-p1', base: 'main' },
+    { branch: 'fix/mis-90-p2', base: 'fix/mis-90-p1' },
+    { branch: 'fix/mis-90', base: 'fix/mis-90-p2' },
+  ]
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/branches',
+    body: { key: 'MIS-90', folder: 'MIS-90', project: 'missions', branches },
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body.branches, branches)
+  assert.equal(response.body.branch, 'fix/mis-90-p1', 'la première paire reste branch')
+  assert.equal(response.body.base, 'main', 'la première paire reste base')
+
+  const text = await readFile(join(dir, 'missions', 'MIS-90', MISSION_FILE), 'utf8')
+  const declared = parse(text)
+  assert.deepEqual(declared.branches, branches)
+  assert.equal(declared.branch, undefined)
+  assert.equal(declared.base, undefined)
+})
+
 test('POST vide un champ retiré, GET est refusé', async (t) => {
   const { dir, handler } = await mount(t)
   await call(handler, {
@@ -2089,6 +2115,165 @@ test('POST local-close ferme le checkout après la preuve tracker', async (t) =>
   const commands = calls.join('\n')
   assert.ok(commands.indexOf('repo fetch origin main') < commands.indexOf('repo worktree remove'))
   assert.ok(commands.indexOf('repo worktree remove') < commands.indexOf('repo branch -D feat/mis-136'))
+})
+
+test('POST local-close prouve chaque paire d’une mission découpée et journalise chaque PR', async (t) => {
+  const tip1 = '1'.repeat(40)
+  const merge2 = '9'.repeat(40)
+  const trackerCalls = []
+  const fetchImpl = async (url) => {
+    trackerCalls.push(String(url))
+    if (String(url).includes('/pulls')) {
+      return trackerResponse([
+        {
+          number: 7,
+          html_url: 'https://github.com/daedalforge/missions/pull/7',
+          merged_at: '2026-11-12T10:00:00Z',
+          merge_commit_sha: LOCAL_CLOSE.merge,
+          head: { ref: 'feat/mis-136-p1', sha: tip1 },
+          base: { ref: 'main' },
+        },
+        {
+          number: 8,
+          html_url: 'https://github.com/daedalforge/missions/pull/8',
+          merged_at: '2026-11-13T10:00:00Z',
+          merge_commit_sha: merge2,
+          head: { ref: 'feat/mis-136', sha: LOCAL_CLOSE.tip },
+          base: { ref: 'feat/mis-136-p1' },
+        },
+      ])
+    }
+    return trackerResponse({
+      number: 136,
+      title: 'Cloturer proprement le local',
+      state: 'open',
+      labels: [{ name: 'ready-for-prod' }],
+    })
+  }
+  const { dir, handler, repo, worktree, useRun } = await mountClose(t, { fetchImpl })
+  await writeFile(
+    join(dir, 'missions', 'MIS-136', MISSION_FILE),
+    [
+      'key: MIS-136',
+      'project: missions',
+      'branches:',
+      '  - branch: feat/mis-136-p1',
+      '    base: main',
+      '  - branch: feat/mis-136',
+      '    base: feat/mis-136-p1',
+      '',
+    ].join('\n'),
+  )
+
+  const { run, calls } = fauxGitRun({
+    'repo rev-parse --git-common-dir': '.git',
+    'repo rev-parse --verify --quiet refs/heads/feat/mis-136-p1': tip1,
+    'repo rev-parse --verify --quiet refs/heads/feat/mis-136': LOCAL_CLOSE.tip,
+    'repo rev-parse --verify --quiet origin/main': LOCAL_CLOSE.base,
+    'repo worktree list --porcelain': [
+      `worktree ${repo}`,
+      `HEAD ${LOCAL_CLOSE.tip}`,
+      'branch refs/heads/feat/mis-136',
+      '',
+      `worktree ${worktree}`,
+      `HEAD ${LOCAL_CLOSE.tip}`,
+      'branch refs/heads/feat/mis-136',
+      '',
+    ].join('\n'),
+    'repo status --porcelain': '',
+    'wt status --porcelain': '',
+    [`repo merge-base --is-ancestor ${tip1} ${tip1}`]: '',
+    [`repo rev-list --first-parent ${tip1}..${tip1}`]: '',
+    [`repo merge-base --is-ancestor ${LOCAL_CLOSE.tip} ${LOCAL_CLOSE.tip}`]: '',
+    [`repo rev-list --first-parent ${LOCAL_CLOSE.tip}..${LOCAL_CLOSE.tip}`]: '',
+    [`repo merge-base --is-ancestor ${LOCAL_CLOSE.merge} origin/main`]: '',
+    [`repo merge-base --is-ancestor ${merge2} origin/main`]: '',
+    'repo fetch origin main': '',
+    [`repo worktree remove ${worktree}`]: '',
+    'repo checkout main': '',
+    'repo merge --ff-only origin/main': '',
+    'repo rev-parse HEAD': LOCAL_CLOSE.base,
+    'repo branch -D feat/mis-136-p1': '',
+    'repo branch -D feat/mis-136': '',
+  })
+  useRun(run)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/local-close',
+    body: { key: 'MIS-136', project: 'missions' },
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body.branchesRemoved, ['feat/mis-136-p1', 'feat/mis-136'])
+  assert.equal(response.body.base, 'main', 'la base de mission reste la première paire')
+  assert.equal(trackerCalls.length, 4, 'deux GET par paire, aucun écrit tracker')
+  assert.ok(calls.includes('repo branch -D feat/mis-136-p1'))
+  assert.ok(calls.includes('repo branch -D feat/mis-136'))
+  assert.equal(await readFile(join(repo, '.git', 'machete'), 'utf8'), 'main\n  fix/one\n')
+
+  const journal = await readFile(join(dir, 'missions', 'MIS-136', 'journal.md'), 'utf8')
+  assert.equal((journal.match(/^- PR : /gm) ?? []).length, 2, 'une ligne - PR : par paire')
+  assert.match(journal, /- PR : #7 .*base `main`\./)
+  assert.match(journal, /- PR : #8 .*base `feat\/mis-136-p1`\./)
+})
+
+test('POST local-close refuse en nommant la paire dont la PR n’est pas mergée', async (t) => {
+  const tip1 = '1'.repeat(40)
+  const fetchImpl = async (url) => {
+    if (String(url).includes('/pulls')) {
+      return trackerResponse([
+        {
+          number: 7,
+          html_url: 'https://github.com/daedalforge/missions/pull/7',
+          merged_at: '2026-11-12T10:00:00Z',
+          merge_commit_sha: LOCAL_CLOSE.merge,
+          head: { ref: 'feat/mis-136-p1', sha: tip1 },
+          base: { ref: 'main' },
+        },
+        {
+          number: 8,
+          html_url: 'https://github.com/daedalforge/missions/pull/8',
+          merged_at: null,
+          merge_commit_sha: null,
+          head: { ref: 'feat/mis-136', sha: LOCAL_CLOSE.tip },
+          base: { ref: 'feat/mis-136-p1' },
+        },
+      ])
+    }
+    return trackerResponse({
+      number: 136,
+      title: 'Cloturer proprement le local',
+      state: 'open',
+      labels: [{ name: 'ready-for-prod' }],
+    })
+  }
+  const { dir, handler, useRun } = await mountClose(t, { fetchImpl })
+  await writeFile(
+    join(dir, 'missions', 'MIS-136', MISSION_FILE),
+    [
+      'key: MIS-136',
+      'project: missions',
+      'branches:',
+      '  - branch: feat/mis-136-p1',
+      '    base: main',
+      '  - branch: feat/mis-136',
+      '    base: feat/mis-136-p1',
+      '',
+    ].join('\n'),
+  )
+  const { run, calls } = fauxGitRun({})
+  useRun(run)
+
+  const response = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/local-close',
+    body: { key: 'MIS-136', project: 'missions' },
+  })
+
+  assert.equal(response.status, 409)
+  assert.match(response.body.error, /MIS-136 \(feat\/mis-136 sur feat\/mis-136-p1\): pull request #8 is not merged/)
+  assert.deepEqual(calls, [], 'un refus ne lance aucun verbe git')
 })
 
 test('POST local-close refuse un commit de travail caché derrière un merge de sync', async (t) => {

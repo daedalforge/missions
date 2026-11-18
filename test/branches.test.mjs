@@ -26,6 +26,17 @@ async function fixtures(t, files) {
 }
 
 const DECLARATION = 'key: daedalforge/missions#41\nbranch: gh-41\nbase: main\n'
+const LISTED_DECLARATION = [
+  'key: MIS-90',
+  'branches:',
+  '  - branch: fix/mis-90-p1',
+  '    base: main',
+  '  - branch: fix/mis-90-p2',
+  '    base: fix/mis-90-p1',
+  '  - branch: fix/mis-90',
+  '    base: fix/mis-90-p2',
+  '',
+].join('\n')
 
 test('un dossier par mission : la branche et la base sont lues', async (t) => {
   const dir = await fixtures(t, {
@@ -37,6 +48,57 @@ test('un dossier par mission : la branche et la base sont lues', async (t) => {
   assert.deepEqual(errors, [])
   assert.deepEqual(index.get('daedalforge/missions#41'), { folder: 'GH-41', branch: 'gh-41', base: 'main' })
   assert.deepEqual(index.get('EX-1184'), { folder: 'EX-1184', branch: 'feat/ex-1184', base: null })
+})
+
+test('une mission découpée déclare ses paires, la première est la branche et la base', async (t) => {
+  const dir = await fixtures(t, {
+    [`MIS-90/${MISSION_FILE}`]: LISTED_DECLARATION,
+  })
+
+  const { index, byProject, errors } = await loadBranches(dir)
+  assert.deepEqual(errors, [])
+  assert.deepEqual(index.get('MIS-90'), {
+    folder: 'MIS-90',
+    branch: 'fix/mis-90-p1',
+    base: 'main',
+    branches: [
+      { branch: 'fix/mis-90-p1', base: 'main' },
+      { branch: 'fix/mis-90-p2', base: 'fix/mis-90-p1' },
+      { branch: 'fix/mis-90', base: 'fix/mis-90-p2' },
+    ],
+  })
+  assert.deepEqual(byProject.get('\u0000MIS-90').branches, index.get('MIS-90').branches)
+})
+
+test('les deux formes ne se mélangent pas, même vides', async (t) => {
+  const dir = await fixtures(t, {
+    'A/mission.yml': 'key: A\nbranch: a\nbranches:\n  - branch: a-p1\n    base: main\n',
+    'B/mission.yml': 'key: B\nbase: ""\nbranches:\n  - branch: b-p1\n    base: main\n',
+  })
+
+  const { index, errors } = await loadBranches(dir)
+  assert.equal(index.size, 0)
+  assert.equal(errors.length, 2)
+  assert.ok(errors.every((error) => /branch\/base and branches cannot be combined/.test(error.message)))
+})
+
+test('une liste de paires incomplète, en double ou avec un champ inconnu est refusée', async (t) => {
+  const dir = await fixtures(t, {
+    'A/mission.yml': 'key: A\nbranches:\n  - branch: a-p1\n',
+    'B/mission.yml': 'key: B\nbranches:\n  - branch: b-p1\n    base: main\n  - branch: b-p1\n    base: main\n',
+    'C/mission.yml': 'key: C\nbranches:\n  - branch: c-p1\n    base: main\n    note: tiers\n',
+    'D/mission.yml': 'key: D\nbranches: []\n',
+    'E/mission.yml': 'key: E\nbranches: main\n',
+  })
+
+  const { index, errors } = await loadBranches(dir)
+  assert.equal(index.size, 0)
+  const message = errors.map((error) => error.message).join('\n')
+  assert.match(message, /A\/mission\.yml: branches\[0\] base is missing/)
+  assert.match(message, /B\/mission\.yml: branch "b-p1" is declared twice/)
+  assert.match(message, /C\/mission\.yml: branches\[0\] unknown field\(s\): note/)
+  assert.match(message, /D\/mission\.yml: branches must not be empty/)
+  assert.match(message, /E\/mission\.yml: branches must be a list/)
 })
 
 test('un dossier sans mission.yml et un fichier à la racine sont ignorés', async (t) => {
@@ -225,6 +287,89 @@ test('saveDeclaration refuse une déclaration invalide sans rien écrire', async
   assert.deepEqual(errors, [])
 })
 
+test('saveDeclaration écrit une liste de paires et répond la liste', async (t) => {
+  const dir = await fixtures(t, {})
+
+  const saved = await saveDeclaration(dir, {
+    key: 'MIS-90',
+    project: 'missions',
+    branches: [
+      { branch: 'fix/mis-90-p1', base: 'main' },
+      { branch: 'fix/mis-90-p2', base: 'fix/mis-90-p1' },
+      { branch: 'fix/mis-90', base: 'fix/mis-90-p2' },
+    ],
+  })
+  assert.deepEqual(saved, {
+    key: 'MIS-90',
+    folder: 'MIS-90',
+    project: 'missions',
+    branch: 'fix/mis-90-p1',
+    base: 'main',
+    branches: [
+      { branch: 'fix/mis-90-p1', base: 'main' },
+      { branch: 'fix/mis-90-p2', base: 'fix/mis-90-p1' },
+      { branch: 'fix/mis-90', base: 'fix/mis-90-p2' },
+    ],
+  })
+
+  const text = await readFile(join(dir, 'MIS-90', MISSION_FILE), 'utf8')
+  const raw = parse(text)
+  assert.deepEqual(raw.branches, saved.branches)
+  assert.equal(raw.branch, undefined)
+  assert.equal(raw.base, undefined)
+
+  const { index, byProject, errors } = await loadBranches(dir)
+  assert.deepEqual(errors, [])
+  const [attached] = attachBranches([{ key: 'MIS-90', project: 'missions' }], index, byProject)
+  assert.equal(attached.branch, 'fix/mis-90-p1')
+  assert.equal(attached.base, 'main')
+  assert.deepEqual(attached.branches, saved.branches)
+})
+
+test('saveDeclaration refuse une liste de paires invalide sans rien écrire', async (t) => {
+  const dir = await fixtures(t, {})
+
+  await assert.rejects(saveDeclaration(dir, { key: 'a#1', branches: [] }), /branches must not be empty/)
+  await assert.rejects(saveDeclaration(dir, { key: 'a#1', branches: [{ branch: 'x' }] }), /branches\[0\] base is missing/)
+  await assert.rejects(
+    saveDeclaration(dir, { key: 'a#1', branch: 'x', branches: [{ branch: 'x', base: 'main' }] }),
+    /branch\/base and branches cannot be combined/,
+  )
+  await assert.rejects(
+    saveDeclaration(dir, { key: 'a#1', branches: [{ branch: 'x', base: 'main' }, { branch: 'x', base: 'main' }] }),
+    /branch "x" is declared twice/,
+  )
+
+  assert.deepEqual(await readdir(dir), [])
+})
+
+test('saveDeclaration refuse une paire sur une mission découpée, sans écrire', async (t) => {
+  const dir = await fixtures(t, { [`MIS-90/${MISSION_FILE}`]: LISTED_DECLARATION })
+  const path = join(dir, 'MIS-90', MISSION_FILE)
+  const before = await readFile(path, 'utf8')
+
+  await assert.rejects(
+    saveDeclaration(dir, { key: 'MIS-90', branch: 'fix/mis-90', base: 'fix/mis-90-p2' }),
+    /this mission declares several branches; save the list instead/,
+  )
+  assert.equal(await readFile(path, 'utf8'), before)
+})
+
+test('saveDeclaration du seul projet garde la liste des paires', async (t) => {
+  const dir = await fixtures(t, { [`MIS-90/${MISSION_FILE}`]: LISTED_DECLARATION })
+
+  const saved = await saveDeclaration(dir, { key: 'MIS-90', folder: 'MIS-90', project: 'missions' })
+  assert.equal(saved.folder, 'MIS-90')
+  assert.equal(saved.project, 'missions')
+  assert.equal(saved.branch, 'fix/mis-90-p1')
+  assert.equal(saved.base, 'main')
+  assert.deepEqual(saved.branches, parse(LISTED_DECLARATION).branches)
+
+  const raw = parse(await readFile(join(dir, 'MIS-90', MISSION_FILE), 'utf8'))
+  assert.equal(raw.project, 'missions')
+  assert.deepEqual(raw.branches, parse(LISTED_DECLARATION).branches)
+})
+
 test('saveDeclaration suffixe un dossier déjà pris par une autre clé', async (t) => {
   // Les clés `a#1` et `a-1` donnent le même dossier : la seconde reçoit un
   // suffixe au lieu d'écraser la première.
@@ -361,6 +506,24 @@ test('un dossier sans project reste sans dépôt quand plusieurs dépôts existe
   assert.deepEqual(errors, [])
   assert.equal(projectByKey.get('SOC-1493'), null)
   assert.equal(byProject.get('\u0000SOC-1493').folder, 'SOC-1493')
+})
+
+test('attachBranches attache les paires complètes d’une mission découpée', () => {
+  const pairs = [
+    { branch: 'fix/mis-90-p1', base: 'main' },
+    { branch: 'fix/mis-90-p2', base: 'fix/mis-90-p1' },
+  ]
+  const index = new Map([['MIS-90', { folder: 'MIS-90', branch: 'fix/mis-90-p1', base: 'main', branches: pairs }]])
+
+  const [attached] = attachBranches([{ key: 'MIS-90', title: 'Découpe' }], index)
+  assert.equal(attached.branch, 'fix/mis-90-p1')
+  assert.deepEqual(attached.branches, pairs)
+
+  // Une déclaration à une paire ne gagne pas de champ : sa forme ne bouge pas.
+  const [legacy] = attachBranches([{ key: 'daedalforge/missions#41' }], new Map([
+    ['daedalforge/missions#41', { folder: 'M', branch: 'gh-41', base: 'main' }],
+  ]))
+  assert.equal(Object.hasOwn(legacy, 'branches'), false)
 })
 
 test('attachBranches suit l’identité (projet, clé)', () => {

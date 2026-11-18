@@ -558,3 +558,145 @@ test('journalSection names the proof and the gestures', () => {
   assert.match(section, /aucun processus `git machete` lancé/)
   assert.match(section, /Tracker : lecture seule/)
 })
+
+test('planClose proves each pair of a split mission against the mission base', async () => {
+  const other = '9'.repeat(40)
+  const pairs = [
+    {
+      branch: 'feat/mis-42-p1',
+      base: 'main',
+      proof: { ...PROOF, pull: { ...PROOF.pull, number: 7, mergeCommit: other, mergeCommitSha: other } },
+    },
+    {
+      branch: 'feat/mis-42',
+      base: 'feat/mis-42-p1',
+      proof: {
+        ...PROOF,
+        pull: {
+          ...PROOF.pull,
+          number: 8,
+          base: 'feat/mis-42-p1',
+          mergeCommit: SHA.merge,
+          mergeCommitSha: SHA.merge,
+        },
+      },
+    },
+  ]
+  const { run } = createRun(planTable({
+    'worktree list --porcelain': [
+      'worktree /repo',
+      `HEAD ${SHA.tip}`,
+      'branch refs/heads/feat/mis-42',
+      '',
+      'worktree /wt/mis-42-p1',
+      `HEAD ${SHA.head}`,
+      'branch refs/heads/feat/mis-42-p1',
+      '',
+      'worktree /wt/mis-42',
+      `HEAD ${SHA.tip}`,
+      'branch refs/heads/feat/mis-42',
+      '',
+    ].join('\n'),
+    'rev-parse --verify --quiet refs/heads/feat/mis-42-p1': SHA.head,
+    [`merge-base --is-ancestor ${SHA.head} ${SHA.head}`]: '',
+    [`rev-list --first-parent ${SHA.head}..${SHA.head}`]: '',
+    [`merge-base --is-ancestor ${other} origin/main`]: '',
+    '/wt/mis-42-p1 :: status --porcelain': '',
+  }))
+  const plan = await planClose({
+    key: 'MIS-42',
+    repo: '/repo',
+    branch: 'feat/mis-42-p1',
+    base: 'main',
+    proof: pairs[0].proof,
+    pairs,
+    run,
+  })
+
+  assert.equal(plan.base, 'main', 'la base de mission reste la première paire')
+  assert.equal(plan.pairs.length, 2)
+  assert.deepEqual(plan.linkedWorktrees, ['/wt/mis-42-p1', '/wt/mis-42'])
+})
+
+test('planClose names the pair whose merge commit never reached the mission base', async () => {
+  const other = '9'.repeat(40)
+  const pairs = [
+    { branch: 'feat/mis-42-p1', base: 'main', proof: PROOF },
+    {
+      branch: 'feat/mis-42',
+      base: 'feat/mis-42-p1',
+      proof: { ...PROOF, pull: { ...PROOF.pull, number: 8, mergeCommit: other, mergeCommitSha: other } },
+    },
+  ]
+  const { run } = createRun(planTable({
+    'rev-parse --verify --quiet refs/heads/feat/mis-42-p1': notAncestor(),
+    [`merge-base --is-ancestor ${other} origin/main`]: notAncestor(),
+  }))
+  await assert.rejects(
+    planClose({ key: 'MIS-42', repo: '/repo', branch: 'feat/mis-42-p1', base: 'main', proof: PROOF, pairs, run }),
+    { status: 409, message: /MIS-42 \(feat\/mis-42 sur feat\/mis-42-p1\): commit 9999999 is not on origin\/main/ },
+  )
+})
+
+test('closeLocal removes every branch of a split mission and journals one PR per pair', async () => {
+  const other = '9'.repeat(40)
+  const dir = await mkdtemp(join(tmpdir(), 'missions-close-many-'))
+  const machetePath = join(dir, 'machete')
+  const journalPath = join(dir, 'MIS-42', 'journal.md')
+  await writeFile(machetePath, 'main\n  feat/mis-42-p1\n    feat/mis-42\n  feat/other\n')
+  await mkdir(join(dir, 'MIS-42'))
+
+  const { run, calls } = createRun({
+    'fetch origin main': '',
+    [`merge-base --is-ancestor ${other} origin/main`]: '',
+    [`merge-base --is-ancestor ${SHA.merge} origin/main`]: '',
+    'worktree remove /wt/mis-42-p1': '',
+    'worktree remove /wt/mis-42': '',
+    'checkout main': '',
+    'merge --ff-only origin/main': '',
+    'rev-parse HEAD': SHA.base,
+    'branch -D feat/mis-42-p1': '',
+    'branch -D feat/mis-42': '',
+  })
+
+  const result = await closeLocal(
+    {
+      key: 'MIS-42',
+      repo: '/repo',
+      commonDir: '/repo/.git',
+      branch: 'feat/mis-42-p1',
+      base: 'main',
+      tip: SHA.head,
+      proof: PROOF,
+      clonePath: '/repo',
+      linkedWorktrees: ['/wt/mis-42-p1', '/wt/mis-42'],
+      pairs: [
+        { branch: 'feat/mis-42-p1', base: 'main', tip: SHA.head, proof: PROOF, linkedWorktrees: ['/wt/mis-42-p1'] },
+        {
+          branch: 'feat/mis-42',
+          base: 'feat/mis-42-p1',
+          tip: SHA.tip,
+          proof: { ...PROOF, pull: { ...PROOF.pull, number: 8, mergeCommit: other, mergeCommitSha: other } },
+          linkedWorktrees: ['/wt/mis-42'],
+        },
+      ],
+      machetePath,
+      machete: 'main\n  feat/mis-42-p1\n    feat/mis-42\n  feat/other\n',
+      journalPath,
+    },
+    { run, now: new Date('2026-11-12T15:00:00Z') },
+  )
+
+  assert.deepEqual(result.branchesRemoved, ['feat/mis-42-p1', 'feat/mis-42'])
+  assert.equal(result.branchRemoved, true)
+  assert.deepEqual(
+    calls.map((call) => call.command).filter((command) => command.startsWith('branch -D')),
+    ['branch -D feat/mis-42-p1', 'branch -D feat/mis-42'],
+  )
+  assert.equal(await readFile(machetePath, 'utf8'), 'main\n  feat/other\n')
+  const journal = await readFile(journalPath, 'utf8')
+  assert.match(journal, /- PR : #7 .* base `main`\./)
+  assert.match(journal, /- PR : #8 .* base `feat\/mis-42-p1`\./)
+  assert.match(journal, /`feat\/mis-42-p1` supprimée/)
+  assert.match(journal, /`feat\/mis-42` supprimée/)
+})
