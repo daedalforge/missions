@@ -23,9 +23,9 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
    description qui dit ce que ça change et comment le vérifier.
 6. **Faire relire le diff à l'aveugle** : une fois la PR renseignée, un
    sous-agent en contexte neuf lit le ticket et le diff, puis valide ou rend ses
-   constats ; un premier refus renvoie aux correctifs, puis à une deuxième
-   relecture. La revue se joue en deux passages au plus : un deuxième refus sort
-   en `blocked` (voir [Revue interne à l'aveugle](#revue-interne-à-laveugle)).
+   constats ; un refus renvoie aux correctifs, puis à une relecture neuve, et la
+   boucle se rejoue jusqu'au verdict « validé », sans nombre de passages maximal
+   (voir [Revue interne à l'aveugle](#revue-interne-à-laveugle)).
 7. **Tenir le journal** : ajouter la section du jour à
    `missions/<dossier>/journal.md` — ce qui a changé, les preuves, les écarts.
 8. **Cocher la checklist** : à chaque point vérifié, cocher `- [x]` dans
@@ -81,14 +81,17 @@ condition de sortie, pas un geste de confort.
   la checklist ; aucune revue ni aucun commentaire ne se publie sur la PR — la
   publication reste le geste du demandeur.
 - **Validé.** Le ticket passe en `in-review`, la PR avec lui.
-- **Un premier refus.** La session corrige sur la branche, pousse, et fait
-  relire une deuxième fois. La revue se joue en deux passages au plus : un
-  passage, c'est une relecture par un sous-agent en contexte neuf.
-- **Un deuxième refus.** Aucun troisième passage ne se lance. La session
-  consigne au ticket les constats restants — pour chacun le critère visé et la
-  preuve manquante —, pose le label `blocked` avec son motif en commentaire, et
-  termine sa session. Le ticket reste `in-progress` : le demandeur tranche avant
-  de rouvrir une exécution, qui repart de la fiche et du ticket.
+- **Un refus.** La session corrige sur la branche, pousse, et fait relire une
+  nouvelle fois : la revue se rejoue jusqu'au verdict « validé », sans nombre
+  de passages maximal. Un passage, c'est une relecture par un sous-agent en
+  contexte neuf.
+- **Un constat qui revient à l'identique.** Quand la relecture neuve rend le
+  même constat que celui que la correction visait, sans changement, la boucle
+  ne se rejoue pas une fois de plus : la session consigne au ticket le constat,
+  le critère visé et la preuve manquante, pose le label `blocked` avec son
+  motif en commentaire, et termine sa session. Le ticket reste `in-progress` :
+  le demandeur tranche avant de rouvrir une exécution, qui repart de la fiche et
+  du ticket.
 - **Un constat hors périmètre** renvoie au cadrage, pas à `blocked`.
 
 ## Règles de conduite
