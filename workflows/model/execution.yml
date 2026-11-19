@@ -58,12 +58,12 @@ nodes:
     writer: session
     condition: la relecture refuse
     artifact: les correctifs poussés sur la branche
-  - id: sortir-blocked
-    label: Sortir en bloqué sur un constat qui revient
+  - id: consigner-constat
+    label: Consigner le constat résiduel
     section: Revue interne à l'aveugle
     writer: session
     condition: un constat revient à l'identique
-    artifact: le label blocked et les constats au ticket
+    artifact: le constat résiduel, le critère visé et la preuve manquante au ticket et au journal
   - id: retour-cadrage
     label: Renvoyer au cadrage
     section: Règles de conduite
@@ -102,11 +102,14 @@ edges:
     to: corriger-constats
     when: la relecture refuse
   - from: revue-interne
-    to: sortir-blocked
+    to: consigner-constat
     when: un constat revient à l'identique
   - from: corriger-constats
     to: revue-interne
     when: les correctifs sont poussés
+  - from: consigner-constat
+    to: tenir-journal
+    when: le constat résiduel est consigné
   - from: revue-interne
     to: tenir-journal
     when: la relecture valide

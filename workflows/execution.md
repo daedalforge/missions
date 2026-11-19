@@ -25,7 +25,9 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
    sous-agent en contexte neuf lit le ticket et le diff, puis valide ou rend ses
    constats ; un refus renvoie aux correctifs, puis à une relecture neuve, et la
    boucle se rejoue jusqu'au verdict « validé », sans nombre de passages maximal
-   (voir [Revue interne à l'aveugle](#revue-interne-à-laveugle)).
+   (voir [Revue interne à l'aveugle](#revue-interne-à-laveugle)). Un constat qui
+   revient à l'identique ne rejoue pas la boucle une fois de plus : il se
+   consigne au ticket et au journal, et l'exécution termine en revue.
 7. **Tenir le journal** : ajouter la section du jour à
    `missions/<dossier>/journal.md` — ce qui a changé, les preuves, les écarts.
 8. **Cocher la checklist** : à chaque point vérifié, cocher `- [x]` dans
@@ -42,7 +44,8 @@ cadrage (voir [`../missions/README.md`](../missions/README.md#branche-et-base)).
 - [ ] La PR est ouverte, liée au ticket.
 - [ ] Chaque critère d'acceptation porte sa preuve dans la description de la PR :
       le scénario qui le couvre, son test, sa capture ou son commentaire daté.
-- [ ] La revue interne à l'aveugle est validée, et son verdict est consigné au journal.
+- [ ] La revue interne à l'aveugle rend « validé », ou son constat résiduel est
+      consigné au ticket et au journal ; le verdict y figure.
 - [ ] Le journal porte la section d'exécution (changements, preuves, écarts).
 - [ ] La checklist est à jour : chaque case cochée porte sa preuve, les cases ouvertes sont nommées.
 
@@ -54,7 +57,8 @@ Une PR n'est pas qu'un diff : elle doit se retrouver dans une liste et se relier
 - **Assignée** à la personne qui l'a ouverte.
 - **Typée** comme son issue : `bug` ou `story`, jamais les deux.
 - **Sans `in-review` avant le verdict** : l'étiquette ne se pose qu'une fois la
-  revue interne validée, comme sur l'issue qu'elle sert.
+  revue interne close — validée, ou arrêtée sur un constat résiduel consigné —
+  comme sur l'issue qu'elle sert.
 - **Liée** : `Closes #N` quand elle termine la mission, `Réf. #N` quand elle
   n'en fait qu'une partie. Seul le mot-clé de fermeture remplit la section
   **Development** de l'issue ; un `Réf. #N` ne crée qu'une référence croisée,
@@ -86,13 +90,14 @@ condition de sortie, pas un geste de confort.
   de passages maximal. Un passage, c'est une relecture par un sous-agent en
   contexte neuf.
 - **Un constat qui revient à l'identique.** Quand la relecture neuve rend le
-  même constat que celui que la correction visait, sans changement, la boucle
-  ne se rejoue pas une fois de plus : la session consigne au ticket le constat,
-  le critère visé et la preuve manquante, pose le label `blocked` avec son
-  motif en commentaire, et termine sa session. Le ticket reste `in-progress` :
-  le demandeur tranche avant de rouvrir une exécution, qui repart de la fiche et
-  du ticket.
-- **Un constat hors périmètre** renvoie au cadrage, pas à `blocked`.
+  même constat que celui que la correction visait, sans changement, la boucle ne
+  se rejoue pas une fois de plus : la session consigne au ticket et au journal
+  le constat résiduel — le constat, le critère visé, la preuve manquante et la
+  correction tentée — puis termine l'exécution en passant le ticket en
+  `in-review`. La revue et le demandeur arbitrent ce constat : c'est la sortie
+  prévue par le cadrage, pas un arrêt.
+- **Un constat hors périmètre** renvoie au cadrage : le ticket repasse en
+  `to-refine`, comme tout changement de périmètre.
 
 ## Règles de conduite
 
@@ -108,20 +113,18 @@ condition de sortie, pas un geste de confort.
   fait à part, ou pas du tout.
 - **Le périmètre change ?** Retour au cadrage : mettre à jour la fiche, faire
   revalider, puis reprendre. Un élargissement silencieux est un défaut de mission.
-- **Aucune question bloquante.** Un choix que la fiche du cadrage ne tranche pas
-  — une dépendance, un arbitrage de périmètre à l'intérieur du plan — ne
-  s'arrête pas sur une question au demandeur : la session consigne le choix
-  manquant et ses conséquences dans le journal et dans un commentaire du
-  ticket, pose le label `blocked`, et termine sa session. Le demandeur tranche
-  hors session et rouvre une exécution. La question reste la règle au cadrage :
-  l'interdiction ne vaut que pour l'exécution.
-- **Bloqué ?** Le dire dans le ticket le jour où ça arrive, avec ce qui bloque et
-  ce qu'il faudrait pour débloquer : le motif en commentaire, le label
-  `blocked`, et la session s'arrête.
+- **Un choix manquant se tranche.** Un choix que la fiche du cadrage ne tranche
+  pas — une dépendance, un arbitrage de périmètre à l'intérieur du plan — ne
+  s'arrête pas sur une question au demandeur : la session retient
+  l'interprétation la moins risquée au vu de la fiche, consigne le choix et ses
+  conséquences dans le journal et dans un commentaire du ticket, puis poursuit.
+  La question au demandeur reste la règle au cadrage ; l'exécution tranche et
+  consigne.
 
 ## Sur le tracker
 
 | Geste | Jira | GitHub |
 |---|---|---|
 | Passer en cours | statut In Progress | label `in-progress` |
-| Ouvrir la revue | statut In Review, lien vers la PR | PR ouverte avec `Closes #<numéro>`, revue interne validée |
+| Consigner un choix ou un constat | commentaire daté sur le ticket | commentaire daté sur le ticket |
+| Ouvrir la revue | statut In Review, lien vers la PR | PR ouverte avec `Closes #<numéro>`, revue interne validée ou constat résiduel consigné |
