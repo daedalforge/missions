@@ -56,13 +56,13 @@ nodes:
     label: Corriger les constats de la relecture
     section: Revue interne à l'aveugle
     writer: session
-    condition: la première relecture refuse
+    condition: la relecture refuse
     artifact: les correctifs poussés sur la branche
   - id: sortir-blocked
-    label: Sortir en bloqué au-delà de la borne
+    label: Sortir en bloqué sur un constat qui revient
     section: Revue interne à l'aveugle
     writer: session
-    condition: la deuxième relecture refuse encore
+    condition: un constat revient à l'identique
     artifact: le label blocked et les constats au ticket
   - id: retour-cadrage
     label: Renvoyer au cadrage
@@ -100,10 +100,10 @@ edges:
     to: revue-interne
   - from: revue-interne
     to: corriger-constats
-    when: la première relecture refuse
+    when: la relecture refuse
   - from: revue-interne
     to: sortir-blocked
-    when: la deuxième relecture refuse encore
+    when: un constat revient à l'identique
   - from: corriger-constats
     to: revue-interne
     when: les correctifs sont poussés
