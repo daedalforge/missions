@@ -105,6 +105,34 @@ test('une section manquante échoue en nommant la page et la section', async (t)
   assert.match(result.stderr, /Pièges observés/)
 })
 
+test('une page de dépôt passe sans numéroter les quatorze interdits', async (t) => {
+  // Given
+  const root = await fixture(t)
+
+  // When
+  const result = await run(root)
+
+  // Then
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stdout, /^OK — 6 pages, 4 étapes, 6 sections\./)
+})
+
+test('une page de dépôt sans une section échoue en la nommant', async (t) => {
+  // Given
+  const root = await fixture(t)
+  const path = join(root, 'playbook', 'clienthub.md')
+  const source = await readFile(path, 'utf8')
+  await writeFile(path, source.replace('## Pièges observés', '## Pièges constatés'))
+
+  // When
+  const result = await run(root)
+
+  // Then
+  assert.notEqual(result.code, 0)
+  assert.match(result.stderr, /playbook\/clienthub\.md/)
+  assert.match(result.stderr, /Pièges observés/)
+})
+
 test('une page qui ne nomme pas son document workflows/ échoue en la nommant', async (t) => {
   // Given
   const root = await fixture(t)
