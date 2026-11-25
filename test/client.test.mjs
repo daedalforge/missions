@@ -3112,11 +3112,13 @@ test('Settings monte ses trois sections sans volet', () => {
   const panneau = findAll(settings, 'section').find((node) => node.props.className === 'missions-settings-panel')
   assert.equal(panneau.props['data-section'], 'usage')
 
-  // Then aucun volet droit sous Settings : la note d'usage reste dans le corps,
-  // sous la section qu'elle commente, et la mission garde sa fiche ailleurs.
-  const asides = findAll(tree, 'aside')
-  assert.equal(asides.length, 0, 'le volet vide a disparu de Settings')
-  assert.doesNotMatch(textOf(tree), /Select a mission to see its details and act on it\./)
+  // Then aucun volet droit sous Settings, quelle que soit la section montée :
+  // la largeur revient au corps, et la mission garde sa fiche ailleurs.
+  for (const section of ['usage', 'workflows', 'playbook']) {
+    const arbre = monterSection(section)
+    assert.equal(findAll(arbre, 'aside').length, 0, `${section} : aucun volet`)
+    assert.doesNotMatch(textOf(arbre), /Select a mission to see its details and act on it\./)
+  }
 
   // Then une fiche choisie ne s'ouvre pas sous Settings.
   const { tree: choisi } = monterUsage(USAGE_LOADED, MISSION)
@@ -5149,6 +5151,69 @@ test('le mode Lire rend le markdown du serveur, le mode Écrire montre sa source
   }
 })
 
+test('la lecture charge le document, puis Écrire ouvre la source lue', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    return { ok: true, json: async () => PLAYBOOK_DOC }
+  }
+  try {
+    // Given la section montée avant la lecture de la page.
+    const { propres, setters } = monterPlaybook(playbookStates({ doc: null, draft: null, baseline: null }))
+    const lecture = propres.find(({ fn }) => String(fn).includes('PLAYBOOK_PAGE_URL'))
+    assert.ok(lecture, 'la lecture de la page est un effet de la vue')
+
+    // When la route de page répond.
+    lecture.fn()
+    await tick()
+    await tick()
+
+    // Then le document, son texte et sa référence arrivent ensemble, en Lire.
+    assert.equal(appels[0], 'missions/api/playbooks/page?page=execution')
+    const doc = setters.filter((value) => value && typeof value === 'object' && 'html' in value).at(-1)
+    assert.equal(doc.html, PLAYBOOK_DOC.html)
+    assert.ok(setters.includes(PLAYBOOK_DOC.text), 'le brouillon part du texte lu')
+    assert.ok(setters.includes('read'), 'la lecture repasse en mode Lire')
+
+    // When Écrire est cliqué.
+    const { tree, setters: gestes } = monterPlaybook(playbookStates())
+    findAll(tree, 'button').find((node) => textOf(node) === 'Écrire').props.onClick()
+
+    // Then le mode bascule et la zone montre le texte lu, sans rien envoyer.
+    assert.deepEqual(gestes, ['write', null])
+    const { tree: ecriture } = monterPlaybook(playbookStates({ mode: 'write' }))
+    assert.equal(findAll(ecriture, 'textarea')[0].props.value, PLAYBOOK_DOC.text)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un enregistrement en vol ne laisse pas changer de page', () => {
+  // Given un envoi en cours, avec une confirmation de brouillon déjà ouverte.
+  const { tree, setters } = monterPlaybook(playbookStates({
+    mode: 'write',
+    draft: 'retouche locale\n',
+    saving: true,
+    pending: { page: 'workspace' },
+  }))
+
+  // Then le rail et les deux modes sont désarmés.
+  const steps = findAll(tree, 'button').filter((node) => node.props.className === 'pb-step')
+  assert.ok(steps.every((node) => node.props.disabled === true), 'le rail attend la réponse')
+  const lire = findAll(tree, 'button').find((node) => textOf(node) === 'Lire')
+  assert.equal(lire.props.disabled, true)
+  setters.length = 0
+
+  // When on insiste sur une autre page, sur Lire et sur Abandonner.
+  steps[4].props.onClick()
+  lire.props.onClick()
+  findAll(tree, 'button').find((node) => textOf(node) === 'Abandonner').props.onClick()
+
+  // Then rien ne bouge tant que l'enregistrement n'a pas répondu.
+  assert.deepEqual(setters, [])
+})
+
 test('Enregistrer envoie le texte et la version lues, puis met à jour le gate', async () => {
   const appels = []
   const enregistre = {
@@ -5181,7 +5246,9 @@ test('Enregistrer envoie le texte et la version lues, puis met à jour le gate',
     assert.deepEqual(JSON.parse(appels[0].options.body), { page: 'execution', text: retouche, mtimeMs: 1234 })
 
     // Then la réponse met à jour le document et le gate sans relire la page :
-    // le nouveau compte de lignes et le HTML enregistré sont posés ensemble.
+    // le POST est le seul appel, et le nouveau compte de lignes et le HTML
+    // enregistré sont posés ensemble.
+    assert.equal(appels.length, 1, 'aucune relecture après l’enregistrement')
     const doc = setters.filter((value) => value && typeof value === 'object' && 'html' in value).at(-1)
     assert.equal(doc.lines, 201)
     assert.equal(doc.mtimeMs, 9999)
@@ -5192,7 +5259,7 @@ test('Enregistrer envoie le texte et la version lues, puis met à jour le gate',
     // redevient inactif.
     assert.equal(setters.includes(retouche), true, 'la nouvelle version enregistrée devient la référence')
     const statut = setters.filter((value) => value && typeof value === 'object' && value.kind === 'ok').at(-1)
-    assert.match(statut.message, /Enregistré — playbook\/execution\.md/)
+    assert.match(statut.message, /Enregistré — playbook\/execution\.md à \d{2}:\d{2}$/)
     const { tree: rendu } = monterPlaybook(playbookStates({
       mode: 'write',
       draft: retouche,
@@ -5307,6 +5374,116 @@ test('un brouillon non enregistré bloque le changement de page et le retour en 
   const fin = SOURCE.indexOf('function RepositoriesView')
   const source = SOURCE.slice(debut, fin)
   assert.equal(/\bconfirm\(/.test(source), false)
+})
+
+test('une page inconnue retombe sur la première, jamais sur un éditeur vide', () => {
+  // Given une session qui range une page que la liste ne porte plus.
+  const cadrage = {
+    ...PLAYBOOK_DOC,
+    page: 'cadrage',
+    file: 'playbook/cadrage.md',
+    step: 'cadrage',
+    title: 'Cadrage — la fiche du dépôt',
+    lines: 12,
+    text: '# Cadrage\n',
+    html: '<h1>Cadrage</h1>',
+    stateLine: { ok: true, entry: 'to-refine', exit: 'ready' },
+    document: { path: 'workflows/cadrage.md', ok: true },
+  }
+  const { tree } = monterPlaybook(playbookStates({
+    chosen: 'archive',
+    doc: cadrage,
+    draft: cadrage.text,
+    baseline: cadrage.text,
+  }))
+
+  // Then la première page est ouverte, avec son en-tête.
+  const steps = findAll(tree, 'button').filter((node) => node.props.className === 'pb-step')
+  assert.equal(steps[0].props['aria-current'], 'true')
+  assert.match(textOf(tree), /Étape 1 sur 4 · Playbook/)
+  assert.match(textOf(tree), /playbook\/cadrage\.md/)
+  assert.match(textOf(tree), /12 lignes/)
+})
+
+test('la page ouverte se range dans la session sous missions.playbook-page', () => {
+  // Given la section ouverte sur l’exécution.
+  const { propres, session } = monterPlaybook(playbookStates())
+
+  // When l’effet de session s’exécute.
+  const ecriture = propres.find(({ fn }) => String(fn).includes('writePlaybookPage('))
+  assert.ok(ecriture, 'la page ouverte est écrite dans la session, pas seulement lue')
+  ecriture.fn()
+
+  // Then la clé porte la page ouverte.
+  assert.equal(session.entries.get('missions.playbook-page'), 'execution')
+})
+
+test('l’éditeur demande les cinq pages, puis la page choisie, au serveur', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    appels.push(String(url))
+    if (String(url) === 'missions/api/playbooks') {
+      return { ok: true, json: async () => ({ pages: PLAYBOOK_VIEW_PAGES }) }
+    }
+    return { ok: true, json: async () => PLAYBOOK_DOC }
+  }
+  try {
+    // Given la section montée sans page encore lue.
+    const { propres } = monterPlaybook(playbookStates({ chosen: null, doc: null, draft: null, baseline: null }))
+
+    // When les effets de montage s’exécutent.
+    for (const effect of propres) effect.fn()
+    await tick()
+    await tick()
+
+    // Then la liste est demandée, puis le texte de la page retenue.
+    assert.equal(appels[0], 'missions/api/playbooks')
+    assert.match(appels[1], /^missions\/api\/playbooks\/page\?page=/)
+    assert.match(appels[1], /cadrage/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('une page illisible montre le refus du serveur et propose une page lisible', async () => {
+  const refus = 'playbook/execution.md is missing'
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (String(url) === 'missions/api/playbooks') {
+      return {
+        ok: true,
+        json: async () => ({
+          pages: PLAYBOOK_VIEW_PAGES.map((entry) => (entry.page === 'execution' ? { ...entry, exists: false, lines: 0 } : entry)),
+        }),
+      }
+    }
+    return { ok: false, json: async () => ({ error: refus }) }
+  }
+  try {
+    // When la lecture de la page échoue.
+    const { propres, setters } = monterPlaybook(playbookStates({ doc: null, draft: null, baseline: null }))
+    const lecture = propres.find(({ fn }) => String(fn).includes('PLAYBOOK_PAGE_URL'))
+    lecture.fn()
+    await tick()
+    await tick()
+
+    // Then le refus du serveur remonte à la vue, tel qu’il est écrit.
+    assert.equal(setters.filter((value) => value === refus).at(-1), refus, 'le refus de lecture arrive à l’écran')
+
+    // Then rendu, la page absente dit le refus et cesse d’attendre.
+    const rendu = monterPlaybook(playbookStates({ doc: null, draft: null, baseline: null, pageError: refus }))
+    assert.match(textOf(rendu.tree), /playbook\/execution\.md is missing/)
+    assert.doesNotMatch(textOf(rendu.tree), /Chargement de la page…/)
+
+    // Then la première page lisible s’ouvre d’un clic.
+    const retour = findAll(rendu.tree, 'button').find((node) => textOf(node) === 'Ouvrir « cadrage »')
+    assert.ok(retour, 'une page illisible propose une page lisible')
+    retour.props.onClick()
+    assert.ok(rendu.setters.includes('cadrage'), 'le clic ouvre la page proposée')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
 })
 
 test('un refus du serveur s’affiche avec sa cause et n’écrit rien', async () => {
@@ -8004,6 +8181,37 @@ const USAGE_LOADED = {
  * les états de la barre, l'onglet, la section, puis celui que `UsageTab`
  * consomme en se montant.
  */
+/**
+ * Le panneau monté sur une section de Settings, sans aucune autre fiche : de
+ * quoi prouver que le volet vide ne revient sous aucune des trois sections.
+ */
+function monterSection(section) {
+  const { api, ctx, registered } = charger(
+    undefined,
+    [
+      EMPTY_BAR,
+      dashboardView(DASH_MISSIONS),
+      'settings',
+      '',
+      { ...EMPTY_BAR.filters },
+      null,
+      'default',
+      null,
+      EMPTY_BAR,
+      { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null },
+      '',
+      { ...EMPTY_BAR.filters, state: ['done'] },
+      0,
+      section,
+      { loading: true, data: null, error: null },
+      null,
+    ],
+    memorySession({ 'missions.tab': section }),
+  )
+  api.apply(ctx)
+  return registered.main({})
+}
+
 /**
  * Le panneau monté sur Settings, avec le relevé déjà lu : les états de la
  * barre, l'onglet, la section, puis ceux que la vue consomme en se montant.

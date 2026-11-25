@@ -669,6 +669,7 @@ window.__ModuleLoader__.load({
 .pb-steps { display: flex; flex-direction: column; }
 .pb-step { position: relative; display: grid; grid-template-columns: 23px minmax(0, 1fr) auto; gap: 10px; align-items: start; width: 100%; padding: 8px 4px 8px 0; border: 0; border-radius: 8px; background: none; text-align: left; color: var(--dsw-alias-label-secondary, #4a4a4a); font: inherit; cursor: pointer; }
 .pb-step:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.04)); }
+.pb-step:disabled, .pb-seg button:disabled { opacity: .55; cursor: default; }
 .pb-step:not(:last-child)::after { content: ""; position: absolute; left: 11px; top: 31px; height: calc(100% - 22px); width: 1px; background: var(--dsw-alias-border-l2, rgba(0,0,0,.10)); }
 .pb-step-num { position: relative; z-index: 1; display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.15)); background: var(--dsw-alias-bg-base, #fbfaf8); font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; color: var(--dsw-alias-label-tertiary, #7a7168); }
 .pb-step[aria-current="true"] .pb-step-num { background: var(--dsw-alias-label-primary, #1f1f1f); border-color: var(--dsw-alias-label-primary, #1f1f1f); color: var(--dsw-alias-bg-base, #fbfaf8); }
@@ -5645,7 +5646,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       const dirty = baseline !== null && draft !== baseline
 
       const openPage = (next) => {
-        if (!next || next.page === page?.page) return
+        if (!next || next.page === page?.page || saving) return
         if (dirty) {
           setPending({ page: next.page })
           return
@@ -5660,6 +5661,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       // The confirmation is inline, never a system box: Abandonner loads the
       // asked page (or the reading mode), Continuer l'édition keeps the draft.
       const discardDraft = () => {
+        if (saving) return
         if (pending?.mode === 'read') {
           setMode('read')
           setDraft(baseline)
@@ -5685,7 +5687,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
       }
 
       const showRead = () => {
-        if (mode === 'read') return
+        if (mode === 'read' || saving) return
         if (dirty) {
           setPending({ mode: 'read' })
           return
@@ -5762,6 +5764,7 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         key: entry.page,
         type: 'button',
         className: 'pb-step',
+        disabled: saving,
         'aria-current': entry.page === page?.page ? 'true' : 'false',
         onClick: () => openPage(entry),
       },
@@ -5828,8 +5831,8 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
               ),
               h('div', { className: 'pb-page-actions' },
                 h('div', { className: 'pb-seg', role: 'group', 'aria-label': 'Mode de lecture' },
-                  h('button', { type: 'button', 'aria-pressed': mode === 'read' ? 'true' : 'false', onClick: showRead }, 'Lire'),
-                  h('button', { type: 'button', 'aria-pressed': mode === 'write' ? 'true' : 'false', onClick: showWrite }, 'Écrire'),
+                  h('button', { type: 'button', disabled: saving, 'aria-pressed': mode === 'read' ? 'true' : 'false', onClick: showRead }, 'Lire'),
+                  h('button', { type: 'button', disabled: saving, 'aria-pressed': mode === 'write' ? 'true' : 'false', onClick: showWrite }, 'Écrire'),
                 ),
                 mode === 'write' && dirty ? h('span', { className: 'pb-dirty' }, 'Brouillon non enregistré') : null,
                 mode === 'write'
