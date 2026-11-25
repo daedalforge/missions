@@ -75,6 +75,6 @@ moins cher et qui évite le plus de travail perdu.
 | Geste | Jira | GitHub |
 |---|---|---|
 | Créer la fiche | nouvelle issue, description = gabarit | nouvelle issue, corps = gabarit |
-| Poser les points | champ `story_points_field` du projet | label `sp:N` |
-| Passer à prête | statut To Do + label `prête` | label `ready` |
+| Poser les points | champ `story_points_field` du projet | champ `Story point` |
+| Passer à prête | statut To Do + label `prête` | statut natif `Todo` |
 | Valider | commentaire de validation du demandeur | commentaire de validation, ou pouce levé explicite |

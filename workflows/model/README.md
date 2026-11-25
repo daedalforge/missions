@@ -75,13 +75,13 @@ nodes:                       # les six états canoniques, une fois chacun
   - id: to-refine
     label: À cadrer
     description: Le ticket est ouvert ; rien n'est encore décidé.
-    tracker: label to-refine
+    tracker: statut natif Backlog
 edges:                       # les événements, d'un état au suivant
   - from: to-refine
     to: ready
     when: cadrage validé
     writer: session
-    artifact: label ready
+    artifact: statut natif Todo
     gate: neuf cases du cadrage cochées et accord du demandeur
 ```
 

@@ -9286,12 +9286,12 @@ function statutsEntry() {
     entry: 'to-refine',
     exit: ['done'],
     nodes: [
-      { id: 'to-refine', label: 'À cadrer', description: 'Rien n’est décidé.', tracker: 'label to-refine' },
-      { id: 'ready', label: 'Prête', description: 'Le cadrage est validé.', tracker: 'label ready' },
-      { id: 'in-progress', label: 'En cours', description: 'La branche est poussée.', tracker: 'label in-progress' },
-      { id: 'in-review', label: 'En revue', description: 'La PR est ouverte.', tracker: 'label in-review' },
+      { id: 'to-refine', label: 'À cadrer', description: 'Rien n’est décidé.', tracker: 'statut natif Backlog' },
+      { id: 'ready', label: 'Prête', description: 'Le cadrage est validé.', tracker: 'statut natif Todo' },
+      { id: 'in-progress', label: 'En cours', description: 'La branche est poussée.', tracker: 'statut natif In progress' },
+      { id: 'in-review', label: 'En revue', description: 'La PR est ouverte.', tracker: 'statut natif In review' },
       { id: 'ready-for-prod', label: 'Prête à partir', description: 'La PR est approuvée.', tracker: 'label ready-for-prod' },
-      { id: 'done', label: 'Terminée', description: 'Merge fait.', tracker: 'issue fermée (map: null)' },
+      { id: 'done', label: 'Terminée', description: 'Merge fait.', tracker: 'statut natif Done ou issue fermée' },
     ],
     edges: [
       { from: 'to-refine', to: 'ready', when: 'cadrage validé', writer: 'session' },
@@ -9375,7 +9375,7 @@ test('le workflow des statuts dessine six états, huit événements et sa légen
   const table = findAll(rendered, 'table').find((node) => node.props.className === 'wf-map-table')
   assert.ok(table, 'le mapping tracker est là')
   assert.equal(findAll(table, 'tr').length, 7, 'un en-tête et six états')
-  assert.match(textOf(table), /issue fermée \(map: null\)/)
+  assert.match(textOf(table), /statut natif Done ou issue fermée/)
 })
 
 test('un état de statuts se modifie par son libellé et sa description, le reste est en lecture seule', () => {
