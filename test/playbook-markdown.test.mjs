@@ -67,6 +67,17 @@ test('le rendu échappe le HTML et ne lie pas un schéma exécutable', () => {
   assert.match(html, /<a href="\.\.\/workflows\/execution\.md">relatif<\/a>/)
 })
 
+test('une ligne de tableau sans séparateur reste un paragraphe', () => {
+  // Given une page dont une ligne commence par un filet sans former un tableau.
+  const source = '| pas un tableau\nla suite du paragraphe'
+
+  // When
+  const html = renderPlaybookMarkdown(source)
+
+  // Then le rendu termine et garde le texte, sans boucle ni tableau inventé.
+  assert.equal(html, '<p>| pas un tableau la suite du paragraphe</p>')
+})
+
 test('les cinq pages passent par le rendu sans laisser de markdown brut', async () => {
   for (const name of PAGES) {
     // Given
