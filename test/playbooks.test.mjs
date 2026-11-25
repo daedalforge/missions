@@ -317,6 +317,7 @@ test('une version périmée répond 409 sans écrire', async (t) => {
     (error) => {
       assert.ok(error instanceof PlaybookError)
       assert.equal(error.status, 409)
+      assert.match(error.message, /playbook\/revue\.md changed since it was read/)
       return true
     },
   )
