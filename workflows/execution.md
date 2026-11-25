@@ -125,6 +125,6 @@ condition de sortie, pas un geste de confort.
 
 | Geste | Jira | GitHub |
 |---|---|---|
-| Passer en cours | statut In Progress | label `in-progress` |
+| Passer en cours | statut In Progress | statut natif `In progress` |
 | Consigner un choix ou un constat | commentaire daté sur le ticket | commentaire daté sur le ticket |
 | Ouvrir la revue | statut In Review, lien vers la PR | PR ouverte avec `Closes #<numéro>`, revue interne validée ou constat résiduel consigné |

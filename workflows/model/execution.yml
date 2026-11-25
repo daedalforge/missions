@@ -17,7 +17,7 @@ nodes:
     section: Sur le tracker
     writer: session
     condition: la branche est poussée
-    artifact: le libellé in-progress
+    artifact: le statut natif In progress
   - id: petits-commits
     label: Travailler par petits commits
     section: Ce qu'on fait
@@ -45,7 +45,7 @@ nodes:
     label: Renseigner la PR
     section: Renseigner la PR
     writer: session
-    gate: assignée, typée, liée au ticket, même milestone, sans label in-review
+    gate: assignée, typée, liée au ticket, même milestone, sans label d'état
   - id: revue-interne
     label: Faire relire le diff à l'aveugle
     section: Revue interne à l'aveugle
@@ -78,7 +78,7 @@ nodes:
     label: Passer le ticket en revue
     section: Sur le tracker
     writer: session
-    artifact: les libellés in-review sur la PR et le ticket
+    artifact: le statut natif In review sur le ticket
 edges:
   - from: ready
     to: ouvrir-branche

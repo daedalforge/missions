@@ -9,19 +9,19 @@ nodes:
   - id: to-refine
     label: À cadrer
     description: Le ticket est ouvert ; rien n'est encore décidé.
-    tracker: label to-refine
+    tracker: statut natif Backlog
   - id: ready
     label: Prête
     description: 'Le cadrage est validé : périmètre, critères et plan.'
-    tracker: label ready
+    tracker: statut natif Todo
   - id: in-progress
     label: En cours
     description: La branche est poussée ; l'exécution travaille.
-    tracker: label in-progress
+    tracker: statut natif In progress
   - id: in-review
     label: En revue
     description: La PR est ouverte et les collègues l'ont relue ; la revue constate leur validation et l'enregistre. Une PR trop grosse peut être découpée en plusieurs PR empilées.
-    tracker: label in-review
+    tracker: statut natif In review
   - id: ready-for-prod
     label: Prête à partir
     description: La PR est validée — ou chaque PR de la pile ; le demandeur livre.
@@ -29,31 +29,31 @@ nodes:
   - id: done
     label: Terminée
     description: 'Merge fait, ticket fermé, branches supprimées.'
-    tracker: 'issue fermée (map: null)'
+    tracker: statut natif Done ou issue fermée
 edges:
   - from: to-refine
     to: ready
     when: cadrage validé
     writer: session
-    artifact: label ready
+    artifact: statut natif Todo
     gate: neuf cases du cadrage cochées et accord du demandeur
   - from: ready
     to: in-progress
     when: branche poussée
     writer: session
-    artifact: label in-progress
+    artifact: statut natif In progress
     gate: la branche est poussée vers la base
   - from: in-progress
     to: in-review
     when: PR ouverte et complète
     writer: session
-    artifact: label in-review
+    artifact: statut natif In review
     gate: 'PR assignée, typée, milestone posée, Closes #N, revue interne à l''aveugle validée'
   - from: in-progress
     to: to-refine
     when: cadrage faux
     writer: demandeur
-    artifact: label to-refine
+    artifact: statut natif Backlog
     gate: le cadrage ou le périmètre change
   - from: in-review
     to: ready-for-prod
@@ -65,13 +65,13 @@ edges:
     to: in-progress
     when: changements demandés
     writer: demandeur
-    artifact: label in-progress
+    artifact: statut natif In progress
     gate: une preuve manque
   - from: in-review
     to: to-refine
     when: diff hors périmètre
     writer: demandeur
-    artifact: label to-refine
+    artifact: statut natif Backlog
     gate: le diff sort du cadrage, ou un critère n'a pas de scénario
   - from: ready-for-prod
     to: done

@@ -74,7 +74,7 @@ nodes:
     label: Passer le ticket à prête
     section: Sur le tracker
     writer: session
-    artifact: le libellé ready sur le ticket
+    artifact: le statut natif Todo sur le ticket
 edges:
   - from: to-refine
     to: lire-ticket

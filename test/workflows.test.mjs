@@ -404,7 +404,7 @@ test('un genre inconnu ou une clé de geste dans les statuts sont refusés', () 
 
 test('un arc de statuts porte condition, écrivain, artefact et porte', () => {
   const doc = statuts()
-  doc.edges[0] = { ...doc.edges[0], when: 'cadrage validé', writer: 'session', artifact: 'label ready', gate: 'accord du demandeur' }
+  doc.edges[0] = { ...doc.edges[0], when: 'cadrage validé', writer: 'session', artifact: 'statut natif Todo', gate: 'accord du demandeur' }
   assert.deepEqual(valideStatuts(doc).errors, [])
 
   const boucle = statuts()
