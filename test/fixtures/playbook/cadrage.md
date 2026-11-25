@@ -21,4 +21,8 @@ Document : workflows/cadrage.md
 - Règle de l’étape.
 
 ## La fiche du dépôt
-- Dépôt : `example`.
+| Dépôt | Ce que le cadrage en lit |
+| --- | --- |
+| `missions` | `AGENTS.md`, `playbook/`, `workflows/`, `test/`, le gabarit de mission |
+| `manager` | `README.md`, `package.json`, `tsconfig`, `cypress/`, le design system |
+| `connect` | `README.md`, `composer.json`, `tests/`, `assets/` |

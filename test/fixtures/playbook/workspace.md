@@ -13,7 +13,7 @@
 - Preuve.
 
 ## Les règles
-1. Interdit 1.
+1. Interdit 1 : le clone garde sa base, la branche vit dans le worktree.
 2. Interdit 2.
 3. Interdit 3.
 4. Interdit 4.
@@ -26,7 +26,8 @@
 11. Interdit 11.
 12. Interdit 12.
 13. Interdit 13.
-14. Interdit 14.
+14. Interdit 14 : *Raison : une règle qui vit ailleurs devient fausse sans
+    bruit.*
 
 ## La fiche du dépôt
 - Dépôts : `example`.

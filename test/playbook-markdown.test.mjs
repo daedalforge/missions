@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -38,10 +38,26 @@ test('le rendu porte listes, tableau, code, gras, italique, lien et citation', a
   assert.match(html, /<ul><li>Piège connu, <strong>en gras<\/strong> et en <em>italique<\/em>\.<\/li><\/ul>/)
   assert.match(html, /<pre class="pb-doc-pre"><code>node tools\/check-playbook\.mjs<\/code><\/pre>/)
   assert.match(html, /<blockquote><p>Une citation qui rappelle le contrat\.<\/p><\/blockquote>/)
-  assert.match(html, /<table><thead><tr><th>Dépôt<\/th><th>Commandes<\/th><\/tr><\/thead><tbody>/)
-  assert.match(html, /<tr><td><code>missions<\/code><\/td><td><code>npm test<\/code><\/td><\/tr>/)
+  assert.match(html, /<table><thead><tr><th>Dépôt<\/th><th>Commandes<\/th><th>Gates et pièges<\/th><\/tr><\/thead><tbody>/)
+  assert.match(html, /<tr><td><code>missions<\/code><\/td><td><code>npm test<\/code>, <code>node tools\/build\.mjs<\/code>/)
   assert.match(html, /<li>Vérifier le ticket et la branche\.<\/li>/)
   assert.match(html, /<p>Document : workflows\/execution\.md<\/p>/)
+  assert.match(html, /<a href="\.\.\/workflows\/execution\.md"><code>workflows\/execution\.md<\/code><\/a>/)
+  assert.match(html, /<h3 id="conventions-manager-react-typescript">Conventions <code>manager<\/code> \(React \/ TypeScript\)<\/h3>/)
+  assert.match(html, /<em>Raison : un trou passe inaperçu\.<\/em>/)
+})
+
+test('le rendu transforme une case à cocher en contrôle, jamais en crochets', async () => {
+  // Given la fixture de revue, qui porte la liste de contrôle réelle.
+  const source = await fixture('revue.md')
+
+  // When
+  const html = renderPlaybookMarkdown(source)
+
+  // Then les cases non cochées et cochées deviennent des contrôles désactivés.
+  assert.match(html, /<li class="pb-doc-task"><input type="checkbox" disabled>Un commentaire daté porte la décision/)
+  assert.match(html, /<li class="pb-doc-task"><input type="checkbox" disabled checked>Le journal et la checklist portent la décision/)
+  assert.doesNotMatch(html, /\[[ xX]\]/)
 })
 
 test('le rendu échappe le HTML et ne lie pas un schéma exécutable', () => {
@@ -91,7 +107,35 @@ test('les cinq pages passent par le rendu sans laisser de markdown brut', async 
     assert.doesNotMatch(html, /```/, `${name} : aucune clôture de code brute`)
     assert.doesNotMatch(html, /\*\*/, `${name} : aucun gras brut`)
     assert.doesNotMatch(html, /\| ---/, `${name} : aucun séparateur de tableau brut`)
+    const visible = html.replace(/<code>[\s\S]*?<\/code>/g, '')
+    assert.doesNotMatch(visible, /\[[ xX]\]/, `${name} : aucune case à cocher brute hors code`)
     assert.equal((html.match(/<h2 [^>]*>/g) ?? []).length, 6, `${name} : les six sections sont rendues`)
     assert.equal((html.match(/<span class="pb-doc-num">/g) ?? []).length, 6, `${name} : les six sections sont numérotées`)
+  }
+})
+
+test('les pages réelles du playbook, quand elles sont là, passent par le rendu', async (t) => {
+  // Given le dossier local du playbook, présent dans le clone et absent du
+  // worktree de mission, puisque `playbook/` est ignoré par git.
+  const dir = fileURLToPath(new URL('../playbook/', import.meta.url))
+  let names
+  try {
+    names = (await readdir(dir)).filter((name) => name.endsWith('.md') && name !== 'README.md')
+  } catch {
+    t.skip('playbook local absent de ce checkout')
+    return
+  }
+
+  // Then chaque page réelle se rend sans laisser de markdown brut.
+  for (const name of names) {
+    const source = await readFile(`${dir}${name}`, 'utf8')
+    const html = renderPlaybookMarkdown(source)
+    assert.doesNotMatch(html, /(^|\n)#{1,6} /, `${name} : aucun titre brut`)
+    assert.doesNotMatch(html, /```/, `${name} : aucune clôture de code brute`)
+    assert.doesNotMatch(html, /\*\*/, `${name} : aucun gras brut`)
+    assert.doesNotMatch(html, /\| ---/, `${name} : aucun séparateur de tableau brut`)
+    const visible = html.replace(/<code>[\s\S]*?<\/code>/g, '')
+    assert.doesNotMatch(visible, /\[[ xX]\]/, `${name} : aucune case à cocher brute hors code`)
+    assert.match(html, /<h2 [^>]*>/, `${name} : les sections sont rendues`)
   }
 })

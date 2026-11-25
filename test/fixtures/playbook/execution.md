@@ -112,13 +112,24 @@ node tools/check-playbook.mjs
 - Piège connu, **en gras** et en *italique*.
 
 ## Preuve de sortie
-- Preuve attendue.
+- Preuve attendue, citée par [`workflows/execution.md`](../workflows/execution.md).
 
 ## Les règles
 - Règle de l’étape.
 
+### Conventions `manager` (React / TypeScript)
+
+- **Un composant ne retourne jamais `undefined`** : la condition qui l'écarte
+  se calcule chez le parent. *Raison : un trou passe inaperçu.*
+
 ## La fiche du dépôt
-| Dépôt | Commandes |
-| --- | --- |
-| `missions` | `npm test` |
-| `manager` | `yarn test` |
+| Dépôt | Commandes | Gates et pièges |
+| --- | --- | --- |
+| `missions` | `npm test`, `node tools/build.mjs`, `node tools/check-workflows.mjs`, `node tools/check-playbook.mjs` | `lib/client.js` généré (diff vide après build) ; prompt épinglé au caractère près ; `node tools/check-playbook.mjs` quand le playbook change |
+| `manager` | `yarn install`, `yarn typescript` (`tsc --noEmit`), `yarn lint` | `yarn test` (Cypress component) reste à la CI ; `.env` préparé depuis `.env.local.dist` ; `yarn.lock` ne bouge qu'avec une dépendance ; textes par le paquet `@tolgee/react`, jamais le CLI |
+| `connect` | `composer install`, `APP_ENV=testing composer test:parallel` | les tests bornés de la fiche, avec `APP_ENV=testing` ; les tests existants ne portent pas de Given / When / Then, le code neuf suit la règle |
+| `clienthub` | `fvm flutter pub get`, `fvm flutter analyze --fatal-warnings`, `fvm flutter test` | `playbook/clienthub.md` : gates, pièges datés, écarts ; tests bornés ; SDK généré ; tokens du design system ; paquet `tolgee` |
+| `backend` | `composer install`, `composer test:unit`, `composer test:functional`, `composer phpstan:analyse`, `composer phpcs:analyse`, `composer phpmd:analyse` | tests ciblés et analyseurs ; la suite complète reste à la CI |
+| `core-service` | `symfony composer install`, `symfony composer test:db:setup`, `symfony php bin/phpunit`, `symfony composer test:db:drop` | base de test dédiée ; tests bornés de la fiche |
+| `marketplace-service` | `composer install`, `composer test:db:setup`, `php bin/phpunit <chemin>` (env `test`), `composer test:db:drop` | `test:all` et `test:coverage` restent à la CI ; base `_test` ; les snapshots `tests/Schema/*.json` ne se régénèrent ni ne se committent ; une migration Casbin pose et retire chaque règle isolément |
+| `ticketing-service` | `symfony composer install`, `symfony composer test:db:setup`, `symfony php bin/phpunit`, `symfony composer test:db:drop` | base de test dédiée ; tests bornés de la fiche |
