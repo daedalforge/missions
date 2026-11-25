@@ -137,6 +137,11 @@ lignes — la lecture close qu'il paie est celle de Done, partagée quand l'ongl
 s'ouvre, et les lignes restent demandées à l'ouverture. Avant cette première
 réponse, la pastille porte l'icône de refresh animée du thème, pas un zéro.
 
+Une déclaration qui ne résout pas d'issue — numéro absent du dépôt, ou numéro
+d'une pull request, qui partage la numérotation — est ignorée sans bruit : Done
+rend les missions qui résolvent, et seule une panne du tracker garde son
+bandeau.
+
 Depuis cet onglet, une mission close peut être **archivée** : son dossier passe
 sous `missions/archives/<dossier>/`, rien n'est supprimé et le tracker n'est pas
 modifié — la mission quitte Done et reste sur le disque. Une même clé peut être
