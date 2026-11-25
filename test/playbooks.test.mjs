@@ -63,9 +63,18 @@ test('la liste décrit les cinq pages dans l’ordre du parcours', async (t) => 
     'playbook/cloture.md',
     'playbook/workspace.md',
   ])
+  const states = pages.map((page) => page.stateLine)
+  assert.deepEqual(states, [
+    { entry: 'to-refine', exit: 'ready' },
+    { entry: 'ready', exit: 'in-review' },
+    { entry: 'in-review', exit: 'ready-for-prod' },
+    { entry: 'ready-for-prod', exit: 'done' },
+    { entry: null, exit: null },
+  ])
   for (const page of pages) {
     assert.equal(page.exists, true)
     assert.equal('text' in page, false, `${page.page} ne porte pas son texte`)
+    assert.equal('maxLines' in page, false, `${page.page} ne porte pas la projection entière`)
     assert.match(page.title, /^[A-ZÀ-Ý]/)
     assert.ok(page.lines > 0)
   }
@@ -147,6 +156,11 @@ test('la lecture rend le texte du fichier et sa version', async (t) => {
   assert.equal(page.step, 'exécution')
   assert.match(page.title, /^Exécution/)
   assert.equal(page.mtimeMs, (await stat(join(dir, 'execution.md'))).mtimeMs)
+  assert.equal(page.maxLines, 200)
+  assert.equal(page.sections.length, SECTIONS.length)
+  assert.ok(page.sections.every((section) => section.ok))
+  assert.deepEqual(page.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
+  assert.deepEqual(page.document, { path: 'workflows/execution.md', ok: true })
 })
 
 test('une page inconnue, l’index et une traversée sont refusés en 400', async (t) => {
@@ -191,6 +205,8 @@ test('une page valide est écrite puis relue avec sa nouvelle version', async (t
   assert.notEqual(saved.mtimeMs, page.mtimeMs)
   assert.equal(saved.mtimeMs, (await stat(join(dir, 'execution.md'))).mtimeMs)
   assert.equal('text' in saved, false)
+  assert.equal(saved.maxLines, 200)
+  assert.deepEqual(saved.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
   const reread = await readPlaybook(dir, 'execution')
   assert.equal(reread.text, changed)
   assert.equal(reread.mtimeMs, saved.mtimeMs)
