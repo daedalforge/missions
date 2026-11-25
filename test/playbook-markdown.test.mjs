@@ -36,8 +36,6 @@ test('le rendu porte listes, tableau, code, gras, italique, lien et citation', a
   // Then
   assert.match(html, /<ol><li>Premier geste\.<\/li><li>Second geste, qui cite <a href="\.\.\/workflows\/execution\.md">le document<\/a>\.<\/li><\/ol>/)
   assert.match(html, /<ul><li>Piège connu, <strong>en gras<\/strong> et en <em>italique<\/em>\.<\/li><\/ul>/)
-  assert.match(html, /<pre class="pb-doc-pre"><code>node tools\/check-playbook\.mjs<\/code><\/pre>/)
-  assert.match(html, /<blockquote><p>Une citation qui rappelle le contrat\.<\/p><\/blockquote>/)
   assert.match(html, /<table><thead><tr><th>Dépôt<\/th><th>Commandes<\/th><th>Gates et pièges<\/th><\/tr><\/thead><tbody>/)
   assert.match(html, /<tr><td><code>missions<\/code><\/td><td><code>npm test<\/code>, <code>node tools\/build\.mjs<\/code>/)
   assert.match(html, /<li>Vérifier le ticket et la branche\.<\/li>/)
@@ -58,6 +56,20 @@ test('le rendu transforme une case à cocher en contrôle, jamais en crochets', 
   assert.match(html, /<li class="pb-doc-task"><input type="checkbox" disabled>Un commentaire daté porte la décision/)
   assert.match(html, /<li class="pb-doc-task"><input type="checkbox" disabled checked>Le journal et la checklist portent la décision/)
   assert.doesNotMatch(html, /\[[ xX]\]/)
+})
+
+test('le rendu couvre le bloc de code et la citation, qu’aucune page ne porte', () => {
+  // Given une entrée qui porte les deux constructions nommées par le contrat
+  // mais absentes des cinq pages actuelles, qui restent hors périmètre.
+  const source = '```sh\nnode tools/check-playbook.mjs\n```\n\n> Une citation qui rappelle le contrat.\n'
+
+  // When
+  const html = renderPlaybookMarkdown(source)
+
+  // Then le bloc est échappé et la citation rendue, sans markdown brut.
+  assert.match(html, /<pre class="pb-doc-pre"><code>node tools\/check-playbook\.mjs<\/code><\/pre>/)
+  assert.match(html, /<blockquote><p>Une citation qui rappelle le contrat\.<\/p><\/blockquote>/)
+  assert.doesNotMatch(html, /```|> Une citation/)
 })
 
 test('le rendu échappe le HTML et ne lie pas un schéma exécutable', () => {

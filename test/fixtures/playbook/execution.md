@@ -11,11 +11,6 @@ Document : workflows/execution.md
 1. Premier geste.
 2. Second geste, qui cite [le document](../workflows/execution.md).
 
-```sh
-node tools/check-playbook.mjs
-```
-
-> Une citation qui rappelle le contrat.
 
 - Geste de remplissage 1.
 - Geste de remplissage 2.

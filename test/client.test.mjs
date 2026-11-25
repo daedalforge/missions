@@ -5405,6 +5405,21 @@ test('une page inconnue retombe sur la première, jamais sur un éditeur vide', 
   assert.match(textOf(tree), /12 lignes/)
 })
 
+test('une page absente du disque se lit « fichier absent » dans le rail', () => {
+  // Given la liste où la revue est absente, mais l’exécution est ouverte.
+  const pages = PLAYBOOK_VIEW_PAGES.map((entry) => (entry.page === 'revue'
+    ? { ...entry, exists: false, lines: 0, stateLine: { entry: null, exit: null } }
+    : entry))
+  const { tree } = monterPlaybook(playbookStates({ view: { loading: false, error: null, pages } }))
+
+  // Then le rail le dit, au lieu d’un état de parcours inventé.
+  const steps = findAll(tree, 'button').filter((node) => String(node.props.className).startsWith('pb-step'))
+  assert.match(steps[2].props.className, /pb-step--missing/)
+  assert.match(textOf(steps[2]), /fichier absent/)
+  assert.doesNotMatch(textOf(steps[2]), /toutes les étapes/)
+  assert.doesNotMatch(textOf(steps[2]), /ready →/)
+})
+
 test('la page ouverte se range dans la session sous missions.playbook-page', () => {
   // Given la section ouverte sur l’exécution.
   const { propres, session } = monterPlaybook(playbookStates())

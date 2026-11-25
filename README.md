@@ -369,7 +369,10 @@ nombre de lignes, le contrat de lecture (pastilles `Entrée · …` →
 sections, la ligne d'état, le document cité et le budget de 200 lignes — ambre
 à 200/200, rouge au-delà. Le corps est le markdown **rendu** par l'hôte
 (`lib/playbook-markdown.js`), jamais la source brute : titres de section
-numérotés `01` à `06`, listes, tableaux, code, gras, liens et citations.
+numérotés `01` à `06`, listes, tableaux, cases à cocher, code inline, gras,
+italiques, liens, citations et blocs de code — les deux dernières constructions
+sont couvertes par le test unitaire du rendu, aucune page actuelle ne les porte
+et elles restent hors du périmètre de cette mission.
 `Lire | Écrire` bascule entre la lecture et une zone monospace ; le brouillon y
 demande confirmation avant de changer de page ou de revenir en lecture,
 `Annuler` le rend au fichier, `Enregistrer` (ou `⌘S`) l'envoie avec sa version
