@@ -8,8 +8,14 @@ Document : workflows/execution.md
 - Vérifier le ticket et la branche.
 
 ## Les gestes, dans l'ordre
-- Premier geste.
-- Second geste.
+1. Premier geste.
+2. Second geste, qui cite [le document](../workflows/execution.md).
+
+```sh
+node tools/check-playbook.mjs
+```
+
+> Une citation qui rappelle le contrat.
 
 - Geste de remplissage 1.
 - Geste de remplissage 2.
@@ -103,7 +109,7 @@ Document : workflows/execution.md
 - Geste de remplissage 90.
 
 ## Pièges observés
-- Piège connu.
+- Piège connu, **en gras** et en *italique*.
 
 ## Preuve de sortie
 - Preuve attendue.
@@ -112,4 +118,7 @@ Document : workflows/execution.md
 - Règle de l’étape.
 
 ## La fiche du dépôt
-- Dépôt : `example`.
+| Dépôt | Commandes |
+| --- | --- |
+| `missions` | `npm test` |
+| `manager` | `yarn test` |
