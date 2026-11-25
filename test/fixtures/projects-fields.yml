@@ -1,4 +1,4 @@
-# Fixture : une board GitHub à champs d'organisation, une board restée aux labels.
+# Fixture : une board GitHub au statut natif, une board restée aux labels.
 canonical:
   states: [to-refine, ready, in-progress, in-review, ready-for-prod, done]
   types: [bug, story]
@@ -10,15 +10,16 @@ trackers:
     reference: CFG
     tracker: github
     github: { owner: example, repo: config }
-    fields: { state: Workflow stage, priority: Priority, points: Story point }
+    statuses:
+      to-refine: Backlog
+      ready: Todo
+      in-progress: In progress
+      in-review: In review
+      done: Done
+    fields: { priority: Priority, points: Story point }
     map:
       states:
-        to-refine: To refine
-        ready: Ready
-        in-progress: In progress
-        in-review: In review
-        ready-for-prod: Ready for prod
-        done: null
+        ready-for-prod: ready-for-prod
       types:
         bug: Bug
         story: Feature

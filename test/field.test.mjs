@@ -42,10 +42,14 @@ test('field.mjs nomme une clé et une valeur inconnues avant tout appel réseau'
   assert.match(wrongPoints.stderr, /n'est pas une taille de l'échelle/)
 })
 
-test('field.mjs refuse une board qui n’a pas de champs d’organisation', async () => {
-  const result = await run('state', 'LAB-1', 'ready', '--projects', FIXTURE)
-  assert.equal(result.code, 1)
-  assert.match(result.stderr, /ne déclare pas fields\.state/)
+test('field.mjs refuse une board sans statut natif ni champ d’organisation', async () => {
+  const state = await run('state', 'LAB-1', 'ready', '--projects', FIXTURE)
+  assert.equal(state.code, 1)
+  assert.match(state.stderr, /ne déclare pas de statuts natifs \(statuses\)/)
+
+  const priority = await run('priority', 'LAB-1', 'high', '--projects', FIXTURE)
+  assert.equal(priority.code, 1)
+  assert.match(priority.stderr, /ne déclare pas fields\.priority/)
 })
 
 test('field.mjs affiche l’aide sans rien lire', async () => {
