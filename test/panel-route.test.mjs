@@ -3505,9 +3505,17 @@ test('GET playbooks liste les cinq pages sans leur texte', async (t) => {
   assert.equal(response.status, 200)
   assert.deepEqual(response.body.pages.map((page) => page.page), ['cadrage', 'execution', 'revue', 'cloture', 'workspace'])
   assert.deepEqual(response.body.pages.map((page) => page.step), ['cadrage', 'exécution', 'revue', 'clôture', null])
+  assert.deepEqual(response.body.pages.map((page) => page.stateLine), [
+    { entry: 'to-refine', exit: 'ready' },
+    { entry: 'ready', exit: 'in-review' },
+    { entry: 'in-review', exit: 'ready-for-prod' },
+    { entry: 'ready-for-prod', exit: 'done' },
+    { entry: null, exit: null },
+  ])
   for (const page of response.body.pages) {
     assert.equal('text' in page, false)
     assert.equal('mtimeMs' in page, false)
+    assert.equal('maxLines' in page, false, `${page.page} ne porte pas la projection entière`)
     assert.equal(page.exists, true)
     assert.match(page.file, /^playbook\/.+\.md$/)
     assert.equal(typeof page.lines, 'number')
@@ -3538,6 +3546,14 @@ test('GET playbooks/page rend le texte et sa version, 400 puis 404 sinon', async
   assert.equal(response.body.step, 'exécution')
   assert.match(response.body.title, /^Exécution/)
   assert.equal(response.body.mtimeMs, (await stat(join(dir, 'playbook', 'execution.md'))).mtimeMs)
+  assert.equal(response.body.maxLines, 200)
+  assert.equal(response.body.sections.length, 6)
+  assert.ok(response.body.sections.every((section) => section.ok))
+  assert.deepEqual(response.body.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
+  assert.deepEqual(response.body.document, { path: 'workflows/execution.md', ok: true })
+  assert.match(response.body.html, /<h2 id="avant-d-agir">/)
+  assert.match(response.body.html, /<table>/)
+  assert.doesNotMatch(response.body.html, /## Avant d'agir/)
 
   const unknown = await call(handler, { path: '/missions/api/playbooks/page?page=inconnue' })
   assert.equal(unknown.status, 400)
@@ -3574,6 +3590,11 @@ test('POST playbooks/page écrit une page valide et refuse une page fautive', as
   assert.equal(saved.body.file, 'playbook/cadrage.md')
   assert.notEqual(saved.body.mtimeMs, read.body.mtimeMs)
   assert.equal(saved.body.mtimeMs, (await stat(join(dir, 'playbook', 'cadrage.md'))).mtimeMs)
+  assert.equal(saved.body.maxLines, 200)
+  assert.equal(saved.body.sections.length, 6)
+  assert.deepEqual(saved.body.stateLine, { ok: true, entry: 'to-refine', exit: 'ready' })
+  assert.deepEqual(saved.body.document, { path: 'workflows/cadrage.md', ok: true })
+  assert.match(saved.body.html, /<span class="pb-doc-num">01<\/span>/)
   assert.equal(await readFile(join(dir, 'playbook', 'cadrage.md'), 'utf8'), changed)
 
   // Une version périmée ne réécrit rien.

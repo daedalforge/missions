@@ -21,4 +21,7 @@ Document : workflows/cloture.md
 - Règle de l’étape.
 
 ## La fiche du dépôt
-- Dépôt : `example`.
+| Dépôt | Ce que la clôture constate |
+| --- | --- |
+| `missions` | PR mergée par le demandeur, ticket fermé par `Closes #N`, branche distante supprimée |
+| `manager` | PR mergée, ticket Jira passé en `Released` par le demandeur, branche supprimée |

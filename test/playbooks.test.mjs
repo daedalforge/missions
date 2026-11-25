@@ -7,7 +7,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
-import { checkPage } from '../lib/playbook-rules.js'
+import { SECTIONS, checkPage, inspectPage } from '../lib/playbook-rules.js'
 import {
   PLAYBOOK_PAGES,
   PlaybookError,
@@ -63,9 +63,18 @@ test('la liste décrit les cinq pages dans l’ordre du parcours', async (t) => 
     'playbook/cloture.md',
     'playbook/workspace.md',
   ])
+  const states = pages.map((page) => page.stateLine)
+  assert.deepEqual(states, [
+    { entry: 'to-refine', exit: 'ready' },
+    { entry: 'ready', exit: 'in-review' },
+    { entry: 'in-review', exit: 'ready-for-prod' },
+    { entry: 'ready-for-prod', exit: 'done' },
+    { entry: null, exit: null },
+  ])
   for (const page of pages) {
     assert.equal(page.exists, true)
     assert.equal('text' in page, false, `${page.page} ne porte pas son texte`)
+    assert.equal('maxLines' in page, false, `${page.page} ne porte pas la projection entière`)
     assert.match(page.title, /^[A-ZÀ-Ý]/)
     assert.ok(page.lines > 0)
   }
@@ -86,6 +95,53 @@ test('une page absente du disque garde sa place avec exists: false', async (t) =
   assert.equal(revue.lines, 0)
 })
 
+test('la projection du gate lit une page d’étape sans la juger', async (t) => {
+  // Given
+  const { dir } = await fixture(t)
+  const source = await pageText(dir, 'execution.md')
+
+  // When
+  const gate = inspectPage('playbook/execution.md', source)
+
+  // Then
+  assert.equal(gate.lines, (source.match(/\n/g) ?? []).length)
+  assert.equal(gate.maxLines, 200)
+  assert.deepEqual(gate.sections, SECTIONS.map((name) => ({ name, ok: true })))
+  assert.deepEqual(gate.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
+  assert.deepEqual(gate.document, { path: 'workflows/execution.md', ok: true })
+})
+
+test('la projection du gate nomme ce qui manque à une page', async (t) => {
+  // Given
+  const { dir } = await fixture(t)
+  const source = (await pageText(dir, 'execution.md'))
+    .replace('## Pièges observés', '## Pièges')
+    .replace('Entrée : ready → Sortie : in-review', 'Entrée : done → Sortie : ready')
+    .replaceAll('workflows/execution.md', 'workflows/autre.md')
+
+  // When
+  const gate = inspectPage('playbook/execution.md', source)
+
+  // Then
+  assert.equal(gate.sections.find((section) => section.name === '## Pièges observés').ok, false)
+  assert.deepEqual(gate.stateLine, { ok: false, entry: 'done', exit: 'ready' })
+  assert.deepEqual(gate.document, { path: 'workflows/execution.md', ok: false })
+})
+
+test('la projection d’une page transversale n’invente ni état ni document', async (t) => {
+  // Given
+  const { dir } = await fixture(t)
+  const source = await pageText(dir, 'workspace.md')
+
+  // When
+  const gate = inspectPage('playbook/workspace.md', source)
+
+  // Then
+  assert.deepEqual(gate.stateLine, { ok: true, entry: null, exit: null })
+  assert.deepEqual(gate.document, { path: null, ok: true })
+  assert.ok(gate.sections.every((section) => section.ok))
+})
+
 test('la lecture rend le texte du fichier et sa version', async (t) => {
   // Given
   const { dir } = await fixture(t)
@@ -100,6 +156,14 @@ test('la lecture rend le texte du fichier et sa version', async (t) => {
   assert.equal(page.step, 'exécution')
   assert.match(page.title, /^Exécution/)
   assert.equal(page.mtimeMs, (await stat(join(dir, 'execution.md'))).mtimeMs)
+  assert.equal(page.maxLines, 200)
+  assert.equal(page.sections.length, SECTIONS.length)
+  assert.ok(page.sections.every((section) => section.ok))
+  assert.deepEqual(page.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
+  assert.deepEqual(page.document, { path: 'workflows/execution.md', ok: true })
+  assert.match(page.html, /<h2 id="avant-d-agir"><span class="pb-doc-num">01<\/span>Avant d&#39;agir<\/h2>/)
+  assert.match(page.html, /<table>/)
+  assert.doesNotMatch(page.html, /## Avant d'agir/)
 })
 
 test('une page inconnue, l’index et une traversée sont refusés en 400', async (t) => {
@@ -144,6 +208,9 @@ test('une page valide est écrite puis relue avec sa nouvelle version', async (t
   assert.notEqual(saved.mtimeMs, page.mtimeMs)
   assert.equal(saved.mtimeMs, (await stat(join(dir, 'execution.md'))).mtimeMs)
   assert.equal('text' in saved, false)
+  assert.equal(saved.maxLines, 200)
+  assert.deepEqual(saved.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
+  assert.match(saved.html, /<table>/)
   const reread = await readPlaybook(dir, 'execution')
   assert.equal(reread.text, changed)
   assert.equal(reread.mtimeMs, saved.mtimeMs)
@@ -250,6 +317,7 @@ test('une version périmée répond 409 sans écrire', async (t) => {
     (error) => {
       assert.ok(error instanceof PlaybookError)
       assert.equal(error.status, 409)
+      assert.match(error.message, /playbook\/revue\.md changed since it was read/)
       return true
     },
   )
