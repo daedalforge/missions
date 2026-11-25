@@ -46,11 +46,17 @@
 #              vient du Trousseau (service `atlassian-token`) ou de
 #              JIRA_API_TOKEN, jamais de ce fichier
 #   github     owner et repo du dépôt distant (tracker: github)
-#   fields     (GitHub) champs d'organisation qui portent l'état, la priorité et
-#              l'estimation, par rôle : { state: Workflow stage, priority:
-#              Priority, points: Story point }. Déclarés, la `map` nomme les
-#              options de ces champs et `blocked` reste le seul label de la
-#              board ; absents, la `map` nomme des labels (ancien schéma).
+#   statuses   (GitHub) statuts natifs qui portent les cinq états de parcours,
+#              par état canonique : { to-refine: Backlog, ready: Todo,
+#              in-progress: In progress, in-review: In review, done: Done }.
+#              GitHub fait avancer le statut lui-même (assignation, PR liée,
+#              fermeture) ; le panneau le lit, il n'est plus un champ.
+#   fields     (GitHub) champs d'organisation qui portent la priorité et
+#              l'estimation, par rôle : { priority: Priority, points:
+#              Story point }. Déclarés, la `map` nomme leurs options. Le
+#              sixième état, `ready-for-prod`, reste un label déclaré dans
+#              `map.states` ; `blocked` est l'autre label de la board. Sans
+#              `statuses`, la `map` nomme des labels d'état (ancien schéma).
 #   map        correspondance canonique -> tracker (obligatoire)
 #
 # Champs d'un projet :
@@ -79,20 +85,22 @@ trackers:
     github:
       owner: your-github-org
       repo: example
-    # Les trois champs d'organisation, tels qu'ils sont nommés sur GitHub.
+    # Les cinq états de parcours portés par le statut natif de l'issue.
+    statuses:
+      to-refine: Backlog
+      ready: Todo
+      in-progress: In progress
+      in-review: In review
+      done: Done
+    # Les deux champs d'organisation, tels qu'ils sont nommés sur GitHub.
     fields:
-      state: Workflow stage
       priority: Priority
       points: Story point
     map:
-      # La `map` nomme les options de ces champs, pas des labels.
+      # `ready-for-prod` n'a pas de statut natif : c'est un label. La `map`
+      # nomme ce label, jamais l'option d'un champ d'état.
       states:
-        to-refine: To refine
-        ready: Ready
-        in-progress: In progress
-        in-review: In review
-        ready-for-prod: Ready for prod
-        done: null
+        ready-for-prod: ready-for-prod
       types:
         bug: Bug
         story: Feature

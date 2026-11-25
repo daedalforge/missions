@@ -388,6 +388,7 @@ test('le lecteur de tracker porte le dépôt du projet', async () => {
   assert.equal(reader.projectName, 'Missions workspace')
   assert.equal(reader.reference, 'MIS')
   assert.equal(reader.repo, '~/projects/missions')
+  assert.equal(reader.statuses, null)
   assert.equal(reader.map.states.ready, 'ready')
 })
 
@@ -407,24 +408,97 @@ test('un fichier projects.yml absent explique où copier le gabarit', async () =
   await assert.rejects(() => loadProjects(missing), /copy missions\/projects\.example\.yml there/)
 })
 
-test('une board GitHub peut porter son état, sa priorité et son estimation par des champs d’organisation', async () => {
+test('une board GitHub porte son état par le statut natif et le reste par ses champs', async () => {
   const file = await writeWorkspace([
     '  - id: cfg',
     '    reference: CFG',
     '    tracker: github',
     '    github: { owner: a, repo: b }',
-    '    fields: { state: Workflow stage, priority: Priority, points: Story point }',
+    '    statuses: { to-refine: Backlog }',
+    '    fields: { priority: Priority, points: Story point }',
+    '    map:',
+    '      states: { ready-for-prod: ready-for-prod }',
+    '      types: { bug: Bug }',
+  ], [])
+
+  const { trackers } = await loadProjects(file)
+  assert.deepEqual(trackers[0].statuses, { 'to-refine': 'Backlog' })
+  assert.deepEqual(trackers[0].fields, { priority: 'Priority', points: 'Story point' })
+  assert.deepEqual(trackers[0].map.states, { 'ready-for-prod': 'ready-for-prod' })
+})
+
+test('le champ d’état n’est plus un rôle de déclaration', async () => {
+  const file = await writeWorkspace([
+    '  - id: cfg',
+    '    reference: CFG',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    fields: { state: The old state field }',
     '    map:',
     '      states: { to-refine: To refine }',
     '      types: { bug: Bug }',
   ], [])
 
-  const { trackers } = await loadProjects(file)
-  assert.deepEqual(trackers[0].fields, {
-    state: 'Workflow stage',
-    priority: 'Priority',
-    points: 'Story point',
-  })
+  await assert.rejects(() => loadProjects(file), /unknown role "state"/)
+})
+
+test('les statuts natifs complètent la map et ne doublonnent pas une valeur', async () => {
+  const twice = await writeWorkspace([
+    '  - id: cfg',
+    '    reference: CFG',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    statuses: { to-refine: Backlog }',
+    '    map:',
+    '      states: { to-refine: to-refine }',
+    '      types: { bug: Bug }',
+  ], [])
+  await assert.rejects(
+    () => loadProjects(twice),
+    /declares state "to-refine" in both statuses and map\.states/,
+  )
+
+  const reused = await writeWorkspace([
+    '  - id: cfg',
+    '    reference: CFG',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    statuses: { to-refine: Ready for prod }',
+    '    map:',
+    '      states: { ready-for-prod: Ready for prod }',
+    '      types: { bug: Bug }',
+  ], [])
+  await assert.rejects(() => loadProjects(reused), /maps "Ready for prod" to both/)
+})
+
+test('les statuts natifs restent une affaire de GitHub', async () => {
+  const jira = await writeWorkspace([
+    '  - id: alp',
+    '    reference: ALP',
+    '    tracker: jira',
+    '    jira: { site: https://example.atlassian.net, email: a@b.c }',
+    '    statuses: { to-refine: To Do }',
+    '    map:',
+    '      states: { to-refine: To Do }',
+    '      types: { bug: Bug }',
+  ], [])
+
+  await assert.rejects(() => loadProjects(jira), /native issue statuses exist on GitHub only/)
+})
+
+test('ready-for-prod reste un label, jamais un statut natif', async () => {
+  const file = await writeWorkspace([
+    '  - id: cfg',
+    '    reference: CFG',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    statuses: { to-refine: Backlog, ready-for-prod: Done }',
+    '    map:',
+    '      states: { ready-for-prod: ready-for-prod }',
+    '      types: { bug: Bug }',
+  ], [])
+
+  await assert.rejects(() => loadProjects(file), /statuses must not carry ready-for-prod/)
 })
 
 test('les champs restent une affaire de GitHub et ne portent pas `blocked`', async () => {
@@ -433,7 +507,7 @@ test('les champs restent une affaire de GitHub et ne portent pas `blocked`', asy
     '    reference: ALP',
     '    tracker: jira',
     '    jira: { site: https://example.atlassian.net, email: a@b.c }',
-    '    fields: { state: Stage }',
+    '    fields: { priority: Priority }',
     '    map:',
     '      states: { to-refine: To Do }',
     '      types: { bug: Bug }',
@@ -457,12 +531,12 @@ test('les champs restent une affaire de GitHub et ne portent pas `blocked`', asy
     '    reference: CFG',
     '    tracker: github',
     '    github: { owner: a, repo: b }',
-    '    fields: { state: "  " }',
+    '    fields: { priority: "  " }',
     '    map:',
     '      states: { to-refine: To refine }',
     '      types: { bug: Bug }',
   ], [])
-  await assert.rejects(() => loadProjects(empty), /fields\.state needs a field name/)
+  await assert.rejects(() => loadProjects(empty), /fields\.priority needs a field name/)
 })
 
 test('un champ d’estimation et un préfixe de label ne se déclarent pas ensemble', async () => {

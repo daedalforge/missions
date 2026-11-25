@@ -453,35 +453,43 @@ n'y a pas d'engagement de date : un epic est thématique, pas calendaire.
 
 ## Champs GitHub
 
-Une issue porte **un type** natif et **un état** en champ d'organisation. Le
-type dit la nature du travail — `Bug` ou `Feature` sur GitHub, `Bug`, `Story` ou
-`Task` sur Jira —, l'état dit où en est la mission. Les deux sont indépendants :
-une story peut être en revue, un bug peut être prêt.
+Une issue porte **un type** natif, **un état** porté par son statut natif, et
+**un label** pour le sixième état. Le type dit la nature du travail — `Bug` ou
+`Feature` sur GitHub, `Bug`, `Story` ou `Task` sur Jira —, l'état dit où en est
+la mission. Les deux sont indépendants : une story peut être en revue, un bug
+peut être prêt.
 
-| Champ | Rôle |
+| Statut ou label | Rôle |
 |---|---|
-| `Workflow stage` = `To refine` | cadrage non fait ou à refaire |
-| `Workflow stage` = `Ready` | cadrage validé, prête à exécuter |
-| `Workflow stage` = `In progress` | branche ouverte, exécution en cours |
-| `Workflow stage` = `In review` | PR ouverte, en attente de revue |
-| `Workflow stage` = `Ready for prod` | revue faite, en attente de livraison |
+| statut `Backlog` | cadrage non fait ou à refaire |
+| statut `Todo` | cadrage validé, prête à exécuter |
+| statut `In progress` | branche ouverte, exécution en cours |
+| statut `In review` | PR ouverte, en attente de revue |
+| label `ready-for-prod` | revue faite, en attente de livraison |
+| statut `Done` (ou issue fermée) | terminée |
 | `Priority` = `Urgent` · `High` · `Medium` · `Low` | priorité, une seule par issue |
 | `Story point` = `0.5` · `1` · `2` · `3` · `5` · `8` · `13` | story points, une seule valeur par issue |
 | label `blocked` | mission bloquée : la raison est en commentaire de l'issue |
 
-Ces trois champs sont propres à l'organisation et partagés par ses dépôts ;
-`projects.yml` les nomme dans le bloc `fields` du tracker, et la `map` nomme
-leurs options. Le panneau les écrit par ses routes ; une session les écrit par
+Le statut natif est celui de l'issue : GitHub le fait avancer lui-même —
+assignation → `Todo`, PR liée → `In review`, fermeture → `Done` —, et le panneau
+ne le combat pas. Les cinq états de parcours y sont déclarés par le bloc
+`statuses` du tracker dans `projects.yml`. GitHub n'a pas de statut « prête à
+partir » : ce sixième état reste le label `ready-for-prod`, qui prime sur le
+statut à la lecture et se retire à toute autre transition. La priorité et
+l'estimation sont des champs d'organisation propres à l'organisation, partagés
+par ses dépôts ; le bloc `fields` les nomme et la `map` nomme leurs options. Le
+panneau les écrit par ses routes ; une session les écrit par
 `node tools/field.mjs` (`state`, `priority`, `points`). Une issue porte **un
-seul** type natif et **une seule** option d'état : le choix unique rend deux
-états simultanés impossibles — l'ancien conflit de libellés n'existe plus.
-Fermer l'issue est l'état terminé : il n'y a pas d'option `Done`. Un blocage se
-dit par le label `blocked` **et** sa raison en commentaire : le label dit qu'on
-est bloqué, le commentaire dit pourquoi et par quoi. `blocked` n'est pas un état
-— il ne remplace jamais l'état en cours, et une mission bloquée garde son état —
-il n'empêche pas non plus de démarrer une session : il informe. Le retirer,
-c'est débloquer, et cela ne poste rien d'autre. L'epic n'est pas un label :
-c'est un milestone.
+seul** statut natif et **un seul** type : le choix unique rend deux états
+simultanés impossibles — l'ancien conflit de libellés n'existe plus. Fermer
+l'issue est l'état terminé, comme le statut `Done` ; `Not planned` et
+`Duplicate` ferment aussi la mission. Un blocage se dit par le label `blocked`
+**et** sa raison en commentaire : le label dit qu'on est bloqué, le commentaire
+dit pourquoi et par quoi. `blocked` n'est pas un état — il ne remplace jamais
+l'état en cours, et une mission bloquée garde son état — il n'empêche pas non
+plus de démarrer une session : il informe. Le retirer, c'est débloquer, et cela
+ne poste rien d'autre. L'epic n'est pas un label : c'est un milestone.
 
 
 ## Lecture
@@ -520,15 +528,17 @@ les branches et les commits l'emploient ; c'est seulement à la frontière du
 tracker qu'une traduction a lieu.
 
 Cette traduction est une donnée, pas une convention : chaque projet la déclare
-dans `projects.yml` (copie locale), bloc `map`. Sur GitHub, elle porte sur les
-**champs d'organisation** que déclare le bloc `fields` (`Workflow stage`,
-`Priority`, `Story point`) : la `map` nomme alors l'option du champ, jamais un
-label, et une valeur `null` dit que l'état n'a pas de représentation propre (la
-fermeture de l'issue, par exemple). `blocked` échappe à la table : il ne se
-traduit pas, se pose tel quel sur le ticket, et c'est le seul label que la
-board garde. L'hôte écrit l'état, la priorité et l'estimation par ses routes,
-parce qu'il n'a pas de jeton ; la session les écrit par
-`node tools/field.mjs`.
+dans `projects.yml` (copie locale). Sur GitHub, les cinq états de parcours sont
+portés par les **statuts natifs** que déclare le bloc `statuses` (`Backlog`,
+`Todo`, `In progress`, `In review`, `Done`) ; le sixième, `ready-for-prod`,
+reste un **label** déclaré dans `map.states`, et `blocked` échappe à la table :
+il ne se traduit pas, se pose tel quel sur le ticket. La priorité et
+l'estimation suivent le bloc `fields` (`Priority`, `Story point`) : la `map`
+nomme alors l'option du champ, jamais un label. L'hôte écrit l'état, la priorité
+et l'estimation par ses routes, parce qu'il n'a pas de jeton ; la session les
+écrit par `node tools/field.mjs`. À la création, l'adaptateur réécrit `Backlog`
+après le POST assigné : GitHub a déjà fait passer l'issue à `Todo`, la mission
+naît « à cadrer ».
 
 `points` suit la même règle que `priority`, à une différence près : la taille
 est un nombre, pas un mot du workflow. C'est l'hôte qui l'écrit — champ
@@ -538,17 +548,17 @@ l'édite jamais : elle se pose au cadrage.
 
 | Canonique | GitHub (`missions`) | Jira (exemple à trois statuts) |
 |---|---|---|
-| `to-refine` | champ `Workflow stage` = `To refine` | `To Do` |
-| `ready` | champ `Workflow stage` = `Ready` | `To Do` + libellé `ready` |
-| `in-progress` | champ `Workflow stage` = `In progress` | `In Progress` |
-| `in-review` | champ `Workflow stage` = `In review` | `In Review` |
-| `ready-for-prod` | champ `Workflow stage` = `Ready for prod` | `Ready for prod`, ou les statuts de déploiement du projet (`Local Testing`, `Staging Test`) |
-| `done` | fermeture de l'issue | `Released` ou `Done` (selon le projet) |
+| `to-refine` | statut natif `Backlog` | `To Do` |
+| `ready` | statut natif `Todo` | `To Do` + libellé `ready` |
+| `in-progress` | statut natif `In progress` | `In Progress` |
+| `in-review` | statut natif `In review` | `In Review` |
+| `ready-for-prod` | label `ready-for-prod` | `Ready for prod`, ou les statuts de déploiement du projet (`Local Testing`, `Staging Test`) |
+| `done` | statut natif `Done` ou fermeture de l'issue | `Released` ou `Done` (selon le projet) |
 | `bug` | type d'issue `Bug` | type `Bug` |
 | `story` | type d'issue `Feature` | type `Story`, `Task` |
 | `urgent` / `high` / `normal` / `low` | champ `Priority` = `Urgent` / `High` / `Medium` / `Low` | `Highest` / `High` / `Medium` / `Low` |
 | story points | champ `Story point` (nombre) | champ `story_points_field` (défaut `customfield_10016`) |
-| bloquée | label `blocked` (le seul label de la board) | label `blocked` |
+| bloquée | label `blocked` (l'autre label de la board) | label `blocked` |
 
 Jira nomme `Story` et `Task` deux types distincts : le workspace n'en fait
 qu'un, la mission `story`. `Epic` et `Sub-task` restent sans traduction — un
