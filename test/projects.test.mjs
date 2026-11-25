@@ -406,3 +406,77 @@ test('un fichier projects.yml absent explique où copier le gabarit', async () =
   const missing = new URL('./fixtures/projects-absent.yml', import.meta.url)
   await assert.rejects(() => loadProjects(missing), /copy missions\/projects\.example\.yml there/)
 })
+
+test('une board GitHub peut porter son état, sa priorité et son estimation par des champs d’organisation', async () => {
+  const file = await writeWorkspace([
+    '  - id: cfg',
+    '    reference: CFG',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    fields: { state: Workflow stage, priority: Priority, points: Story point }',
+    '    map:',
+    '      states: { to-refine: To refine }',
+    '      types: { bug: Bug }',
+  ], [])
+
+  const { trackers } = await loadProjects(file)
+  assert.deepEqual(trackers[0].fields, {
+    state: 'Workflow stage',
+    priority: 'Priority',
+    points: 'Story point',
+  })
+})
+
+test('les champs restent une affaire de GitHub et ne portent pas `blocked`', async () => {
+  const jira = await writeWorkspace([
+    '  - id: alp',
+    '    reference: ALP',
+    '    tracker: jira',
+    '    jira: { site: https://example.atlassian.net, email: a@b.c }',
+    '    fields: { state: Stage }',
+    '    map:',
+    '      states: { to-refine: To Do }',
+    '      types: { bug: Bug }',
+  ], [])
+  await assert.rejects(() => loadProjects(jira), /organization fields exist on GitHub only/)
+
+  const blocked = await writeWorkspace([
+    '  - id: cfg',
+    '    reference: CFG',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    fields: { blocked: Blocked }',
+    '    map:',
+    '      states: { to-refine: To refine }',
+    '      types: { bug: Bug }',
+  ], [])
+  await assert.rejects(() => loadProjects(blocked), /unknown role "blocked"/)
+
+  const empty = await writeWorkspace([
+    '  - id: cfg',
+    '    reference: CFG',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    fields: { state: "  " }',
+    '    map:',
+    '      states: { to-refine: To refine }',
+    '      types: { bug: Bug }',
+  ], [])
+  await assert.rejects(() => loadProjects(empty), /fields\.state needs a field name/)
+})
+
+test('un champ d’estimation et un préfixe de label ne se déclarent pas ensemble', async () => {
+  const file = await writeWorkspace([
+    '  - id: cfg',
+    '    reference: CFG',
+    '    tracker: github',
+    '    github: { owner: a, repo: b }',
+    '    fields: { points: Story point }',
+    '    map:',
+    '      states: { to-refine: To refine }',
+    '      types: { bug: Bug }',
+    '      points: "sp:"',
+  ], [])
+
+  await assert.rejects(() => loadProjects(file), /both fields\.points and map\.points/)
+})
