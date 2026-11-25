@@ -346,22 +346,37 @@ des deux gestes : il n'a ni checkout principal ni dossier à rendre.
 **Settings** range les trois vues qui ne lisent ni le tracker ni la liste des
 missions ouvertes : **Usage**, puis **Workflows**, puis **Playbook**, dans une
 navigation verticale à gauche. La section ouverte est la seule montée ; Usage
-est le défaut. Le volet droit reste monté, vide, et ne reçoit aucune note de
-section. Le panneau de Settings est un conteneur (`container-type:
-inline-size`) : sous 560 px de large, Workflows et Playbook passent à une
-colonne et les pages du Playbook se replient en ligne, si bien qu'un panneau
-étroit dans une large fenêtre ne déborde pas. Aucune clé de stockage nouvelle :
+est le défaut. Le volet droit n'y est plus monté : les trois sections prennent
+la largeur qu'il occupait (380 px), et les quatre autres onglets gardent le
+leur, vide ou garni. Le panneau de Settings est un conteneur (`container-type:
+inline-size`) : sous 560 px de large, Workflows passe à une colonne ; le
+Playbook a son propre seuil à 820 px, où son rail se replie en pastilles et son
+en-tête s'empile, si bien qu'un panneau étroit dans une large fenêtre ne
+déborde pas. Aucune clé de stockage nouvelle :
 `missions.tab` range la section
 (`usage`, `workflows`, `playbook`) tant que Settings est ouvert, si bien qu'une
 session restée sur l'un de ces anciens onglets rouvre Settings sur cette
-section ; une valeur inconnue retombe sur le Dashboard. La section Playbook
-ouvre la page retenue par `missions.playbook-page` — la première tant que rien
-n'est rangé — et ne touche jamais l'index : elle liste les cinq pages, lit leur
-texte, l'édite et l'enregistre, le serveur refusant toute écriture que
-`node tools/check-playbook.mjs` ne valide pas. Quitter une page au brouillon
-demande confirmation, et un fichier changé sous l'éditeur est refusé plutôt
-qu'écrasé. Sous Settings, pas de bandeau tracker, et le rafraîchissement
-périodique ne relit jamais la liste des missions ouvertes.
+section ; une valeur inconnue retombe sur le Dashboard.
+
+La section Playbook ouvre la page retenue par `missions.playbook-page` — la
+première tant que rien n'est rangé — et ne touche jamais l'index. Elle se lit
+comme un parcours : un rail de 208 px porte les quatre étapes **Cadrage**,
+**Exécution**, **Revue**, **Clôture**, chacune avec son état d'entrée → sortie
+et son compte de lignes, puis **Workspace** sous **Transversal** ; la page
+ouverte montre son sur-titre d'étape, son titre, `playbook/<page>.md` et son
+nombre de lignes, le contrat de lecture (pastilles `Entrée · …` →
+`Sortie · …`, document de l'étape cité) et le gate que l'hôte calcule : les six
+sections, la ligne d'état, le document cité et le budget de 200 lignes — ambre
+à 200/200, rouge au-delà. Le corps est le markdown **rendu** par l'hôte
+(`lib/playbook-markdown.js`), jamais la source brute : titres de section
+numérotés `01` à `06`, listes, tableaux, code, gras, liens et citations.
+`Lire | Écrire` bascule entre la lecture et une zone monospace ; le brouillon y
+demande confirmation avant de changer de page ou de revenir en lecture,
+`Annuler` le rend au fichier, `Enregistrer` (ou `⌘S`) l'envoie avec sa version
+`mtimeMs`. Le serveur refuse toute écriture que `node tools/check-playbook.mjs`
+ne valide pas, et un fichier changé sous l'éditeur répond 409 sans rien écrire.
+Sous Settings, pas de bandeau tracker, et le rafraîchissement périodique ne
+relit jamais la liste des missions ouvertes.
 
 ## Le relevé d'usage
 
