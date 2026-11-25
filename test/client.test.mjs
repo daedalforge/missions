@@ -3118,32 +3118,39 @@ test('Settings monte ses trois sections avec le volet vide', () => {
   assert.equal(findAll(choisi, 'aside')[0].props.className, 'missions-drawer missions-drawer--empty')
 })
 
-test('Settings passe ses sous-layouts à une colonne sous 560 px de panneau', () => {
+test('Settings replie le parcours du Playbook sous 820 px de panneau', () => {
   // Given la query de conteneur posée sur le panneau de Settings, et non sur
   // la fenêtre : un panneau étroit dans une large fenêtre doit se replier.
   assert.match(regle('.missions-settings-panel'), /container-type: inline-size/)
-  const bloc = SOURCE.match(/@container \(max-width: 560px\) \{\n([\s\S]*?)\n\}/)
-  assert.ok(bloc, 'la query de conteneur est déclarée')
 
-  // Then Workflows et Playbook passent à une piste, et les pages du Playbook
-  // forment une ligne qui se replie.
-  assert.match(bloc[1], /\.wf-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
-  assert.match(bloc[1], /\.pb-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
-  assert.match(bloc[1], /\.pb-pages \{ flex-direction: row; flex-wrap: wrap; \}/)
-  assert.match(bloc[1], /\.pb-page \{ width: auto; \}/)
-  assert.match(bloc[1], /\.wf-list \{ grid-template-columns: minmax\(0, 1fr\); \}/)
-  assert.match(bloc[1], /\.wf-prop code, \.wf-pick-title \{ overflow-wrap: anywhere; \}/)
+  // Then Workflows garde son seuil de 560 px, sans règle du Playbook.
+  const petit = SOURCE.match(/@container \(max-width: 560px\) \{\n([\s\S]*?)\n\}/)
+  assert.ok(petit, 'la query de conteneur de Workflows est déclarée')
+  assert.match(petit[1], /\.wf-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  assert.match(petit[1], /\.wf-list \{ grid-template-columns: minmax\(0, 1fr\); \}/)
+  assert.match(petit[1], /\.wf-prop code, \.wf-pick-title \{ overflow-wrap: anywhere; \}/)
+  assert.doesNotMatch(petit[1], /\.pb-/, 'le Playbook a son propre seuil')
 
-  // Then la query passe après les règles de base et après le palier viewport de
-  // 720 px, sinon la règle de base l'emporterait à spécificité égale.
-  const at = SOURCE.indexOf('@container (max-width: 560px)')
-  assert.ok(at > SOURCE.indexOf('.wf-layout {'), 'la query suit la règle de base de Workflows')
-  assert.ok(at > SOURCE.indexOf('.pb-layout {'), 'la query suit la règle de base du Playbook')
-  assert.ok(at > SOURCE.indexOf('@media (max-width: 720px)'), 'la query suit le palier de 720 px')
+  // Then sous 820 px, le rail se replie en pastilles sans états ni comptes et
+  // l'en-tête s'empile.
+  const large = SOURCE.match(/@container \(max-width: 820px\) \{\n([\s\S]*?)\n\}/)
+  assert.ok(large, 'la query de conteneur du Playbook est déclarée')
+  assert.match(large[1], /\.pb-path-layout \{ grid-template-columns: minmax\(0, 1fr\); gap: 12px; \}/)
+  assert.match(large[1], /\.pb-steps \{ flex-direction: row; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; \}/)
+  assert.match(large[1], /\.pb-step \{ display: flex; align-items: center; gap: 7px; width: auto; padding: 5px 9px 5px 6px; border: 1px solid var\(--dsw-alias-border-l2, rgba\(0,0,0,\.10\)\); border-radius: 999px;/)
+  assert.match(large[1], /\.pb-step-states, \.pb-step-lines \{ display: none; \}/)
+  assert.match(large[1], /\.pb-page-head \{ flex-direction: column; gap: 10px; \}/)
+  assert.match(large[1], /\.pb-page-actions \{ align-self: flex-start; justify-content: flex-start; padding-top: 0; \}/)
 
-  // Then l'éditeur du Playbook compte ses marges dans sa largeur : à 100 %
-  // plus 26 px de padding et de filet, il pousserait le panneau étroit
-  // au-delà de son clientWidth.
+  // Then la query de 820 px passe après les règles de base et après celle de
+  // 560 px, sinon la règle de base l'emporterait à spécificité égale.
+  const at = SOURCE.lastIndexOf('@container (max-width: 820px)')
+  assert.ok(at > SOURCE.indexOf('.pb-path-layout {'), 'la query suit la règle de base du Playbook')
+  assert.ok(at > SOURCE.indexOf('@container (max-width: 560px)'), 'la query suit celle de Workflows')
+
+  // Then l'éditeur compte ses marges dans sa largeur : à 100 % plus 26 px de
+  // padding et de filet, il pousserait le panneau étroit au-delà de son
+  // clientWidth.
   assert.match(regle('.pb-text'), /box-sizing: border-box/)
 
   // Then le palier viewport de 860 px reste : il gère la fenêtre, la query
@@ -4927,28 +4934,70 @@ test('une session Usage ou Workflows rouvre la section, une valeur inconnue reto
 })
 
 
-/** Les cinq pages que le serveur liste, avec leurs titres et leurs étapes. */
+const PLAYBOOK_SECTIONS = [
+  "## Avant d'agir",
+  '## Les gestes, dans l’ordre',
+  '## Pièges observés',
+  '## Preuve de sortie',
+  '## Les règles',
+  '## La fiche du dépôt',
+].map((name) => ({ name, ok: true }))
+
+/** Les cinq pages que le serveur liste, avec leur place dans le parcours. */
 // La forme exacte de la route : `page`, `file`, `step`, `title`, `lines`,
-// `exists` — `name` n'en fait pas partie, le client ne doit pas en dépendre.
+// `exists`, `stateLine` — `name` n'en fait pas partie, le client ne doit pas
+// en dépendre.
 const PLAYBOOK_VIEW_PAGES = [
-  { page: 'cadrage', file: 'playbook/cadrage.md', step: 'cadrage', title: 'Cadrage — la fiche du dépôt', lines: 12, exists: true },
-  { page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 40, exists: true },
-  { page: 'revue', file: 'playbook/revue.md', step: 'revue', title: 'Revue — la vérification', lines: 30, exists: true },
-  { page: 'cloture', file: 'playbook/cloture.md', step: 'clôture', title: 'Clôture — la sortie', lines: 20, exists: true },
-  { page: 'workspace', file: 'playbook/workspace.md', step: null, title: 'Workspace — la fiche du dépôt', lines: 18, exists: true },
+  { page: 'cadrage', file: 'playbook/cadrage.md', step: 'cadrage', title: 'Cadrage — la fiche du dépôt', lines: 12, exists: true, stateLine: { entry: 'to-refine', exit: 'ready' } },
+  { page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 200, exists: true, stateLine: { entry: 'ready', exit: 'in-review' } },
+  { page: 'revue', file: 'playbook/revue.md', step: 'revue', title: 'Revue — la vérification', lines: 30, exists: true, stateLine: { entry: 'in-review', exit: 'ready-for-prod' } },
+  { page: 'cloture', file: 'playbook/cloture.md', step: 'clôture', title: 'Clôture — la sortie', lines: 20, exists: true, stateLine: { entry: 'ready-for-prod', exit: 'done' } },
+  { page: 'workspace', file: 'playbook/workspace.md', step: null, title: 'Workspace — la fiche du dépôt', lines: 18, exists: true, stateLine: { entry: null, exit: null } },
 ]
 
-/** Les dix hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
-const PLAYBOOK_HOOKS = ['view', 'chosen', 'draft', 'baseline', 'mtimeMs', 'status', 'pageError', 'saving', 'pending', 'attempt']
+/** La page lue pour l'exécution : texte, HTML rendu et gate de l'hôte. */
+const PLAYBOOK_DOC = {
+  page: 'execution',
+  file: 'playbook/execution.md',
+  step: 'exécution',
+  title: 'Exécution — les gestes',
+  lines: 200,
+  exists: true,
+  text: '## Avant d’agir\n',
+  html: '<h2 id="avant-d-agir"><span class="pb-doc-num">01</span>Avant d’agir</h2>\n<p>Un paragraphe.</p>',
+  maxLines: 200,
+  sections: PLAYBOOK_SECTIONS,
+  stateLine: { ok: true, entry: 'ready', exit: 'in-review' },
+  document: { path: 'workflows/execution.md', ok: true },
+  mtimeMs: 1234,
+}
 
-/** L'état de `PlaybookView`, par défaut sur la page d'exécution, sans retouche. */
+/** La page lue pour le workspace : aucune ligne d'état, aucun document. */
+const PLAYBOOK_WORKSPACE_DOC = {
+  ...PLAYBOOK_DOC,
+  page: 'workspace',
+  file: 'playbook/workspace.md',
+  step: null,
+  title: 'Workspace — la fiche du dépôt',
+  lines: 18,
+  text: '# Workspace\n',
+  html: '<h1>Workspace</h1>',
+  stateLine: { ok: true, entry: null, exit: null },
+  document: { path: null, ok: true },
+}
+
+/** Les onze hooks de `PlaybookView`, dans l'ordre de leur déclaration. */
+const PLAYBOOK_HOOKS = ['view', 'chosen', 'doc', 'draft', 'baseline', 'mode', 'status', 'pageError', 'saving', 'pending', 'attempt']
+
+/** L'état de `PlaybookView`, par défaut sur la page d'exécution, en lecture. */
 function playbookStates(patch = {}) {
   const base = {
     view: { loading: false, error: null, pages: PLAYBOOK_VIEW_PAGES },
     chosen: 'execution',
-    draft: '## Avant d’agir\n',
-    baseline: '## Avant d’agir\n',
-    mtimeMs: 1234,
+    doc: PLAYBOOK_DOC,
+    draft: PLAYBOOK_DOC.text,
+    baseline: PLAYBOOK_DOC.text,
+    mode: 'read',
     status: null,
     pageError: null,
     saving: false,
@@ -4971,222 +5020,377 @@ function monterPlaybook(states, session = memorySession({ 'missions.tab': 'playb
   return { panneau, node, tree, setters, effects, session, propres: effects.slice(avant) }
 }
 
+/** Les pastilles du gate, dans l'ordre du document. */
+function chipsOf(tree) {
+  return findAll(tree, 'span').filter((node) => /(^|\s)pb-chip(\s|$)/.test(node.props.className ?? ''))
+}
+
 /** Laisse filer une chaîne de promesses de `fetch`, sans minuterie. */
 const tick = () => new Promise((resolve) => setImmediate(resolve))
 
-test('la section Playbook liste les cinq pages et ouvre celle de la session', () => {
+test('la section Playbook montre le parcours, le contrat et le gate de la page', () => {
+  // Given la section ouverte sur l’exécution, la page à son plafond.
   const { tree } = monterPlaybook(playbookStates())
 
-  // Cinq pages, dans l'ordre du parcours puis le workspace, chacune avec son
-  // nom d'étape lisible — le titre du fichier, puis l'étape.
-  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
-  assert.equal(pages.length, 5)
-  assert.match(textOf(pages[0]), /Cadrage — la fiche du dépôt/)
-  assert.match(textOf(pages[0]), /Étape cadrage/)
-  assert.match(textOf(pages[4]), /Workspace — la fiche du dépôt/)
-  assert.match(textOf(pages[4]), /Workspace/)
-  assert.match(textOf(pages[1]), /40 lignes/, 'chaque page dit son nombre de lignes')
+  // When / Then le rail porte les quatre étapes puis la page transversale.
+  const steps = findAll(tree, 'button').filter((node) => node.props.className === 'pb-step')
+  assert.equal(steps.length, 5, 'quatre étapes et le workspace')
+  assert.match(textOf(steps[0]), /01/)
+  assert.match(textOf(steps[0]), /Cadrage — la fiche du dépôt/)
+  assert.match(textOf(steps[0]), /to-refine → ready/)
+  assert.match(textOf(steps[0]), /12 l\./)
+  assert.match(textOf(steps[1]), /02/)
+  assert.match(textOf(steps[1]), /ready → in-review/)
+  assert.match(textOf(steps[3]), /04/)
+  assert.match(textOf(steps[3]), /ready-for-prod → done/)
+  assert.match(textOf(steps[4]), /§/)
+  assert.match(textOf(steps[4]), /Workspace — la fiche du dépôt/)
+  assert.match(textOf(steps[4]), /toutes les étapes/)
+  assert.match(textOf(tree), /Transversal/)
+  assert.equal(steps[1].props['aria-current'], 'true', 'l’étape de la page est courante')
+  assert.equal(steps[0].props['aria-current'], 'false')
 
-  // La page retenue est marquée, les autres non.
-  assert.equal(pages[1].props['aria-current'], 'true', 'la page de la session est ouverte')
-  assert.equal(pages[0].props['aria-current'], 'false')
+  // Then l’en-tête dit l’étape, le titre, le fichier et le compte de lignes.
+  assert.match(textOf(tree), /Étape 2 sur 4 · Playbook/)
+  assert.match(textOf(tree), /Exécution — les gestes/)
+  assert.match(textOf(tree), /playbook\/execution\.md/)
+  assert.match(textOf(tree), /200 lignes/)
 
-  // L'éditeur porte le texte de la page, son chemin et son compte de lignes.
-  const champ = findAll(tree, 'textarea').find((node) => node.props.className === 'pb-text')
-  assert.equal(champ.props.value, '## Avant d’agir\n')
-  assert.match(textOf(tree), /playbook\/execution\.md — 40 lignes/)
-  assert.match(textOf(tree), /exécution/)
+  // Then le contrat porte ses deux pastilles et cite le document de l’étape.
+  const pills = findAll(tree, 'span').filter((node) => node.props.className === 'pb-pill')
+  assert.deepEqual(pills.map(textOf), ['Entrée · ready', 'Sortie · in-review'])
+  assert.match(textOf(tree), /Document de l’étape workflows\/execution\.md/)
+
+  // Then le gate montre les six sections, la ligne d’état, le document et le
+  // budget, ambre à 200 / 200 lignes.
+  const chips = chipsOf(tree)
+  assert.deepEqual(chips.map(textOf), [
+    '6 / 6 sections',
+    'ligne d’état conforme',
+    'document de l’étape cité',
+    '200 / 200 lignes — plafond atteint',
+  ])
+  assert.doesNotMatch(chips[0].props.className, /pb-chip--warn|pb-chip--bad/)
+  assert.match(chips[3].props.className, /pb-chip--warn/)
+  assert.doesNotMatch(chips[3].props.className, /pb-chip--bad/)
 })
 
-test('une page inconnue retombe sur la première, jamais sur un éditeur vide', () => {
-  const { tree } = monterPlaybook(playbookStates({ chosen: 'archive' }))
-  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
-  assert.equal(pages[0].props['aria-current'], 'true')
-  assert.equal(findAll(tree, 'textarea').find((node) => node.props.className === 'pb-text').props.value, '## Avant d’agir\n')
+test('la pastille de budget passe au rouge au-delà du plafond', () => {
+  // Given une page que l’hôte annonce à 201 lignes pour 200.
+  const { tree } = monterPlaybook(playbookStates({
+    doc: { ...PLAYBOOK_DOC, lines: 201 },
+    draft: PLAYBOOK_DOC.text,
+    baseline: PLAYBOOK_DOC.text,
+  }))
+
+  // Then la pastille le dit, en rouge.
+  const chip = chipsOf(tree).at(-1)
+  assert.equal(textOf(chip), '201 / 200 lignes — plafond dépassé')
+  assert.match(chip.props.className, /pb-chip--bad/)
 })
 
-test('la page ouverte se range dans la session sous missions.playbook-page', () => {
-  const { effects, session } = monterPlaybook(playbookStates())
-  const ecriture = effects.find(({ fn }) => String(fn).includes('writePlaybookPage('))
-  assert.ok(ecriture, 'la page ouverte est écrite dans la session, pas seulement lue')
-  ecriture.fn()
-  assert.equal(session.entries.get('missions.playbook-page'), 'execution')
+test('la page transversale n’affiche ni état ni document d’étape', () => {
+  // Given la page Workspace ouverte.
+  const { tree } = monterPlaybook(playbookStates({
+    chosen: 'workspace',
+    doc: PLAYBOOK_WORKSPACE_DOC,
+    draft: PLAYBOOK_WORKSPACE_DOC.text,
+    baseline: PLAYBOOK_WORKSPACE_DOC.text,
+  }))
+
+  // Then son en-tête dit « Transversal », sans pastille d’entrée ni de sortie.
+  assert.match(textOf(tree), /Transversal · Playbook/)
+  const pills = findAll(tree, 'span').filter((node) => node.props.className === 'pb-pill')
+  assert.equal(pills.length, 0)
+  assert.doesNotMatch(textOf(tree), /Document de l’étape/)
+  assert.match(textOf(tree), /Page transversale/)
+
+  // Then le gate ne vérifie que les sections et le budget.
+  assert.deepEqual(chipsOf(tree).map(textOf), ['6 / 6 sections', '18 / 200 lignes'])
 })
 
-test('l’éditeur demande les cinq pages, puis la page choisie, au serveur', async () => {
-  const appels = []
-  const vraiFetch = globalThis.fetch
-  globalThis.fetch = async (url) => {
-    appels.push(String(url))
-    return { ok: true, json: async () => ({ pages: PLAYBOOK_VIEW_PAGES }) }
+test('le mode Lire rend le markdown du serveur, le mode Écrire montre sa source', () => {
+  // Given la page ouverte en lecture.
+  const lecture = monterPlaybook(playbookStates())
+
+  // Then le document vient du HTML de l’hôte, jamais de la source brute, et
+  // aucun éditeur n’est monté.
+  const article = findAll(lecture.tree, 'article').find((node) => node.props.className === 'pb-doc')
+  assert.equal(article.props.dangerouslySetInnerHTML.__html, PLAYBOOK_DOC.html)
+  assert.equal(findAll(lecture.tree, 'textarea').length, 0)
+
+  // When la page passe en Écrire.
+  const ecriture = monterPlaybook(playbookStates({ mode: 'write' }))
+
+  // Then la zone monospace remplace le document, avec le texte lu pour valeur
+  // initiale, et les quatre gestes portent leur libellé français.
+  assert.equal(findAll(ecriture.tree, 'article').length, 0)
+  const champ = findAll(ecriture.tree, 'textarea').find((node) => node.props.className === 'pb-text')
+  assert.equal(champ.props.value, PLAYBOOK_DOC.text)
+  const libelles = findAll(ecriture.tree, 'button').map(textOf)
+  for (const libelle of ['Lire', 'Écrire', 'Annuler', 'Enregistrer']) {
+    assert.ok(libelles.includes(libelle), `le bouton ${libelle} est monté`)
   }
-  try {
-    const { propres } = monterPlaybook(playbookStates({ chosen: null }))
-    // Le chargement de la liste, puis celui du texte : deux routes distinctes.
-    for (const effect of propres) effect.fn()
-    assert.equal(appels[0], 'missions/api/playbooks')
-    await tick()
-    await tick()
-    assert.match(appels[1], /^missions\/api\/playbooks\/page\?page=/)
-    assert.match(appels[1], /cadrage/)
-  } finally {
-    globalThis.fetch = vraiFetch
-  }
-})
+  assert.ok(!libelles.includes('Continuer l’édition'), 'la confirmation n’est pas montée sans brouillon')
 
-test('une page illisible montre le refus du serveur et propose une page lisible', async () => {
-  const refus = 'playbook/execution.md is missing'
-  const vraiFetch = globalThis.fetch
-  // La liste dit la page absente, puis la lecture de cette page est refusée.
-  globalThis.fetch = async (url) => {
-    if (String(url) === 'missions/api/playbooks') {
-      return {
-        ok: true,
-        json: async () => ({ pages: PLAYBOOK_VIEW_PAGES.map((entry) => (entry.page === 'execution' ? { ...entry, exists: false, lines: 0 } : entry)) }),
-      }
-    }
-    return { ok: false, json: async () => ({ error: refus }) }
-  }
-  try {
-    // Le refus du serveur remonte à la vue, tel qu'il est écrit.
-    const lecture = monterPlaybook(playbookStates({ chosen: 'execution', draft: null, baseline: null, mtimeMs: null }))
-    for (const effect of lecture.propres) effect.fn()
-    await tick()
-    await tick()
-    assert.equal(lecture.setters.filter((value) => value === refus).at(-1), refus, 'le refus de lecture arrive à l’écran')
-
-    // Rendu, la page absente dit le refus et cesse d'attendre.
-    const rendu = monterPlaybook(playbookStates({ chosen: 'execution', draft: null, baseline: null, mtimeMs: null, pageError: refus }))
-    assert.match(textOf(rendu.tree), /playbook\/execution\.md is missing/)
-    assert.doesNotMatch(textOf(rendu.tree), /Chargement de la page…/)
-
-    // Et la première page lisible s'ouvre d'un clic.
-    const retour = findAll(rendu.tree, 'button').find((node) => textOf(node) === 'Ouvrir « cadrage »')
-    assert.ok(retour, 'une page illisible propose une page lisible')
-    retour.props.onClick()
-    assert.ok(rendu.setters.includes('cadrage'), 'le clic ouvre la page proposée')
-  } finally {
-    globalThis.fetch = vraiFetch
-  }
-})
-
-test('Enregistrer envoie le texte et la version lues, puis affiche le fichier écrit', async () => {
-  const appels = []
-  const vraiFetch = globalThis.fetch
-  globalThis.fetch = async (url, options = {}) => {
-    appels.push({ url: String(url), options })
-    return { ok: true, json: async () => ({ page: 'execution', file: 'playbook/execution.md', step: 'exécution', title: 'Exécution — les gestes', lines: 41, exists: true, mtimeMs: 9999 }) }
-  }
-  try {
-    const { tree, setters } = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
-    const bouton = findAll(tree, 'button').find((node) => textOf(node) === 'Save')
-    bouton.props.onClick()
-    await tick()
-    await tick()
-
-    assert.equal(appels[0].url, 'missions/api/playbooks/page')
-    assert.equal(appels[0].options.method, 'POST')
-    assert.equal(appels[0].options.headers['content-type'], 'application/json')
-    assert.deepEqual(JSON.parse(appels[0].options.body), { page: 'execution', text: '## Avant d’agir\n\nretouche\n', mtimeMs: 1234 })
-
-    const statut = setters.filter((value) => value && typeof value === 'object' && value.kind === 'ok').at(-1)
-    assert.ok(statut, 'un enregistrement accepté se dit')
-    assert.match(statut.message, /Enregistré — playbook\/execution\.md/)
-  } finally {
-    globalThis.fetch = vraiFetch
-  }
-})
-
-test('un refus du serveur s’affiche avec sa cause et la liste des manques', async () => {
-  const manque = 'playbook/execution.md : section manquante « Les règles »'
-  const vraiFetch = globalThis.fetch
-  globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: 'page invalid', errors: [manque] }) })
-  try {
-    const { tree, setters } = monterPlaybook(playbookStates({ draft: 'court\n' }))
-    findAll(tree, 'button').find((node) => textOf(node) === 'Save').props.onClick()
-    await tick()
-    await tick()
-    const refus = setters.filter((value) => value && typeof value === 'object' && value.kind === 'error').at(-1)
-    assert.deepEqual(refus, { kind: 'error', message: 'page invalid', errors: [manque] })
-
-    // Rendue, la liste des manques est un vrai texte, pas un compteur.
-    const { tree: rendu } = monterPlaybook(playbookStates({ status: { kind: 'error', message: 'page invalid', errors: [manque] } }))
-    const alerte = findAll(rendu, 'div').find((node) => /pb-status pb-status--error/.test(node.props.className ?? ''))
-    assert.equal(alerte.props.role, 'alert')
-    assert.match(textOf(alerte), /page invalid/)
-    assert.equal(findAll(alerte, 'li')[0] && textOf(findAll(alerte, 'li')[0]), manque)
-  } finally {
-    globalThis.fetch = vraiFetch
-  }
-})
-
-test('Save et Cancel restent fermés sans retouche, et s’ouvrent au premier caractère', () => {
-  const gestes = (tree) => findAll(tree, 'button').filter((node) => ['Save', 'Saving…', 'Cancel'].includes(textOf(node)))
-
-  // Sans retouche, enregistrer n'aurait rien à écrire et annuler rien à rendre.
-  const propre = monterPlaybook(playbookStates())
-  assert.deepEqual(gestes(propre.tree).map((node) => node.props.disabled), [true, true])
-
-  // Un caractère de plus réveille les deux gestes.
-  const retouche = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n' }))
-  assert.deepEqual(gestes(retouche.tree).map((node) => node.props.disabled), [false, false])
-
-  // Pendant l'envoi, les deux se referment — un second clic ne double pas l'écriture.
-  const envoi = monterPlaybook(playbookStates({ draft: '## Avant d’agir\n\nretouche\n', saving: true }))
-  assert.deepEqual(gestes(envoi.tree).map((node) => node.props.disabled), [true, true])
-})
-
-test('quitter une page au brouillon demande confirmation en ligne, et les deux issues tiennent', () => {
-  const { tree, setters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n' }))
-  const pages = findAll(tree, 'button').filter((node) => node.props.className === 'pb-page')
-  setters.length = 0
-
-  // Un clic sur une autre page n'ouvre rien : il pose la question, et le
-  // brouillon reste où il est.
-  pages[4].props.onClick()
-  assert.deepEqual(setters, ['workspace'], 'la page demandée attend la réponse')
-  assert.equal(findAll(tree, 'textarea').length, 1, 'aucune boîte système, le panneau reste monté')
-
-  // « Keep editing » efface la question et laisse la page ouverte.
-  const { tree: question } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
-  const dialogue = findAll(question, 'div').find((node) => /pb-confirm\b/.test(node.props.className ?? ''))
-  assert.ok(dialogue, 'la confirmation vit dans la section')
-  assert.equal(dialogue.props.role, 'alertdialog')
-  assert.match(textOf(dialogue), /modifications non enregistrées/)
-  assert.match(textOf(dialogue), /« workspace »/)
-  const garder = findAll(dialogue, 'button').find((node) => textOf(node) === 'Keep editing')
-  const abandonner = findAll(dialogue, 'button').find((node) => textOf(node) === 'Discard')
-  assert.ok(garder && abandonner, 'les deux issues sont des boutons')
-
-  const { tree: garde, setters: gardeSetters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
-  findAll(garde, 'button').find((node) => textOf(node) === 'Keep editing').props.onClick()
-  assert.deepEqual(gardeSetters, [null], 'Keep editing ne change pas de page')
-
-  // « Discard » charge la page demandée, et le brouillon repart du fichier.
-  const { tree: abandon, setters: abandonSetters } = monterPlaybook(playbookStates({ draft: 'brouillon local\n', pending: 'workspace' }))
-  findAll(abandon, 'button').find((node) => textOf(node) === 'Discard').props.onClick()
-  // Discard ouvre la page, vide le brouillon le temps de la relecture (Save
-  // retombe désactivé), puis efface la question.
-  assert.deepEqual(abandonSetters, ['workspace', null, null, null, null])
-
-  // Jamais de boîte système : la question est du panneau.
+  // Then la section ne porte plus aucun libellé anglais.
   const debut = SOURCE.indexOf('function PlaybookView')
   const fin = SOURCE.indexOf('function RepositoriesView')
   const source = SOURCE.slice(debut, fin)
   assert.ok(debut > -1 && fin > debut)
+  for (const anglais of ['Cancel', 'Save', 'Discard', 'Keep editing', 'Unsaved changes']) {
+    assert.equal(source.includes(anglais), false, `${anglais} a disparu de la section`)
+  }
+})
+
+test('Enregistrer envoie le texte et la version lues, puis met à jour le gate', async () => {
+  const appels = []
+  const enregistre = {
+    ...PLAYBOOK_DOC,
+    lines: 201,
+    title: 'Exécution — les gestes',
+    html: '<h2 id="autres"><span class="pb-doc-num">01</span>Avant d’agir</h2><p>retouche</p>',
+    mtimeMs: 9999,
+  }
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (url, options = {}) => {
+    appels.push({ url: String(url), options })
+    return { ok: true, json: async () => enregistre }
+  }
+  try {
+    // Given l’exécution en Écrire, une ligne ajoutée.
+    const retouche = '## Avant d’agir\n\nretouche\n'
+    const { tree, setters } = monterPlaybook(playbookStates({ mode: 'write', draft: retouche }))
+    assert.match(textOf(tree), /Brouillon non enregistré/)
+
+    // When le bouton Enregistrer envoie le brouillon.
+    findAll(tree, 'button').find((node) => textOf(node) === 'Enregistrer').props.onClick()
+    await tick()
+    await tick()
+
+    // Then la requête porte le texte et la version lue.
+    assert.equal(appels[0].url, 'missions/api/playbooks/page')
+    assert.equal(appels[0].options.method, 'POST')
+    assert.equal(appels[0].options.headers['content-type'], 'application/json')
+    assert.deepEqual(JSON.parse(appels[0].options.body), { page: 'execution', text: retouche, mtimeMs: 1234 })
+
+    // Then la réponse met à jour le document et le gate sans relire la page :
+    // le nouveau compte de lignes et le HTML enregistré sont posés ensemble.
+    const doc = setters.filter((value) => value && typeof value === 'object' && 'html' in value).at(-1)
+    assert.equal(doc.lines, 201)
+    assert.equal(doc.mtimeMs, 9999)
+    assert.equal(doc.text, retouche)
+    assert.equal(doc.html, enregistre.html)
+
+    // Then le badge tombe, le message nomme le fichier et l’heure, et Annuler
+    // redevient inactif.
+    assert.equal(setters.includes(retouche), true, 'la nouvelle version enregistrée devient la référence')
+    const statut = setters.filter((value) => value && typeof value === 'object' && value.kind === 'ok').at(-1)
+    assert.match(statut.message, /Enregistré — playbook\/execution\.md/)
+    const { tree: rendu } = monterPlaybook(playbookStates({
+      mode: 'write',
+      draft: retouche,
+      baseline: retouche,
+      status: statut,
+      doc: { ...PLAYBOOK_DOC, lines: 201, html: enregistre.html, mtimeMs: 9999 },
+    }))
+    assert.doesNotMatch(textOf(rendu), /Brouillon non enregistré/)
+    assert.match(textOf(rendu), /201 lignes/)
+    const annuler = findAll(rendu, 'button').find((node) => textOf(node) === 'Annuler')
+    assert.equal(annuler.props.disabled, true)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('⌘S en mode Écrire enregistre comme le bouton', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  const vraiAjout = globalThis.document.addEventListener
+  let raccourci = null
+  globalThis.document.addEventListener = (type, fn) => {
+    if (type === 'keydown') raccourci = fn
+  }
+  globalThis.fetch = async (url, options = {}) => {
+    appels.push({ url: String(url), options })
+    return { ok: true, json: async () => ({ ...PLAYBOOK_DOC, lines: 201, mtimeMs: 9999 }) }
+  }
+  try {
+    // Given la page en Écrire, une ligne ajoutée.
+    const { propres } = monterPlaybook(playbookStates({ mode: 'write', draft: '## Avant d’agir\n\nretouche\n' }))
+    const effet = propres.find(({ fn }) => String(fn).includes("'keydown'"))
+    assert.ok(effet, 'le mode Écrire arme un raccourci clavier')
+    effet.fn()
+    assert.ok(raccourci, 'l’écouteur est posé sur le document')
+
+    // When ⌘S est frappé.
+    let prevented = false
+    raccourci({ metaKey: true, key: 's', preventDefault: () => { prevented = true } })
+    await tick()
+    await tick()
+
+    // Then le même enregistrement part que par le bouton.
+    assert.equal(prevented, true)
+    assert.equal(appels[0].url, 'missions/api/playbooks/page')
+    assert.equal(appels[0].options.method, 'POST')
+    assert.equal(JSON.parse(appels[0].options.body).text, '## Avant d’agir\n\nretouche\n')
+  } finally {
+    globalThis.fetch = vraiFetch
+    globalThis.document.addEventListener = vraiAjout
+  }
+})
+
+test('un brouillon non enregistré bloque le changement de page et le retour en lecture', () => {
+  // Given l’exécution en Écrire, une ligne ajoutée.
+  const brouillon = '## Avant d’agir\n\nbrouillon local\n'
+  const { tree, setters } = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon }))
+  const steps = findAll(tree, 'button').filter((node) => node.props.className === 'pb-step')
+  setters.length = 0
+
+  // When un clic sur le workspace demande une autre page.
+  steps[4].props.onClick()
+
+  // Then rien ne s’ouvre : la question est posée dans la section, jamais dans
+  // une boîte système, et le brouillon reste affiché.
+  assert.deepEqual(setters, [{ page: 'workspace' }], 'la page demandée attend la réponse')
+  assert.equal(findAll(tree, 'textarea').length, 1, 'le panneau reste monté')
+
+  // Then les deux issues sont des boutons français.
+  const { tree: question } = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon, pending: { page: 'workspace' } }))
+  const dialogue = findAll(question, 'div').find((node) => /pb-confirm\b/.test(node.props.className ?? ''))
+  assert.ok(dialogue, 'la confirmation vit dans la section')
+  assert.equal(dialogue.props.role, 'alertdialog')
+  assert.equal(dialogue.props['aria-label'], 'Modifications non enregistrées')
+  assert.match(textOf(dialogue), /modifications non enregistrées/)
+  assert.match(textOf(dialogue), /« workspace »/)
+  assert.ok(findAll(dialogue, 'button').some((node) => textOf(node) === 'Continuer l’édition'))
+  assert.ok(findAll(dialogue, 'button').some((node) => textOf(node) === 'Abandonner'))
+
+  // When « Continuer l’édition » est choisi.
+  const { tree: garde, setters: gardeSetters } = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon, pending: { page: 'workspace' } }))
+  findAll(garde, 'button').find((node) => textOf(node) === 'Continuer l’édition').props.onClick()
+
+  // Then la question s’efface et la page ouverte ne bouge pas.
+  assert.deepEqual(gardeSetters, [null])
+
+  // When « Abandonner » est choisi.
+  const { tree: abandon, setters: abandonSetters } = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon, pending: { page: 'workspace' } }))
+  findAll(abandon, 'button').find((node) => textOf(node) === 'Abandonner').props.onClick()
+
+  // Then la page demandée s’ouvre, le brouillon repart du fichier et le mode
+  // revient à la lecture.
+  assert.deepEqual(abandonSetters, ['workspace', null, null, null, 'read', null, null])
+
+  // Given la page en Écrire avec un brouillon.
+  const lecture = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon }))
+  lecture.setters.length = 0
+
+  // When le mode Lire est demandé.
+  findAll(lecture.tree, 'button').find((node) => textOf(node) === 'Lire').props.onClick()
+
+  // Then la même confirmation bloque le retour en lecture.
+  assert.deepEqual(lecture.setters, [{ mode: 'read' }])
+  const { tree: retour } = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon, pending: { mode: 'read' } }))
+  assert.match(textOf(retour), /repasser en lecture/)
+  const { tree: renduLecture, setters: lectureSetters } = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon, pending: { mode: 'read' } }))
+  findAll(renduLecture, 'button').find((node) => textOf(node) === 'Abandonner').props.onClick()
+  assert.deepEqual(lectureSetters, ['read', PLAYBOOK_DOC.text, null, null])
+
+  // Then jamais de boîte système : la question est du panneau.
+  const debut = SOURCE.indexOf('function PlaybookView')
+  const fin = SOURCE.indexOf('function RepositoriesView')
+  const source = SOURCE.slice(debut, fin)
   assert.equal(/\bconfirm\(/.test(source), false)
 })
 
-test('Cancel rend le brouillon au dernier état enregistré', () => {
-  const { tree, setters } = monterPlaybook(playbookStates({ draft: 'retouche non enregistrée\n' }))
-  findAll(tree, 'button').find((node) => textOf(node) === 'Cancel').props.onClick()
-  assert.deepEqual(setters.slice(-2), ['## Avant d’agir\n', { kind: 'ok', message: 'Modifications annulées.' }])
+test('un refus du serveur s’affiche avec sa cause et n’écrit rien', async () => {
+  const manque = 'playbook/execution.md : section manquante « Les règles »'
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: 'page invalid', errors: [manque] }) })
+  try {
+    // Given l’exécution en Écrire, une section retirée.
+    const { tree, setters } = monterPlaybook(playbookStates({ mode: 'write', draft: 'court\n' }))
+
+    // When Enregistrer envoie le brouillon fautif.
+    findAll(tree, 'button').find((node) => textOf(node) === 'Enregistrer').props.onClick()
+    await tick()
+    await tick()
+
+    // Then le refus arrive avec la liste de checkPage.
+    const refus = setters.filter((value) => value && typeof value === 'object' && value.kind === 'error').at(-1)
+    assert.deepEqual(refus, { kind: 'error', message: 'page invalid', errors: [manque] })
+
+    // Then rendu, le refus est une alerte et chaque manque un vrai texte,
+    // tandis que le gate reste celui de la version enregistrée.
+    const { tree: rendu } = monterPlaybook(playbookStates({ mode: 'write', draft: 'court\n', status: refus }))
+    const alerte = findAll(rendu, 'div').find((node) => /pb-status pb-status--error/.test(node.props.className ?? ''))
+    assert.equal(alerte.props.role, 'alert')
+    assert.match(textOf(alerte), /page invalid/)
+    assert.equal(textOf(findAll(alerte, 'li')[0]), manque)
+    const budget = chipsOf(rendu).at(-1)
+    assert.equal(textOf(budget), '200 / 200 lignes — plafond atteint')
+    assert.match(budget.props.className, /pb-chip--warn/)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un conflit de version nomme le fichier changé et garde le brouillon', async () => {
+  const conflit = 'playbook/execution.md changed since it was read'
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: conflit }) })
+  try {
+    // Given l’exécution en Écrire, une ligne ajoutée, la version de la lecture.
+    const brouillon = '## Avant d’agir\n\nretouche locale\n'
+    const { tree, setters } = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon }))
+
+    // When Enregistrer rencontre un fichier modifié sur le disque.
+    findAll(tree, 'button').find((node) => textOf(node) === 'Enregistrer').props.onClick()
+    await tick()
+    await tick()
+
+    // Then le 409 nomme le fichier changé et le brouillon reste affiché.
+    const refus = setters.filter((value) => value && typeof value === 'object' && value.kind === 'error').at(-1)
+    assert.equal(refus.message, conflit)
+    assert.deepEqual(setters.filter((value) => typeof value === 'string'), [], 'le brouillon n’est pas effacé')
+    const { tree: rendu } = monterPlaybook(playbookStates({ mode: 'write', draft: brouillon, status: refus }))
+    assert.match(textOf(rendu), new RegExp(conflit.replace(/[/.]/g, '\\$&')))
+    assert.equal(findAll(rendu, 'textarea').find((node) => node.props.className === 'pb-text').props.value, brouillon)
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Annuler et Enregistrer restent fermés sans retouche, et s’ouvrent au premier caractère', () => {
+  const gestes = (tree) => findAll(tree, 'button').filter((node) => ['Annuler', 'Enregistrer', 'Enregistrement…'].includes(textOf(node)))
+
+  // Sans retouche, enregistrer n'aurait rien à écrire et annuler rien à rendre.
+  const propre = monterPlaybook(playbookStates({ mode: 'write' }))
+  assert.deepEqual(gestes(propre.tree).map((node) => node.props.disabled), [true, true])
+
+  // Un caractère de plus réveille les deux gestes.
+  const retouche = monterPlaybook(playbookStates({ mode: 'write', draft: '## Avant d’agir\n\nretouche\n' }))
+  assert.deepEqual(gestes(retouche.tree).map((node) => node.props.disabled), [false, false])
+
+  // Pendant l'envoi, les deux se referment — un second clic ne double pas l'écriture.
+  const envoi = monterPlaybook(playbookStates({ mode: 'write', draft: '## Avant d’agir\n\nretouche\n', saving: true }))
+  assert.deepEqual(gestes(envoi.tree).map((node) => node.props.disabled), [true, true])
+})
+
+test('Annuler rend le brouillon au dernier état enregistré', () => {
+  const { tree, setters } = monterPlaybook(playbookStates({ mode: 'write', draft: 'retouche non enregistrée\n' }))
+  findAll(tree, 'button').find((node) => textOf(node) === 'Annuler').props.onClick()
+  assert.deepEqual(setters, ['## Avant d’agir\n', { kind: 'ok', message: 'Modifications annulées.' }])
 })
 
 test('la page Playbook a ses règles, l’onglet son glyphe dans les deux thèmes', () => {
-  assert.match(regle('.pb-layout'), /grid-template-columns: 240px minmax\(0, 1fr\)/)
-  assert.match(regle('.pb-page[aria-current="true"]'), /box-shadow/)
+  // Le rail large fait 208 px, et l'étape courante porte la pastille pleine.
+  assert.match(regle('.pb-path-layout'), /grid-template-columns: 208px minmax\(0, 1fr\)/)
+  assert.match(regle('.pb-step[aria-current="true"] .pb-step-num'), /background: var\(--dsw-alias-label-primary/)
+  // Le document rendu et son éditeur monospace.
+  assert.match(regle('.pb-doc table'), /border-collapse: collapse/)
   assert.match(regle('.pb-text'), /font-family: var\(--dsw-font-mono/)
+  // Le refus liste ses manques en rouge.
   assert.match(regle('.pb-errors'), /color: #a33a2a/)
   // Un dessin par thème, et un seul : le glyphe suit le thème actif.
   assert.equal((SOURCE.match(/playbook: \[/g) ?? []).length, 2)
