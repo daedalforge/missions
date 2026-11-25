@@ -120,6 +120,7 @@ function pullRequest(number) {
 /** Route `/user`, the GraphQL endpoint and the REST fallback by call shape. */
 function fakeFetch({ graphql = {}, rest = {} } = {}) {
   const calls = []
+  let byNumberCalls = 0
   const fetchImpl = async (url, init = {}) => {
     const href = String(url)
     const method = init.method ?? 'GET'
@@ -132,6 +133,11 @@ function fakeFetch({ graphql = {}, rest = {} } = {}) {
         return response(graphql.mutation ?? { data: { setIssueFieldValue: { issue: { number: 1 } } } })
       }
       if (query.includes('issue(number: $n')) {
+        if (Array.isArray(graphql.byNumber)) {
+          const reply = graphql.byNumber[byNumberCalls] ?? graphql.byNumber.at(-1)
+          byNumberCalls += 1
+          return response(reply)
+        }
         return response(graphql.byNumber ?? { data: { repository: {} } })
       }
       return response(graphql.list ?? { data: { repository: { issues: { pageInfo: { hasNextPage: false }, nodes: [] } } } })
@@ -235,6 +241,118 @@ test('l’historique fermé se lit par numéro, champs compris', async () => {
   assert.equal(missions[0].points, 5)
   const query = calls.find((call) => call.url === GRAPHQL && call.body.query.includes('issue(number: $n')).body.query
   assert.match(query, /i1: issue\(number: \$n1\)/)
+})
+
+test('un lot mixte rend les issues qui résolvent et ignore un numéro absent ou une PR', async () => {
+  // Given des déclarations mêlant une issue fermée, une issue ouverte, une PR
+  // et un numéro absent du dépôt
+  const { fetchImpl } = fakeFetch({
+    graphql: {
+      byNumber: {
+        data: {
+          repository: {
+            i0: node(7, { state: 'CLOSED', fields: { 'Workflow stage': 'In progress', 'Story point': 5 } }),
+            i1: node(8, { state: 'OPEN', fields: { 'Workflow stage': 'Ready' } }),
+            i2: null,
+            i3: null,
+          },
+        },
+        errors: [
+          { type: 'NOT_FOUND', path: ['repository', 'i2'], message: 'Could not resolve to an Issue with the number of 103.' },
+          { type: 'NOT_FOUND', path: ['repository', 'i3'], message: 'Could not resolve to an Issue with the number of 114.' },
+        ],
+      },
+    },
+  })
+
+  // When Done lit les quatre clés déclarées
+  const missions = await listDone(PROJECT, ['CFG-7', 'CFG-8', 'CFG-103', 'CFG-114'], { fetchImpl })
+
+  // Then les deux issues sont rendues, la PR et l'absente ne font aucune ligne done
+  assert.deepEqual(missions.map((mission) => mission.key), ['CFG-7', 'CFG-8'])
+  assert.deepEqual(missions.map((mission) => mission.state), ['done', 'ready'])
+  assert.equal(missions.filter((mission) => mission.state === 'done').length, 1)
+  assert.equal(missions[0].points, 5)
+})
+
+test('un NOT_FOUND d’alias ne masque pas une panne du même lot', async () => {
+  // Given un lot qui porte une erreur d'alias tolérée et un rate limit
+  const { fetchImpl } = fakeFetch({
+    graphql: {
+      byNumber: {
+        data: { repository: { i0: node(7, { state: 'CLOSED' }), i1: null } },
+        errors: [
+          { type: 'NOT_FOUND', path: ['repository', 'i1'], message: 'Could not resolve to an Issue with the number of 114.' },
+          { type: 'RATE_LIMITED', message: 'API rate limit exceeded for user ID 1.' },
+        ],
+      },
+    },
+  })
+
+  // When Done lit le lot
+  // Then la lecture lève, et le message conservé est celui de la panne
+  await assert.rejects(
+    () => listDone(PROJECT, ['CFG-7', 'CFG-114'], { fetchImpl }),
+    (error) => {
+      assert.match(error.message, /API rate limit exceeded/)
+      assert.doesNotMatch(error.message, /Could not resolve/)
+      return true
+    },
+  )
+})
+
+test('un NOT_FOUND qui ne vise pas un numéro reste fatal', async () => {
+  // Given un NOT_FOUND sur le dépôt lui-même, sans alias d'issue
+  const { fetchImpl } = fakeFetch({
+    graphql: {
+      byNumber: {
+        data: null,
+        errors: [{
+          type: 'NOT_FOUND',
+          path: ['repository'],
+          message: 'Could not resolve to a Repository with the name \'daedalforge/gone\'.',
+        }],
+      },
+    },
+  })
+
+  // When Done lit une clé
+  // Then la lecture lève : le silence est réservé aux numéros
+  await assert.rejects(
+    () => listDone(PROJECT, ['CFG-7'], { fetchImpl }),
+    /Could not resolve to a Repository/,
+  )
+})
+
+test('un lot entièrement absent laisse le lot suivant résoudre ses numéros', async () => {
+  // Given 41 déclarations dont les 40 premières ne résolvent pas
+  const numbers = Array.from({ length: 41 }, (_, index) => index + 1)
+  const missing = numbers.slice(0, 40)
+  const { fetchImpl, calls } = fakeFetch({
+    graphql: {
+      byNumber: [
+        {
+          data: { repository: Object.fromEntries(missing.map((number, index) => [`i${index}`, null])) },
+          errors: missing.map((number, index) => ({
+            type: 'NOT_FOUND',
+            path: ['repository', `i${index}`],
+            message: `Could not resolve to an Issue with the number of ${number}.`,
+          })),
+        },
+        { data: { repository: { i0: node(41, { state: 'CLOSED' }) } } },
+      ],
+    },
+  })
+
+  // When Done lit les 41 clés en deux lots
+  const keys = numbers.map((number) => `CFG-${number}`)
+  const missions = await listDone(PROJECT, keys, { fetchImpl })
+
+  // Then les requêtes restent bornées à 40 alias, et le second lot résout
+  const queries = calls.filter((call) => call.url === GRAPHQL && call.body.query.includes('issue(number: $n'))
+  assert.equal(queries.length, 2)
+  assert.equal((queries[0].body.query.match(/issue\(number: \$n\d+\)/g) ?? []).length, 40)
+  assert.deepEqual(missions.map((mission) => mission.key), ['CFG-41'])
 })
 
 test('la création écrit les champs et ne pose aucun label d’état ni de priorité', async () => {
