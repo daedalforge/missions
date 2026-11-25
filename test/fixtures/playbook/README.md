@@ -7,6 +7,7 @@
 | `playbook/revue.md` | revue |
 | `playbook/cloture.md` | clôture |
 | `playbook/workspace.md` | workspace |
+| `playbook/clienthub.md` | dépôt clienthub |
 
 ## Contrat de lecture
 
