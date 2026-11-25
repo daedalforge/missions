@@ -161,6 +161,9 @@ test('la lecture rend le texte du fichier et sa version', async (t) => {
   assert.ok(page.sections.every((section) => section.ok))
   assert.deepEqual(page.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
   assert.deepEqual(page.document, { path: 'workflows/execution.md', ok: true })
+  assert.match(page.html, /<h2 id="avant-d-agir"><span class="pb-doc-num">01<\/span>Avant d&#39;agir<\/h2>/)
+  assert.match(page.html, /<table>/)
+  assert.doesNotMatch(page.html, /## Avant d'agir/)
 })
 
 test('une page inconnue, l’index et une traversée sont refusés en 400', async (t) => {
@@ -207,6 +210,7 @@ test('une page valide est écrite puis relue avec sa nouvelle version', async (t
   assert.equal('text' in saved, false)
   assert.equal(saved.maxLines, 200)
   assert.deepEqual(saved.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
+  assert.match(saved.html, /<table>/)
   const reread = await readPlaybook(dir, 'execution')
   assert.equal(reread.text, changed)
   assert.equal(reread.mtimeMs, saved.mtimeMs)

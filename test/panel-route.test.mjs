@@ -3551,6 +3551,9 @@ test('GET playbooks/page rend le texte et sa version, 400 puis 404 sinon', async
   assert.ok(response.body.sections.every((section) => section.ok))
   assert.deepEqual(response.body.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
   assert.deepEqual(response.body.document, { path: 'workflows/execution.md', ok: true })
+  assert.match(response.body.html, /<h2 id="avant-d-agir">/)
+  assert.match(response.body.html, /<table>/)
+  assert.doesNotMatch(response.body.html, /## Avant d'agir/)
 
   const unknown = await call(handler, { path: '/missions/api/playbooks/page?page=inconnue' })
   assert.equal(unknown.status, 400)
@@ -3591,6 +3594,7 @@ test('POST playbooks/page écrit une page valide et refuse une page fautive', as
   assert.equal(saved.body.sections.length, 6)
   assert.deepEqual(saved.body.stateLine, { ok: true, entry: 'to-refine', exit: 'ready' })
   assert.deepEqual(saved.body.document, { path: 'workflows/cadrage.md', ok: true })
+  assert.match(saved.body.html, /<span class="pb-doc-num">01<\/span>/)
   assert.equal(await readFile(join(dir, 'playbook', 'cadrage.md'), 'utf8'), changed)
 
   // Une version périmée ne réécrit rien.
