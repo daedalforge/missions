@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { join, relative } from 'node:path'
 
 import { loadProjects } from '../lib/projects.js'
-import { LOCAL_MODEL_DIR, MODEL_DIR, WORKFLOWS, loadWorkflows } from '../lib/workflows.js'
+import { ACTION_MODEL_DIR, LOCAL_ACTION_MODEL_DIR, LOCAL_MODEL_DIR, MODEL_DIR, WORKFLOWS, loadActionFlows, loadWorkflows } from '../lib/workflows.js'
 
 /**
  * Check every workflow model against its document and the workspace
@@ -31,9 +31,17 @@ try {
 // an absent one is a fresh clone, not a failure.
 const { workflows } = await loadWorkflows(join(root, MODEL_DIR), { states })
 const { workflows: local } = await loadWorkflows(join(root, LOCAL_MODEL_DIR), { states })
+// The flows document one node of a workflow: they are checked against the real
+// nodes, and their key is unique across the two directories.
+const { actionFlows } = await loadActionFlows(join(root, ACTION_MODEL_DIR), { workflows: [...workflows, ...local] })
+const { actionFlows: localFlows } = await loadActionFlows(join(root, LOCAL_ACTION_MODEL_DIR), {
+  workflows: [...workflows, ...local],
+  flows: actionFlows,
+})
 let failures = 0
 
 console.log(`workflows · ${workflows.length} modèles versionnés · ${local.length} locaux · vocabulaire ${states.join(', ')}`)
+console.log(`action flows · ${actionFlows.length} versionnés · ${localFlows.length} locaux`)
 
 for (const entry of [...workflows, ...local]) {
   const broken = entry.errors.length > 0
@@ -51,6 +59,18 @@ for (const entry of [...workflows, ...local]) {
   }
   if (entry.orphanSections.length) {
     console.log(`  sections orphelines : ${entry.orphanSections.join(' · ')}`)
+  }
+}
+
+for (const flow of [...actionFlows, ...localFlows]) {
+  const broken = flow.errors.length > 0
+  if (broken) failures += 1
+  console.log('')
+  console.log(`${broken ? '✖' : '✔'} ${flow.flow} — ${flow.title} (${flow.workflow || '?'} › ${flow.action || '?'})`)
+  console.log(`  ${flow.file} · ${flow.counts.entry} conditions · ${flow.counts.steps} étapes · ${flow.counts.forbidden} interdits`)
+  for (const error of flow.errors) {
+    const where = error.field ? `${error.field} · ` : ''
+    console.log(`  ${where}${error.code} : ${error.message}`)
   }
 }
 

@@ -105,6 +105,15 @@ dossier, les dessine, les édite et en crée de nouveaux dans son onglet
 **Workflows** ; le format, les deux genres et leurs règles sont décrits dans
 `workflows/model/README.md`.
 
+À côté des workflows, les **action flows** documentent la procédure d'un nœud :
+conditions d'entrée, étapes ordonnées, gate, interdits et preuve de sortie. Ils
+vivent dans `workflows/model/actions/` (versionnés) et
+`workflows/local/model/actions/` (ignorés), portent `kind: action-flow` et
+citent le nœud qu'ils décrivent. Le panneau les liste au même niveau que les
+workflows, avec le badge **Action flow** ; le type, le schéma
+(en treize clés), le rangement, le lien, l'édition et la validation sont décrits
+dans [`model/README.md`](model/README.md#les-action-flows).
+
 Le document `.md` reste la référence : le modèle en est la vue éditable, et
 `node tools/check-workflows.mjs` signale, étape par étape, une section du
 document restée sans geste (ou un geste qui n'ancre aucune section). Une

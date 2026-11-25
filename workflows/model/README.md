@@ -5,7 +5,10 @@ dépôt vivent dans `workflows/local/model/` : même format, autre dossier (voir
 « Workflows locaux »). Les quatre étapes de la
 méthode s'appellent `cadrage.yml`, `execution.yml`, `review.yml` et `cloture.yml`
 ; le parcours des statuts s'appelle `statuts.yml`. Tout autre fichier `.yml` du
-dossier est un workflow de plus ; la liste du panneau est le dossier.
+dossier est un workflow de plus ; la liste du panneau est le dossier. Le
+sous-dossier `actions/` ne contient pas des workflows mais les **action flows**
+(voir plus bas) : `loadWorkflows` ne lit que les `*.yml` du dossier, donc il les
+ignore.
 
 Le document `workflows/<workflow>.md` reste la référence : il dit ce que
 l'étape demande. Le modèle en est la vue éditable — les points et les arcs — et
@@ -86,6 +89,75 @@ Un arc de statuts porte, en plus de `from`, `to` et `when`, les trois champs
 facultatifs `writer`, `artifact` et `gate`. Le panneau les édite ; un modèle
 d'étape qui les porte reste valide, et le panneau les y affiche aussi.
 
+## Les action flows
+
+Un **workflow** est le cycle de vie : il possède les états. Une **action** est un
+nœud d'un workflow : elle ne possède pas d'état. Un **action flow** est la
+procédure d'une action — ses conditions d'entrée, ses étapes ordonnées, sa gate,
+ses interdits et sa preuve de sortie. Il ne vit pas tout seul : il cite le nœud
+qu'il documente.
+
+Un action flow n'est pas un genre de workflow : c'est un type de modèle à part,
+`kind: action-flow`, rangé dans les jumeaux `actions/` des deux dossiers de
+modèles.
+
+| Rangement | Modèle | Lien |
+| --- | --- | --- |
+| versionné | `workflows/model/actions/<clé>.yml` | un nœud de `workflows/model/<workflow>.yml` |
+| local | `workflows/local/model/actions/<clé>.yml` | un nœud local ou versionné |
+
+Le premier flow est `workflows/model/actions/decoupage.yml`, la procédure du
+nœud `decouper` de la revue (`section: Quand la PR est trop grosse`,
+`writer: session`). Sa procédure est aussi écrite en prose dans
+`workflows/review.md` et dans le prompt de découpe (`SPLIT_BRIEF`) : le YAML en
+est la transcription structurée et éditable, le prompt reste la source exécutée
+pour ce lot.
+
+## Ce que contient un fichier d'action flow
+
+```yaml
+kind: action-flow              # le type, toujours écrit
+flow: decoupage                # la clé, égale au nom du fichier
+title: Découper une PR trop grosse
+description: …                 # facultatif : 280 caractères au plus
+workflow: review               # un workflow qui existe
+action: decouper               # un nœud de ce workflow
+section: Quand la PR est trop grosse   # la section du nœud, texte exact
+writer: session                # l'écrivain du nœud, texte exact
+entry:                         # les conditions d'entrée, au moins une
+  - la PR est trop grosse pour une revue sérieuse
+steps:                         # les étapes, dans l'ordre, sans doublon
+  - Retrouver la PR de la branche avec `gh pr list --head <branche> --state all`
+gate: le demandeur a confirmé le découpage
+forbidden:                     # les gestes que la session ne fait pas
+  - merger une PR
+  - écrire sur `main`
+proof: la liste `branches:` écrite par la route, une PR ouverte par partie
+```
+
+Les treize clés sont `kind`, `flow`, `title`, `description`, `workflow`,
+`action`, `section`, `writer`, `entry`, `steps`, `gate`, `forbidden` et `proof`.
+`description` est le seul champ facultatif ; `entry`, `steps`, `gate`,
+`forbidden` et `proof` sont obligatoires et non vides. Un flow n'a ni `document`
+ni `local` : il cite la section du document de son workflow, et c'est le dossier
+qui dit son rangement.
+
+## Éditer un action flow
+
+Dans l'onglet **Workflows**, un action flow est une entrée de la même liste
+qu'un workflow, avec le badge **Action flow** et le lien `review › decouper`. Sa
+fiche a deux onglets :
+
+- **Informations** : le titre, la description, et le lien (`flow`, `workflow`,
+  `action`, `section`, `writer`) en lecture seule — il vient du nœud ;
+- **Procédure** : les conditions d'entrée, les étapes (ajout, suppression,
+  ordre), la gate, les interdits et la preuve de sortie.
+
+**Enregistrer** poste le flow à `POST /missions/api/action-flows/model` ; le
+serveur valide et n'écrit rien en cas de refus. **Annuler** revient au dernier
+état lu. La création et le déplacement depuis le panneau n'existent pas : un
+flow s'ajoute par un commit, puis s'édite en place.
+
 ## Règles
 
 Le fichier est validé à chaque écriture, et par `node tools/check-workflows.mjs`.
@@ -108,6 +180,12 @@ Le fichier est validé à chaque écriture, et par `node tools/check-workflows.m
   qu'écrit la création d'un workflow.
 - **Pas de coordonnées** : le panneau calcule le dessin. Le fichier ne dit que
   le graphe.
+- **Action flows** : `flow` est unique entre les deux dossiers et égal au nom du
+  fichier ; le couple `(workflow, action)` est unique ; `workflow` existe et
+  `action` est un nœud de ce workflow ; `section` et `writer` sont ceux du nœud,
+  texte exact ; les étapes ne se répètent pas ; une clé inconnue est refusée.
+  Un flow orphelin (workflow ou action inconnus, section ou écrivain divergents,
+  gate vide) est refusé avec son fichier et son champ.
 
 ## Créer un workflow
 
@@ -162,8 +240,10 @@ node tools/check-workflows.mjs
 ```
 
 La commande lit `missions/projects.yml` pour le vocabulaire, charge les modèles
-du dossier, et affiche pour chacun son genre, ses compteurs, ses erreurs et ses
-sections orphelines. Elle sort en erreur (code 1) dès qu'un modèle est invalide.
+et les action flows des deux dossiers, et affiche pour chacun son genre, ses
+compteurs, ses erreurs et ses sections orphelines. Elle vérifie aussi le lien de
+chaque flow vers son workflow et son nœud, et sort en erreur (code 1) dès qu'un
+modèle ou un flow est invalide, en nommant le fichier fautif.
 
 ## Workflows locaux
 
