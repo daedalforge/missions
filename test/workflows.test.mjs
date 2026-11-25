@@ -8,24 +8,33 @@ import YAML, { parse } from 'yaml'
 
 import { loadProjects } from '../lib/projects.js'
 import {
+  ACTION_FLOW_KIND,
+  ACTION_MODEL_DIR,
+  LOCAL_ACTION_MODEL_DIR,
   STATUS_STATES,
   WORKFLOWS,
+  actionFlowDirs,
   createWorkflow,
   descriptionError,
   documentStub,
+  fileActionFlow,
   fileModel,
   isWorkflowKey,
+  loadActionFlows,
+  loadWorkflows,
+  readActionFlow,
+  readHeadings,
   retitleDocument,
+  saveActionFlow,
+  scopeOf,
+  readWorkflow,
+  saveWorkflow,
   slugify,
   expectedDocument,
   LOCAL_MODEL_DIR,
   LOCAL_MODELS_DIR,
   MODELS_DIR,
-  loadWorkflows,
-  readHeadings,
-  scopeOf,
-  readWorkflow,
-  saveWorkflow,
+  validateActionFlow,
   validateModel,
   workflowDirs,
 } from '../lib/workflows.js'
@@ -867,4 +876,221 @@ test('saveWorkflow local refuse un document hors de workflows/local/', async (t)
   const refused = await saveWorkflow(local, 'cadrage', modele({ document: 'workflows/cadrage.md' }), { states: STATES })
   assert.deepEqual(codes(refused), ['document-hors-dossier'])
   assert.equal(await readFile(join(local, 'cadrage.yml'), 'utf8').catch(() => null), null, 'rien n’est écrit')
+})
+
+
+/* ------------------------------------------------------------------------- *
+ * Action flows: the procedure of one node, cited by its workflow
+ * ------------------------------------------------------------------------- */
+
+const ACTIONS = join(ROOT, 'workflows', 'model', 'actions')
+const ACTION_WORKFLOWS = [{
+  workflow: 'review',
+  nodes: [
+    { id: 'decouper', section: 'Quand la PR est trop grosse', writer: 'session' },
+  ],
+}]
+
+/** Le flow minimal, que chaque test casse d'une seule façon. */
+function flux(over = {}) {
+  return {
+    kind: ACTION_FLOW_KIND,
+    flow: 'decoupage',
+    title: 'Découper une PR trop grosse',
+    description: 'Transformer une PR trop grosse en plusieurs PR empilées.',
+    workflow: 'review',
+    action: 'decouper',
+    section: 'Quand la PR est trop grosse',
+    writer: 'session',
+    entry: ['la PR est trop grosse pour une revue sérieuse'],
+    steps: ['Retrouver la PR', 'Lire les commits'],
+    gate: 'le demandeur a confirmé le découpage',
+    forbidden: ['merger une PR'],
+    proof: 'la liste branches écrite par la route',
+    ...over,
+  }
+}
+
+function valideFlux(doc, over = {}) {
+  return validateActionFlow(doc, { workflows: ACTION_WORKFLOWS, flows: [], file: 'decoupage', ...over })
+}
+
+test('le flow de découpe du dépôt est valide et couvre la procédure du nœud decouper', async () => {
+  // Given : les workflows du dépôt et le flow versionné qui cite l'un de leurs nœuds.
+  const { workflows } = await loadWorkflows(MODELS, { states: STATES })
+  const { actionFlows } = await loadActionFlows(ACTIONS, { workflows })
+
+  // When
+  const decoupage = actionFlows.find((entry) => entry.flow === 'decoupage')
+
+  // Then : le flow est valide, lié au nœud, et porte la procédure entière.
+  assert.ok(decoupage, 'le flow decoupage est chargé')
+  assert.deepEqual(decoupage.errors, [])
+  assert.equal(decoupage.kind, ACTION_FLOW_KIND)
+  assert.equal(decoupage.flow, 'decoupage')
+  assert.equal(decoupage.workflow, 'review')
+  assert.equal(decoupage.action, 'decouper')
+  assert.equal(decoupage.section, 'Quand la PR est trop grosse')
+  assert.equal(decoupage.writer, 'session')
+  assert.equal(decoupage.file, 'workflows/model/actions/decoupage.yml')
+  assert.equal(decoupage.local, false)
+  assert.deepEqual(decoupage.counts, { entry: 2, steps: 8, forbidden: 7 })
+  const node = workflows.find((entry) => entry.workflow === 'review').nodes.find((item) => item.id === 'decouper')
+  assert.equal(decoupage.section, node.section, 'la section concorde avec le nœud')
+  assert.equal(decoupage.writer, node.writer, 'l’écrivain concorde avec le nœud')
+  assert.ok(decoupage.gate, 'la gate est renseignée')
+  assert.ok(decoupage.proof, 'la preuve de sortie est renseignée')
+
+  // Les huit gestes de SPLIT_BRIEF se retrouvent dans les étapes.
+  const steps = decoupage.steps.join('\n')
+  for (const fragment of ['gh pr list', 'git log --oneline', 'confirmation explicite', 'git branch', 'pousser les branches', 'Retargéter', 'POST /missions/api/branches', 'section Revue du journal']) {
+    assert.match(steps, new RegExp(fragment, 'i'), `l’étape ${fragment} est transcrite`)
+  }
+  // Les sept interdits nomment les gestes que la session ne fait pas.
+  const forbidden = decoupage.forbidden.join('\n')
+  for (const fragment of ['merger', 'fermer', 'libellé', 'approuver', 'main', 'force-push', 'commit nouveau']) {
+    assert.match(forbidden, new RegExp(fragment, 'i'), `l’interdit ${fragment} est nommé`)
+  }
+})
+
+test('un action flow valide cite un workflow et un nœud connus', () => {
+  assert.deepEqual(valideFlux(flux()).errors, [])
+})
+
+test('validateActionFlow refuse chaque écart de schéma, de liste ou de lien', () => {
+  const cas = [
+    ['une gate vide', flux({ gate: '   ' }), 'gate', 'gate-manquant'],
+    ['un écrivain inconnu', flux({ writer: 'robot' }), 'writer', 'ecrivain-inconnu'],
+    ['un écrivain divergent', flux({ writer: 'demandeur' }), 'writer', 'ecrivain-divergent'],
+    ['un workflow inconnu', flux({ workflow: 'deploy' }), 'workflow', 'workflow-inconnu'],
+    ['une action inconnue', flux({ action: 'deployer' }), 'action', 'action-inconnue'],
+    ['une section divergente', flux({ section: 'Ce qu’on constate' }), 'section', 'section-divergente'],
+    ['un flow différent du fichier', flux({ flow: 'autre' }), 'flow', 'flux-different'],
+    ['un genre absent', flux({ kind: undefined }), 'kind', 'genre-inconnu'],
+    ['une étape en double', flux({ steps: ['Lire les commits', 'lire   les commits'] }), 'steps[1]', 'etape-double'],
+    ['une étape vide', flux({ steps: ['Retrouver la PR', ''] }), 'steps[1]', 'element-vide'],
+    ['une entrée absente', flux({ entry: [] }), 'entry', 'entree-manquante'],
+    ['des étapes absentes', flux({ steps: [] }), 'steps', 'etapes-manquantes'],
+    ['des interdits absents', flux({ forbidden: [] }), 'forbidden', 'interdits-manquants'],
+    ['une preuve absente', flux({ proof: ' ' }), 'proof', 'preuve-manquante'],
+    ['une description de 281 caractères', flux({ description: 'x'.repeat(281) }), 'description', 'description-invalide'],
+    ['une clé inconnue', flux({ document: 'workflows/review.md' }), 'document', 'cle-inconnue'],
+  ]
+
+  for (const [nom, doc, field, code] of cas) {
+    const result = valideFlux(doc)
+    assert.deepEqual(codes(result), [code], nom)
+    assert.equal(result.errors[0].field, field, nom)
+  }
+})
+
+test('un flow refuse une clé ou un couple (workflow, action) déjà pris, toutes portées confondues', () => {
+  const clePrise = valideFlux(flux(), { flows: [{ flow: 'decoupage', workflow: 'review', action: 'decouper', local: true }] })
+  assert.ok(codes(clePrise).includes('flux-double'), 'la clé est déjà prise')
+  assert.deepEqual(codes(clePrise), ['flux-double', 'paire-double'], 'la même entrée prend aussi le couple')
+  assert.equal(clePrise.errors[0].field, 'flow')
+  assert.match(clePrise.errors[0].message, /workflows\/local\/model\/actions/)
+
+  const pairePrise = valideFlux(flux({ flow: 'autre', title: 'Autre' }), {
+    flows: [{ flow: 'decoupage', workflow: 'review', action: 'decouper', local: false }],
+    file: 'autre',
+  })
+  assert.deepEqual(codes(pairePrise), ['paire-double'])
+  assert.equal(pairePrise.errors[0].field, 'action')
+})
+
+test('fileActionFlow ordonne les treize clés et n’écrit pas une description vide', () => {
+  const model = fileActionFlow(flux({ description: '   ' }))
+  assert.deepEqual(Object.keys(model), ['kind', 'flow', 'title', 'workflow', 'action', 'section', 'writer', 'entry', 'steps', 'gate', 'forbidden', 'proof'])
+  const ordered = YAML.stringify(model, { lineWidth: 0 })
+  const keys = ['kind:', 'flow:', 'title:', 'workflow:', 'action:', 'section:', 'writer:', 'entry:', 'steps:', 'gate:', 'forbidden:', 'proof:']
+  const positions = keys.map((key) => ordered.indexOf(key))
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, 'les clés sortent dans l’ordre du schéma')
+  assert.ok(YAML.stringify(fileActionFlow(flux())).includes('description:'))
+})
+
+/** Write a flow in a temporary actions directory, as a commit would. */
+async function ecrireFlux(dir, doc = flux()) {
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, 'decoupage.yml'), YAML.stringify(doc), 'utf8')
+}
+
+test('saveActionFlow réécrit le flow validé et n’écrit rien quand il est refusé', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'actions-save-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const actions = join(dir, 'workflows', 'model', 'actions')
+  await ecrireFlux(actions)
+
+  // Given : un flow valide sur disque, dont une étape a bougé et la gate change.
+  const avant = await readFile(join(actions, 'decoupage.yml'), 'utf8')
+
+  // When : la sauvegarde d'une version valide.
+  const saved = await saveActionFlow(actions, 'decoupage', flux({
+    title: 'Découper une PR trop grosse autrement',
+    steps: ['Lire les commits', 'Retrouver la PR'],
+    gate: 'le demandeur a confirmé les bornes',
+  }), { workflows: ACTION_WORKFLOWS })
+
+  // Then : le fichier porte les treize clés dans l'ordre, et la version relue est renvoyée.
+  assert.deepEqual(saved.errors, [])
+  const written = await readFile(join(actions, 'decoupage.yml'), 'utf8')
+  const parsed = parse(written)
+  assert.deepEqual(Object.keys(parsed), ['kind', 'flow', 'title', 'description', 'workflow', 'action', 'section', 'writer', 'entry', 'steps', 'gate', 'forbidden', 'proof'])
+  assert.deepEqual(parsed.steps, ['Lire les commits', 'Retrouver la PR'])
+  assert.equal(parsed.gate, 'le demandeur a confirmé les bornes')
+  assert.equal(saved.local, false)
+
+  // Et un flow refusé laisse le fichier intact.
+  const refused = await saveActionFlow(actions, 'decoupage', flux({ gate: '' }), { workflows: ACTION_WORKFLOWS })
+  assert.deepEqual(codes(refused), ['gate-manquant'])
+  assert.equal(await readFile(join(actions, 'decoupage.yml'), 'utf8'), written, 'le fichier refusé reste intact')
+  assert.notEqual(written, avant, 'la version valide a bien été écrite')
+})
+
+test('saveActionFlow refuse un flux absent et un conflit sans écrire', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'actions-save-refus-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const actions = join(dir, 'workflows', 'model', 'actions')
+  await mkdir(actions, { recursive: true })
+
+  const absent = await saveActionFlow(actions, 'decoupage', flux(), { workflows: ACTION_WORKFLOWS })
+  assert.deepEqual(codes(absent), ['flux-absent'], 'un flow s’ajoute par commit, pas par le panneau')
+  assert.equal(await readFile(join(actions, 'decoupage.yml'), 'utf8').catch(() => null), null)
+
+  await ecrireFlux(actions)
+  const avant = await readFile(join(actions, 'decoupage.yml'), 'utf8')
+  const conflit = await saveActionFlow(actions, 'decoupage', flux(), {
+    workflows: ACTION_WORKFLOWS,
+    flows: [{ flow: 'decoupage-local', workflow: 'review', action: 'decouper', local: true }],
+  })
+  assert.equal(conflit.conflict, true)
+  assert.deepEqual(codes(conflit), ['paire-double'])
+  assert.equal(await readFile(join(actions, 'decoupage.yml'), 'utf8'), avant)
+})
+
+test('un flow local se lit dans son dossier, un dossier local absent ne casse rien', async (t) => {
+  // Given : les dossiers d'actions dérivés d'un fichier de projets temporaire.
+  const dir = await mkdtemp(join(tmpdir(), 'actions-local-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const { modelsDir, localModelsDir } = actionFlowDirs(pathToFileURL(join(dir, 'missions', 'projects.yml')))
+
+  // Then : sans dossier local, les deux lectures rendent une liste vide.
+  assert.deepEqual((await loadActionFlows(modelsDir, { workflows: ACTION_WORKFLOWS })).actionFlows, [])
+  assert.deepEqual((await loadActionFlows(localModelsDir, { workflows: ACTION_WORKFLOWS })).actionFlows, [])
+
+  // When : un flow est rangé sous workflows/local/model/actions/.
+  const local = fileURLToPath(localModelsDir)
+  await ecrireFlux(local)
+
+  // Then : il est listé local, avec son chemin et son document lié.
+  const { actionFlows } = await loadActionFlows(localModelsDir, { workflows: ACTION_WORKFLOWS })
+  assert.equal(actionFlows.length, 1)
+  assert.equal(actionFlows[0].flow, 'decoupage')
+  assert.equal(actionFlows[0].local, true)
+  assert.equal(actionFlows[0].file, 'workflows/local/model/actions/decoupage.yml')
+  assert.deepEqual(actionFlows[0].errors, [])
+  assert.equal((await readActionFlow(localModelsDir, 'decoupage', { workflows: ACTION_WORKFLOWS })).local, true)
+  assert.equal(scopeOf(localModelsDir), 'local')
+  assert.equal(ACTION_MODEL_DIR, 'workflows/model/actions')
+  assert.equal(LOCAL_ACTION_MODEL_DIR, 'workflows/local/model/actions')
 })

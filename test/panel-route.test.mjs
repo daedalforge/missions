@@ -867,6 +867,11 @@ async function copyWorkflows(dir) {
       await readFile(join(root, 'workflows', 'model', `${workflow}.yml`)),
     )
   }
+  await mkdir(join(dir, 'workflows', 'model', 'actions'), { recursive: true })
+  await writeFile(
+    join(dir, 'workflows', 'model', 'actions', 'decoupage.yml'),
+    await readFile(join(root, 'workflows', 'model', 'actions', 'decoupage.yml')),
+  )
 }
 
 /** Le modèle nu, tel que le panneau le renvoie au serveur. */
@@ -1056,6 +1061,210 @@ test('POST /workflows pré-remplit un workflow de statuts, et la liste le rend',
   assert.deepEqual(list.body.workflows.map((entry) => entry.workflow), ['cadrage', 'execution', 'review', 'cloture', 'statuts'])
   assert.equal(list.body.workflows.at(-1).kind, 'statuts')
   assert.deepEqual(list.body.workflows.at(-1).counts, { nodes: 6, edges: 0 })
+})
+
+test('GET /workflows rend aussi les action flows, liés à leur nœud', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const response = await call(handler, { path: '/missions/api/workflows' })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body.actionFlows.length, 1)
+  const flow = response.body.actionFlows[0]
+  assert.equal(flow.kind, 'action-flow')
+  assert.equal(flow.flow, 'decoupage')
+  assert.equal(flow.workflow, 'review')
+  assert.equal(flow.action, 'decouper')
+  assert.equal(flow.section, 'Quand la PR est trop grosse')
+  assert.equal(flow.writer, 'session')
+  assert.equal(flow.file, 'workflows/model/actions/decoupage.yml')
+  assert.equal(flow.local, false)
+  assert.deepEqual(flow.counts, { entry: 2, steps: 8, forbidden: 7 })
+  assert.deepEqual(flow.errors, [])
+  assert.equal(flow.text, undefined, 'le texte reste dans la route du flow')
+})
+
+test('GET /action-flows/model rend le YAML, un flow inconnu répond 400', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+
+  const response = await call(handler, { path: '/missions/api/action-flows/model?flow=decoupage' })
+  assert.equal(response.status, 200)
+  assert.match(response.body.text, /^kind: action-flow/)
+  assert.equal(response.body.file, 'workflows/model/actions/decoupage.yml')
+  assert.equal(response.body.entry.steps.length, 8)
+  assert.deepEqual(response.body.errors, [])
+
+  const missing = await call(handler, { path: '/missions/api/action-flows/model' })
+  assert.equal(missing.status, 400)
+
+  const unknown = await call(handler, { path: '/missions/api/action-flows/model?flow=deploy' })
+  assert.equal(unknown.status, 400)
+})
+
+test('POST /action-flows/model enregistre un flow valide et relit le fichier', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const { errors, local, file, text, counts, ...model } = list.body.actionFlows[0]
+  model.title = 'Découper une PR trop grosse (relu)'
+  model.steps = [model.steps[1], model.steps[0], ...model.steps.slice(2)]
+  model.gate = 'le demandeur a confirmé les bornes'
+
+  const saved = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/action-flows/model',
+    body: { flow: 'decoupage', model },
+  })
+
+  assert.equal(saved.status, 200)
+  assert.equal(saved.body.flow, 'decoupage')
+  assert.equal(saved.body.file, 'workflows/model/actions/decoupage.yml')
+  assert.equal(saved.body.entry.title, 'Découper une PR trop grosse (relu)')
+  assert.equal(saved.body.entry.gate, 'le demandeur a confirmé les bornes')
+  assert.deepEqual(saved.body.entry.steps.slice(0, 2), [model.steps[0], model.steps[1]])
+  const written = parse(await readFile(join(dir, 'workflows', 'model', 'actions', 'decoupage.yml'), 'utf8'))
+  assert.equal(written.title, 'Découper une PR trop grosse (relu)')
+  assert.deepEqual(written.steps, model.steps)
+  assert.equal(written.gate, 'le demandeur a confirmé les bornes')
+
+  const listed = await call(handler, { path: '/missions/api/workflows' })
+  assert.equal(listed.body.actionFlows[0].title, 'Découper une PR trop grosse (relu)')
+})
+
+test('POST /action-flows/model refuse chaque écart et n’écrit rien', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  const list = await call(handler, { path: '/missions/api/workflows' })
+  const { errors, local, file, text, counts, ...base } = list.body.actionFlows[0]
+  const fichier = join(dir, 'workflows', 'model', 'actions', 'decoupage.yml')
+  const avant = await readFile(fichier, 'utf8')
+
+  const cas = [
+    ['une gate vide', { gate: '' }, 'gate', 'gate-manquant'],
+    ['un écrivain inconnu', { writer: 'robot' }, 'writer', 'ecrivain-inconnu'],
+    ['une action inconnue', { action: 'deployer' }, 'action', 'action-inconnue'],
+    ['une section divergente', { section: 'Ce qu’on constate' }, 'section', 'section-divergente'],
+    ['un flow différent du fichier', { flow: 'autre' }, 'flow', 'flux-different'],
+    ['des étapes en double', { steps: ['la même', 'la même'] }, 'steps[1]', 'etape-double'],
+  ]
+
+  for (const [nom, patch, field, code] of cas) {
+    const refused = await call(handler, {
+      method: 'POST',
+      path: '/missions/api/action-flows/model',
+      body: { flow: 'decoupage', model: { ...base, ...patch } },
+    })
+    assert.equal(refused.status, 400, nom)
+    assert.equal(refused.body.errors[0].field, field, nom)
+    assert.equal(refused.body.errors[0].code, code, nom)
+    assert.equal(await readFile(fichier, 'utf8'), avant, `${nom} : le fichier reste intact`)
+  }
+})
+
+test('POST /action-flows/model refuse un couple déjà pris en 409', async (t) => {
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  await writeFile(join(dir, 'workflows', 'model', 'actions', 'decoupage-bis.yml'), [
+    'kind: action-flow',
+    'flow: decoupage-bis',
+    'title: Découpage bis',
+    'workflow: review',
+    'action: decouper',
+    'section: Quand la PR est trop grosse',
+    'writer: session',
+    'entry:',
+    '  - une condition',
+    'steps:',
+    '  - une étape',
+    'gate: une gate',
+    'forbidden:',
+    '  - un interdit',
+    'proof: une preuve',
+    '',
+  ].join('\n'), 'utf8')
+  const fichier = join(dir, 'workflows', 'model', 'actions', 'decoupage-bis.yml')
+  const avant = await readFile(fichier, 'utf8')
+
+  const refused = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/action-flows/model',
+    body: {
+      flow: 'decoupage-bis',
+      model: {
+        kind: 'action-flow',
+        flow: 'decoupage-bis',
+        title: 'Découpage bis',
+        workflow: 'review',
+        action: 'decouper',
+        section: 'Quand la PR est trop grosse',
+        writer: 'session',
+        entry: ['une condition'],
+        steps: ['une étape'],
+        gate: 'une gate',
+        forbidden: ['un interdit'],
+        proof: 'une preuve',
+      },
+    },
+  })
+
+  assert.equal(refused.status, 409)
+  assert.equal(refused.body.error, 'action flow conflict')
+  assert.ok(refused.body.errors.some((error) => error.code === 'paire-double'))
+  assert.equal(await readFile(fichier, 'utf8'), avant)
+})
+
+test('un flow local est listé local, lu et édité dans son dossier', async (t) => {
+  // Given : un flow rangé sous workflows/local/model/actions/.
+  const { dir, handler } = await mount(t)
+  await copyWorkflows(dir)
+  const local = join(dir, 'workflows', 'local', 'model', 'actions')
+  await mkdir(local, { recursive: true })
+  await writeFile(join(local, 'constat.yml'), [
+    'kind: action-flow',
+    'flow: constat',
+    'title: Constater la validation',
+    'workflow: review',
+    'action: constater-validation',
+    "section: Ce qu'on constate",
+    'writer: session',
+    'entry:',
+    '  - une PR ouverte',
+    'steps:',
+    '  - lire les avis',
+    'gate: chaque PR porte son verdict',
+    'forbidden:',
+    '  - approuver une PR',
+    'proof: la validation citée',
+    '',
+  ].join('\n'), 'utf8')
+
+  // When : la liste et la route du flow.
+  const listed = await call(handler, { path: '/missions/api/workflows' })
+  const read = await call(handler, { path: '/missions/api/action-flows/model?flow=constat' })
+
+  // Then : le flow est marqué local, lu depuis son dossier, et validé.
+  const flow = listed.body.actionFlows.find((entry) => entry.flow === 'constat')
+  assert.ok(flow)
+  assert.equal(flow.local, true)
+  assert.equal(flow.file, 'workflows/local/model/actions/constat.yml')
+  assert.deepEqual(flow.errors, [])
+  assert.equal(read.status, 200)
+  assert.equal(read.body.local, true)
+  assert.match(read.body.file, /^workflows\/local\/model\/actions\/constat\.yml$/)
+
+  // Et l'édition en place passe par la même route.
+  const { errors, local: rangement, file, text, counts, ...model } = flow
+  model.gate = 'chaque PR porte son verdict, daté'
+  const saved = await call(handler, {
+    method: 'POST',
+    path: '/missions/api/action-flows/model',
+    body: { flow: 'constat', model },
+  })
+  assert.equal(saved.status, 200)
+  assert.equal(saved.body.local, true)
+  assert.equal(saved.body.entry.gate, 'chaque PR porte son verdict, daté')
 })
 
 /** Réponse d'un tracker : ce que `requestJson` lit d'un vrai `fetch`. */

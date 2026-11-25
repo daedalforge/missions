@@ -1,0 +1,30 @@
+kind: action-flow
+flow: decoupage
+title: Découper une PR trop grosse
+description: Transformer une PR trop grosse en plusieurs PR empilées, sans réécrire le travail qu'elle porte.
+workflow: review
+action: decouper
+section: Quand la PR est trop grosse
+writer: session
+entry:
+  - la PR est trop grosse pour une revue sérieuse
+  - la mission tient en une paire — le bouton n'est rendu qu'à `in-review`, pour une mission à une paire
+steps:
+  - "Retrouver la PR de la branche avec `gh pr list --head <branche> --state all` ; si elle ne rend rien, le dire et s'arrêter."
+  - "Lire les commits depuis la base de mission avec `git log --oneline <base>..<branche>`."
+  - "Proposer les bornes — chaque partie avec le commit de coupe qui la termine — puis attendre la confirmation explicite du demandeur."
+  - "Créer chaque branche de partie au commit de coupe existant (`git branch <partie> <commit>`), sans commit nouveau ni force-push : la première part de la base de mission, chaque partie k de la partie k-1, la branche d'origine restant la dernière partie."
+  - "Pousser les branches et ouvrir une PR par partie précédente : la première vers la base de mission, chaque suivante vers la partie précédente."
+  - "Retargéter la PR d'origine vers la partie précédente : elle reste la PR de la dernière partie."
+  - "Écrire la liste `branches:` par la route `POST /missions/api/branches` (corps `{ key, folder, project, branches }`), jamais à la main dans `mission.yml`."
+  - "Consigner la découpe dans la section Revue du journal."
+gate: le demandeur a confirmé explicitement le découpage avant tout geste
+forbidden:
+  - merger une PR
+  - fermer une PR ou le ticket
+  - poser un libellé
+  - approuver une PR
+  - écrire sur `main`
+  - force-push
+  - créer un commit nouveau
+proof: la liste `branches:` écrite par la route, une PR ouverte par partie, la PR d'origine retargetée et la section Revue du journal
