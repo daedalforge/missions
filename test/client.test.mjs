@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { USAGE_ELEMENTS, modelOf } from '../lib/view.js'
+import { USAGE_ELEMENTS, actionFlowModelOf, modelOf } from '../lib/view.js'
 import { MODELS_DIR, readWorkflow } from '../lib/workflows.js'
 import { blockedReasonAfterWrite } from '../lib/view.js'
 import { forgetToken, setBlocked } from '../lib/trackers/jira.js'
@@ -1242,7 +1242,7 @@ test('les deux listes qui gardent une carte passent par la même coque', () => {
   // montage de `Card`, et deux sites l'appellent — la liste des missions n'est
   // plus un article, elle est un arbre.
   assert.equal((SOURCE.match(/className: \['missions-card', `missions-card--\$\{variant\}`/g) ?? []).length, 1)
-  assert.equal((SOURCE.match(/h\(Card, \{/g) ?? []).length, 2, 'les deux listes passent par Card')
+  assert.equal((SOURCE.match(/h\(Card, \{/g) ?? []).length, 3, 'le dashboard et les deux types de la liste Workflows passent par Card')
 
   // Dashboard : les six widgets, sans interaction.
   const { tree: dashboard } = renderDigest()
@@ -3658,9 +3658,9 @@ test('l’éditeur attend le modèle au lieu de lire un brouillon absent', () =>
   // La régression MIS-102 : entre la réponse du serveur (l'entrée est trouvée)
   // et l'effet qui pose le brouillon, le rendu lisait `draft.entry` et levait —
   // React démontait alors le panneau entier, onglets compris.
-  assert.match(SOURCE, /if \(!entry \|\| !draft\) \{/, 'le rendu garde les deux attentes')
+  assert.match(SOURCE, /if \(!selected \|\| !draft\) \{/, 'le rendu garde les deux attentes')
   assert.match(SOURCE, /'Chargement du modèle du parcours…'/, 'l’attente du modèle se dit')
-  assert.ok(SOURCE.indexOf('if (!entry || !draft) {') < SOURCE.indexOf('draft.entry'), 'le brouillon ne se lit qu’après la garde')
+  assert.ok(SOURCE.indexOf('if (!selected || !draft) {') < SOURCE.indexOf('draft.entry'), 'le brouillon ne se lit qu’après la garde')
   assert.match(SOURCE, /const ends = endPoints\(draft\)/, 'les extrémités passent par le helper qui tolère l’absence')
 })
 
@@ -8809,6 +8809,39 @@ function workflowEntry(over = {}) {
   }
 }
 
+/** Le flow de découpe, tel que le serveur le rend au panneau. */
+function actionFlowEntry(over = {}) {
+  return {
+    kind: 'action-flow',
+    flow: 'decoupage',
+    title: 'Découper une PR trop grosse',
+    description: 'Transformer une PR trop grosse en plusieurs PR empilées.',
+    workflow: 'review',
+    action: 'decouper',
+    section: 'Quand la PR est trop grosse',
+    writer: 'session',
+    entry: ['la PR est trop grosse pour une revue sérieuse', 'la mission tient en une paire'],
+    steps: [
+      'Retrouver la PR',
+      'Lire les commits',
+      'Proposer les bornes',
+      'Créer les branches',
+      'Pousser et ouvrir les PR',
+      'Retargéter la PR',
+      'Écrire branches:',
+      'Consigner au journal',
+    ],
+    gate: 'le demandeur a confirmé le découpage',
+    forbidden: ['merger une PR', 'fermer une PR ou le ticket', 'poser un libellé', 'approuver une PR', 'écrire sur main', 'force-push', 'créer un commit nouveau'],
+    proof: 'la liste branches écrite par la route',
+    counts: { entry: 2, steps: 8, forbidden: 7 },
+    local: false,
+    file: 'workflows/model/actions/decoupage.yml',
+    errors: [],
+    ...over,
+  }
+}
+
 /** Le workflow des statuts, l'autre genre de modèle. */
 function statutsEntry() {
   return {
@@ -8848,18 +8881,22 @@ function statutsEntry() {
 
 /** Le panneau monté sur Workflows, avec la liste et l'entrée voulues. */
 function montrerWorkflows(workflows, options = {}) {
-  const active = workflows.find((workflow) => workflow.workflow === options.step) ?? workflows[0]
+  const actionFlows = options.actionFlows ?? []
+  const activeFlow = actionFlows.find((flow) => `action-flow:${flow.flow}` === options.step) ?? null
+  const active = activeFlow ?? workflows.find((workflow) => workflow.workflow === options.step) ?? workflows[0]
+  const activeKey = activeFlow ? `action-flow:${activeFlow.flow}` : active.workflow
+  const activeModel = activeFlow ? actionFlowModelOf(activeFlow) : modelOf(active)
   const { api, ctx, registered, queue, setters } = charger(undefined, [EMPTY_BAR, dashboardView(DASH_MISSIONS)], memorySession({ 'missions.tab': 'workflows' }))
   api.apply(ctx)
   const vue = findAll(registered.main({}), 'WorkflowsView')[0]
   assert.ok(vue, 'l’onglet Workflows est monté')
-  const model = options.draft ?? modelOf(active)
+  const model = options.draft ?? activeModel
   queue.push(...WORKFLOW_HOOKS.map((name) => {
     if (name in options) return options[name]
-    if (name === 'view') return { loading: false, error: null, workflows, writers: ['demandeur', 'session', 'outil'], states: WORKFLOW_STATES }
-    if (name === 'step') return options.step ?? active.workflow
+    if (name === 'view') return { loading: false, error: null, workflows, actionFlows, writers: ['demandeur', 'session', 'outil'], states: WORKFLOW_STATES }
+    if (name === 'step') return options.step ?? activeKey
     if (name === 'draft') return model
-    if (name === 'baseline') return modelOf(active)
+    if (name === 'baseline') return activeModel
     if (name === 'exitText') return (model.exit ?? []).join(', ')
     if (name === 'tab') return options.tab ?? 'graphe'
     if (name === 'form') return { title: '', description: '', kind: 'etape' }
@@ -8986,6 +9023,180 @@ test('Annuler rend le brouillon au fichier lu, sans rien poster', async () => {
     annuler.props.onClick()
     const draft = setters.findLast((value) => value && typeof value === 'object' && value.workflow === 'statuts')
     assert.equal(draft.nodes.find((node) => node.id === 'done').label, 'Terminée')
+    assert.equal(appels.length, 0, 'Annuler n’écrit rien')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('un action flow est une entrée de la liste, avec son badge et son lien', () => {
+  // Given : une liste qui porte un workflow et le flow de découpe.
+  const { rendered, setters } = montrerWorkflows([workflowEntry()], {
+    actionFlows: [actionFlowEntry()],
+    step: 'action-flow:decoupage',
+  })
+
+  // Then : les deux entrées partagent la liste, le flow porte son badge et son lien.
+  const cartes = findAll(rendered, 'button').filter((node) => /missions-card--pick/.test(node.props.className ?? ''))
+  assert.equal(cartes.length, 2, 'les workflows puis les flows, une seule liste')
+  const flow = cartes.find((node) => node.props['data-flow'] === 'decoupage')
+  assert.ok(flow, 'le flow a sa carte')
+  assert.equal(flow.props['data-kind'], 'action-flow')
+  assert.equal(flow.props['aria-pressed'], true, 'la carte du flow ouvert est pressée')
+  assert.match(textOf(flow), /Action flow/)
+  assert.match(textOf(flow), /review/)
+  assert.match(textOf(flow), /decouper/)
+  assert.match(textOf(flow), /8 étapes/)
+  const workflow = cartes.find((node) => node.props['data-workflow'] === 'cadrage')
+  assert.ok(workflow, 'le workflow garde sa carte')
+
+  // When / Then : le clic choisit la clé de son type, flow préfixé.
+  workflow.props.onClick()
+  assert.equal(setters.at(-1), 'cadrage')
+  flow.props.onClick()
+  assert.equal(setters.at(-1), 'action-flow:decoupage', 'la clé préfixée distingue un flow homonyme')
+})
+
+test('la fiche d’un action flow porte Informations et Procédure, et sa procédure se lit en listes', () => {
+  const { rendered } = montrerWorkflows([workflowEntry()], {
+    actionFlows: [actionFlowEntry()],
+    step: 'action-flow:decoupage',
+    tab: 'procedure',
+  })
+
+  const onglets = findAll(rendered, 'button').filter((node) => node.props.role === 'tab')
+  assert.deepEqual(onglets.map(textOf), ['Informations', 'Procédure'])
+  assert.equal(onglets[1].props['aria-selected'], 'true')
+
+  const text = textOf(rendered)
+  for (const rubrique of ['Conditions d’entrée', 'Étapes', 'Gate', 'Interdits', 'Preuve de sortie']) {
+    assert.match(text, new RegExp(rubrique), rubrique)
+  }
+  assert.match(text, /lecture seule/)
+  const valeurs = findAll(rendered, 'input').map((node) => node.props.value)
+  for (const condition of actionFlowEntry().entry) assert.ok(valeurs.includes(condition), condition)
+  for (const interdit of actionFlowEntry().forbidden) assert.ok(valeurs.includes(interdit), interdit)
+  for (const libelle of ['Ajouter une condition', 'Ajouter une étape', 'Ajouter un interdit']) {
+    assert.ok(findAll(rendered, 'button').some((node) => textOf(node) === libelle), libelle)
+  }
+  assert.equal(findAll(rendered, 'svg').length, 0, 'un flow n’a pas de graphe')
+})
+
+test('les informations d’un flow éditent le titre et montrent le lien en lecture seule', () => {
+  const { rendered, setters } = montrerWorkflows([workflowEntry()], {
+    actionFlows: [actionFlowEntry()],
+    step: 'action-flow:decoupage',
+    tab: 'infos',
+  })
+
+  const champs = findAll(rendered, 'input')
+  assert.equal(champs.some((node) => node.props.value === 'review'), false, 'le workflow ne s’édite pas')
+  assert.equal(champs.some((node) => node.props.value === 'decouper'), false, 'l’action ne s’édite pas')
+  const codes = findAll(rendered, 'code').map(textOf)
+  for (const valeur of ['decoupage', 'review', 'decouper', 'Quand la PR est trop grosse', 'session']) {
+    assert.ok(codes.includes(valeur), valeur)
+  }
+
+  const titre = champs.find((node) => node.props.value === 'Découper une PR trop grosse')
+  assert.ok(titre, 'le titre s’édite')
+  titre.props.onChange({ target: { value: 'Découper autrement' } })
+  const draft = setters
+    .filter((value) => typeof value === 'function')
+    .map((update) => update(actionFlowModelOf(actionFlowEntry())))
+    .findLast((value) => value?.kind === 'action-flow')
+  assert.equal(draft.title, 'Découper autrement')
+})
+
+test('les étapes d’un flow s’ajoutent, se suppriment et se réordonnent', () => {
+  const base = actionFlowModelOf(actionFlowEntry())
+  const { rendered, setters } = montrerWorkflows([workflowEntry()], {
+    actionFlows: [actionFlowEntry()],
+    step: 'action-flow:decoupage',
+    tab: 'procedure',
+  })
+  const dernierBrouillon = () => {
+    for (const value of [...setters].reverse()) {
+      if (typeof value !== 'function') {
+        continue
+      }
+      const next = value(base)
+      if (next && typeof next === 'object' && Array.isArray(next.steps)) {
+        return next
+      }
+    }
+    return null
+  }
+
+  findAll(rendered, 'button').find((node) => node.props['aria-label'] === 'Descendre l’étape 1').props.onClick()
+  assert.deepEqual(dernierBrouillon().steps.slice(0, 2), ['Lire les commits', 'Retrouver la PR'], 'descendre échange deux étapes')
+
+  findAll(rendered, 'button').find((node) => textOf(node) === 'Ajouter une étape').props.onClick()
+  assert.equal(dernierBrouillon().steps.length, 9)
+  assert.equal(dernierBrouillon().steps.at(-1), 'Nouvelle étape')
+
+  findAll(rendered, 'button').find((node) => node.props['aria-label'] === 'Supprimer étape 1').props.onClick()
+  assert.equal(dernierBrouillon().steps.length, 7)
+  assert.equal(dernierBrouillon().steps[0], 'Lire les commits')
+})
+
+test('Enregistrer poste un action flow sur sa route et met la liste à jour', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  const relu = actionFlowEntry({ title: 'Découper autrement', steps: ['Lire les commits', 'Retrouver la PR'], gate: 'bornes confirmées' })
+  globalThis.fetch = async (url, options) => {
+    appels.push({ url: String(url), options })
+    return { ok: true, json: async () => ({ flow: 'decoupage', file: 'workflows/model/actions/decoupage.yml', local: false, entry: relu }) }
+  }
+  try {
+    const { rendered, setters } = montrerWorkflows([workflowEntry()], {
+      actionFlows: [actionFlowEntry()],
+      step: 'action-flow:decoupage',
+      tab: 'procedure',
+      draft: actionFlowModelOf(relu),
+    })
+
+    findAll(rendered, 'button').find((node) => textOf(node).trim() === 'Enregistrer').props.onClick()
+    await new Promise((done) => setTimeout(done, 0))
+
+    const envois = appels.filter((appel) => String(appel.url).includes('action-flows/model'))
+    assert.equal(envois.length, 1)
+    assert.equal(envois[0].url, 'missions/api/action-flows/model')
+    const body = JSON.parse(envois[0].options.body)
+    assert.equal(body.flow, 'decoupage')
+    assert.equal(body.model.kind, 'action-flow')
+    assert.deepEqual(body.model.steps.slice(0, 2), ['Lire les commits', 'Retrouver la PR'])
+    assert.equal(body.model.gate, 'bornes confirmées')
+    assert.equal('local' in body.model, false, 'le rangement ne part pas dans le YAML')
+
+    const vues = setters
+      .filter((value) => typeof value === 'function')
+      .map((update) => update({ workflows: [workflowEntry()], actionFlows: [actionFlowEntry()], writers: [], states: [] }))
+      .filter((value) => value && Array.isArray(value.actionFlows))
+    assert.ok(vues.some((vue) => vue.actionFlows[0].title === 'Découper autrement'), 'la liste relit l’entrée enregistrée')
+  } finally {
+    globalThis.fetch = vraiFetch
+  }
+})
+
+test('Annuler rend le flow au fichier lu, sans rien poster', async () => {
+  const appels = []
+  const vraiFetch = globalThis.fetch
+  globalThis.fetch = async (...args) => { appels.push(args); return { ok: true, json: async () => ({}) } }
+  try {
+    const { rendered, setters } = montrerWorkflows([workflowEntry()], {
+      actionFlows: [actionFlowEntry()],
+      step: 'action-flow:decoupage',
+      tab: 'procedure',
+      draft: actionFlowModelOf(actionFlowEntry({ title: 'Brouillon', steps: ['une seule étape'] })),
+    })
+
+    findAll(rendered, 'button').find((node) => textOf(node).trim() === 'Annuler').props.onClick()
+    const base = actionFlowModelOf(actionFlowEntry({ title: 'Brouillon', steps: ['une seule étape'] }))
+    const draft = setters
+      .map((value) => (typeof value === 'function' ? value(base) : value))
+      .findLast((value) => value?.kind === 'action-flow')
+    assert.equal(draft.title, 'Découper une PR trop grosse')
+    assert.equal(draft.steps.length, 8)
     assert.equal(appels.length, 0, 'Annuler n’écrit rien')
   } finally {
     globalThis.fetch = vraiFetch
