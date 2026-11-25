@@ -7,7 +7,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
-import { checkPage } from '../lib/playbook-rules.js'
+import { SECTIONS, checkPage, inspectPage } from '../lib/playbook-rules.js'
 import {
   PLAYBOOK_PAGES,
   PlaybookError,
@@ -84,6 +84,53 @@ test('une page absente du disque garde sa place avec exists: false', async (t) =
   assert.equal(revue.exists, false)
   assert.equal(revue.title, null)
   assert.equal(revue.lines, 0)
+})
+
+test('la projection du gate lit une page d’étape sans la juger', async (t) => {
+  // Given
+  const { dir } = await fixture(t)
+  const source = await pageText(dir, 'execution.md')
+
+  // When
+  const gate = inspectPage('playbook/execution.md', source)
+
+  // Then
+  assert.equal(gate.lines, (source.match(/\n/g) ?? []).length)
+  assert.equal(gate.maxLines, 200)
+  assert.deepEqual(gate.sections, SECTIONS.map((name) => ({ name, ok: true })))
+  assert.deepEqual(gate.stateLine, { ok: true, entry: 'ready', exit: 'in-review' })
+  assert.deepEqual(gate.document, { path: 'workflows/execution.md', ok: true })
+})
+
+test('la projection du gate nomme ce qui manque à une page', async (t) => {
+  // Given
+  const { dir } = await fixture(t)
+  const source = (await pageText(dir, 'execution.md'))
+    .replace('## Pièges observés', '## Pièges')
+    .replace('Entrée : ready → Sortie : in-review', 'Entrée : done → Sortie : ready')
+    .replaceAll('workflows/execution.md', 'workflows/autre.md')
+
+  // When
+  const gate = inspectPage('playbook/execution.md', source)
+
+  // Then
+  assert.equal(gate.sections.find((section) => section.name === '## Pièges observés').ok, false)
+  assert.deepEqual(gate.stateLine, { ok: false, entry: 'done', exit: 'ready' })
+  assert.deepEqual(gate.document, { path: 'workflows/execution.md', ok: false })
+})
+
+test('la projection d’une page transversale n’invente ni état ni document', async (t) => {
+  // Given
+  const { dir } = await fixture(t)
+  const source = await pageText(dir, 'workspace.md')
+
+  // When
+  const gate = inspectPage('playbook/workspace.md', source)
+
+  // Then
+  assert.deepEqual(gate.stateLine, { ok: true, entry: null, exit: null })
+  assert.deepEqual(gate.document, { path: null, ok: true })
+  assert.ok(gate.sections.every((section) => section.ok))
 })
 
 test('la lecture rend le texte du fichier et sa version', async (t) => {
