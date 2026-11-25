@@ -73,6 +73,10 @@ seule à pouvoir découper une PR trop grosse en plusieurs PR empilées : le ges
 « Split into several PRs » du volet ouvre la session qui écrit la liste des
 paires et ouvre une PR par partie.
 
+Le choix des modèles — qui exécute, qui relit, qui contredit — est un
+« comment » local : il vit dans `playbook/modeles.md` (page non versionnée),
+citée par chaque page d'étape. Le workflow ne le duplique pas.
+
 ## Règles invariantes
 
 1. **Une mission = un ticket ; à l'exécution, une branche et une PR.** Pas de
