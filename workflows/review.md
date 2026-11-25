@@ -48,11 +48,11 @@ la revue constate seulement que la pile est ouverte.
 
 ## Décisions possibles
 
-| Constat | Décision | Label |
+| Constat | Décision | Statut natif ou label |
 | --- | --- | --- |
-| Validation citée sur chaque PR, critères et scénarios complets, périmètre et tests vérifiés, journal et checklist à jour | La revue est faite : on enregistre et on passe le ticket | `ready-for-prod` |
-| Les collègues ont remonté des changements sur la PR | La revue renvoie en exécution : le demandeur pose le label, la session de remontées corrige sur la branche | `in-progress` |
-| La PR sort du périmètre du cadrage, ou un critère n'a pas de scénario | Le cadrage reprend la main : le demandeur pose le label, la branche et la PR restent ouvertes | `to-refine` |
+| Validation citée sur chaque PR, critères et scénarios complets, périmètre et tests vérifiés, journal et checklist à jour | La revue est faite : on enregistre et on passe le ticket | label `ready-for-prod` |
+| Les collègues ont remonté des changements sur la PR | La revue renvoie en exécution : le demandeur pose le statut natif `In progress`, la session de remontées corrige sur la branche | statut natif `In progress` |
+| La PR sort du périmètre du cadrage, ou un critère n'a pas de scénario | Le cadrage reprend la main : le demandeur pose le statut natif `Backlog`, la branche et la PR restent ouvertes | statut natif `Backlog` |
 
 La décision retenue est écrite en commentaire daté dans le ticket, jamais
 seulement dans la session. Le merge et la fermeture sont les gestes du
@@ -66,7 +66,8 @@ demandeur : la revue ne les fait pas.
       couvre, vérifié un à un.
 - [ ] Le périmètre et les tests sont vérifiés sur la tête de branche.
 - [ ] Le journal et la checklist sont à jour, chaque case avec sa preuve.
-- [ ] La décision datée est écrite dans le ticket et le label d'état est posé.
+- [ ] La décision datée est écrite dans le ticket, le label `ready-for-prod`
+      est posé et le statut natif reste `In review`.
 
 ## Ce qui n'est pas un motif de refus
 
@@ -86,12 +87,18 @@ gh pr view <n> -R <owner>/<repo> --json reviewDecision,reviews,comments
 # 2. Écrire la décision datée dans le ticket, avec la preuve de chaque critère.
 gh issue comment <n> -R <owner>/<repo> --body "Décision du <date> : ..."
 
-# 3. Poser le label de la décision (retirer l'ancien état).
-gh issue edit <n> -R <owner>/<repo> --add-label ready-for-prod --remove-label in-review
+# 3. Poser `ready-for-prod` : un label, pas un statut. L'état reste le statut
+#    natif de l'issue (`In review`) ; la revue ne le déplace pas.
+node tools/field.mjs state <KEY> ready-for-prod
 ```
 
+`<KEY>` est la clé de la mission (`CFG-7`), l'outil est celui du dépôt
+`missions` : il résout le tracker, vérifie le vocabulaire et crée le label au
+premier usage. `gh issue edit --add-label` fonctionne aussi mais ne contrôle
+rien et écrit à côté du vocabulaire déclaré.
+
 La décision d'un retour est écrite de la même façon, puis le demandeur pose
-`in-progress` (remontées) ou `to-refine` (hors périmètre). La revue ne publie
-jamais d'avis GitHub (`gh pr review --approve`) et ne merge pas : `in-review →
-ready-for-prod` est la colonne qu'un désaccord peut vider, une décision repose
-sur les constats, pas sur la confiance.
+le statut natif `In progress` (remontées) ou `Backlog` (hors périmètre). La
+revue ne publie jamais d'avis GitHub (`gh pr review --approve`) et ne merge
+pas : `in-review → ready-for-prod` est la colonne qu'un désaccord peut vider,
+une décision repose sur les constats, pas sur la confiance.

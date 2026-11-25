@@ -63,12 +63,12 @@ nodes:
     label: Demander des changements
     section: Décisions possibles
     writer: demandeur
-    artifact: le libellé in-progress
+    artifact: le statut natif In progress
   - id: renvoyer-cadrage
     label: Renvoyer au cadrage
     section: Décisions possibles
     writer: demandeur
-    artifact: le libellé to-refine
+    artifact: le statut natif Backlog
   - id: enregistrer-validation
     label: Enregistrer la décision datée dans le ticket
     section: Sur le tracker
@@ -85,8 +85,8 @@ nodes:
     label: Passer le ticket à prête à partir
     section: Sur le tracker
     writer: session
-    artifact: le libellé ready-for-prod
-    gate: le ticket porte ready-for-prod et plus in-review, et chaque PR de la mission est validée
+    artifact: le label ready-for-prod
+    gate: le ticket porte le label ready-for-prod, le statut natif reste In review, et chaque PR de la mission est validée
 edges:
   - from: in-review
     to: constater-validation
