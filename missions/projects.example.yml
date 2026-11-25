@@ -46,6 +46,11 @@
 #              vient du Trousseau (service `atlassian-token`) ou de
 #              JIRA_API_TOKEN, jamais de ce fichier
 #   github     owner et repo du dépôt distant (tracker: github)
+#   fields     (GitHub) champs d'organisation qui portent l'état, la priorité et
+#              l'estimation, par rôle : { state: Workflow stage, priority:
+#              Priority, points: Story point }. Déclarés, la `map` nomme les
+#              options de ces champs et `blocked` reste le seul label de la
+#              board ; absents, la `map` nomme des labels (ancien schéma).
 #   map        correspondance canonique -> tracker (obligatoire)
 #
 # Champs d'un projet :
@@ -74,23 +79,28 @@ trackers:
     github:
       owner: your-github-org
       repo: example
+    # Les trois champs d'organisation, tels qu'ils sont nommés sur GitHub.
+    fields:
+      state: Workflow stage
+      priority: Priority
+      points: Story point
     map:
+      # La `map` nomme les options de ces champs, pas des labels.
       states:
-        to-refine: to-refine
-        ready: ready
-        in-progress: in-progress
-        in-review: in-review
-        ready-for-prod: ready-for-prod
+        to-refine: To refine
+        ready: Ready
+        in-progress: In progress
+        in-review: In review
+        ready-for-prod: Ready for prod
         done: null
       types:
         bug: Bug
         story: Feature
       priorities:
-        urgent: priority:urgent
-        high: priority:high
-        normal: priority:normal
-        low: priority:low
-      points: "sp:"
+        urgent: Urgent
+        high: High
+        normal: Medium
+        low: Low
 
   # Tracker Jira : décommentez ce bloc et remplacez les valeurs.
   # - id: example-jira

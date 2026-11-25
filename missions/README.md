@@ -270,9 +270,8 @@ sélectionnable ; une taille hors échelle (`4`, héritée du tracker) reste
 offerte en fin de liste, sélectionnée. Choisir la taille déjà affichée n'écrit
 rien. Une clé inconnue, une taille hors échelle ou un projet dont la `map` ne
 déclare pas de forme native sont refusés avant le tracker, avec leur message.
-Poser les points remplace : les autres tailles de la famille sont retirées de
-l'issue dans le même geste, et un libellé voisin (`sp:moyen`) reste étranger à
-la famille.
+Poser les points remplace : le champ `Story point` porte un nombre, l'écrire
+écrase l'ancienne valeur sans laisser de trace.
 
 **Jamais versionné** : `missions/*/` est ignoré par git. Une déclaration reste
 locale au poste — elle n'est ni commitée, ni poussée, ni partagée. Un clone neuf
@@ -287,7 +286,7 @@ supprime une branche ; il ne remplace ni le merge ni la fermeture du ticket,
 qui restent ceux du demandeur.
 
 - **Il vérifie avant d'agir.** L'hôte relit l'issue (encore en
-  `ready-for-prod`, sans conflit de labels) et les PR de la branche : il faut
+  `ready-for-prod`, sans conflit d'état) et les PR de la branche : il faut
   une PR mergée vers la base déclarée, et un merge commit (ou la tête) ancêtre
   de `origin/<base>`. Le projet squash-merchant, la branche locale n'est jamais
   ancêtre de la base : la preuve part de `head.sha` de la PR, et
@@ -452,35 +451,37 @@ courte description, se ferme quand toutes ses missions sont terminées, et naît
 avec au moins une mission. La date d'échéance du milestone reste vide tant qu'il
 n'y a pas d'engagement de date : un epic est thématique, pas calendaire.
 
-## Libellés GitHub
+## Champs GitHub
 
-Une issue porte **un type** natif et **un état** en libellé. Le type dit la
-nature du travail — `Bug` ou `Feature` sur GitHub, `Bug`, `Story` ou `Task` sur
-Jira —, l'état dit où en est la mission. Les deux sont indépendants : une story
-peut être en revue, un bug peut être prêt.
+Une issue porte **un type** natif et **un état** en champ d'organisation. Le
+type dit la nature du travail — `Bug` ou `Feature` sur GitHub, `Bug`, `Story` ou
+`Task` sur Jira —, l'état dit où en est la mission. Les deux sont indépendants :
+une story peut être en revue, un bug peut être prêt.
 
-| Libellé | Rôle |
+| Champ | Rôle |
 |---|---|
-| `to-refine` | cadrage non fait ou à refaire |
-| `ready` | cadrage validé, prête à exécuter |
-| `in-progress` | branche ouverte, exécution en cours |
-| `in-review` | PR ouverte, en attente de revue |
-| `ready-for-prod` | revue faite, en attente de livraison |
-| `priority:urgent` · `priority:high` · `priority:normal` · `priority:low` | priorité, une seule par issue |
-| `sp:0.5` · `sp:1` · `sp:2` · `sp:3` · `sp:5` · `sp:8` · `sp:13` | story points, un seul par issue |
-| `blocked` | mission bloquée : la raison est en commentaire de l'issue |
+| `Workflow stage` = `To refine` | cadrage non fait ou à refaire |
+| `Workflow stage` = `Ready` | cadrage validé, prête à exécuter |
+| `Workflow stage` = `In progress` | branche ouverte, exécution en cours |
+| `Workflow stage` = `In review` | PR ouverte, en attente de revue |
+| `Workflow stage` = `Ready for prod` | revue faite, en attente de livraison |
+| `Priority` = `Urgent` · `High` · `Medium` · `Low` | priorité, une seule par issue |
+| `Story point` = `0.5` · `1` · `2` · `3` · `5` · `8` · `13` | story points, une seule valeur par issue |
+| label `blocked` | mission bloquée : la raison est en commentaire de l'issue |
 
-Une issue porte **un seul** type natif et **un seul** état. Deux libellés d'état ne
-s'arbitrent pas : l'état devient indéterminé, le panneau le signale en erreur et la
-session de la mission reste bloquée jusqu'à ce qu'il n'en reste qu'un. Changer
-d'état, c'est poser le nouveau libellé en retirant l'ancien. Fermer l'issue est
-l'état terminé : il n'y a pas de libellé `done`. Un blocage se dit par le libellé
-`blocked` **et** sa raison en commentaire : le libellé dit qu'on est bloqué, le
-commentaire dit pourquoi et par quoi. `blocked` n'est pas un état — il ne
-remplace jamais l'état en cours, et une mission bloquée garde son état — il
-n'empêche pas non plus de démarrer une session : il informe. Le retirer, c'est
-débloquer, et cela ne poste rien d'autre. L'epic n'est pas un libellé : c'est un
-milestone.
+Ces trois champs sont propres à l'organisation et partagés par ses dépôts ;
+`projects.yml` les nomme dans le bloc `fields` du tracker, et la `map` nomme
+leurs options. Le panneau les écrit par ses routes ; une session les écrit par
+`node tools/field.mjs` (`state`, `priority`, `points`). Une issue porte **un
+seul** type natif et **une seule** option d'état : le choix unique rend deux
+états simultanés impossibles — l'ancien conflit de libellés n'existe plus.
+Fermer l'issue est l'état terminé : il n'y a pas d'option `Done`. Un blocage se
+dit par le label `blocked` **et** sa raison en commentaire : le label dit qu'on
+est bloqué, le commentaire dit pourquoi et par quoi. `blocked` n'est pas un état
+— il ne remplace jamais l'état en cours, et une mission bloquée garde son état —
+il n'empêche pas non plus de démarrer une session : il informe. Le retirer,
+c'est débloquer, et cela ne poste rien d'autre. L'epic n'est pas un label :
+c'est un milestone.
 
 
 ## Lecture
@@ -519,32 +520,35 @@ les branches et les commits l'emploient ; c'est seulement à la frontière du
 tracker qu'une traduction a lieu.
 
 Cette traduction est une donnée, pas une convention : chaque projet la déclare
-dans `projects.yml` (copie locale), bloc `map`. Deux champs échappent à la
-table parce qu'ils s'écrivent : `blocked` ne se traduit pas, il se pose tel
-quel sur le ticket ; `priority` se traduit, mais c'est l'hôte qui choisit la
-valeur du projet. Le panneau écrit les deux par la route de l'hôte, parce
-qu'il n'a pas de jeton. Une clé canonique sans valeur
-dans le tracker se compense par un libellé ; une valeur `null` dit que l'état
-n'a pas de représentation propre (la fermeture de l'issue, par exemple).
+dans `projects.yml` (copie locale), bloc `map`. Sur GitHub, elle porte sur les
+**champs d'organisation** que déclare le bloc `fields` (`Workflow stage`,
+`Priority`, `Story point`) : la `map` nomme alors l'option du champ, jamais un
+label, et une valeur `null` dit que l'état n'a pas de représentation propre (la
+fermeture de l'issue, par exemple). `blocked` échappe à la table : il ne se
+traduit pas, se pose tel quel sur le ticket, et c'est le seul label que la
+board garde. L'hôte écrit l'état, la priorité et l'estimation par ses routes,
+parce qu'il n'a pas de jeton ; la session les écrit par
+`node tools/field.mjs`.
 
 `points` suit la même règle que `priority`, à une différence près : la taille
-est un nombre, pas un mot du workflow. C'est l'hôte qui la traduit — libellé
-`sp:N` sur GitHub, champ `story_points_field` du projet sur Jira — et il refuse
-d'écrire quand la `map` du projet ne déclare pas de forme native. Le panneau ne
+est un nombre, pas un mot du workflow. C'est l'hôte qui l'écrit — champ
+`Story point` sur GitHub, `story_points_field` du projet sur Jira — et il refuse
+d'écrire quand la déclaration ne donne pas de forme native. Le panneau ne
 l'édite jamais : elle se pose au cadrage.
 
 | Canonique | GitHub (`missions`) | Jira (exemple à trois statuts) |
 |---|---|---|
-| `to-refine` | label `to-refine` | `To Do` |
-| `ready` | label `ready` | `To Do` + libellé `ready` |
-| `in-progress` | label `in-progress` | `In Progress` |
-| `in-review` | label `in-review` | `In Review` |
-| `ready-for-prod` | label `ready-for-prod` | `Ready for prod`, ou les statuts de déploiement du projet (`Local Testing`, `Staging Test`) |
+| `to-refine` | champ `Workflow stage` = `To refine` | `To Do` |
+| `ready` | champ `Workflow stage` = `Ready` | `To Do` + libellé `ready` |
+| `in-progress` | champ `Workflow stage` = `In progress` | `In Progress` |
+| `in-review` | champ `Workflow stage` = `In review` | `In Review` |
+| `ready-for-prod` | champ `Workflow stage` = `Ready for prod` | `Ready for prod`, ou les statuts de déploiement du projet (`Local Testing`, `Staging Test`) |
 | `done` | fermeture de l'issue | `Released` ou `Done` (selon le projet) |
-| `bug` | type `Bug` | type `Bug` |
-| `story` | type `Feature` | type `Story`, `Task` |
-| `urgent` / `high` / `normal` / `low` | label `priority:*` | `Highest` / `High` / `Medium` / `Low` |
-| story points | label `sp:0.5` ou `sp:N` (`N` entier) | champ `story_points_field` (défaut `customfield_10016`) |
+| `bug` | type d'issue `Bug` | type `Bug` |
+| `story` | type d'issue `Feature` | type `Story`, `Task` |
+| `urgent` / `high` / `normal` / `low` | champ `Priority` = `Urgent` / `High` / `Medium` / `Low` | `Highest` / `High` / `Medium` / `Low` |
+| story points | champ `Story point` (nombre) | champ `story_points_field` (défaut `customfield_10016`) |
+| bloquée | label `blocked` (le seul label de la board) | label `blocked` |
 
 Jira nomme `Story` et `Task` deux types distincts : le workspace n'en fait
 qu'un, la mission `story`. `Epic` et `Sub-task` restent sans traduction — un

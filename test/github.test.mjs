@@ -475,7 +475,7 @@ test('une écriture de points exige une clé, un préfixe et une taille positive
   )
   await assert.rejects(
     () => setPoints({ ...PROJECT, map: { ...PROJECT.map, points: null } }, 'MIS-110', { points: 3, fetchImpl: async () => response({}) }),
-    /no points label prefix/,
+    /no points field or label prefix/,
   )
 })
 

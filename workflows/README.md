@@ -27,12 +27,16 @@ ci-dessous en donne la forme courante pour les deux trackers.
 
 | État | Jira | GitHub |
 |---|---|---|
-| **à cadrer** | Backlog ou To Do | issue ouverte, label `to-refine` |
-| **prête** | To Do | label `ready` |
-| **en cours** | In Progress | label `in-progress`, branche poussée |
-| **en revue** | In Review | label `in-review`, PR ouverte |
-| **prête à partir** | `Ready for prod` (Alpha : `Local Testing`, `Staging Test`) | label `ready-for-prod` |
+| **à cadrer** | Backlog ou To Do | issue ouverte, champ `Workflow stage` = `To refine` |
+| **prête** | To Do | champ `Workflow stage` = `Ready` |
+| **en cours** | In Progress | champ `Workflow stage` = `In progress`, branche poussée |
+| **en revue** | In Review | champ `Workflow stage` = `In review`, PR ouverte |
+| **prête à partir** | `Ready for prod` (Alpha : `Local Testing`, `Staging Test`) | champ `Workflow stage` = `Ready for prod` |
 | **terminée** | `Released` (Alpha), `Done` (Beta) | PR mergée, issue fermée |
+
+Sur GitHub, l'état, la priorité et l'estimation sont des **champs
+d'organisation** (`Workflow stage`, `Priority`, `Story point`) déclarés par le
+bloc `fields` du tracker ; `blocked` est le seul label que la board garde.
 
 L'état **prête à partir** est posé par la revue, pas par l'exécution : la PR est
 approuvée, la mission n'est pas encore livrée. Sur Jira, plusieurs statuts
@@ -88,9 +92,11 @@ paires et ouvre une PR par partie.
    devient un ticket, pas un commit supplémentaire.
 6. **Le demandeur valide le cadrage.** Sans validation explicite, la mission
    reste à l'état « prête » ou « à cadrer ».
-7. **Un seul état par mission.** Une issue porte exactement un libellé d'état.
-   Plusieurs laissent l'état indéterminé et bloquent le passage à l'étape
-   suivante : on retire l'ancien libellé en posant le nouveau.
+7. **Un seul état par mission.** Une issue porte exactement une valeur d'état —
+   une option du champ `Workflow stage` sur GitHub, un statut sur Jira. Le choix
+   unique du champ rend deux états simultanés impossibles ; sur Jira, plusieurs
+   libellés laissent l'état indéterminé et bloquent le passage à l'étape
+   suivante, on retire l'ancien en posant le nouveau.
 
 ## Le modèle éditable
 

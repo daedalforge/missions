@@ -161,7 +161,7 @@ trois barres, lu par le lecteur d'écran (« Priority: High », « No priority �
 sans niveau), garde sa forme. Elle porte aussi ses story points en texte
 (« 5 pts », « 1 pt », « 0.5 pt », rien quand le tracker n'en donne pas),
 entre le repère de priorité et la clé de la mission. La demi-pointe fait
-partie de l'échelle : une issue `sp:0.5` s'écrit « 0.5 pt », un total de
+partie de l'échelle : une estimation de `0.5` s'écrit « 0.5 pt », un total de
 `2.5` porte le pluriel, et `0` reste au singulier (« 0 pt »). L'ordre de la liste
 est fixe : priorité décroissante, puis story points croissants, puis clé
 de la mission. Une mission bloquée ferme la liste : elle passe après toutes
