@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
 import YAML, { parse } from 'yaml'
 
 import { loadProjects } from '../lib/projects.js'
@@ -1093,4 +1095,51 @@ test('un flow local se lit dans son dossier, un dossier local absent ne casse ri
   assert.equal(scopeOf(localModelsDir), 'local')
   assert.equal(ACTION_MODEL_DIR, 'workflows/model/actions')
   assert.equal(LOCAL_ACTION_MODEL_DIR, 'workflows/local/model/actions')
+})
+
+
+test('le checker sort 1 en nommant un flow orphelin sur un dossier temporaire', async (t) => {
+  // Given : un dépôt temporaire complet, plus un flow dont le workflow n'existe pas.
+  const dir = await mkdtemp(join(tmpdir(), 'actions-checker-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await mkdir(join(dir, 'missions'), { recursive: true })
+  await writeFile(join(dir, 'missions', 'projects.yml'), await readFile(join(ROOT, 'test', 'fixtures', 'projects.yml')))
+  const models = join(dir, 'workflows', 'model')
+  await mkdir(join(models, 'actions'), { recursive: true })
+  for (const name of await readdir(join(ROOT, 'workflows', 'model'))) {
+    if (!name.endsWith('.yml')) {
+      continue
+    }
+    await writeFile(join(models, name), await readFile(join(ROOT, 'workflows', 'model', name)))
+    await writeFile(join(dir, 'workflows', name.replace(/\.yml$/, '.md')), await readFile(join(ROOT, 'workflows', name.replace(/\.yml$/, '.md'))))
+  }
+  await writeFile(join(models, 'actions', 'orphelin.yml'), [
+    'kind: action-flow',
+    'flow: orphelin',
+    'title: Flow orphelin',
+    'workflow: deploy',
+    'action: deployer',
+    'section: Une section',
+    'writer: session',
+    'entry:',
+    '  - une condition',
+    'steps:',
+    '  - une étape',
+    'gate: une gate',
+    'forbidden:',
+    '  - un interdit',
+    'proof: une preuve',
+    '',
+  ].join('\n'), 'utf8')
+
+  // When : la commande du dépôt, sur ce dossier.
+  const result = await promisify(execFile)(process.execPath, [join(ROOT, 'tools', 'check-workflows.mjs'), dir], { cwd: ROOT })
+    .then(({ stdout }) => ({ code: 0, stdout }))
+    .catch((error) => ({ code: error.code, stdout: error.stdout }))
+
+  // Then : elle sort 1 et nomme le fichier fautif et le champ.
+  assert.equal(result.code, 1, 'un flow orphelin fait échouer le checker')
+  assert.match(result.stdout, /workflows\/model\/actions\/orphelin\.yml/)
+  assert.match(result.stdout, /workflow-inconnu/)
+  assert.match(result.stdout, /action flows · 1 versionnés · 0 locaux/)
 })

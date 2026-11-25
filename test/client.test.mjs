@@ -9030,8 +9030,8 @@ test('Annuler rend le brouillon au fichier lu, sans rien poster', async () => {
 })
 
 test('un action flow est une entrée de la liste, avec son badge et son lien', () => {
-  // Given : une liste qui porte un workflow et le flow de découpe.
-  const { rendered, setters } = montrerWorkflows([workflowEntry()], {
+  // Given : un workflow homonyme du flow, et le flow de découpe.
+  const { rendered, setters } = montrerWorkflows([workflowEntry({ workflow: 'decoupage', title: 'Découpage' })], {
     actionFlows: [actionFlowEntry()],
     step: 'action-flow:decoupage',
   })
@@ -9047,12 +9047,13 @@ test('un action flow est une entrée de la liste, avec son badge et son lien', (
   assert.match(textOf(flow), /review/)
   assert.match(textOf(flow), /decouper/)
   assert.match(textOf(flow), /8 étapes/)
-  const workflow = cartes.find((node) => node.props['data-workflow'] === 'cadrage')
-  assert.ok(workflow, 'le workflow garde sa carte')
+  const workflow = cartes.find((node) => node.props['data-workflow'] === 'decoupage')
+  assert.ok(workflow, 'le workflow homonyme garde sa carte')
+  assert.equal(workflow.props['aria-pressed'], false, 'le flow ouvert ne presse pas le workflow homonyme')
 
   // When / Then : le clic choisit la clé de son type, flow préfixé.
   workflow.props.onClick()
-  assert.equal(setters.at(-1), 'cadrage')
+  assert.equal(setters.at(-1), 'decoupage')
   flow.props.onClick()
   assert.equal(setters.at(-1), 'action-flow:decoupage', 'la clé préfixée distingue un flow homonyme')
 })
