@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -111,31 +111,5 @@ test('les cinq pages passent par le rendu sans laisser de markdown brut', async 
     assert.doesNotMatch(visible, /\[[ xX]\]/, `${name} : aucune case à cocher brute hors code`)
     assert.equal((html.match(/<h2 [^>]*>/g) ?? []).length, 6, `${name} : les six sections sont rendues`)
     assert.equal((html.match(/<span class="pb-doc-num">/g) ?? []).length, 6, `${name} : les six sections sont numérotées`)
-  }
-})
-
-test('les pages réelles du playbook, quand elles sont là, passent par le rendu', async (t) => {
-  // Given le dossier local du playbook, présent dans le clone et absent du
-  // worktree de mission, puisque `playbook/` est ignoré par git.
-  const dir = fileURLToPath(new URL('../playbook/', import.meta.url))
-  let names
-  try {
-    names = (await readdir(dir)).filter((name) => name.endsWith('.md') && name !== 'README.md')
-  } catch {
-    t.skip('playbook local absent de ce checkout')
-    return
-  }
-
-  // Then chaque page réelle se rend sans laisser de markdown brut.
-  for (const name of names) {
-    const source = await readFile(`${dir}${name}`, 'utf8')
-    const html = renderPlaybookMarkdown(source)
-    assert.doesNotMatch(html, /(^|\n)#{1,6} /, `${name} : aucun titre brut`)
-    assert.doesNotMatch(html, /```/, `${name} : aucune clôture de code brute`)
-    assert.doesNotMatch(html, /\*\*/, `${name} : aucun gras brut`)
-    assert.doesNotMatch(html, /\| ---/, `${name} : aucun séparateur de tableau brut`)
-    const visible = html.replace(/<code>[\s\S]*?<\/code>/g, '')
-    assert.doesNotMatch(visible, /\[[ xX]\]/, `${name} : aucune case à cocher brute hors code`)
-    assert.match(html, /<h2 [^>]*>/, `${name} : les sections sont rendues`)
   }
 })
