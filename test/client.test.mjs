@@ -2928,9 +2928,9 @@ test('chaque volet garde la famille missions-drawer et son titre', () => {
   assert.equal(findAll(arbre, 'MissionDrawer').length, 0)
 })
 
-test('le volet est monté dans les cinq onglets, même vide', () => {
+test('le volet est monté dans les quatre autres onglets, et pas sous Settings', () => {
   // Given chaque onglet du panneau, monté au repos, sans mission choisie.
-  const onglets = ['dashboard', 'missions', 'done', 'repositories', 'settings']
+  const onglets = ['dashboard', 'missions', 'done', 'repositories']
   const vide = { loading: false, missions: [], errors: [], workspaceId: null, workspaceRoot: null, count: null }
   const etats = (onglet) => [
     EMPTY_BAR, vide, onglet, '', { ...EMPTY_BAR.filters }, null, 'default', null,
@@ -2945,7 +2945,7 @@ test('le volet est monté dans les cinq onglets, même vide', () => {
     assert.match(asides[0].props.className, /(^|\s)missions-drawer(\s|$)/, `${onglet} : la famille du volet`)
 
     // Then chaque volet dit ce qu'il attend : la fiche d'un dépôt, sinon celle
-    // d'une mission ; sous Settings comme sous le Dashboard, il reste vide.
+    // d'une mission.
     if (onglet === 'repositories') {
       assert.equal(asides[0].props['aria-label'], 'Repository details')
       assert.equal(textOf(asides[0]), 'Select a repository to see its remote, its upstream and its last commits.')
@@ -2963,6 +2963,15 @@ test('le volet est monté dans les cinq onglets, même vide', () => {
     assert.equal(enfants[0].props.className, 'missions-body')
     assert.equal(enfants[1].props['aria-label'], asides[0].props['aria-label'])
   }
+
+  // Then sous Settings, aucun volet : le corps reste seul et gagne les 380 px.
+  const settings = monter(etats('settings'))
+  assert.equal(findAll(settings, 'aside').length, 0, 'Settings ne monte aucun volet')
+  assert.doesNotMatch(textOf(settings), /Select a mission to see its details/)
+  const contenu = findAll(settings, 'div').find((node) => node.props.className === 'missions-content')
+  const enfants = contenu.children.filter((enfant) => enfant !== null && enfant !== undefined)
+  assert.equal(enfants.length, 1, 'le corps seul')
+  assert.equal(enfants[0].props.className, 'missions-body')
 })
 
 test('le volet vide garde la classe et l’invitation de Done', () => {
@@ -3086,7 +3095,7 @@ test('fermer la fiche laisse le volet vide et la largeur au volet', () => {
   assert.equal(enfants[1].props['aria-label'], 'Mission details')
 })
 
-test('Settings monte ses trois sections avec le volet vide', () => {
+test('Settings monte ses trois sections sans volet', () => {
   // Given Settings ouvert sur Usage, que le panneau monte dans son corps.
   const { tree } = monterUsage()
   const settings = renderTree(findAll(tree, 'SettingsView')[0])
@@ -3103,19 +3112,16 @@ test('Settings monte ses trois sections avec le volet vide', () => {
   const panneau = findAll(settings, 'section').find((node) => node.props.className === 'missions-settings-panel')
   assert.equal(panneau.props['data-section'], 'usage')
 
-  // Then le volet droit est monté, vide, et ne porte aucune note de section :
-  // la note d'usage reste dans le corps, sous la section qu'elle commente.
+  // Then aucun volet droit sous Settings : la note d'usage reste dans le corps,
+  // sous la section qu'elle commente, et la mission garde sa fiche ailleurs.
   const asides = findAll(tree, 'aside')
-  assert.equal(asides.length, 1)
-  assert.equal(asides[0].props.className, 'missions-drawer missions-drawer--empty')
-  assert.equal(textOf(asides[0]), 'Select a mission to see its details and act on it.')
-  assert.doesNotMatch(textOf(asides[0]), /Every gesture the panel counted/)
+  assert.equal(asides.length, 0, 'le volet vide a disparu de Settings')
+  assert.doesNotMatch(textOf(tree), /Select a mission to see its details and act on it\./)
 
-  // Then une fiche choisie ne s'ouvre pas sous Settings : le volet reste vide.
+  // Then une fiche choisie ne s'ouvre pas sous Settings.
   const { tree: choisi } = monterUsage(USAGE_LOADED, MISSION)
   assert.equal(findAll(choisi, 'MissionDrawer').length, 0)
-  assert.equal(findAll(choisi, 'aside').length, 1)
-  assert.equal(findAll(choisi, 'aside')[0].props.className, 'missions-drawer missions-drawer--empty')
+  assert.equal(findAll(choisi, 'aside').length, 0)
 })
 
 test('Settings replie le parcours du Playbook sous 820 px de panneau', () => {

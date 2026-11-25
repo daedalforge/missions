@@ -7599,8 +7599,10 @@ body[data-ds-dark-theme] .missions-tip { box-shadow: 0 8px 20px color-mix(in srg
         h('p', { className: 'missions-drawer-hint' }, 'Select a mission to see its details and act on it.'),
       )
 
+      // Settings is read-only and its sections take the whole width: the
+      // mission drawer has nothing to say there.
       const tabDrawer = tab === 'settings'
-        ? emptyDrawer
+        ? null
         : tab === 'repositories'
         ? repository
           ? h(RepositoryDrawer, {
